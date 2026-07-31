@@ -1,0 +1,19 @@
+/* BizCore typography standard: application UI only */
+label, .form-label, .field-label, .control-label, .form-group > label, .input-label {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: #374151;
+}
+.small-label, .secondary-label, .helper-label {
+  font-size: 10px !important;
+}
+input, select, textarea {
+  font-size: 13px;
+}
+table th {
+  font-size: 11px;
+  font-weight: 600;
+}
+table td {
+  font-size: 12px;
+}
