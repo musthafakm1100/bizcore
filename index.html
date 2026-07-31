@@ -1,0 +1,1623 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BizCore — Downtown Trading Est.</title>
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link href="css/main.css" rel="stylesheet"/>
+<link href="css/bizcore-design.css" rel="stylesheet"/>
+<link href="css/typography.css" rel="stylesheet"/>
+<link href="css/masters.css" rel="stylesheet"/>
+<style id="bizcore-typography-standard">
+.page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
+.quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
+.card-title,.card-header h2,.card-header h3{font-size:15px!important;font-weight:600!important;}
+label,.field-label,.summary-label,.detail-label,th{font-size:13px!important;}
+label,.field-label,.summary-label,.detail-label{font-weight:500!important;color:#4B5563!important;}
+input,select,textarea,.field-value,.summary-value,.detail-value,td,.readonly-value{font-size:14px!important;font-weight:400!important;color:#111827!important;}
+th{font-weight:600!important;}
+.summary-card .card-title{font-size:15px!important;font-weight:600!important;}
+.summary-card .summary-label{font-size:13px!important;font-weight:500!important;}
+.summary-card .summary-value{font-size:14px!important;font-weight:400!important;}
+.grand-total,.total-amount{font-size:26px!important;font-weight:700!important;}
+button,.btn{font-size:14px!important;font-weight:600!important;}
+.badge,.status-badge{font-size:13px!important;font-weight:600!important;}
+</style>
+
+</head>
+<body>
+<div class="app">
+<div class="sidebar" id="app-sidebar">
+<div class="sidebar-logo" id="sidebar-logo">
+<div class="logo-placeholder" id="sb-logo-img">DT</div>
+<div><div class="co" id="sb-co-name">Downtown Trading Est.</div><div class="sub">BizCore v1.0</div></div>
+<button aria-expanded="true" aria-label="Collapse sidebar" class="sidebar-collapse-btn" id="sidebar-collapse-btn" onclick="toggleSidebarCollapse()" title="Collapse sidebar" type="button"><i class="ti ti-layout-sidebar-left-collapse"></i></button></div>
+<div class="nav-section">
+<div aria-label="Dashboard" class="nav-item nav-root active" data-nav-page="dashboard" onclick="showPage('dashboard',this)" role="button" tabindex="0" title="Dashboard"><i class="ti ti-layout-dashboard"></i><span class="nav-text">Dashboard</span></div>
+<div class="nav-group open" data-group="sales">
+<div aria-expanded="true" aria-label="Sales" class="nav-group-toggle" onclick="toggleNavGroup(this)" role="button" tabindex="0" title="Sales"><i class="ti ti-briefcase"></i><span class="nav-text">Sales</span><i class="ti ti-chevron-right nav-chevron"></i></div>
+<div class="nav-submenu">
+<div aria-label="RFQs" class="nav-item" data-nav-page="rfq" onclick="showPage('rfq',this)" role="button" tabindex="0" title="RFQs"><i class="ti ti-inbox"></i><span class="nav-text">RFQs</span><span class="nav-badge nav-badge-workflow" id="rfq-badge" style="display:none" title="RFQs requiring attention"></span></div>
+<div aria-label="Pricing" class="nav-item" data-nav-page="costing" onclick="showPage('costing',this)" role="button" tabindex="0" title="Pricing"><i class="ti ti-calculator"></i><span class="nav-text">Pricing</span><span class="nav-badge nav-badge-workflow" id="pricing-badge" style="display:none"></span></div>
+<div aria-label="Quotations" class="nav-item" data-nav-page="quotations" onclick="showPage('quotations',this)" role="button" tabindex="0" title="Quotations"><i class="ti ti-file-text"></i><span class="nav-text">Quotations</span></div>
+<div aria-label="Sales Orders" class="nav-item" data-nav-page="salesorders" onclick="showPage('salesorders',this)" role="button" tabindex="0" title="Sales Orders"><i class="ti ti-shopping-cart"></i><span class="nav-text">Sales Orders</span><span class="nav-badge nav-badge-workflow" id="so-badge" style="display:none"></span></div>
+<div aria-label="Delivery Notes" class="nav-item" data-nav-page="deliverynotes" onclick="showPage('deliverynotes',this)" role="button" tabindex="0" title="Delivery Notes"><i class="ti ti-truck-delivery"></i><span class="nav-text">Delivery Notes</span><span class="nav-badge nav-badge-workflow" id="dn-badge" style="display:none" title="Delivery notes requiring attention"></span></div>
+<div aria-label="Invoices" class="nav-item" data-nav-page="customerinvoices" onclick="showPage('customerinvoices',this)" role="button" tabindex="0" title="Invoices"><i class="ti ti-receipt"></i><span class="nav-text">Invoices</span><span class="nav-badge nav-badge-workflow" id="invoice-badge" style="display:none" title="Invoices requiring attention"></span></div>
+</div>
+</div>
+<div class="nav-group" data-group="purchasing">
+<div aria-expanded="false" aria-label="Purchasing" class="nav-group-toggle" onclick="toggleNavGroup(this)" role="button" tabindex="0" title="Purchasing"><i class="ti ti-shopping-bag"></i><span class="nav-text">Purchasing</span><i class="ti ti-chevron-right nav-chevron"></i></div>
+<div class="nav-submenu">
+<div aria-label="Supplier RFQs" class="nav-item" data-nav-page="supplierrfqs" onclick="showPage('supplierrfqs',this)" role="button" tabindex="0" title="Supplier RFQs"><i class="ti ti-file-search"></i><span class="nav-text">Supplier RFQs</span><span class="nav-badge nav-badge-workflow" id="supplier-rfq-badge" style="display:none" title="Supplier RFQs requiring attention"></span></div>
+<div aria-label="Purchase Orders" class="nav-item" data-nav-page="purchaseorders" onclick="showPage('purchaseorders',this)" role="button" tabindex="0" title="Purchase Orders"><i class="ti ti-clipboard-check"></i><span class="nav-text">Purchase Orders</span><span class="nav-badge nav-badge-workflow" id="po-badge" style="display:none" title="Purchase orders requiring attention"></span></div>
+<div aria-label="Purchase Invoices" class="nav-item" data-nav-page="purchaseinvoices" onclick="showPage('purchaseinvoices',this)" role="button" tabindex="0" title="Purchase Invoices"><i class="ti ti-file-invoice"></i><span class="nav-text">Purchase Invoices</span><span class="nav-badge nav-badge-workflow" id="pi-badge" style="display:none" title="Purchase invoices requiring attention"></span></div>
+</div>
+</div>
+<div aria-label="Master Data" class="nav-item nav-root" data-nav-page="masters" onclick="showPage('masters',this)" role="button" tabindex="0" title="Master Data"><i class="ti ti-database"></i><span class="nav-text">Master Data</span></div>
+<div aria-label="Reports" class="nav-item nav-root" data-nav-page="analytics" onclick="showPage('analytics',this)" role="button" tabindex="0" title="Reports"><i class="ti ti-chart-bar"></i><span class="nav-text">Reports</span></div>
+<div aria-label="Administration" class="nav-item nav-root" data-nav-page="setup" onclick="showPage('setup',this)" role="button" tabindex="0" title="Administration"><i class="ti ti-settings-cog"></i><span class="nav-text">Administration</span></div>
+</div>
+</div>
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeMobileSidebar()"></div>
+<div class="main">
+<header class="topbar" id="app-topbar">
+<div class="topbar-left">
+<button aria-label="Open menu" class="mobile-menu-btn" onclick="toggleMobileSidebar()" title="Menu"><i class="ti ti-menu-2"></i></button>
+<div class="topbar-heading">
+<div class="topbar-title" id="page-title">Dashboard</div>
+<nav aria-label="Breadcrumb" class="topbar-breadcrumb" id="topbar-breadcrumb">
+<button onclick="showPage('dashboard')" type="button">Dashboard</button>
+</nav>
+</div>
+</div>
+<div class="topbar-center">
+<div class="global-search-wrap">
+<i class="ti ti-search"></i>
+<input aria-label="Global search" autocomplete="off" id="global-search" oninput="handleGlobalSearch(this.value)" onkeydown="handleGlobalSearchKey(event)" placeholder="Search pages, documents or master data…" type="search"/>
+<kbd>Ctrl K</kbd>
+<div class="global-search-results" id="global-search-results"></div>
+</div>
+</div>
+<div class="topbar-actions">
+<button class="topbar-primary-action" id="topbar-primary-action" onclick="runTopbarPrimaryAction()" style="display:none" type="button"><i class="ti ti-plus"></i><span>New</span></button>
+<div class="topbar-menu-wrap">
+<button aria-label="Notifications" class="topbar-icon-btn" onclick="toggleTopbarMenu('notification-menu')" title="Notifications" type="button"><i class="ti ti-bell"></i><span class="topbar-alert-dot" id="topbar-alert-dot"></span></button>
+<div class="topbar-dropdown notification-dropdown" id="notification-menu">
+<div class="topbar-dropdown-head"><strong>Notifications</strong><span>Workflow updates</span></div>
+<div class="topbar-notification-list" id="topbar-notification-list"></div>
+</div>
+</div>
+<div class="topbar-menu-wrap">
+<button aria-label="User menu" class="topbar-user-btn" onclick="toggleTopbarMenu('user-menu')" type="button">
+<span class="topbar-avatar">MK</span><span class="topbar-user-copy"><strong>Musthafa</strong><small>Administrator</small></span><i class="ti ti-chevron-down"></i>
+</button>
+<div class="topbar-dropdown user-dropdown" id="user-menu">
+<button onclick="openAdministration('users','Users',document.querySelector('[data-nav-page=setup]'));closeTopbarMenus()" type="button"><i class="ti ti-user"></i>My Profile</button>
+<button onclick="openAdministration('preferences','System Preferences',document.querySelector('[data-nav-page=setup]'));closeTopbarMenus()" type="button"><i class="ti ti-adjustments"></i>Preferences</button>
+<button onclick="showPage('setup');closeTopbarMenus()" type="button"><i class="ti ti-building"></i>Company Settings</button>
+<div class="topbar-dropdown-separator"></div>
+<button onclick="showToast('Sign out will be connected when authentication is enabled.','info');closeTopbarMenus()" type="button"><i class="ti ti-logout"></i>Sign Out</button>
+</div>
+</div>
+</div>
+</header>
+<div class="content">
+<!-- DASHBOARD -->
+<div class="page active" id="page-dashboard">
+<!-- Dashboard date filter -->
+<div aria-label="Dashboard period controls" class="page-toolbar page-toolbar--filters dashboard-period-toolbar" role="toolbar">
+<i class="ti ti-calendar-filter" style="font-size:16px;color:var(--blue-mid)"></i>
+<span style="font-size:12px;font-weight:600;color:var(--blue);margin-right:4px">Period:</span>
+<button class="dash-period-btn active" onclick="setDashPeriod('all',this)">All time</button>
+<button class="dash-period-btn" onclick="setDashPeriod('thismonth',this)">This month</button>
+<button class="dash-period-btn" onclick="setDashPeriod('lastmonth',this)">Last month</button>
+<button class="dash-period-btn" onclick="setDashPeriod('last3',this)">Last 3 months</button>
+<button class="dash-period-btn" onclick="setDashPeriod('thisyear',this)">This year</button>
+<div style="display:flex;align-items:center;gap:6px;margin-left:8px">
+<span style="font-size:11px;color:var(--gray)">From</span>
+<input id="dash-date-from" onchange="onDashCustomDate()" style="height:28px;border:1px solid var(--border);border-radius:var(--radius);padding:0 8px;font-size:12px;outline:none" type="date"/>
+<span style="font-size:11px;color:var(--gray)">To</span>
+<input id="dash-date-to" onchange="onDashCustomDate()" style="height:28px;border:1px solid var(--border);border-radius:var(--radius);padding:0 8px;font-size:12px;outline:none" type="date"/>
+</div>
+<span id="dash-period-label" style="font-size:11px;color:var(--gray);margin-left:auto;font-style:italic">Showing all sales orders</span>
+</div>
+<div class="stats-grid dashboard-kpi-grid">
+<div class="stat-card dashboard-kpi"><div class="dashboard-kpi-icon"><i class="ti ti-shopping-cart"></i></div><div class="dashboard-kpi-copy"><div class="label">Total sales orders</div><div class="value" id="s-total">0</div><div class="sub" id="s-total-sub">all time</div></div></div>
+<div class="stat-card dashboard-kpi green"><div class="dashboard-kpi-icon"><i class="ti ti-circle-check"></i></div><div class="dashboard-kpi-copy"><div class="label">Paid orders</div><div class="value" id="s-won">0</div><div class="sub" id="s-won-val">SAR 0</div></div></div>
+<div class="stat-card dashboard-kpi amber"><div class="dashboard-kpi-icon"><i class="ti ti-truck-delivery"></i></div><div class="dashboard-kpi-copy"><div class="label">Pending delivery</div><div class="value" id="s-pending">0</div><div class="sub">confirmed + in transit</div></div></div>
+<div class="stat-card dashboard-kpi red"><div class="dashboard-kpi-icon"><i class="ti ti-cash-banknote"></i></div><div class="dashboard-kpi-copy"><div class="label">Pending payment</div><div class="value" id="s-lost">0</div><div class="sub">invoiced + partial</div></div></div>
+<div class="stat-card dashboard-kpi dashboard-kpi--value"><div class="dashboard-kpi-icon"><i class="ti ti-report-money"></i></div><div class="dashboard-kpi-copy"><div class="label">Order value</div><div class="value" id="s-pipeline">SAR 0</div><div class="sub">selected period</div></div></div>
+</div>
+<div class="dashboard-primary-grid">
+<div class="card dashboard-panel dashboard-panel--orders">
+<div class="card-header dashboard-card-header"><h3><i class="ti ti-clock"></i>Recent sales orders</h3><button class="dashboard-text-action" onclick="showPage('salesorders')" type="button">View all <i class="ti ti-arrow-right"></i></button></div>
+<div class="card-body dashboard-table-wrap">
+<table><thead><tr><th>SO No</th><th>Date</th><th>Customer</th><th class="right">Amount</th><th>Status</th></tr></thead><tbody id="recent-tbody"></tbody></table>
+</div>
+</div>
+<div class="card dashboard-panel">
+<div class="card-header dashboard-card-header"><h3><i class="ti ti-chart-pie"></i>Status breakdown</h3><span class="dashboard-panel-meta">Selected period</span></div>
+<div class="card-body dashboard-status-body"><div id="status-chart"></div></div>
+</div>
+<div class="card dashboard-panel dashboard-quick-actions">
+<div class="card-header dashboard-card-header"><h3><i class="ti ti-bolt"></i>Quick actions</h3></div>
+<div class="card-body">
+<button class="dashboard-quick-action" onclick="openDashboardNewRFQ()" type="button"><span><i class="ti ti-file-search"></i><b>New RFQ</b></span><i class="ti ti-chevron-right"></i></button>
+<button class="dashboard-quick-action" onclick="showPage('quotations')" type="button"><span><i class="ti ti-file-dollar"></i><b>New quotation</b></span><i class="ti ti-chevron-right"></i></button>
+<button class="dashboard-quick-action" onclick="showPage('salesorders')" type="button"><span><i class="ti ti-shopping-cart-plus"></i><b>Sales orders</b></span><i class="ti ti-chevron-right"></i></button>
+<button class="dashboard-quick-action" onclick="showPage('customers')" type="button"><span><i class="ti ti-users"></i><b>Customers</b></span><i class="ti ti-chevron-right"></i></button>
+</div>
+</div>
+</div>
+<div class="card dashboard-panel dashboard-chart-panel">
+<div class="card-header dashboard-card-header"><h3><i class="ti ti-trending-up"></i>Monthly sales orders</h3><span class="dashboard-panel-meta">Value in SAR</span></div>
+<div class="card-body"><div class="chart-bars" id="monthly-chart"></div></div>
+</div>
+</div>
+<!-- QUOTATIONS -->
+<div class="page" id="page-quotations">
+<div class="quotation-main-workspace">
+<aside aria-label="Quotation Monitor" class="quotation-main-monitor">
+  <div class="quotation-monitor-head"><div><strong>Quotation Monitor</strong><span>Sales quotation overview</span></div></div>
+  <div class="quotation-monitor-items">
+    <button class="quotation-monitor-item all active" type="button" onclick="setQuotationMonitorFilter('',this)"><span class="quotation-monitor-icon"><i class="ti ti-files"></i></span><span><small>All quotations</small><strong id="quote-kpi-all">0</strong></span><i class="ti ti-chevron-right"></i></button>
+    <button class="quotation-monitor-item draft" type="button" onclick="setQuotationMonitorFilter('Draft',this)"><span class="quotation-monitor-icon"><i class="ti ti-file-pencil"></i></span><span><small>Draft</small><strong id="quote-kpi-draft">0</strong></span><i class="ti ti-chevron-right"></i></button>
+    <button class="quotation-monitor-item sent" type="button" onclick="setQuotationMonitorFilter('Sent',this)"><span class="quotation-monitor-icon"><i class="ti ti-send"></i></span><span><small>Sent</small><strong id="quote-kpi-sent">0</strong></span><i class="ti ti-chevron-right"></i></button>
+    <button class="quotation-monitor-item won" type="button" onclick="setQuotationMonitorFilter('Won',this)"><span class="quotation-monitor-icon"><i class="ti ti-trophy"></i></span><span><small>Won</small><strong id="quote-kpi-won">0</strong></span><i class="ti ti-chevron-right"></i></button>
+    <button class="quotation-monitor-item lost" type="button" onclick="setQuotationMonitorFilter('Lost',this)"><span class="quotation-monitor-icon"><i class="ti ti-circle-x"></i></span><span><small>Lost</small><strong id="quote-kpi-lost">0</strong></span><i class="ti ti-chevron-right"></i></button>
+    <button class="quotation-monitor-item expired" type="button" onclick="setQuotationMonitorFilter('Expired',this)"><span class="quotation-monitor-icon"><i class="ti ti-clock-exclamation"></i></span><span><small>Expired</small><strong id="quote-kpi-expired">0</strong></span><i class="ti ti-chevron-right"></i></button>
+  </div>
+</aside>
+<div class="card quotation-register-card">
+<div class="card-header page-command-header">
+<h3>All quotations</h3>
+<span id="q-count" class="quotation-count"></span>
+</div>
+<div class="card-body" style="padding:14px 16px 0">
+<div aria-label="Quotation filters" class="filter-bar page-filter-bar page-control-bar" role="toolbar">
+<input id="search-input" oninput="renderTable()" placeholder="Search Q No, customer, ref, product, description…" style="width:320px" type="text"/>
+<select id="filter-status" onchange="renderTable()">
+<option value="">All statuses</option>
+<option>Draft</option><option>Sent</option><option>Won</option><option>Lost</option><option>Expired</option><option>Revised</option>
+</select>
+<select id="filter-customer" onchange="renderTable()"><option value="">All customers</option></select>
+<select id="filter-sort" onchange="renderTable()">
+<option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option>
+<option value="amount-desc">Highest amount</option><option value="amount-asc">Lowest amount</option>
+</select>
+<div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap">
+<span style="font-size:11px;color:var(--gray);white-space:nowrap">From</span>
+<input id="filter-date-from" onchange="renderTable()" style="width:136px" type="date"/>
+<span style="font-size:11px;color:var(--gray)">To</span>
+<input id="filter-date-to" onchange="renderTable()" style="width:136px" type="date"/>
+<button class="btn btn-secondary btn-sm" id="date-clear-btn" onclick="clearDateFilter()" style="display:none;padding:4px 8px" title="Clear date filter"><i class="ti ti-x"></i></button>
+</div>
+<div style="display:flex;gap:6px;flex-wrap:nowrap">
+<button class="btn btn-secondary btn-sm" onclick="setDatePreset('thismonth')">This month</button>
+<button class="btn btn-secondary btn-sm" onclick="setDatePreset('lastmonth')">Last month</button>
+<button class="btn btn-secondary btn-sm" onclick="setDatePreset('last3')">Last 3 months</button>
+</div>
+</div>
+</div>
+<div style="overflow-x:auto">
+<table id="quotes-table">
+<thead><tr><th>Q No</th><th class="mob-hide">Date</th><th>Customer</th><th class="mob-hide">Reference</th><th class="mob-hide">Items</th><th class="right">Net Amount</th><th>Status</th><th class="mob-hide">Sales Orders</th><th class="mob-hide">Valid until</th></tr></thead>
+<tbody id="quotes-tbody"></tbody>
+</table>
+</div>
+<div style="padding:8px 16px"><div class="pagination" id="pagination"></div></div>
+</div>
+</div>
+</div>
+<!-- CUSTOMERS -->
+<!-- ANALYTICS -->
+<div class="page" id="page-analytics">
+<div class="kpi-row">
+<div class="kpi-mini"><div><div class="km-label">Win rate</div><div class="km-val" id="an-winrate">0%</div></div><i class="ti ti-trophy" style="font-size:28px;color:var(--blue-light)"></i></div>
+<div class="kpi-mini"><div><div class="km-label">Avg quotation value</div><div class="km-val" id="an-avg">SAR 0</div></div><i class="ti ti-calculator" style="font-size:28px;color:var(--blue-light)"></i></div>
+<div class="kpi-mini"><div><div class="km-label">Revenue won (YTD)</div><div class="km-val" id="an-ytd">SAR 0</div></div><i class="ti ti-coin" style="font-size:28px;color:var(--blue-light)"></i></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+<div class="card">
+<div class="card-header page-command-header"><h3>Top customers by value</h3></div>
+<div class="card-body" style="padding:0"><table><thead><tr><th>Customer</th><th class="right">Total quoted</th><th class="right">Won</th></tr></thead><tbody id="top-cust-tbody"></tbody></table></div>
+</div>
+<div class="card">
+<div class="card-header page-command-header"><h3>Quotations by status</h3></div>
+<div class="card-body" id="an-status-chart"></div>
+</div>
+</div>
+</div>
+<!-- PRODUCTS PAGE -->
+<!-- SUPPLIERS PAGE -->
+<!-- RFQ TRACKER PAGE -->
+<div class="page" id="page-rfq">
+<div aria-label="RFQ actions and filters" class="rfq-main-toolbar page-toolbar page-toolbar--sticky page-control-bar" role="toolbar">
+<div class="rfq-filter-group">
+<button class="dash-period-btn active" id="rfq-f-all" onclick="filterRFQ('all',this)">All <span id="rfq-cnt-all"></span></button>
+<button class="dash-period-btn" id="rfq-f-new" onclick="filterRFQ('New',this)">New <span id="rfq-cnt-new"></span></button>
+<button class="dash-period-btn" id="rfq-f-pricing" onclick="filterRFQ('Pricing',this)">In Pricing <span id="rfq-cnt-pricing"></span></button>
+<button class="dash-period-btn" id="rfq-f-quoted" onclick="filterRFQ('Quoted',this)">Quoted <span id="rfq-cnt-quoted"></span></button>
+<button class="dash-period-btn" id="rfq-f-nobid" onclick="filterRFQ('No Bid',this)">No Bid <span id="rfq-cnt-nobid"></span></button>
+<button class="dash-period-btn" id="rfq-f-overdue" onclick="filterRFQ('Overdue',this)" style="color:var(--red)">Overdue <span id="rfq-cnt-overdue"></span></button>
+</div>
+<div class="rfq-toolbar-actions">
+<input class="rfq-search" id="rfq-search" oninput="renderRFQPage()" placeholder="Search RFQ, customer or reference…" type="text"/>
+<button class="btn btn-primary btn-sm" onclick="openNewRFQ()"><i class="ti ti-plus"></i>New RFQ</button>
+</div>
+</div>
+<div class="rfq-main-workspace" id="rfq-main-workspace">
+<aside aria-label="RFQ Monitor" class="rfq-main-monitor" id="rfq-main-monitor">
+<div class="rfq-main-monitor-head">
+<div><strong>RFQ Monitor</strong><span>Sales response overview</span></div>
+<button aria-label="Collapse RFQ Monitor" class="rfq-monitor-collapse" onclick="toggleRFQMainMonitor()" title="Collapse monitor" type="button"><i class="ti ti-chevron-left"></i></button>
+</div>
+<div class="rfq-main-monitor-items">
+<button class="rfq-main-monitor-item open" onclick="applyRFQMonitorFilter('Open',this)" type="button"><span class="rfq-main-monitor-icon"><i class="ti ti-folder-open"></i></span><span><small>Open RFQs</small><strong id="rfq-k-open">0</strong></span><i class="ti ti-chevron-right"></i></button>
+<button class="rfq-main-monitor-item overdue" onclick="applyRFQMonitorFilter('Overdue',this)" type="button"><span class="rfq-main-monitor-icon"><i class="ti ti-alert-triangle"></i></span><span><small>Overdue</small><strong id="rfq-k-overdue">0</strong></span><i class="ti ti-chevron-right"></i></button>
+<button class="rfq-main-monitor-item pricing" onclick="applyRFQMonitorFilter('Pricing',this)" type="button"><span class="rfq-main-monitor-icon"><i class="ti ti-calculator"></i></span><span><small>Waiting Pricing</small><strong id="rfq-k-pricing">0</strong></span><i class="ti ti-chevron-right"></i></button>
+<button class="rfq-main-monitor-item quoted" onclick="applyRFQMonitorFilter('Quoted',this)" type="button"><span class="rfq-main-monitor-icon"><i class="ti ti-file-check"></i></span><span><small>Closed — Quoted</small><strong id="rfq-k-quoted">0</strong></span><i class="ti ti-chevron-right"></i></button>
+<button class="rfq-main-monitor-item nobid" onclick="applyRFQMonitorFilter('No Bid',this)" type="button"><span class="rfq-main-monitor-icon"><i class="ti ti-circle-off"></i></span><span><small>Closed — No Bid</small><strong id="rfq-k-nobid">0</strong></span><i class="ti ti-chevron-right"></i></button>
+<button class="rfq-main-monitor-item age" onclick="applyRFQMonitorFilter('Open',this)" type="button"><span class="rfq-main-monitor-icon"><i class="ti ti-calendar-time"></i></span><span><small>Average Open Age</small><strong id="rfq-k-avg">—</strong></span><i class="ti ti-chevron-right"></i></button>
+</div>
+<div aria-label="RFQ workflow" class="rfq-workflow-card">
+<div class="rfq-workflow-head"><span>Workflow</span><small>RFQ response process</small></div>
+<div class="rfq-workflow-track">
+<button class="rfq-workflow-step received" onclick="applyRFQMonitorFilter('Open',this)" type="button"><span class="rfq-workflow-dot"><i class="ti ti-inbox"></i></span><span><strong>RFQ Received</strong><small>New requests awaiting action</small></span></button>
+<button class="rfq-workflow-step assigned" onclick="applyRFQMonitorFilter('Open',this)" type="button"><span class="rfq-workflow-dot"><i class="ti ti-user-check"></i></span><span><strong>Assigned</strong><small>Owned by the sales team</small></span></button>
+<button class="rfq-workflow-step pricing" onclick="applyRFQMonitorFilter('Pricing',this)" type="button"><span class="rfq-workflow-dot"><i class="ti ti-calculator"></i></span><span><strong>Waiting Pricing</strong><small>Sourcing or costing in progress</small></span></button>
+<button class="rfq-workflow-step quotation" onclick="applyRFQMonitorFilter('Quoted',this)" type="button"><span class="rfq-workflow-dot"><i class="ti ti-file-check"></i></span><span><strong>Quotation Sent</strong><small>Customer request attended</small></span></button>
+<button class="rfq-workflow-step closed" onclick="applyRFQMonitorFilter('No Bid',this)" type="button"><span class="rfq-workflow-dot"><i class="ti ti-circle-check"></i></span><span><strong>Closed</strong><small>Quoted or closed as no bid</small></span></button>
+</div>
+</div>
+</aside>
+<button aria-label="Open RFQ Monitor" class="rfq-monitor-expand" id="rfq-monitor-expand" onclick="toggleRFQMainMonitor()" title="Open RFQ Monitor" type="button"><i class="ti ti-layout-sidebar-left-expand"></i><span>RFQ Monitor</span></button>
+<div class="rfq-register-area"><div id="rfq-list"></div></div>
+</div>
+</div>
+<!-- PRICING DOCUMENTS PAGE -->
+<div class="page" id="page-costing">
+  <div class="pricing-register-toolbar page-toolbar page-toolbar--sticky page-control-bar">
+    <div class="pricing-register-filters">
+      <button class="dash-period-btn active" id="pricing-doc-f-all" onclick="filterPricingDocuments('all',this)">All <span id="pricing-doc-c-all"></span></button>
+      <button class="dash-period-btn" id="pricing-doc-f-saved" onclick="filterPricingDocuments('Saved',this)">Saved <span id="pricing-doc-c-saved"></span></button>
+      <button class="dash-period-btn" id="pricing-doc-f-converted" onclick="filterPricingDocuments('Converted',this)">Converted <span id="pricing-doc-c-converted"></span></button>
+    </div>
+    <input class="rfq-search" id="pricing-doc-search" oninput="renderPricingDocuments()" placeholder="Search pricing no., RFQ, customer or quotation…" type="text"/>
+  </div>
+  <div class="pricing-register-kpis">
+    <div class="kpi-mini"><div><div class="km-label">Pricing documents</div><div class="km-val" id="pricing-doc-k-total">0</div></div><i class="ti ti-calculator"></i></div>
+    <div class="kpi-mini"><div><div class="km-label">Saved drafts</div><div class="km-val" id="pricing-doc-k-saved">0</div></div><i class="ti ti-device-floppy"></i></div>
+    <div class="kpi-mini"><div><div class="km-label">Converted</div><div class="km-val" id="pricing-doc-k-converted">0</div></div><i class="ti ti-file-check"></i></div>
+  </div>
+  <div class="card pricing-register-card">
+    <div class="card-header page-command-header"><div><h3>Pricing register</h3><p>Saved pricing documents and their quotation conversion status.</p></div></div>
+    <div class="pricing-register-table-wrap"><table class="pricing-register-table"><colgroup><col class="col-pricing-no"><col class="col-customer"><col class="col-version"><col class="col-updated"><col class="col-money"><col class="col-money"><col class="col-money"><col class="col-margin"><col class="col-status"><col class="col-quotation"><col class="col-action"></colgroup><thead><tr><th>Pricing No.</th><th>Customer</th><th class="center">Version</th><th>Updated</th><th class="right">Cost</th><th class="right">Selling</th><th class="right">Profit</th><th class="right">Margin %</th><th class="center">Status</th><th>Quotation</th><th class="center"></th></tr></thead><tbody id="pricing-doc-tbody"></tbody></table></div>
+  </div>
+</div>
+<!-- SALES ORDERS PAGE -->
+<div class="page" id="page-salesorders">
+<!-- Sales Order KPIs -->
+<div class="so-kpi-grid">
+<div aria-pressed="false" class="so-kpi" data-kpi-filter="all" onclick="filterSOKPI('all',this)" onkeydown="handleSOKPIKey(event,'all',this)" role="button" style="--kpi-col:var(--blue)" tabindex="0" title="Show all sales orders">
+<div class="so-kpi-icon"><i class="ti ti-shopping-cart"></i></div>
+<div class="so-kpi-content"><div class="so-kpi-label">Total Orders</div><div class="so-kpi-value" id="so-k-total">0</div></div>
+</div>
+<div aria-pressed="false" class="so-kpi" data-kpi-filter="open" onclick="filterSOKPI('open',this)" onkeydown="handleSOKPIKey(event,'open',this)" role="button" style="--kpi-col:#d97706" tabindex="0" title="Show open sales orders">
+<div class="so-kpi-icon"><i class="ti ti-clock-hour-4"></i></div>
+<div class="so-kpi-content"><div class="so-kpi-label">Open Orders</div><div class="so-kpi-value" id="so-k-open">0</div></div>
+</div>
+<div aria-pressed="false" class="so-kpi" data-kpi-filter="ready" onclick="filterSOKPI('ready',this)" onkeydown="handleSOKPIKey(event,'ready',this)" role="button" style="--kpi-col:#7c3aed" tabindex="0" title="Show orders ready for delivery">
+<div class="so-kpi-icon"><i class="ti ti-package-export"></i></div>
+<div class="so-kpi-content"><div class="so-kpi-label">Ready for Delivery</div><div class="so-kpi-value" id="so-k-ready">0</div></div>
+</div>
+<div aria-pressed="false" class="so-kpi" data-kpi-filter="partial-delivery" onclick="filterSOKPI('partial-delivery',this)" onkeydown="handleSOKPIKey(event,'partial-delivery',this)" role="button" style="--kpi-col:#0891b2" tabindex="0" title="Show partially delivered orders">
+<div class="so-kpi-icon"><i class="ti ti-packages"></i></div>
+<div class="so-kpi-content"><div class="so-kpi-label">Partially Delivered</div><div class="so-kpi-value" id="so-k-partial-delivery">0</div></div>
+</div>
+<div aria-pressed="false" class="so-kpi" data-kpi-filter="pending-invoice" onclick="filterSOKPI('pending-invoice',this)" onkeydown="handleSOKPIKey(event,'pending-invoice',this)" role="button" style="--kpi-col:#b45309" tabindex="0" title="Show orders pending customer invoice">
+<div class="so-kpi-icon"><i class="ti ti-file-invoice"></i></div>
+<div class="so-kpi-content"><div class="so-kpi-label">Pending Invoice</div><div class="so-kpi-value" id="so-k-invoice">0</div></div>
+</div>
+<div aria-pressed="false" class="so-kpi" data-kpi-filter="all-value" onclick="filterSOKPI('all-value',this)" onkeydown="handleSOKPIKey(event,'all-value',this)" role="button" style="--kpi-col:var(--green)" tabindex="0" title="Show all orders included in total order value">
+<div class="so-kpi-icon"><i class="ti ti-report-money"></i></div>
+<div class="so-kpi-content"><div class="so-kpi-label">Total Order Value</div><div class="so-kpi-value amount" id="so-k-value">SAR 0.00</div></div>
+</div>
+<div aria-pressed="false" class="so-kpi" data-kpi-filter="receivables" onclick="filterSOKPI('receivables',this)" onkeydown="handleSOKPIKey(event,'receivables',this)" role="button" style="--kpi-col:#c2415d" tabindex="0" title="Show orders with outstanding receivables">
+<div class="so-kpi-icon"><i class="ti ti-cash-banknote"></i></div>
+<div class="so-kpi-content"><div class="so-kpi-label">Outstanding Receivables</div><div class="so-kpi-value amount" id="so-k-receivables">SAR 0.00</div></div>
+</div>
+</div>
+<div class="so-kpi-filter-summary" id="so-kpi-filter-summary">
+<div>
+<div class="so-kpi-filter-title" id="so-kpi-filter-title">All Sales Orders</div>
+<div class="so-kpi-filter-meta" id="so-kpi-filter-meta"></div>
+</div>
+<button class="so-kpi-clear" onclick="clearSOKPIFilter()" type="button"><i class="ti ti-x"></i> Clear KPI filter</button>
+</div>
+<!-- Filter bar -->
+<div aria-label="Sales order status filters" class="page-toolbar page-toolbar--filters so-status-toolbar page-control-bar" role="toolbar">
+<div style="display:flex;gap:7px;flex-wrap:wrap">
+<button class="so-filter-btn active" id="so-f-all" onclick="filterSO('all',this)"><i class="ti ti-list"></i>All <span class="cnt" id="so-cnt-all"></span></button>
+<button class="so-filter-btn pending-btn" id="so-f-pending" onclick="filterSO('pending',this)"><i class="ti ti-alert-circle"></i>Pending <span class="cnt" id="so-cnt-pending"></span></button>
+<button class="so-filter-btn" id="so-f-confirmed" onclick="filterSO('Confirmed',this)">Confirmed <span class="cnt" id="so-cnt-confirmed"></span></button>
+<button class="so-filter-btn" id="so-f-ofd" onclick="filterSO('Out for Delivery',this)">Out for Delivery <span class="cnt" id="so-cnt-ofd"></span></button>
+<button class="so-filter-btn" id="so-f-partdel" onclick="filterSO('Partially Delivered',this)">Partially Delivered <span class="cnt" id="so-cnt-partdel"></span></button>
+<button class="so-filter-btn" id="so-f-delivered" onclick="filterSO('Delivered',this)">Delivered <span class="cnt" id="so-cnt-delivered"></span></button>
+<button class="so-filter-btn" id="so-f-invoiced" onclick="filterSO('Invoiced',this)">Invoiced <span class="cnt" id="so-cnt-invoiced"></span></button>
+<button class="so-filter-btn" id="so-f-paid" onclick="filterSO('Paid',this)">Paid <span class="cnt" id="so-cnt-paid"></span></button>
+<button class="so-filter-btn" id="so-f-partial" onclick="filterSO('Partially Paid',this)">Partially Paid <span class="cnt" id="so-cnt-partial"></span></button>
+</div>
+<div style="display:flex;gap:8px;align-items:center">
+<input id="so-search" oninput="renderSOPage()" placeholder="Search SO No, customer, PO No…" style="height:34px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;outline:none;width:240px" type="text"/>
+</div>
+</div>
+<!-- Date filter row -->
+<div aria-label="Sales order date filters" class="page-toolbar page-toolbar--subtle so-date-toolbar page-control-bar" role="toolbar">
+<span style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.03em;margin-right:2px"><i class="ti ti-calendar" style="margin-right:4px"></i>Date</span>
+<button class="so-filter-btn active" id="so-d-all" onclick="filterSODate('all',this)" style="padding:5px 12px;font-size:11px">All time</button>
+<button class="so-filter-btn" id="so-d-today" onclick="filterSODate('today',this)" style="padding:5px 12px;font-size:11px">Today</button>
+<button class="so-filter-btn" id="so-d-week" onclick="filterSODate('week',this)" style="padding:5px 12px;font-size:11px">This week</button>
+<button class="so-filter-btn" id="so-d-month" onclick="filterSODate('month',this)" style="padding:5px 12px;font-size:11px">This month</button>
+<button class="so-filter-btn" id="so-d-year" onclick="filterSODate('year',this)" style="padding:5px 12px;font-size:11px">This year</button>
+<span style="width:1px;height:20px;background:var(--border);margin:0 2px"></span>
+<input id="so-d-from" onchange="filterSODate('custom')" style="height:30px;border:1px solid var(--border);border-radius:var(--radius);padding:0 8px;font-size:11px;outline:none" type="date"/>
+<span style="font-size:11px;color:var(--gray)">to</span>
+<input id="so-d-to" onchange="filterSODate('custom')" style="height:30px;border:1px solid var(--border);border-radius:var(--radius);padding:0 8px;font-size:11px;outline:none" type="date"/>
+<button class="btn btn-secondary btn-sm" onclick="clearSODateFilter()" style="padding:5px 10px;font-size:11px"><i class="ti ti-x"></i>Clear</button>
+<span id="so-date-summary" style="margin-left:auto;font-size:11px;color:var(--blue);font-weight:600"></span>
+</div>
+<div id="so-list"></div>
+</div>
+<!-- FUTURE / FOUNDATION MODULES -->
+<div class="page" id="page-deliverynotes"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-truck-delivery"></i></div><h2>Delivery Notes</h2><p>Create delivery documents from approved sales orders, track partial deliveries, and prepare invoice-ready records.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
+<div class="page" id="page-customerinvoices"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-receipt"></i></div><h2>Customer Invoices</h2><p>Generate customer invoices from one or multiple delivery notes and track invoice status and receivables.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
+<div class="page" id="page-supplierrfqs"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-file-search"></i></div><h2>Supplier RFQs</h2><p>Request and compare supplier offers. This module is reserved for a later development phase.</p><span class="module-tag"><i class="ti ti-clock"></i>Planned for later</span></div></div></div>
+<div class="page" id="page-purchaseorders"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-clipboard-check"></i></div><h2>Purchase Orders</h2><p>Create purchase orders for selected suppliers and connect them to sales orders and costing records.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
+<div class="page" id="page-purchaseinvoices"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-file-invoice"></i></div><h2>Purchase Invoices</h2><p>Record supplier invoices, costs, VAT, payment status, and related purchase orders.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
+<div class="page" id="page-stock"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-box"></i></div><h2>Stock</h2><p>Monitor quantities received, issued, reserved, and available across your inventory.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
+<div class="page" id="page-warehouses"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-building-warehouse"></i></div><h2>Warehouses</h2><p>Maintain warehouse locations and prepare the system for location-based stock tracking.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
+<div class="page" id="page-categories"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-category"></i></div><h2>Product Categories</h2><p>Organize products into categories for faster searching, reporting, and inventory control.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
+<!-- SETUP PAGE -->
+<div class="page" id="page-masters"><div class="setup-shell masters-shell"><aside aria-label="Masters navigation" class="setup-nav masters-nav"><div class="setup-nav-head"><div class="setup-nav-title"><i class="ti ti-database"></i>Master Data</div><div class="setup-nav-subtitle">Operational business records and reusable data</div></div><div class="setup-nav-group"><div class="setup-nav-group-title">Business Data</div><button class="setup-tab masters-tab" id="mtab-customers" onclick="switchMastersTab('customers')"><i class="ti ti-users"></i><span class="tab-copy"><span class="tab-title">Customers</span></span></button><button class="setup-tab masters-tab" id="mtab-suppliers" onclick="switchMastersTab('suppliers')"><i class="ti ti-building-store"></i><span class="tab-copy"><span class="tab-title">Suppliers</span></span></button><button class="setup-tab masters-tab" id="mtab-products" onclick="switchMastersTab('products')"><i class="ti ti-package"></i><span class="tab-copy"><span class="tab-title">Products</span></span></button><button class="setup-tab masters-tab" id="mtab-employees" onclick="switchMastersTab('employees')"><i class="ti ti-users-group"></i><span class="tab-copy"><span class="tab-title">Employees</span></span></button><button class="setup-tab masters-tab" id="mtab-units" onclick="switchMastersTab('units')"><i class="ti ti-ruler-measure"></i><span class="tab-copy"><span class="tab-title">Units of Measure</span></span></button></div></aside><div class="setup-workspace masters-workspace"><div class="masters-tab-content" id="masters-tab-customers">
+<div class="card">
+<div class="card-header page-command-header">
+<h3>Customer directory</h3>
+<div style="display:flex;gap:8px;align-items:center">
+<button class="btn btn-secondary btn-sm" onclick="openImportModal('customers')" title="Import customers from Excel"><i class="ti ti-table-import"></i>Import Excel</button>
+<button class="btn btn-primary btn-sm page-primary-command" onclick="openAddCustomer()"><i class="ti ti-plus"></i>Add customer</button>
+</div>
+</div>
+<div class="card-body" style="padding:14px 16px 0">
+<div class="filter-bar page-control-bar">
+<input id="cust-search" oninput="renderCustomers()" placeholder="Search customers…" type="text"/>
+</div>
+</div>
+<div style="overflow-x:auto">
+<table>
+<thead><tr><th>Company</th><th>Default contact</th><th>Title</th><th>City</th><th>Phone</th><th class="center">Quotes</th><th class="right">Total value</th><th class="center">Actions</th></tr></thead>
+<tbody id="customers-tbody"></tbody>
+</table>
+</div>
+</div>
+</div><div class="masters-tab-content" id="masters-tab-suppliers">
+<div class="card">
+<div class="card-header page-command-header">
+<h3><i class="ti ti-building-store" style="margin-right:6px"></i>Supplier directory</h3>
+<div style="display:flex;gap:8px;align-items:center">
+<button class="btn btn-secondary btn-sm" onclick="openImportModal('suppliers')" title="Import suppliers from Excel"><i class="ti ti-table-import"></i>Import Excel</button>
+<button class="btn btn-primary btn-sm page-primary-command" onclick="openAddSupplier()"><i class="ti ti-plus"></i>Add supplier</button>
+</div>
+</div>
+<div class="card-body" style="padding:14px 16px 0">
+<div class="filter-bar page-control-bar">
+<input id="sup-search" oninput="renderSuppliers()" placeholder="Search suppliers…" style="width:280px" type="text"/>
+</div>
+</div>
+<div style="overflow-x:auto">
+<table>
+<thead><tr><th>Company</th><th>Contact</th><th>Phone</th><th>Email</th><th>Category</th><th>City</th><th class="center">Quotes received</th><th class="center">Actions</th></tr></thead>
+<tbody id="suppliers-tbody"></tbody>
+</table>
+</div>
+</div>
+</div><div class="masters-tab-content" id="masters-tab-products">
+<div class="card">
+<div class="card-header page-command-header">
+<h3><i class="ti ti-package" style="margin-right:6px"></i>Product database</h3>
+<div style="display:flex;gap:8px;align-items:center">
+<button class="btn btn-secondary btn-sm" onclick="openImportModal('products')" title="Import products from Excel"><i class="ti ti-table-import"></i>Import Excel</button>
+<button class="btn btn-primary btn-sm page-primary-command" onclick="openAddProduct()"><i class="ti ti-plus"></i>Add product</button>
+</div>
+</div>
+<div class="card-body" style="padding:14px 16px 0">
+<div class="filter-bar page-control-bar">
+<input id="prod-search-filter" oninput="renderProducts()" placeholder="Search products, brand, model…" style="width:280px" type="text"/>
+<select id="prod-cat-filter" onchange="renderProducts()">
+<option value="">All categories</option>
+</select>
+</div>
+</div>
+<div style="overflow-x:auto">
+<table>
+<thead><tr>
+<th style="width:52px">Image</th><th>Item code</th><th>Product name</th><th>Brand</th><th>Model no.</th>
+<th>Category</th><th>UOM</th><th class="right">Default price</th><th>Specs</th><th class="center" style="min-width:160px">Actions</th>
+</tr></thead>
+<tbody id="products-tbody"></tbody>
+</table>
+</div>
+<div style="padding:8px 16px"><div class="pagination" id="prod-pagination"></div></div>
+</div>
+</div><div class="masters-tab-content" id="masters-tab-employees">
+<div class="card employee-master-card">
+<div class="card-header page-command-header">
+<div><h3><i class="ti ti-users-group" style="margin-right:7px"></i>Employee directory</h3><p class="employee-master-subtitle">One employee record can carry multiple operational roles and document-expiry dates.</p></div>
+<div style="display:flex;gap:8px;align-items:center">
+<button class="btn btn-secondary btn-sm" onclick="openImportModal('employees')" title="Import employees from Excel"><i class="ti ti-table-import"></i>Import Excel</button>
+<button class="btn btn-primary btn-sm page-primary-command" onclick="openEmployeeForm()"><i class="ti ti-user-plus"></i>Add employee</button>
+</div>
+</div>
+<div class="card-body employee-toolbar">
+<input id="emp-search" oninput="renderEmployees()" placeholder="Search employee, role, Iqama or mobile…" type="text"/>
+<select id="emp-status-filter" onchange="renderEmployees()"><option value="active">Active employees</option><option value="all">All employees</option><option value="expiring">Documents expiring in 90 days</option></select>
+</div>
+<div class="employee-form-panel employee-profile-form" id="employee-form-panel" style="display:none">
+<div class="employee-form-head employee-profile-head"><div><h4 id="employee-form-title">New employee</h4><p>Employee profile, operational roles and document validity.</p></div><button aria-label="Close employee form" class="close-btn" onclick="closeEmployeeForm()">✕</button></div>
+<div class="employee-profile-hero">
+<div class="employee-photo-field employee-profile-photo">
+<div class="employee-photo-editor">
+<div class="employee-photo-preview" id="emp-photo-preview"><i class="ti ti-user"></i></div>
+<div class="employee-photo-actions">
+<strong>Profile photo</strong>
+<input accept="image/*" id="emp-photo-input" onchange="handleEmployeePhoto(event)" type="file"/>
+<label class="btn btn-secondary btn-sm" for="emp-photo-input"><i class="ti ti-camera"></i>Change photo</label>
+<button class="btn btn-ghost btn-sm" id="emp-photo-remove" onclick="removeEmployeePhoto()" style="display:none" type="button">Remove</button>
+<small>JPG, PNG or WebP · maximum 2 MB</small>
+</div>
+</div>
+</div>
+<div class="employee-profile-main">
+<div class="employee-profile-title-row">
+<div class="form-group employee-name-field"><label>Employee name *</label><input id="emp-name" placeholder="Full employee name"/></div>
+<div class="form-group employee-code-field"><label>Employee code</label><input id="emp-code" placeholder="EMP-0001" readonly="" title="Generated automatically"/></div>
+<div class="form-group"><label>Employment status</label><select id="emp-active"><option value="true">Active</option><option value="false">Inactive</option></select></div>
+</div>
+<div class="employee-profile-info-grid">
+<div class="form-group"><label>Department</label><input id="emp-department" placeholder="Sales, Purchasing, Operations…"/></div>
+<div class="form-group"><label>Designation</label><input id="emp-designation" placeholder="Sales Executive"/></div>
+<div class="form-group"><label>Email</label><input id="emp-email" placeholder="name@company.com" type="email"/></div>
+<div class="form-group"><label>Mobile</label><input id="emp-mobile" placeholder="+966 …"/></div>
+</div>
+</div>
+</div>
+<div class="employee-profile-lower">
+<section class="employee-compact-card employee-role-section">
+<h5><i class="ti ti-shield-check"></i><span>Operational roles</span></h5>
+<div class="employee-role-grid" id="employee-role-grid">
+<label><input type="checkbox" value="Sales"/>Sales</label><label><input type="checkbox" value="Purchasing"/>Purchasing</label><label><input type="checkbox" value="Administration"/>Administration</label><label><input type="checkbox" value="Delivery"/>Delivery</label><label><input type="checkbox" value="Store"/>Store</label><label><input type="checkbox" value="Finance"/>Finance</label><label><input type="checkbox" value="Manager"/>Manager / Approver</label>
+</div>
+</section>
+<section class="employee-compact-card employee-doc-section">
+<h5><i class="ti ti-id"></i><span>Employee documents</span></h5>
+<div class="employee-document-grid employee-document-grid-compact">
+<div class="employee-document-card"><div class="form-group"><label>Iqama number</label><input id="emp-iqama" placeholder="Iqama number"/></div><div class="form-group"><label>Iqama expiry date</label><input id="emp-iqama-expiry" type="date"/></div></div>
+<div class="employee-document-card"><div class="form-group"><label>Passport number</label><input id="emp-passport" placeholder="Passport number"/></div><div class="form-group"><label>Passport expiry date</label><input id="emp-passport-expiry" type="date"/></div></div>
+<div class="employee-document-card"><div class="form-group"><label>Driving licence number</label><input id="emp-license" placeholder="Licence number"/></div><div class="form-group"><label>Driving licence expiry date</label><input id="emp-license-expiry" type="date"/></div></div>
+</div>
+</section>
+</div>
+<div class="employee-form-actions"><button class="btn btn-secondary" onclick="closeEmployeeForm()">Cancel</button><button class="btn btn-primary" onclick="saveEmployee()"><i class="ti ti-device-floppy"></i>Save employee</button></div>
+</div>
+<div aria-labelledby="employee-view-name" aria-modal="true" class="employee-view-overlay" id="employee-view-overlay" role="dialog" style="display:none">
+<div class="employee-view-card">
+<div class="employee-view-topbar">
+<button aria-label="Close employee profile" class="employee-view-close" onclick="closeEmployeeView()" type="button"><i class="ti ti-x"></i></button>
+</div>
+<div id="employee-view-content"></div>
+</div>
+</div>
+<div class="employee-expiry-summary" id="employee-expiry-summary"></div>
+<div class="employee-table-wrap"><table class="employee-table"><thead><tr><th>Employee</th><th>Department / Designation</th><th>Roles</th><th>Contact</th><th>Iqama</th><th>Passport</th><th>Driving licence</th><th>Status</th><th class="center">Actions</th></tr></thead><tbody id="employees-tbody"></tbody></table></div>
+</div>
+</div><div class="masters-tab-content" id="masters-tab-units">
+<div class="card uom-master-card">
+  <div class="card-header page-command-header">
+    <div><h3><i class="ti ti-ruler-measure" style="margin-right:6px"></i>Units of Measure</h3><p class="uom-master-subtitle">Control quantity precision and keyboard increments across BizCore documents.</p></div>
+    <button class="btn btn-primary btn-sm page-primary-command" onclick="openUomForm()"><i class="ti ti-plus"></i>Add UOM</button>
+  </div>
+  <div class="card-body uom-toolbar">
+    <input id="uom-search" oninput="renderUomMaster()" placeholder="Search code or unit name…" type="text"/>
+    <span class="uom-count" id="uom-count"></span>
+  </div>
+  <div class="uom-form-panel" id="uom-form-panel" style="display:none">
+    <div class="uom-form-head"><div><h4 id="uom-form-title">New unit of measure</h4><p>Set how quantities are entered and rounded.</p></div><button class="close-btn" onclick="closeUomForm()">✕</button></div>
+    <div class="uom-form-grid">
+      <div class="form-group"><label>UOM code *</label><input id="uom-code" maxlength="12" placeholder="e.g. PCS"/></div>
+      <div class="form-group"><label>Unit name *</label><input id="uom-name" placeholder="e.g. Pieces"/></div>
+      <div class="form-group"><label>Decimal places</label><select id="uom-decimals" onchange="syncUomStepSuggestion()"><option value="0">0 — Whole numbers only</option><option value="1">1 decimal place</option><option value="2">2 decimal places</option><option value="3">3 decimal places</option></select></div>
+      <div class="form-group"><label>Quantity step</label><input id="uom-step" inputmode="decimal" placeholder="1"/></div>
+      <div class="form-group"><label>Status</label><select id="uom-active"><option value="true">Active</option><option value="false">Inactive</option></select></div>
+    </div>
+    <div class="uom-form-actions"><button class="btn btn-secondary" onclick="closeUomForm()">Cancel</button><button class="btn btn-primary" onclick="saveUomMaster()"><i class="ti ti-device-floppy"></i>Save UOM</button></div>
+  </div>
+  <div style="overflow-x:auto"><table class="uom-table"><thead><tr><th>Code</th><th>Unit name</th><th class="center">Decimal places</th><th class="right">Quantity step</th><th class="center">Status</th><th class="center">Actions</th></tr></thead><tbody id="uom-tbody"></tbody></table></div>
+</div>
+</div></div></div></div><div class="page" id="page-setup">
+<div class="setup-shell">
+<aside aria-label="System Administration navigation" class="setup-nav">
+<div class="setup-nav-head">
+<div class="setup-nav-title"><i class="ti ti-settings-cog"></i>Administration</div>
+<div class="setup-nav-subtitle">ERP configuration, security and maintenance</div>
+</div>
+<div class="setup-nav-group">
+<div class="setup-nav-group-title">General</div>
+<button class="setup-tab active" id="stab-branding" onclick="switchSetupTab('branding')"><i class="ti ti-building-cog"></i><span class="tab-copy"><span class="tab-title">Company Settings</span></span></button>
+<button class="setup-tab" id="stab-preferences" onclick="switchSetupTab('preferences')"><i class="ti ti-adjustments"></i><span class="tab-copy"><span class="tab-title">System Preferences</span></span></button>
+</div>
+<div class="setup-nav-group">
+<div class="setup-nav-group-title">Security</div>
+<button class="setup-tab" id="stab-users" onclick="switchSetupTab('users')"><i class="ti ti-user-cog"></i><span class="tab-copy"><span class="tab-title">Users</span></span></button>
+<button class="setup-tab" id="stab-roles" onclick="switchSetupTab('roles')"><i class="ti ti-shield-check"></i><span class="tab-copy"><span class="tab-title">Roles &amp; Permissions</span></span></button>
+</div>
+<div class="setup-nav-group">
+<div class="setup-nav-group-title">Document Configuration</div>
+<button class="setup-tab" id="stab-defaults" onclick="switchSetupTab('defaults')"><i class="ti ti-file-settings"></i><span class="tab-copy"><span class="tab-title">Numbering &amp; Defaults</span></span></button>
+<button class="setup-tab" id="stab-tax-settings" onclick="switchSetupTab('tax-settings')"><i class="ti ti-receipt-tax"></i><span class="tab-copy"><span class="tab-title">Tax Settings</span></span></button>
+</div>
+<div class="setup-nav-group">
+<div class="setup-nav-group-title">Display Settings</div>
+<button class="setup-tab" id="stab-currency-display" onclick="switchSetupTab('currency-display')"><i class="ti ti-currency-riyal"></i><span class="tab-copy"><span class="tab-title">Currency Display</span></span></button>
+</div>
+<div class="setup-nav-group">
+<div class="setup-nav-group-title">Business Rules</div>
+<button class="setup-tab" id="stab-cost-components" onclick="switchSetupTab('cost-components')"><i class="ti ti-calculator"></i><span class="tab-copy"><span class="tab-title">Cost Components</span></span></button>
+<button class="setup-tab" id="stab-margin-status" onclick="switchSetupTab('margin-status')"><i class="ti ti-chart-line"></i><span class="tab-copy"><span class="tab-title">Margin Status</span></span></button>
+<button class="setup-tab" id="stab-pricing-settings" onclick="switchSetupTab('pricing-settings')"><i class="ti ti-adjustments-dollar"></i><span class="tab-copy"><span class="tab-title">Pricing Settings</span></span></button>
+</div>
+<div class="setup-nav-group">
+<div class="setup-nav-group-title">Maintenance</div>
+<button class="setup-tab admin-tab" id="stab-admin" onclick="switchSetupTab('admin')"><i class="ti ti-database-export"></i><span class="tab-copy"><span class="tab-title">Backup &amp; Restore</span></span></button>
+<button class="setup-tab" id="stab-audit-log" onclick="switchSetupTab('audit-log')"><i class="ti ti-history"></i><span class="tab-copy"><span class="tab-title">Audit Log</span></span></button>
+</div>
+</aside>
+<div class="setup-workspace">
+<!-- TAB: Company branding -->
+<div class="setup-tab-content" id="setup-tab-branding">
+<div class="setup-page-head">
+<div><h2>Company Settings</h2><p>Maintain the company identity used across quotations, orders, delivery notes and invoices.</p></div>
+<span class="phase-badge"><i class="ti ti-progress-check" style="margin-right:5px"></i>Phase 2</span>
+</div>
+<div class="branding-layout">
+<div class="branding-stack">
+<section class="setup-section">
+<div class="setup-section-head"><div><h3><i class="ti ti-photo"></i>Brand assets</h3><p>Upload clean PNG or JPG files. Transparent PNG is preferred.</p></div></div>
+<div class="setup-section-body">
+<div class="brand-assets">
+<div class="brand-asset">
+<div class="brand-asset-title"><span>Company logo</span><span style="color:var(--green);font-size:9px">REQUIRED</span></div>
+<div class="brand-upload" onclick="document.getElementById('logo-file-input').click()"><div class="empty" id="logo-preview-wrap"><i class="ti ti-photo-up"></i><span>Upload logo<br/>Recommended 600 × 240 px</span></div></div>
+<div class="asset-actions"><button class="asset-remove" id="remove-logo" onclick="removeBrandAsset('logo')">Remove logo</button></div>
+<input accept="image/png,image/jpeg,image/webp" id="logo-file-input" onchange="handleBrandAssetUpload('logo',event)" style="display:none" type="file"/>
+</div>
+<div class="brand-asset">
+<div class="brand-asset-title"><span>Digital signature</span><span style="color:var(--gray);font-size:9px">OPTIONAL</span></div>
+<div class="brand-upload" onclick="document.getElementById('signature-file-input').click()"><div class="empty" id="signature-preview-wrap"><i class="ti ti-signature"></i><span>Upload signature<br/>Transparent PNG preferred</span></div></div>
+<div class="asset-actions"><button class="asset-remove" id="remove-signature" onclick="removeBrandAsset('signature')">Remove signature</button></div>
+<input accept="image/png,image/jpeg,image/webp" id="signature-file-input" onchange="handleBrandAssetUpload('signature',event)" style="display:none" type="file"/>
+</div>
+<div class="brand-asset">
+<div class="brand-asset-title"><span>Company stamp</span><span style="color:var(--gray);font-size:9px">OPTIONAL</span></div>
+<div class="brand-upload" onclick="document.getElementById('stamp-file-input').click()"><div class="empty" id="stamp-preview-wrap"><i class="ti ti-rosette-discount-check"></i><span>Upload stamp<br/>Transparent PNG preferred</span></div></div>
+<div class="asset-actions"><button class="asset-remove" id="remove-stamp" onclick="removeBrandAsset('stamp')">Remove stamp</button></div>
+<input accept="image/png,image/jpeg,image/webp" id="stamp-file-input" onchange="handleBrandAssetUpload('stamp',event)" style="display:none" type="file"/>
+</div>
+</div>
+</div>
+</section>
+<section class="setup-section">
+<div class="setup-section-head"><div><h3><i class="ti ti-building-skyscraper"></i>Company identity</h3><p>Legal information displayed on commercial documents.</p></div></div>
+<div class="setup-section-body">
+<div class="form-grid">
+<div class="form-group"><label>Company name *</label><input id="s-coname" oninput="updateBrandPreview()" placeholder="Downtown Trading Est."/></div>
+<div class="form-group"><label>Arabic company name</label><input dir="rtl" id="s-coname-ar" oninput="updateBrandPreview()" placeholder="اسم الشركة بالعربية"/></div>
+<div class="form-group"><label>CR number</label><input id="s-cr" placeholder="e.g. 1010XXXXXXX"/></div>
+<div class="form-group"><label>VAT registration no.</label><input id="s-vat" placeholder="3XXXXXXXXXXXXXX"/></div>
+<div class="form-group form-full"><label>Tagline / business description</label><input id="s-tagline" oninput="updateBrandPreview()" placeholder="Trading • Contracting • Industrial Supplies"/><span class="field-help">A short line shown below the company name where the template allows it.</span></div>
+</div>
+</div>
+</section>
+<section class="setup-section">
+<div class="setup-section-head"><div><h3><i class="ti ti-map-pin"></i>Registered address</h3><p>Saudi National Address and document footer address.</p></div></div>
+<div class="setup-section-body">
+<div class="form-grid four">
+<div class="form-group"><label>Building no.</label><input id="s-building" placeholder="1234"/></div>
+<div class="form-group"><label>Street</label><input id="s-street" placeholder="King Fahd Road"/></div>
+<div class="form-group"><label>Secondary no.</label><input id="s-secondary" placeholder="5678"/></div>
+<div class="form-group"><label>District</label><input id="s-district" placeholder="Al Olaya"/></div>
+<div class="form-group"><label>Postal code</label><input id="s-postal" placeholder="12345"/></div>
+<div class="form-group"><label>City</label><input id="s-city" oninput="updateBrandPreview()" placeholder="Riyadh"/></div>
+<div class="form-group"><label>Country</label><input id="s-country" oninput="updateBrandPreview()" placeholder="Saudi Arabia"/></div>
+<div class="form-group"><label>P.O. Box</label><input id="s-pobox" placeholder="Optional"/></div>
+</div>
+</div>
+</section>
+<section class="setup-section">
+<div class="setup-section-head"><div><h3><i class="ti ti-address-book"></i>Contact and document footer</h3><p>Contact information printed on company documents.</p></div></div>
+<div class="setup-section-body">
+<div class="form-grid three">
+<div class="form-group"><label>Telephone</label><input id="s-phone" oninput="updateBrandPreview()" placeholder="+966 XX XXX XXXX"/></div>
+<div class="form-group"><label>Mobile</label><input id="s-mobile" placeholder="+966 5X XXX XXXX"/></div>
+<div class="form-group"><label>Email</label><input id="s-email" oninput="updateBrandPreview()" placeholder="info@company.com" type="email"/></div>
+<div class="form-group"><label>Website</label><input id="s-website" placeholder="www.company.com"/></div>
+<div class="form-group form-full"><label>Closing message</label><input id="s-closing-message" placeholder="Thank you for the opportunity to serve you."/><span class="field-help">Used as the default closing message in supported print templates.</span></div>
+</div>
+</div>
+</section>
+<div class="setup-actions-bar">
+<span class="save-note"><i class="ti ti-info-circle"></i> Branding changes apply to future previews and printed documents.</span>
+<button class="btn btn-primary" onclick="saveSetup()"><i class="ti ti-device-floppy"></i>Save company branding</button>
+</div>
+</div>
+<aside class="brand-preview">
+<div class="brand-preview-head"><span><i class="ti ti-eye" style="margin-right:5px"></i>Document preview</span><span style="font-size:10px;color:var(--gray);font-weight:400">Live preview</span></div>
+<div class="brand-preview-paper">
+<div class="bp-top"><div class="bp-logo" id="bp-logo">COMPANY LOGO</div><div class="bp-company"><strong id="bp-company-name">Downtown Trading Est.</strong><small id="bp-company-ar"></small><small id="bp-tagline">Trading &amp; Contracting</small></div></div>
+<div class="bp-doc-title">Quotation</div>
+<div class="bp-line short"></div><div class="bp-line mid"></div>
+<div class="bp-table"><div class="bp-table-head"></div><div class="bp-table-row"></div><div class="bp-table-row"></div><div class="bp-table-row"></div></div>
+<div class="bp-footer" id="bp-footer">Riyadh, Saudi Arabia   |   Tel: +966 XX XXX XXXX</div>
+</div>
+</aside>
+</div>
+</div>
+<!-- TAB: Document defaults -->
+<div class="setup-tab-content" id="setup-tab-defaults" style="display:none">
+<div class="setup-page-head"><div><h2>Numbering &amp; Document Defaults</h2><p>Manage document numbering and the standard terms automatically applied to new business documents.</p></div><span class="phase-badge">Document setup</span></div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+<div class="setup-card"><h4><i class="ti ti-adjustments" style="margin-right:6px"></i>General defaults</h4><p style="font-size:12px;color:var(--gray);margin-bottom:14px">Pre-fill values for new records.</p><div style="display:flex;flex-direction:column;gap:12px"><div class="form-group"><label>Default validity (days)</label><input id="s-validity" min="1" type="number" value="7"/></div><div class="form-group"><label>RFQ response due (hours)</label><input id="s-rfqhours" min="1" type="number" value="48"/></div><button class="btn btn-primary" onclick="saveSetup()"><i class="ti ti-device-floppy"></i>Save defaults</button></div></div>
+<div class="setup-card"><h4><i class="ti ti-truck" style="margin-right:6px"></i>Delivery terms</h4><p style="font-size:12px;color:var(--gray);margin-bottom:10px">Click a term to set it as default.</p><div id="setup-delivery-list" style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;max-height:260px;overflow-y:auto"></div><div style="display:flex;gap:6px"><input id="setup-delivery-new" onkeydown="if(event.key==='Enter') addSetupTerm('delivery')" placeholder="Add delivery term…" style="flex:1;height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px"/><button class="btn btn-secondary btn-sm" onclick="addSetupTerm('delivery')"><i class="ti ti-plus"></i>Add</button></div></div>
+<div class="setup-card"><h4><i class="ti ti-credit-card" style="margin-right:6px"></i>Payment terms</h4><p style="font-size:12px;color:var(--gray);margin-bottom:10px">Click a term to set it as default.</p><div id="setup-payment-list" style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;max-height:260px;overflow-y:auto"></div><div style="display:flex;gap:6px"><input id="setup-payment-new" onkeydown="if(event.key==='Enter') addSetupTerm('payment')" placeholder="Add payment term…" style="flex:1;height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px"/><button class="btn btn-secondary btn-sm" onclick="addSetupTerm('payment')"><i class="ti ti-plus"></i>Add</button></div></div>
+</div>
+</div>
+<!-- TAB: Users -->
+<div class="setup-tab-content" id="setup-tab-users" style="display:none">
+<div class="setup-page-head"><div><h2>Users</h2><p>Create basic login accounts and assign each user a role.</p></div><span class="phase-badge">Basic access</span></div>
+<div class="card"><div class="card-header page-command-header"><h3><i class="ti ti-users" style="margin-right:6px"></i>User accounts</h3><button class="btn btn-primary btn-sm page-primary-command" onclick="openUserForm()"><i class="ti ti-user-plus"></i>New user</button></div><div class="card-body"><div class="user-toolbar"><input class="user-search" id="user-search" oninput="renderUsers()" placeholder="Search user, username or role…"/><span style="font-size:11px;color:var(--gray)">Prototype accounts are stored in this browser.</span></div><div class="setup-card" id="user-form-card" style="display:none;margin-bottom:14px;background:#fbfdff"><h4><i class="ti ti-user-edit" style="margin-right:6px"></i><span id="user-form-title">New user</span></h4><div class="simple-form-grid"><div class="form-group"><label>Full name</label><input id="u-fullname" placeholder="Employee name"/></div><div class="form-group"><label>Username</label><input id="u-username" placeholder="Login username"/></div><div class="form-group"><label>Password</label><input id="u-password" placeholder="Temporary password" type="password"/></div><div class="form-group"><label>Role</label><select id="u-role"></select></div><div class="form-group"><label>Email</label><input id="u-email" placeholder="name@company.com" type="email"/></div><div class="form-group"><label>Status</label><select id="u-active"><option value="true">Active</option><option value="false">Inactive</option></select></div></div><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-secondary btn-sm" onclick="closeUserForm()">Cancel</button><button class="btn btn-primary btn-sm" onclick="saveUser()"><i class="ti ti-device-floppy"></i>Save user</button></div></div><div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius)"><table class="setup-data-table"><thead><tr><th>User</th><th>Username</th><th>Role</th><th>Status</th><th style="width:130px"></th></tr></thead><tbody id="users-tbody"></tbody></table></div></div></div>
+</div>
+<!-- TAB: Roles & Permissions -->
+<div class="setup-tab-content" id="setup-tab-roles" style="display:none"><div class="setup-page-head"><div><h2>Roles &amp; Permissions</h2><p>Define simple access levels now. Detailed controls can be expanded later.</p></div><span class="phase-badge">Basic permissions</span></div><div class="role-grid"><div class="role-list"><div class="role-list-head">Roles</div><div id="role-list"></div><div style="padding:10px"><button class="btn btn-secondary btn-sm" onclick="addRole()" style="width:100%;justify-content:center"><i class="ti ti-plus"></i>Add role</button></div></div><div class="setup-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px"><div><h4 style="margin:0;border:0;padding:0"><i class="ti ti-lock-access" style="margin-right:6px"></i><span id="role-editor-name">Administrator</span></h4><p style="font-size:11px;color:var(--gray);margin-top:5px">Select the basic actions allowed for this role.</p></div><button class="btn btn-primary btn-sm" onclick="saveRolePermissions()"><i class="ti ti-device-floppy"></i>Save permissions</button></div><div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius)"><table class="permission-table"><thead><tr><th>Module</th><th>View</th><th>Create</th><th>Edit</th><th>Delete</th><th>Print</th><th>Approve</th></tr></thead><tbody id="permission-tbody"></tbody></table></div></div></div></div>
+<!-- TAB: Pricing and business configuration placeholders -->
+<div class="setup-tab-content" id="setup-tab-cost-components" style="display:none">
+<div class="setup-page-head"><div><h2><i class="ti ti-calculator" style="margin-right:7px"></i>Cost Components Master</h2><p>Define the default cost components used during pricing calculations.</p></div><button class="btn btn-primary btn-sm" onclick="openCostComponentForm()"><i class="ti ti-plus"></i>Add Component</button></div>
+<div class="setup-card cost-components-width" id="cost-component-form" style="display:none;margin-bottom:14px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px"><div><h4 id="cost-component-form-title" style="margin:0"><i class="ti ti-calculator" style="margin-right:6px"></i>New cost component</h4><p style="font-size:11px;color:var(--gray);margin-top:4px">Choose how the component is calculated in the pricing sheet.</p></div><button class="btn btn-secondary btn-sm" onclick="closeCostComponentForm()"><i class="ti ti-x"></i>Close</button></div>
+<div class="form-grid four">
+<div class="form-group"><label>Sequence *</label><input id="cc-seq" min="1" step="1" type="number"/></div>
+<div class="form-group"><label>Component *</label><input id="cc-name" maxlength="60" placeholder="e.g. Freight"/></div>
+<div class="form-group"><label>Type *</label><select id="cc-type" onchange="updateCostComponentBaseOptions()"><option value="Fixed">Fixed</option><option value="%">Percentage (%)</option></select></div>
+<div class="form-group"><label>Value *</label><input id="cc-value" min="0" step="0.01" type="number" value="0"/></div>
+<div class="form-group"><label>Calculate From *</label><select id="cc-base"><option value="—">—</option><option value="Material Cost">Material Cost</option><option value="Total Cost">Total Cost</option><option value="Total Selling">Total Selling</option></select></div>
+<div class="form-group"><label>Status</label><select id="cc-enabled"><option value="true">Enabled</option><option value="false">Disabled</option></select></div>
+<div class="form-group"><label>Pricing Screen</label><select id="cc-editable"><option value="true">Editable</option><option value="false">Locked</option></select><small>Controls whether users can change this component in pricing.</small></div>
+</div>
+<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-secondary" onclick="closeCostComponentForm()">Cancel</button><button class="btn btn-primary" onclick="saveCostComponent()"><i class="ti ti-device-floppy"></i>Save component</button></div>
+</div>
+<div class="card cost-components-width cost-components-card">
+<div class="card-header page-command-header"><div><h3><i class="ti ti-list-numbers" style="margin-right:6px"></i>Cost components</h3><p style="font-size:11px;color:var(--gray);margin-top:3px">Sequence controls the order in which components are applied.</p></div><span class="phase-badge" id="cost-component-count">5 components</span></div>
+<div class="cost-components-table-wrap"><table class="cost-components-table"><thead><tr><th>Seq</th><th>Component</th><th>Type</th><th class="right">Value</th><th>Calculate From</th><th class="center">Pricing Edit</th><th class="center">Enabled</th><th class="center">Actions</th></tr></thead><tbody id="cost-components-tbody">
+<tr><td><strong>1</strong></td><td><strong>Transport</strong></td><td><span class="status-pill inactive">Fixed</span></td><td class="right"><strong>0.00</strong></td><td>—</td><td class="center"><label class="switch" title="Enable or disable"><input checked="" onchange="toggleCostComponent('cc-transport',this.checked)" type="checkbox"/><span class="slider"></span></label></td><td><div class="action-btns" style="justify-content:center"><button class="abtn abtn-edit" onclick="openCostComponentForm('cc-transport')" title="Edit"><i class="ti ti-edit"></i></button><button class="abtn abtn-del" onclick="deleteCostComponent('cc-transport')" title="Delete"><i class="ti ti-trash"></i></button></div></td></tr>
+<tr><td><strong>2</strong></td><td><strong>Freight</strong></td><td><span class="status-pill active">Percentage</span></td><td class="right"><strong>5%</strong></td><td>Material Cost</td><td class="center"><label class="switch" title="Enable or disable"><input checked="" onchange="toggleCostComponent('cc-freight',this.checked)" type="checkbox"/><span class="slider"></span></label></td><td><div class="action-btns" style="justify-content:center"><button class="abtn abtn-edit" onclick="openCostComponentForm('cc-freight')" title="Edit"><i class="ti ti-edit"></i></button><button class="abtn abtn-del" onclick="deleteCostComponent('cc-freight')" title="Delete"><i class="ti ti-trash"></i></button></div></td></tr>
+<tr><td><strong>3</strong></td><td><strong>Installation</strong></td><td><span class="status-pill active">Percentage</span></td><td class="right"><strong>10%</strong></td><td>Material Cost</td><td class="center"><label class="switch" title="Enable or disable"><input checked="" onchange="toggleCostComponent('cc-installation',this.checked)" type="checkbox"/><span class="slider"></span></label></td><td><div class="action-btns" style="justify-content:center"><button class="abtn abtn-edit" onclick="openCostComponentForm('cc-installation')" title="Edit"><i class="ti ti-edit"></i></button><button class="abtn abtn-del" onclick="deleteCostComponent('cc-installation')" title="Delete"><i class="ti ti-trash"></i></button></div></td></tr>
+<tr><td><strong>4</strong></td><td><strong>Contingency</strong></td><td><span class="status-pill active">Percentage</span></td><td class="right"><strong>5%</strong></td><td>Total Cost</td><td class="center"><label class="switch" title="Enable or disable"><input checked="" onchange="toggleCostComponent('cc-contingency',this.checked)" type="checkbox"/><span class="slider"></span></label></td><td><div class="action-btns" style="justify-content:center"><button class="abtn abtn-edit" onclick="openCostComponentForm('cc-contingency')" title="Edit"><i class="ti ti-edit"></i></button><button class="abtn abtn-del" onclick="deleteCostComponent('cc-contingency')" title="Delete"><i class="ti ti-trash"></i></button></div></td></tr>
+<tr><td><strong>5</strong></td><td><strong>Zakat Provision</strong></td><td><span class="status-pill active">Percentage</span></td><td class="right"><strong>2.5%</strong></td><td>Total Selling</td><td class="center"><label class="switch" title="Enable or disable"><input checked="" onchange="toggleCostComponent('cc-zakat',this.checked)" type="checkbox"/><span class="slider"></span></label></td><td><div class="action-btns" style="justify-content:center"><button class="abtn abtn-edit" onclick="openCostComponentForm('cc-zakat')" title="Edit"><i class="ti ti-edit"></i></button><button class="abtn abtn-del" onclick="deleteCostComponent('cc-zakat')" title="Delete"><i class="ti ti-trash"></i></button></div></td></tr>
+</tbody></table></div>
+</div>
+<div class="info-box cost-components-width" style="margin-top:12px"><i class="ti ti-info-circle"></i><div><strong>Calculation order</strong><div style="font-size:11px;margin-top:3px">Fixed components add a direct amount. Percentage components use the selected calculation base. Components are applied according to their sequence.</div></div></div>
+<div class="setup-card cost-components-width cost-components-actions" style="margin-top:14px;padding:12px 14px;background:#f8fafc">
+<div>
+<div id="cost-components-change-status" style="font-size:12px;font-weight:700;color:var(--gray)">No pending changes</div>
+<div style="font-size:11px;color:var(--gray);margin-top:2px">Changes affect defaults for newly created pricing calculations only after approval.</div>
+</div>
+<div class="cost-components-action-buttons">
+<button class="btn btn-secondary" disabled="" id="cost-components-cancel-btn" onclick="requestCancelCostComponentChanges()"><i class="ti ti-arrow-back-up"></i>Cancel Changes</button>
+<button class="btn btn-primary" disabled="" id="cost-components-apply-btn" onclick="requestApplyCostComponentChanges()"><i class="ti ti-check"></i>Apply Changes</button>
+</div>
+</div>
+</div>
+<div class="setup-tab-content" id="setup-tab-margin-status" style="display:none">
+<div class="setup-page-head admin-master-width"><div><h2><i class="ti ti-chart-line" style="margin-right:7px"></i>Margin Status Master</h2><p>Define the margin ranges and visual status shown in pricing calculations.</p></div><button class="btn btn-primary btn-sm" onclick="openMarginStatusForm()"><i class="ti ti-plus"></i>Add Status</button></div>
+<div class="setup-card admin-master-width" id="margin-status-form" style="display:none;margin-bottom:14px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px"><div><h4 id="margin-status-form-title" style="margin:0"><i class="ti ti-chart-line" style="margin-right:6px"></i>New margin status</h4><p style="font-size:11px;color:var(--gray);margin-top:4px">Ranges should not overlap. The upper limit is treated as exclusive except for the final range.</p></div><button class="btn btn-secondary btn-sm" onclick="closeMarginStatusForm()"><i class="ti ti-x"></i>Close</button></div>
+<div class="form-grid four">
+<div class="form-group"><label>Sequence *</label><input id="ms-seq" min="1" step="1" type="number"/></div>
+<div class="form-group"><label>Status Name *</label><input id="ms-name" maxlength="40" placeholder="e.g. Good"/></div>
+<div class="form-group"><label>Icon *</label><div class="margin-icon-field"><span class="margin-icon-live" id="ms-icon-preview">●</span><input id="ms-icon" list="margin-icon-options" maxlength="4" oninput="updateMarginIconPreview()" placeholder="Choose or type an icon" value="●"/></div><datalist id="margin-icon-options"><option value="⛔"><option value="⚠️"><option value="▼"><option value="●"><option value="✓"><option value="★"><option value="👑"><option value="💎"><option value="🚀"></option></option></option></option></option></option></option></option></option></datalist></div>
+<div class="form-group"><label>From % *</label><input id="ms-from" step="0.1" type="number"/></div>
+<div class="form-group"><label>To % *</label><input id="ms-to" step="0.1" type="number"/></div>
+<div class="form-group"><label>Colour *</label><div class="margin-color-picker-field"><input aria-label="Choose margin status colour" id="ms-color" oninput="syncMarginColorHex(this.value)" type="color" value="#2563eb"/><input aria-label="Margin status colour HEX code" class="margin-color-hex" id="ms-color-hex" maxlength="7" onblur="normaliseMarginColorHex()" oninput="syncMarginColorPicker(this.value)" spellcheck="false" value="#2563EB"/></div></div>
+<div class="form-group"><label>Status</label><select id="ms-active"><option value="true">Active</option><option value="false">Inactive</option></select></div>
+</div>
+<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-secondary" onclick="closeMarginStatusForm()">Cancel</button><button class="btn btn-primary" onclick="saveMarginStatusDraft()"><i class="ti ti-device-floppy"></i>Save Status</button></div>
+</div>
+<div class="card admin-master-width">
+<div class="card-header page-command-header"><div><h3><i class="ti ti-list-numbers" style="margin-right:6px"></i>Margin statuses</h3><p style="font-size:11px;color:var(--gray);margin-top:3px">Pricing automatically displays the active status matching the calculated margin.</p></div><span class="phase-badge" id="margin-status-count">6 statuses</span></div>
+<div class="admin-master-table-wrap"><table class="margin-status-table"><thead><tr><th>Seq</th><th>Status</th><th class="center">Icon</th><th class="right">From %</th><th class="right">To %</th><th>Colour</th><th class="center">Active</th><th class="center">Actions</th></tr></thead><tbody id="margin-status-tbody"></tbody></table></div>
+</div>
+<div class="info-box admin-master-width" style="margin-top:12px"><i class="ti ti-info-circle"></i><div><strong>Range behaviour</strong><div style="font-size:11px;margin-top:3px">For example, a range from 10% to 20% includes 10.0% through 19.9%. Keep ranges continuous to avoid an unclassified margin.</div></div></div>
+<div class="setup-card admin-master-width master-change-bar">
+<div><div id="margin-status-change-status" style="font-size:12px;font-weight:700;color:var(--gray)">No pending changes</div><div style="font-size:11px;color:var(--gray);margin-top:2px">Pricing uses only the last applied status ranges.</div></div>
+<div class="master-change-actions"><button class="btn btn-secondary" disabled="" id="margin-status-cancel-btn" onclick="requestCancelMarginStatusChanges()"><i class="ti ti-arrow-back-up"></i>Cancel Changes</button><button class="btn btn-primary" disabled="" id="margin-status-apply-btn" onclick="requestApplyMarginStatusChanges()"><i class="ti ti-check"></i>Apply Changes</button></div>
+</div>
+</div>
+<!-- TAB: Tax Settings -->
+<div class="setup-tab-content" id="setup-tab-tax-settings" style="display:none">
+  <div class="setup-page-head admin-master-width">
+    <div><h2><i class="ti ti-receipt-tax" style="margin-right:7px"></i>Tax Master</h2><p>Maintain effective-dated tax codes for new documents. Every saved document retains its own tax snapshot.</p></div>
+    <button class="btn btn-primary" onclick="newTaxMasterRecord()"><i class="ti ti-plus"></i>New Tax</button>
+  </div>
+  <div class="admin-master-width">
+    <section class="setup-section" id="tax-master-form" style="display:none">
+      <div class="setup-section-head"><div><h3><i class="ti ti-percentage"></i><span id="tax-form-title">New tax</span></h3><p>Only one active, currently effective record can be the default.</p></div><button class="btn btn-secondary btn-sm" onclick="cancelTaxMasterEdit()"><i class="ti ti-x"></i>Close</button></div>
+      <div class="setup-section-body">
+        <input id="tax-record-id" type="hidden"/>
+        <div class="form-grid four">
+          <div class="form-group"><label>Tax code <span style="color:#dc2626">*</span></label><input id="tax-code" maxlength="20" placeholder="VAT15" oninput="this.value=this.value.toUpperCase()"/></div>
+          <div class="form-group"><label>Tax name <span style="color:#dc2626">*</span></label><input id="tax-name" placeholder="Standard VAT"/></div>
+          <div class="form-group"><label>VAT rate % <span style="color:#dc2626">*</span></label><input id="tax-rate" type="number" min="0" max="100" step="0.01" placeholder="15.00"/></div>
+          <div class="form-group"><label>Effective from <span style="color:#dc2626">*</span></label><input id="tax-effective-from" type="date"/></div>
+          <div class="form-group"><label>Effective to</label><input id="tax-effective-to" type="date"/></div>
+          <div class="form-group"><label>Status</label><div class="setting-switch-row" style="min-height:36px;padding:6px 10px"><div class="setting-switch-copy"><strong>Active</strong></div><label class="switch"><input id="tax-active" type="checkbox" checked/><span class="slider"></span></label></div></div>
+          <div class="form-group"><label>Default for new documents</label><div class="setting-switch-row" style="min-height:36px;padding:6px 10px"><div class="setting-switch-copy"><strong>Default</strong></div><label class="switch"><input id="tax-default" type="checkbox"/><span class="slider"></span></label></div></div>
+          <div class="form-group"><label>Used in documents</label><div id="tax-usage-count" style="height:36px;display:flex;align-items:center;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:#f8fafc;color:var(--gray)">0 quotations</div></div>
+        </div>
+        <div class="form-group" style="margin-top:12px"><label>Remarks</label><textarea id="tax-remarks" rows="2" placeholder="Optional internal note"></textarea></div>
+        <div id="tax-form-error" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid #fecaca;background:#fef2f2;color:#b91c1c;border-radius:7px;font-size:12px"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-secondary" onclick="cancelTaxMasterEdit()">Cancel</button><button class="btn btn-primary" onclick="saveTaxMasterRecord()"><i class="ti ti-device-floppy"></i>Save Tax</button></div>
+      </div>
+    </section>
+    <section class="setup-section">
+      <div class="setup-section-head"><div><h3><i class="ti ti-list"></i>Tax records</h3><p>Inactive and expired codes remain available for historical document display but cannot be used for new documents.</p></div><span class="phase-badge" id="tax-master-count">0 records</span></div>
+      <div class="admin-master-table-wrap">
+        <table class="margin-status-table"><thead><tr><th>Tax Code</th><th>Tax Name</th><th class="right">Rate</th><th>Effective From</th><th>Effective To</th><th class="center">Active</th><th class="center">Default</th><th class="right">Used</th><th class="center">Actions</th></tr></thead><tbody id="tax-master-tbody"></tbody></table>
+      </div>
+    </section>
+    <div class="info-box" style="margin-top:12px"><i class="ti ti-shield-lock"></i><div><strong>Historical integrity</strong><div style="font-size:11px;margin-top:3px">Tax Master changes affect only newly created documents. Drafts with an older snapshot receive the controlled Keep or Update prompt; sent and historical quotations never change.</div></div></div>
+  </div>
+</div>
+<!-- TAB: Pricing Settings -->
+<div class="setup-tab-content" id="setup-tab-currency-display" style="display:none">
+<div class="setup-page-head admin-master-width"><div><h2><i class="ti ti-currency-riyal" style="margin-right:7px"></i>Currency Display</h2><p>Set the standard currency visibility across BizCore entry, view and print/PDF screens.</p></div></div>
+<div class="pricing-settings-grid admin-master-width">
+<section class="pricing-setting-card"><div class="pricing-setting-card-head"><h3><i class="ti ti-eye" style="margin-right:6px"></i>Currency Visibility</h3><p>Choose which monetary values display the document currency.</p></div><div class="pricing-setting-card-body">
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Show currency in unit price</strong><span>Display the currency code or symbol before each line-item unit price.</span></div><label class="switch"><input id="cdisp-line-unit" onchange="markCurrencyDisplayDirty()" type="checkbox"/><span class="slider"></span></label></div>
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Show currency in line amount</strong><span>Display the currency code or symbol before each line-item total.</span></div><label class="switch"><input id="cdisp-line-amount" onchange="markCurrencyDisplayDirty()" type="checkbox"/><span class="slider"></span></label></div>
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Show currency in summary rows</strong><span>Apply currency formatting to subtotal, discount and VAT values.</span></div><label class="switch"><input id="cdisp-summary" onchange="markCurrencyDisplayDirty()" type="checkbox"/><span class="slider"></span></label></div>
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Show currency in grand total</strong><span>Keep the document currency visible beside the final total.</span></div><label class="switch"><input id="cdisp-grand-total" onchange="markCurrencyDisplayDirty()" type="checkbox"/><span class="slider"></span></label></div>
+</div></section>
+<section class="pricing-setting-card"><div class="pricing-setting-card-head"><h3><i class="ti ti-apps" style="margin-right:6px"></i>Apply To</h3><p>Select the modules that follow this global presentation preference.</p></div><div class="pricing-setting-card-body">
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>RFQ</strong></div><label class="switch"><input data-cdisp-module="rfq" onchange="markCurrencyDisplayDirty()" type="checkbox"/><span class="slider"></span></label></div>
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Pricing</strong></div><label class="switch"><input data-cdisp-module="pricing" onchange="markCurrencyDisplayDirty()" type="checkbox"/><span class="slider"></span></label></div>
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Quotation</strong></div><label class="switch"><input data-cdisp-module="quotation" onchange="markCurrencyDisplayDirty()" type="checkbox"/><span class="slider"></span></label></div>
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Sales Order</strong></div><label class="switch"><input data-cdisp-module="salesOrder" onchange="markCurrencyDisplayDirty()" type="checkbox"/><span class="slider"></span></label></div>
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Delivery Note</strong></div><label class="switch"><input data-cdisp-module="deliveryNote" onchange="markCurrencyDisplayDirty()" type="checkbox"/><span class="slider"></span></label></div>
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Customer Invoice</strong></div><label class="switch"><input data-cdisp-module="customerInvoice" onchange="markCurrencyDisplayDirty()" type="checkbox"/><span class="slider"></span></label></div>
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Purchase Order</strong></div><label class="switch"><input data-cdisp-module="purchaseOrder" onchange="markCurrencyDisplayDirty()" type="checkbox"/><span class="slider"></span></label></div>
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Purchase Invoice</strong></div><label class="switch"><input data-cdisp-module="purchaseInvoice" onchange="markCurrencyDisplayDirty()" type="checkbox"/><span class="slider"></span></label></div>
+</div></section>
+</div>
+<div class="setup-card admin-master-width master-change-bar"><div><div id="currency-display-change-status" style="font-size:12px;font-weight:700;color:var(--gray)">No pending changes</div><div style="font-size:11px;color:var(--gray);margin-top:2px">Presentation only: stored monetary values and historical document data are never changed.</div></div><div class="master-change-actions"><button class="btn btn-secondary" onclick="restoreCurrencyDisplayDefaults()"><i class="ti ti-restore"></i>Restore Defaults</button><button class="btn btn-secondary" onclick="selectAllCurrencyDisplayModules()"><i class="ti ti-checks"></i>Apply to All</button><button class="btn btn-primary" disabled id="currency-display-apply-btn" onclick="applyCurrencyDisplayChanges()"><i class="ti ti-device-floppy"></i>Save Settings</button></div></div>
+</div>
+<div class="setup-tab-content" id="setup-tab-pricing-settings" style="display:none">
+<div class="setup-page-head admin-master-width"><div><h2><i class="ti ti-adjustments-dollar" style="margin-right:7px"></i>Pricing Settings</h2><p>Control default pricing behaviour, selling rules, rounding and approval warnings.</p></div></div>
+<div class="pricing-settings-grid admin-master-width">
+<section class="pricing-setting-card"><div class="pricing-setting-card-head"><h3><i class="ti ti-settings-dollar" style="margin-right:6px"></i>General</h3><p>Core defaults used when a new pricing calculation is created.</p></div><div class="pricing-setting-card-body">
+<div class="form-group"><label>Default Currency</label><select id="pset-currency" onchange="markPricingSettingsDirty()"><option value="SAR">SAR</option><option value="USD">USD</option><option value="AED">AED</option><option value="EUR">EUR</option></select></div>
+<div class="form-group"><label>Decimal Places</label><select id="pset-decimals" onchange="markPricingSettingsDirty()"><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
+<div class="form-group"><label>VAT source</label><div style="height:36px;display:flex;align-items:center;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:#f8fafc;color:var(--gray)"><i class="ti ti-lock" style="margin-right:6px"></i>Controlled from Administration → Tax Settings</div></div>
+<div class="form-group"><label>Default Margin Method</label><select id="pset-margin-method" onchange="markPricingSettingsDirty()"><option value="markup">Markup on Cost</option><option value="gross_margin">Gross Margin on Selling</option></select></div>
+</div></section>
+<section class="pricing-setting-card"><div class="pricing-setting-card-head"><h3><i class="ti ti-shield-dollar" style="margin-right:6px"></i>Selling Rules</h3><p>Define warnings and controls for unprofitable selling prices.</p></div><div class="pricing-setting-card-body">
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Allow selling below cost</strong><span>Permit a selling price lower than total cost.</span></div><label class="switch"><input id="pset-allow-below-cost" onchange="markPricingSettingsDirty()" type="checkbox"/><span class="slider"></span></label></div>
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Warn below minimum margin</strong><span>Show a warning when margin falls below the selected threshold.</span></div><label class="switch"><input id="pset-warn-low" onchange="markPricingSettingsDirty()" type="checkbox"/><span class="slider"></span></label></div>
+<div class="form-group"><label>Minimum Margin %</label><input id="pset-min-margin" oninput="markPricingSettingsDirty()" step="0.1" type="number"/></div>
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Manager approval required</strong><span>Flag pricing below the minimum margin for approval.</span></div><label class="switch"><input id="pset-manager-approval" onchange="markPricingSettingsDirty()" type="checkbox"/><span class="slider"></span></label></div>
+</div></section>
+<section class="pricing-setting-card"><div class="pricing-setting-card-head"><h3><i class="ti ti-calculator" style="margin-right:6px"></i>Pricing Behaviour</h3><p>Choose which defaults and rounding rules apply to new pricing sheets.</p></div><div class="pricing-setting-card-body">
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Include cost components by default</strong><span>Load enabled Cost Components Master rows into new pricing sheets.</span></div><label class="switch"><input id="pset-include-costs" onchange="markPricingSettingsDirty()" type="checkbox"/><span class="slider"></span></label></div>
+<div class="setting-switch-row"><div class="setting-switch-copy"><strong>Round selling price</strong><span>Automatically round calculated selling prices.</span></div><label class="switch"><input id="pset-round-selling" onchange="markPricingSettingsDirty()" type="checkbox"/><span class="slider"></span></label></div>
+<div class="form-group"><label>Rounding Method</label><select id="pset-round-method" onchange="markPricingSettingsDirty()"><option value="0.01">Nearest 0.01</option><option value="0.05">Nearest 0.05</option><option value="0.10">Nearest 0.10</option><option value="0.50">Nearest 0.50</option><option value="1.00">Nearest 1.00</option></select></div>
+</div></section>
+<section class="pricing-setting-card"><div class="pricing-setting-card-head"><h3><i class="ti ti-file-description" style="margin-right:6px"></i>Quotation Defaults</h3><p>Defaults that support pricing-to-quotation conversion.</p></div><div class="pricing-setting-card-body">
+<div class="form-group"><label>Default Validity (days)</label><input id="pset-validity" min="1" oninput="markPricingSettingsDirty()" step="1" type="number"/></div>
+<div class="form-group"><label>Target Margin %</label><input id="pset-target-margin" oninput="markPricingSettingsDirty()" step="0.1" type="number"/></div>
+</div></section>
+</div>
+<div class="setup-card admin-master-width master-change-bar">
+<div><div id="pricing-settings-change-status" style="font-size:12px;font-weight:700;color:var(--gray)">No pending changes</div><div style="font-size:11px;color:var(--gray);margin-top:2px">New pricing calculations use only the last applied settings.</div></div>
+<div class="master-change-actions"><button class="btn btn-secondary" disabled="" id="pricing-settings-cancel-btn" onclick="requestCancelPricingSettingsChanges()"><i class="ti ti-arrow-back-up"></i>Cancel Changes</button><button class="btn btn-primary" disabled="" id="pricing-settings-apply-btn" onclick="requestApplyPricingSettingsChanges()"><i class="ti ti-check"></i>Apply Changes</button></div>
+</div>
+</div>
+<div class="setup-tab-content" id="setup-tab-audit-log" style="display:none">
+<div class="setup-page-head"><div><h2>Audit Log</h2><p>Review important user and document activities recorded by BizCore.</p></div><span class="phase-badge"><i class="ti ti-clock" style="margin-right:5px"></i>Planned</span></div>
+<div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-history"></i></div><h2>Audit Log</h2><p>The navigation and workspace are ready. Activity tracking will be connected in a later phase.</p><span class="module-tag"><i class="ti ti-tools"></i>Menu ready</span></div></div>
+</div>
+<div class="setup-tab-content" id="setup-tab-preferences" style="display:none">
+<div class="setup-page-head"><div><h2>System Preferences</h2><p>Control application-wide display and working preferences.</p></div><span class="phase-badge"><i class="ti ti-adjustments" style="margin-right:5px"></i>Preferences</span></div>
+<div class="setup-card preferences-card">
+<h4><i class="ti ti-palette" style="margin-right:6px"></i>Appearance</h4>
+<p class="preferences-help">Choose the application color theme. The selected theme is saved in this browser.</p>
+<div class="form-group preferences-theme-field"><label for="theme-select">Application theme</label><div class="preferences-theme-control"><span class="theme-preview" id="theme-preview"></span><select aria-label="Select application theme" id="theme-select" onchange="applyTheme(this.value)"><option value="blue">Corporate Navy</option><option value="darkblue">Executive Blue</option><option value="slate">Professional Slate</option><option value="teal">Modern Teal</option><option value="green">Forest Green</option><option value="purple">Royal Purple</option><option value="red">Burgundy</option><option value="dark">Charcoal</option></select></div></div>
+</div>
+<div class="setup-page-head"><div><h2>System Preferences</h2><p>Maintain general application behaviour and user-interface preferences.</p></div><span class="phase-badge"><i class="ti ti-clock" style="margin-right:5px"></i>Planned</span></div>
+<div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-adjustments"></i></div><h2>System Preferences</h2><p>This screen is ready for future application-wide preference controls.</p><span class="module-tag"><i class="ti ti-tools"></i>Menu ready</span></div></div>
+</div>
+<div class="setup-tab-content" id="setup-tab-admin" style="display:none">
+<div class="setup-page-head"><div><h2>Backup &amp; Security</h2><p>Protected PIN settings, backup and data management tools.</p></div><span class="phase-badge"><i class="ti ti-lock"></i> PIN protected</span></div>
+<div id="admin-pin-gate" style="display:flex;justify-content:center;padding:30px 0"><div class="setup-card" style="width:380px;text-align:center"><div style="font-size:40px;margin-bottom:12px"><i class="ti ti-shield-lock" style="color:var(--blue)"></i></div><h4 style="justify-content:center;margin-bottom:6px">Admin access required</h4><p style="font-size:12px;color:var(--gray);margin-bottom:18px">Enter the admin PIN to access security and data management.</p><div class="form-group" style="margin-bottom:12px"><input id="admin-pin-input" maxlength="8" onkeydown="if(event.key==='Enter') verifyAdminPin()" placeholder="Enter PIN" style="text-align:center;letter-spacing:6px;font-size:18px;height:44px" type="password"/></div><button class="btn btn-primary" onclick="verifyAdminPin()" style="width:100%"><i class="ti ti-lock-open"></i>Unlock administration</button><div id="admin-pin-error" style="color:var(--red);font-size:12px;margin-top:8px;display:none">Incorrect PIN. Try again.</div><p style="font-size:11px;color:var(--gray);margin-top:14px">Default PIN: <strong>1234</strong> — change it after first login</p></div></div>
+<div id="admin-content" style="display:none"><div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn btn-secondary btn-sm" onclick="lockAdmin()"><i class="ti ti-lock"></i>Lock administration</button></div><div class="setup-grid"><div class="setup-card"><h4><i class="ti ti-key" style="margin-right:6px"></i>Change admin PIN</h4><div style="display:flex;flex-direction:column;gap:10px"><div class="form-group"><label>Current PIN</label><input id="pin-current" maxlength="8" placeholder="Current PIN" type="password"/></div><div class="form-group"><label>New PIN</label><input id="pin-new" maxlength="8" placeholder="New PIN (4–8 digits)" type="password"/></div><div class="form-group"><label>Confirm new PIN</label><input id="pin-confirm" maxlength="8" placeholder="Re-enter new PIN" type="password"/></div><button class="btn btn-primary" onclick="changeAdminPin()"><i class="ti ti-key"></i>Update PIN</button></div></div><div class="setup-card" style="border-color:#f5c6cb"><h4 style="color:var(--red)"><i class="ti ti-database" style="margin-right:6px"></i>Data management</h4><p style="font-size:12px;color:var(--gray);margin-bottom:12px">Export a complete backup or restore a previous BizCore backup.</p><div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"><button class="btn btn-success" onclick="exportAllData()"><i class="ti ti-download"></i>Export all data</button><label class="btn btn-secondary" style="cursor:pointer;justify-content:center"><i class="ti ti-upload"></i>Import data<input accept=".json" id="import-file-input" onchange="importAllData(event)" style="display:none" type="file"/></label></div><div style="border-top:1px solid #f5c6cb;padding-top:12px"><p style="font-size:11px;color:var(--red);font-weight:600;margin-bottom:8px">⚠ Danger zone</p><button class="btn btn-danger" onclick="resetAndReload()"><i class="ti ti-refresh"></i>Clear stored data &amp; reload</button></div></div></div></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- NEW / EDIT QUOTATION MODAL -->
+<div class="modal-overlay" id="quote-modal">
+<div class="modal modal-normal">
+<div class="modal-header">
+<div><h2 id="modal-title">New quotation</h2><div id="quote-header-sub" style="font-size:11px;color:var(--gray);margin-top:2px"></div></div>
+<div style="display:flex;align-items:center;gap:8px">
+
+<button class="close-btn" onclick="confirmCloseModal('quote-modal')">✕</button>
+</div>
+</div>
+<div class="modal-body" onchange="markDirty('quote-modal')" oninput="markDirty('quote-modal')">
+<div class="quote-head-strip">
+<div class="quote-meta"><strong id="quote-strip-no">New quotation</strong><span id="quote-strip-customer">Select a customer</span><span id="quote-valid-until">Valid until: —</span></div>
+<div style="display:flex;align-items:center;gap:8px"><span class="quote-save-state saved" id="quote-form-state">Saved</span><select class="quote-status-select" id="f-status"><option>Draft</option><option>Sent</option><option>Won</option><option>Lost</option><option>Expired</option><option>Revised</option></select></div>
+</div>
+<section class="quote-header-section">
+<div class="quote-section-heading"><span><i class="ti ti-layout-form"></i>Header information</span></div>
+<div class="quote-info-layout quote-info-layout-three">
+<section class="quote-info-panel quote-customer-panel">
+<div class="quote-info-panel-head"><i class="ti ti-building-store"></i>Customer &amp; reference</div>
+<div class="quote-info-panel-body quote-customer-grid">
+<div class="form-group quote-customer-select-field"><div class="quote-label-action"><label>Customer Name *</label><button class="quote-inline-add" onclick="quickAddCustomerFromQuote()" type="button"><i class="ti ti-user-plus"></i> New customer</button></div><div class="cust-wrap"><input autocomplete="off" id="f-cust-search" onblur="setTimeout(closeCustDropdown,200)" onfocus="openCustDropdown()" oninput="filterCustDropdown();updateQuoteHeaderSummary()" onkeydown="handleQuoteCustomerKey(event)" placeholder="Search customer…"/><div class="cust-dropdown" id="cust-dd"></div></div></div>
+<div class="form-group"><label>Customer Ref. / PO No.</label><input id="f-ref" placeholder="RFQ / PO reference"/></div>
+<div class="form-group"><label>Contact Name *</label><div class="cust-wrap"><input autocomplete="off" id="f-contact" onblur="setTimeout(closeContactDropdown,200)" onfocus="openContactDropdown()" oninput="filterContactDropdown()" placeholder="Select or type contact…"/><div class="cust-dropdown" id="contact-dd"></div></div><div id="f-contact-hint" style="font-size:11px;color:var(--gray);margin-top:4px;display:none"><i class="ti ti-info-circle"></i> <a href="#" id="save-contact-link" onclick="saveNewContactFromQuote();return false" style="color:var(--blue)">Save new contact</a></div></div>
+<div class="form-group"><label>Project / Site</label><input id="f-project" placeholder="Project or location"/></div>
+<input id="f-company" type="hidden"/><input id="f-city" type="hidden"/>
+<div class="quote-customer-line" id="quote-customer-info"><i class="ti ti-info-circle"></i> Select a customer to display address and VAT information.</div>
+</div>
+</section>
+<section class="quote-info-panel quote-details-panel">
+<div class="quote-info-panel-head"><i class="ti ti-file-description"></i>Quotation details</div>
+<div class="quote-info-panel-body quote-detail-grid">
+<div class="form-group"><label>Quotation No.</label><input id="f-qno" readonly="" style="background:#f8f9fa;font-weight:700;color:var(--blue)"/></div>
+<div class="form-group quote-date-field"><label>Date</label><div class="quote-date-combo"><input id="f-date" inputmode="numeric" maxlength="10" onblur="normalizeQuoteDateInput();syncQuoteCalendarFromText()" oninput="formatQuoteDateTyping(this);updateValidUntil()" placeholder="DD/MM/YYYY" type="text"/><button aria-label="Choose date from calendar" class="quote-calendar-button" onclick="openQuoteCalendar()" title="Choose date" type="button"><i class="ti ti-calendar"></i></button><input aria-label="Quotation date calendar" id="f-date-calendar" onchange="applyQuoteCalendarDate(this.value)" tabindex="-1" type="date"/></div><div class="quote-date-hint">Type DD/MM/YYYY or choose from calendar</div></div>
+<div class="form-group"><label>Validity (days)</label><input id="f-validity" min="1" oninput="updateValidUntil()" type="number" value="7"/><div class="quote-validity-hint" id="quote-validity-inline">Auto expiry</div></div>
+<div class="form-group quote-term-field quote-delivery-term"><label>Delivery terms</label><div class="terms-wrap"><select class="terms-select" id="f-delivery" onchange="onTermsChange('delivery')"></select></div><div class="terms-add-inline" id="f-delivery-add"><input id="f-delivery-new" onkeydown="if(event.key==='Enter'){saveNewTerm('delivery');event.preventDefault()}" placeholder="New delivery term…"/><button class="btn btn-primary btn-sm" onclick="saveNewTerm('delivery')"><i class="ti ti-check"></i>Add</button><button class="btn btn-secondary btn-sm" onclick="cancelNewTerm('delivery')">Cancel</button></div></div>
+<div class="form-group quote-term-field quote-payment-term"><label>Payment terms</label><div class="terms-wrap"><select class="terms-select" id="f-payment" onchange="onTermsChange('payment')"></select></div><div class="terms-add-inline" id="f-payment-add"><input id="f-payment-new" onkeydown="if(event.key==='Enter'){saveNewTerm('payment');event.preventDefault()}" placeholder="New payment term…"/><button class="btn btn-primary btn-sm" onclick="saveNewTerm('payment')"><i class="ti ti-check"></i>Add</button><button class="btn btn-secondary btn-sm" onclick="cancelNewTerm('payment')">Cancel</button></div></div>
+</div>
+</section>
+<section class="quote-info-panel quote-notes-panel">
+<div class="quote-info-panel-head"><i class="ti ti-notes"></i>Notes &amp; remarks</div>
+<div class="quote-info-panel-body quote-notes-grid quote-notes-grid-top">
+<div class="form-group"><label>Customer notes / remarks</label><textarea id="f-notes" placeholder="Remarks that may appear on the quotation…"></textarea></div>
+<div class="form-group"><label>Internal notes <span style="font-weight:400;color:var(--gray)">(not printed)</span></label><textarea id="f-internal-notes" placeholder="Internal instructions, follow-up notes, approvals…"></textarea></div>
+</div>
+</section>
+</div>
+</section>
+<section class="quote-items-panel">
+<div class="quote-section-heading"><span><i class="ti ti-list-details"></i>Quotation items</span><div class="quote-tabs"><button class="btn btn-sm btn-primary" id="type-btn-product" onclick="setQuoteType('product')"><i class="ti ti-package"></i>Products</button><button class="btn btn-sm btn-secondary" id="type-btn-contracting" onclick="setQuoteType('contracting')"><i class="ti ti-tool"></i>Services</button></div></div>
+<div id="product-search-bar" style="margin-bottom:8px;display:flex;align-items:center;gap:7px"><div style="position:relative;flex:1;max-width:460px"><i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--gray);font-size:14px"></i><input autocomplete="off" id="prod-search-inp" onblur="setTimeout(closeProdSearch,200)" onfocus="openProdSearch()" oninput="filterProdSearch()" onkeydown="handleQuoteProductSearchKey(event)" placeholder="Search product database…" style="width:100%;height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px 0 32px;font-size:12px;outline:none"/><div id="prod-search-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--blue-mid);border-top:none;border-radius:0 0 var(--radius) var(--radius);max-height:220px;overflow-y:auto;z-index:300;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div></div><button class="btn btn-secondary btn-sm" onclick="addItemRow()"><i class="ti ti-plus"></i>Blank item</button><button class="btn btn-secondary btn-sm" onclick="addSpecialQuoteRow('heading')"><i class="ti ti-heading"></i>Add heading</button><button class="btn btn-secondary btn-sm" onclick="addSpecialQuoteRow('note')"><i class="ti ti-note"></i>Add note</button><button class="btn btn-secondary btn-sm" onclick="quickAddProductFromQuote()"><i class="ti ti-package-import"></i>New product</button><button class="btn btn-danger btn-sm" onclick="clearAllItems()"><i class="ti ti-trash"></i>Clear all</button></div>
+<div class="quote-items-wrap"><table class="items-table" id="items-table-main"><thead id="items-thead"><tr><th style="width:32px">SL</th><th style="width:110px">Item code</th><th style="width:145px">Brand / Model</th><th style="width:230px">Description</th><th style="width:82px">Qty *</th><th style="width:90px">UOM</th><th style="width:100px">Unit price *</th><th style="width:100px">Total</th><th style="width:32px"></th></tr></thead><tbody id="items-tbody"></tbody></table></div>
+<div id="service-add-btn" style="display:none;margin-top:8px;gap:6px"><button class="btn btn-secondary btn-sm" onclick="addServiceRow()"><i class="ti ti-plus"></i>Add scope line</button><button class="btn btn-secondary btn-sm" onclick="addSpecialQuoteRow('heading')"><i class="ti ti-heading"></i>Add heading</button><button class="btn btn-secondary btn-sm" onclick="addSpecialQuoteRow('note')"><i class="ti ti-note"></i>Add note</button><button class="btn btn-danger btn-sm" onclick="clearAllItems()"><i class="ti ti-trash"></i>Clear all</button></div>
+<div class="quote-bottom-summary"><div class="totals-box"><div class="totals-row"><span>Sub-total</span><span id="t-subtotal">SAR 0.00</span></div><div class="totals-row"><span>Discount <input id="f-discount" min="0" oninput="calcTotals()" style="width:70px;height:22px;font-size:12px;border:1px solid var(--border);border-radius:4px;padding:0 6px;margin-left:6px" type="number" value="0"/> SAR</span><span id="t-discount" style="color:var(--red)">- SAR 0.00</span></div><div class="totals-row"><span>Total before VAT</span><span id="t-before-vat">SAR 0.00</span></div><div class="totals-row"><span id="t-vat-label">VAT (15%)</span><span id="t-vat">SAR 0.00</span></div><div class="totals-row net"><span>Net amount</span><span id="t-net">SAR 0.00</span></div></div></div>
+</section>
+</div>
+<div class="modal-footer"><div class="quote-footer-state"><span id="quote-footer-state">✓ Saved</span><span>Ctrl + S to save</span></div><div class="quote-footer-actions"><button class="btn btn-secondary" onclick="confirmCloseModal('quote-modal')">Cancel</button><button class="btn btn-secondary" onclick="saveQuotation('draft')"><i class="ti ti-device-floppy"></i>Save Draft</button><button class="btn btn-primary" onclick="saveQuotation('preview')"><i class="ti ti-eye"></i>Save &amp; Preview</button><button class="btn btn-success" onclick="saveQuotation('sent')"><i class="ti ti-send"></i>Save &amp; Mark Sent</button></div></div>
+</div>
+</div>
+<!-- VIEW QUOTATION MODAL -->
+<div class="modal-overlay" id="view-modal">
+<div class="modal modal-normal">
+<div class="modal-header">
+<h2 id="view-title">Quotation details</h2>
+<div style="display:flex;align-items:center;gap:8px">
+
+<button class="close-btn" onclick="closeModal('view-modal')">✕</button>
+</div>
+</div>
+<!-- Frozen status bar — never scrolls, always visible -->
+<div class="modal-status-bar" id="view-status-bar">
+<span class="ssb-label"><i class="ti ti-tag" style="margin-right:4px"></i>Status:</span>
+</div>
+<div class="modal-body" id="view-body"></div>
+<div class="modal-footer" id="view-footer"></div>
+</div>
+</div>
+<!-- ADD / EDIT CUSTOMER MODAL -->
+<div class="modal-overlay" id="cust-modal">
+<div class="modal modal-compact">
+<div class="modal-header">
+<h2 id="cust-modal-title">Add customer</h2>
+<div style="display:flex;align-items:center;gap:8px">
+
+<button class="close-btn" onclick="confirmCloseModal('cust-modal')">✕</button>
+</div>
+</div>
+<div class="modal-body" onchange="markDirty('cust-modal')" oninput="markDirty('cust-modal')">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;margin-bottom:16px">
+<div class="form-group form-full"><label>Company name *</label><input id="cm-company" placeholder="e.g. SNC Lavalin Arabia"/></div>
+<div class="form-group"><label>City / Address</label><input id="cm-city" placeholder="e.g. Riyadh, Saudi Arabia"/></div>
+<div class="form-group"><label>VAT No. (optional)</label><input id="cm-vat" placeholder="Customer VAT number"/></div>
+</div>
+<div class="section-title" style="margin-top:0;display:flex;align-items:center;justify-content:space-between">
+<span><i class="ti ti-users" style="margin-right:6px"></i>Contacts</span>
+<button class="btn btn-secondary btn-sm" onclick="addContactRow()"><i class="ti ti-plus"></i>Add contact</button>
+</div>
+<p style="font-size:11px;color:var(--gray);margin:-6px 0 10px">Add all contact persons for this company. The first one becomes the default.</p>
+<div id="cm-contacts-list" style="display:flex;flex-direction:column;gap:8px"></div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="confirmCloseModal('cust-modal')">Cancel</button>
+<button class="btn btn-primary" onclick="saveCustomer()"><i class="ti ti-device-floppy"></i>Save customer</button>
+</div>
+</div>
+</div>
+<!-- PRODUCT VIEW MODAL -->
+<div class="modal-overlay" id="prod-view-modal">
+<div class="modal modal-compact">
+<div class="modal-header">
+<h2 id="prod-view-title">Product details</h2>
+<button class="close-btn" onclick="closeModal('prod-view-modal')">✕</button>
+</div>
+<div class="modal-body" id="prod-view-body"></div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closeModal('prod-view-modal')">Close</button>
+<button class="btn btn-primary" id="prod-view-edit-btn" onclick="closeModal('prod-view-modal');openEditProduct(this.getAttribute('data-pid'))"><i class="ti ti-edit"></i>Edit product</button>
+</div>
+</div>
+</div>
+<!-- ADD / EDIT PRODUCT MODAL -->
+<div class="modal-overlay" id="prod-modal">
+<div class="modal modal-normal">
+<div class="modal-header">
+<h2 id="prod-modal-title">Add product</h2>
+<div style="display:flex;align-items:center;gap:8px">
+
+<button class="close-btn" onclick="confirmCloseModal('prod-modal')">✕</button>
+</div>
+</div>
+<div class="modal-body" onchange="markDirty('prod-modal')" oninput="markDirty('prod-modal')" style="overflow-y:auto">
+<!-- Two-column: form fields left, image right -->
+<div style="display:grid;grid-template-columns:1fr 200px;gap:16px;align-items:start">
+<!-- LEFT: all form fields -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
+<div class="form-group form-full"><label>Product name *</label><input id="pm-name" placeholder="e.g. Insect Killer Light 32W Round"/></div>
+<div class="form-group"><label>Item code / SKU</label><input id="pm-code" placeholder="e.g. IKL-32W-RD"/></div>
+<div class="form-group">
+<label>Category</label>
+<select id="pm-cat" onchange="onCategoryChange()">
+<option value="">— Select —</option>
+<option>Electrical</option><option>Mechanical</option><option>Safety</option>
+<option>Cleaning</option><option>Stationery</option><option>Tools</option>
+<option>Plumbing</option><option>Hardware</option><option>Consumables</option>
+<option>Food &amp; Beverages</option><option>IT Hardware &amp; Software</option>
+<option>Other</option>
+<option value="__addcat__">＋ Add new category…</option>
+</select>
+<div id="pm-cat-add" style="display:none;margin-top:6px;display:none;gap:6px;align-items:center">
+<input id="pm-cat-new" onkeydown="if(event.key==='Enter'){saveNewCategory();event.preventDefault()}" placeholder="New category name…" style="flex:1;height:30px;border:1px solid var(--blue-mid);border-radius:var(--radius);padding:0 10px;font-size:12px;outline:none"/>
+<button class="btn btn-primary btn-sm" onclick="saveNewCategory()"><i class="ti ti-check"></i>Add</button>
+<button class="btn btn-secondary btn-sm" onclick="cancelNewCategory()">Cancel</button>
+</div>
+</div>
+<div class="form-group"><label>Brand</label><input id="pm-brand" placeholder="e.g. Sylvania"/></div>
+<div class="form-group"><label>Model number</label><input id="pm-model" placeholder="e.g. SYL-IKL-32W"/></div>
+<div class="form-group"><label>UOM</label>
+<select id="pm-uom"></select>
+</div>
+<div class="form-group"><label>Default price (SAR)</label><input id="pm-price" min="0" placeholder="0.00" step="0.01" type="number"/></div>
+</div>
+<!-- RIGHT: product image -->
+<div style="display:flex;flex-direction:column;gap:8px">
+<label style="font-size:11px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:.05em">Product image</label>
+<div id="pm-img-area" onclick="document.getElementById('pm-img-input').click()" style="border:2px dashed var(--border);border-radius:var(--radius);cursor:pointer;transition:border-color .2s;width:100%;aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;background:#fafafa">
+<div id="pm-img-preview" style="display:none;width:100%;height:100%">
+<img id="pm-img-thumb" style="width:100%;height:100%;object-fit:contain;border-radius:4px"/>
+</div>
+<div id="pm-img-placeholder" style="text-align:center;padding:8px">
+<i class="ti ti-photo-up" style="font-size:28px;color:var(--blue-light);display:block;margin-bottom:6px"></i>
+<span style="font-size:11px;color:var(--gray)">Click to upload</span>
+<span style="font-size:10px;color:#aaa;display:block">PNG, JPG</span>
+</div>
+</div>
+<input accept="image/*" id="pm-img-input" onchange="handleProductImageUpload(event)" style="display:none" type="file"/>
+<div id="pm-img-actions" style="display:none;gap:4px;flex-direction:column">
+<button class="btn btn-secondary btn-sm" onclick="document.getElementById('pm-img-input').click()" style="width:100%;justify-content:center"><i class="ti ti-upload"></i>Change</button>
+<button class="btn btn-danger btn-sm" onclick="clearProductImage()" style="width:100%;justify-content:center"><i class="ti ti-trash"></i>Remove</button>
+</div>
+</div>
+</div><!-- end two-column grid -->
+<div style="margin-top:14px">
+<div class="section-title" style="margin-top:0">Specifications <span style="font-size:10px;font-weight:400;color:var(--gray);text-transform:none">(optional — e.g. Color, Height, Wattage)</span></div>
+<div id="specs-list" style="display:flex;flex-direction:column;gap:8px"></div>
+<button class="btn btn-secondary btn-sm" onclick="addSpecRow()" style="margin-top:8px"><i class="ti ti-plus"></i>Add spec</button>
+</div>
+<div class="form-group" style="margin-top:14px"><label>Additional description / notes</label>
+<textarea id="pm-notes" placeholder="Any extra information about this product…" style="height:70px;width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;resize:vertical;outline:none"></textarea>
+</div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="confirmCloseModal('prod-modal')">Cancel</button>
+<button class="btn btn-primary" onclick="saveProduct()"><i class="ti ti-device-floppy"></i>Save product</button>
+</div>
+</div>
+</div>
+<!-- SUPPLIER MODAL -->
+<div class="modal-overlay" id="sup-modal">
+<div class="modal modal-compact">
+<div class="modal-header">
+<h2 id="sup-modal-title">Add supplier</h2>
+<div style="display:flex;align-items:center;gap:8px">
+
+<button class="close-btn" onclick="confirmCloseModal('sup-modal')">✕</button>
+</div>
+</div>
+<div class="modal-body" onchange="markDirty('sup-modal')" oninput="markDirty('sup-modal')">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
+<div class="form-group form-full"><label>Company name *</label><input id="sm-company" placeholder="e.g. Al-Rajhi Trading Co."/></div>
+<div class="form-group"><label>Contact person</label><input id="sm-contact" placeholder="Mr. Ahmed"/></div>
+<div class="form-group"><label>Phone</label><input id="sm-phone" placeholder="+966 XX XXX XXXX"/></div>
+<div class="form-group"><label>Email</label><input id="sm-email" placeholder="sales@supplier.com"/></div>
+<div class="form-group"><label>WhatsApp</label><input id="sm-whatsapp" placeholder="+966 XX XXX XXXX"/></div>
+<div class="form-group"><label>City</label><input id="sm-city" placeholder="Riyadh"/></div>
+<div class="form-group"><label>Category / Specialty</label><input id="sm-cat" placeholder="e.g. Electrical, Mechanical"/></div>
+<div class="form-group"><label>VAT No. (optional)</label><input id="sm-vat" placeholder="Supplier VAT number"/></div>
+<div class="form-group form-full"><label>Notes</label><textarea id="sm-notes" placeholder="Any notes about this supplier…" style="height:60px;width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;resize:vertical;outline:none"></textarea></div>
+</div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="confirmCloseModal('sup-modal')">Cancel</button>
+<button class="btn btn-primary" onclick="saveSupplier()"><i class="ti ti-device-floppy"></i>Save supplier</button>
+</div>
+</div>
+</div>
+<!-- NEW RFQ MODAL -->
+<div class="modal-overlay" id="rfq-modal">
+<div class="modal rfq-form-modal">
+<div class="modal-header rfq-form-head">
+<div class="rfq-head-main">
+<div class="rfq-head-icon"><i class="ti ti-clipboard-list"></i></div>
+<div class="rfq-head-copy">
+<h2 id="rfq-modal-title">Log new RFQ</h2>
+<div class="rfq-head-meta">
+<span class="rfq-edit-no" id="rfq-edit-no">New record</span>
+
+</div>
+</div>
+</div>
+<div class="rfq-header-actions"><button aria-label="Close" class="close-btn" onclick="confirmCloseModal('rfq-modal')">✕</button></div>
+</div>
+<div class="modal-body rfq-form-body" onchange="markDirty('rfq-modal')" oninput="markDirty('rfq-modal')">
+<div class="rfq-form-card">
+<div class="rfq-card-title"><i class="ti ti-building"></i>Customer information</div>
+<div class="rfq-simple-grid">
+<div class="form-group">
+<label>Customer <span class="rfq-required">*</span></label>
+<div class="cust-wrap">
+<input autocomplete="off" id="rfq-cust-search" onblur="setTimeout(closeRFQCustDD,200)" onfocus="openRFQCustDD()" oninput="filterRFQCustDD()" placeholder="Search and select customer"/>
+<div class="cust-dropdown" id="rfq-cust-dd"></div>
+</div>
+</div>
+<div class="form-group"><label>Contact person</label><select id="rfq-contact"><option value="">Select customer first</option></select></div>
+<div class="form-group form-full"><label>Customer reference / subject</label><input id="rfq-ref" placeholder="Example: RFQ for maintenance materials"/></div>
+</div>
+</div>
+<div class="rfq-form-card">
+<div class="rfq-card-title"><i class="ti ti-calendar-event"></i>RFQ details</div>
+<div class="rfq-simple-grid">
+<div class="form-group"><label>Received via</label>
+<select id="rfq-channel">
+<option>Email</option><option>WhatsApp</option><option>Phone</option><option>Walk-in</option><option>Other</option>
+</select>
+</div>
+<div class="form-group"><label>Assigned to</label><select id="rfq-assigned"><option value="">Select employee</option></select><span class="field-help rfq-assigned-help">Active employees with the Sales role</span></div>
+<div class="form-group"><label>Date received</label><input id="rfq-date" type="date"/></div>
+<div class="form-group"><label>Response due date</label><input id="rfq-due" type="date"/></div>
+<div class="form-group form-full"><label>Description / requirements</label>
+<textarea id="rfq-desc" placeholder="Briefly describe what the customer is requesting" style="height:82px"></textarea>
+</div>
+</div>
+</div>
+<div class="rfq-form-card">
+<div class="rfq-card-title"><i class="ti ti-paperclip"></i>Attachment</div>
+<div class="rfq-attach-compact" onclick="document.getElementById('rfq-attach-input').click()">
+<i class="ti ti-cloud-upload"></i>
+<div><strong>Attach supporting file</strong><small>Email screenshot, WhatsApp image or PDF</small></div>
+</div>
+<input accept="image/*,.pdf" id="rfq-attach-input" onchange="handleRFQAttach(event)" style="display:none" type="file"/>
+<div id="rfq-attach-list"></div>
+</div>
+</div>
+<div class="modal-footer rfq-form-footer">
+<div class="rfq-footer-hint"><span>Quick save</span><kbd>Ctrl</kbd><span>+</span><kbd>S</kbd></div>
+<div class="rfq-footer-actions">
+<button class="btn btn-secondary" onclick="confirmCloseModal('rfq-modal')">Cancel</button>
+<button class="btn btn-primary" id="rfq-save-btn" onclick="saveRFQ()"><i class="ti ti-device-floppy"></i><span id="rfq-save-label">Save RFQ</span></button>
+</div>
+</div>
+</div>
+</div>
+<!-- PRICING SHEET MODAL -->
+<div class="modal-overlay" id="pricing-modal">
+<div class="modal modal-normal">
+<div class="modal-header">
+<h2 id="pricing-modal-title">Pricing sheet</h2>
+<div style="display:flex;align-items:center;gap:8px">
+
+<button class="close-btn" onclick="closeModal('pricing-modal')">✕</button>
+</div>
+</div>
+<div class="modal-body">
+<!-- RFQ info bar -->
+<div id="pricing-rfq-info" style="background:var(--blue-pale);border:1px solid var(--blue-light);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;display:flex;gap:20px;flex-wrap:wrap;font-size:12px"></div>
+<div class="pricing-workspace">
+<div class="pricing-workspace-main">
+<!-- Compact supplier and vendor quotation header -->
+<div class="pricing-top-panel">
+<div class="pricing-supplier-grid">
+<div class="form-group">
+<label>Primary supplier</label>
+<div class="cust-wrap">
+<input autocomplete="off" id="pricing-sup-search" onblur="setTimeout(closePricingSupDD,200)" onfocus="openPricingSupDD()" oninput="filterPricingSupDD()" placeholder="Search supplier…"/>
+<div class="cust-dropdown" id="pricing-sup-dd"></div>
+</div>
+</div>
+<div class="form-group"><label>Quote reference</label><input id="pricing-sup-ref" placeholder="Quote no."/></div>
+<div class="form-group"><label>Quote date</label><input id="pricing-sup-date" inputmode="numeric" maxlength="10" placeholder="DD/MM/YYYY" autocomplete="off"/></div>
+</div>
+<div class="pricing-top-actions">
+<div class="pricing-supplier-actions">
+<button class="btn btn-secondary btn-sm" onclick="applyPrimarySupplierToPricingLines('blank')" type="button"><i class="ti ti-wand"></i>Fill blank lines</button>
+<button class="btn btn-secondary btn-sm" onclick="if(confirm('Replace supplier and quotation reference on all pricing lines?'))applyPrimarySupplierToPricingLines('all')" type="button"><i class="ti ti-copy-check"></i>Replace all</button>
+</div>
+</div>
+<div class="pricing-vendor-compact">
+<div class="pricing-vendor-label"><strong>Vendor quotations</strong><span>PDF or image attachments</span></div>
+<div class="pricing-vendor-content">
+<input accept="image/*,.pdf" id="pricing-attach-input" onchange="handlePricingAttach(event)" style="display:none" type="file"/>
+<div id="pricing-attach-list"></div>
+<button class="btn btn-secondary btn-sm" onclick="document.getElementById('pricing-attach-input').click()" type="button"><i class="ti ti-paperclip"></i>Attach</button>
+</div>
+</div>
+</div>
+<!-- Compact table action -->
+<div class="pricing-grid-actions">
+<span class="pricing-grid-help">Select a product from the Quick Add row below</span>
+<button class="btn btn-danger btn-sm" onclick="confirmClearPricingRows()" title="Clear all pricing lines"><i class="ti ti-trash"></i>Clear all</button>
+</div>
+<!-- Pricing table -->
+<div class="pricing-table-scroll">
+<table class="pricing-table" id="pricing-table">
+<thead>
+<tr>
+<th class="pricing-drag-column" style="width:24px" title="Drag lines to reorder"></th>
+<th style="width:42px">#</th>
+<th style="width:90px">Code</th>
+<th style="width:260px">Description</th>
+<th style="width:105px">Qty</th>
+<th style="width:70px">UOM</th>
+<th style="width:150px">Supplier</th>
+<th style="width:110px">Quote ref.</th>
+<th style="width:105px">Buy price</th>
+<th style="width:85px">Markup %</th>
+<th style="width:110px">Sell price</th>
+<th style="width:95px">Margin</th>
+<th style="width:80px">Margin %</th>
+<th style="width:36px"></th>
+</tr>
+</thead>
+<tbody id="pricing-tbody"></tbody>
+</table>
+</div>
+<!-- Document-level notes and additional costs in one balanced row -->
+<div class="pricing-notes-costs-row">
+<section class="pricing-internal-notes-section">
+<div class="pricing-internal-notes-head">
+<div><strong>Internal Notes</strong><span>Internal use only — not copied to customer documents</span></div>
+<span id="pricing-internal-notes-count">0 / 2000</span>
+</div>
+<textarea id="pricing-internal-notes" maxlength="2000" rows="4" placeholder="Add pricing-level notes, supplier conditions, negotiation details or internal instructions…" oninput="document.getElementById('pricing-internal-notes-count').textContent=this.value.length+' / 2000'"></textarea>
+</section>
+<section class="internal-costs internal-costs-below" id="internal-costs-section">
+<div class="internal-costs-summary">
+<span class="internal-costs-summary-title">Additional Costs</span>
+<span class="internal-costs-summary-meta" id="internal-costs-count">None added</span>
+<span class="internal-costs-summary-total" id="internal-costs-total">SAR 0.00</span>
+<button class="btn btn-secondary btn-sm" id="internal-costs-toggle" onclick="toggleAdditionalCosts()" type="button"><i class="ti ti-adjustments"></i>Manage</button>
+</div>
+<div class="internal-costs-body" id="internal-costs-body">
+<div class="internal-costs-toolbar">
+<span class="internal-costs-note">Defaults come from System Administration. Locked components cannot be changed here.</span>
+<button class="btn btn-secondary btn-sm" onclick="addAdditionalCostRow({},true)" type="button"><i class="ti ti-plus"></i>Add cost</button>
+</div>
+<table class="internal-costs-table">
+<thead><tr><th>Cost type</th><th style="width:180px">Calculation method</th><th style="width:120px">Value</th><th style="width:130px;text-align:right">Calculated cost</th><th style="width:34px"></th></tr></thead>
+<tbody id="internal-costs-tbody"></tbody>
+</table>
+</div>
+<datalist id="additional-cost-types"><option value="Transportation"><option value="Administration"><option value="Commission"><option value="Packing"><option value="Loading &amp; Unloading"><option value="Installation"><option value="Accommodation"><option value="Other"></option></option></option></option></option></option></option></option></datalist>
+</section>
+</div>
+</div>
+<div class="pricing-financial-column">
+<aside aria-label="Pricing summary" class="pricing-summary-panel">
+<div class="pricing-summary-title"><i class="ti ti-chart-dots-3"></i><span class="pricing-summary-title-text">Summary</span><button class="btn pricing-summary-toggle" id="pricing-summary-toggle" onclick="togglePricingSummaryPanel()" title="Collapse summary" type="button"><i class="ti ti-layout-sidebar-right-collapse"></i></button></div>
+<div class="pricing-margin-status-card" id="pricing-margin-status-card" style="display:none">
+<div class="pricing-margin-status-main">
+<span class="pricing-margin-status-dot" id="ps-status-dot"></span>
+<span class="pricing-margin-status-icon" id="ps-status-icon">⚠️</span>
+<strong id="ps-status-label">Below Target</strong>
+</div>
+<div class="pricing-margin-status-detail" id="ps-status-detail">
+<span class="pricing-margin-status-line" id="ps-status-current">Current margin: 0.0%</span>
+<span class="pricing-margin-status-line" id="ps-status-range">Range: —</span>
+<span class="pricing-margin-status-approval" id="ps-status-approval" aria-live="polite">&nbsp;</span>
+</div>
+</div>
+<div class="pricing-summary" id="pricing-summary">
+<div class="pricing-summary-section">Cost</div>
+<div class="ps-item"><div class="ps-label">Material cost</div><div class="ps-val" id="ps-cost">SAR 0</div></div>
+<div class="ps-item"><div class="ps-label">Additional cost</div><div class="ps-val" id="ps-additional-cost">SAR 0</div></div>
+<div class="ps-item"><div class="ps-label">Total cost</div><div class="ps-val" id="ps-total-cost">SAR 0</div></div>
+<div class="pricing-summary-section">Selling</div>
+<div class="ps-item"><div class="ps-label">Total sell</div><div class="ps-val" id="ps-sell">SAR 0</div></div>
+<div class="pricing-summary-section">Result</div>
+<div class="ps-item ps-highlight"><div class="ps-label">Profit</div><div class="ps-val green" id="ps-margin">SAR 0</div></div>
+<div class="ps-item ps-highlight"><div class="ps-label">Margin</div><div class="ps-val green" id="ps-pct">0%</div></div>
+</div>
+<div class="margin-gauge-wrap" id="margin-gauge-wrap">
+<div class="margin-gauge-head"><strong>Margin status</strong><span id="margin-gauge-value">0.0%</span></div>
+<div class="margin-gauge-vertical-wrap">
+<div class="margin-gauge-scale"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div>
+<div aria-label="Drag vertically to set overall margin percentage" class="margin-gauge is-draggable" id="margin-gauge" title="Drag vertically to set the target margin and adjust all selling prices">
+<span class="margin-gauge-marker" id="margin-gauge-marker" style="bottom:0%"><span class="margin-gauge-marker-icon" id="margin-gauge-marker-icon"></span></span>
+</div>
+</div>
+<div class="margin-gauge-help">Drag to set target margin</div>
+</div>
+</aside>
+</div>
+</div>
+</div>
+<div class="modal-footer">
+<span id="pricing-back-btn"></span>
+<span class="pricing-save-note" id="pricing-save-note">Save pricing before conversion.</span>
+<div class="pricing-footer-actions">
+<button class="btn pricing-footer-btn pricing-cancel-btn btn-sm" onclick="closeModal('pricing-modal')"><i class="ti ti-x"></i>Cancel</button>
+<button class="btn btn-primary pricing-footer-btn btn-sm" id="pricing-save-btn" onclick="requestSavePricing()"><i class="ti ti-device-floppy"></i>Save</button>
+<button class="btn btn-success btn-sm" disabled="" id="pricing-convert-btn" onclick="convertToQuotation()"><i class="ti ti-file-arrow-right"></i>Convert</button>
+</div>
+</div>
+</div>
+</div>
+<!-- VIEW RFQ MODAL -->
+<div class="modal-overlay" id="rfq-view-modal">
+<div class="modal modal-normal rfq-view-modal">
+<div class="modal-header">
+<h2 id="rfq-view-title">RFQ details</h2>
+<div style="display:flex;align-items:center;gap:8px">
+
+<button class="close-btn" onclick="closeModal('rfq-view-modal')">✕</button>
+</div>
+</div>
+<div class="modal-body" id="rfq-view-body"></div>
+<div class="modal-footer" id="rfq-view-footer"></div>
+</div>
+</div>
+<!-- READ-ONLY PRICING VIEW MODAL -->
+<div class="modal-overlay" id="pricing-ro-modal">
+<div class="modal modal-normal">
+<div class="modal-header">
+<h2 id="pricing-ro-title">Pricing sheet</h2>
+<div style="display:flex;align-items:center;gap:8px">
+<span style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:4px;padding:3px 10px;font-size:11px;color:rgba(255,255,255,0.9)"><i class="ti ti-lock"></i> Read only</span>
+
+<button class="close-btn" onclick="closeModal('pricing-ro-modal')">✕</button>
+</div>
+</div>
+<div class="modal-body" id="pricing-ro-body"></div>
+<div class="modal-footer" id="pricing-ro-footer"></div>
+</div>
+</div>
+<!-- CUSTOMER VIEW MODAL -->
+<div class="modal-overlay" id="cust-view-modal">
+<div class="modal modal-compact">
+<div class="modal-header">
+<h2 id="cust-view-title">Customer</h2>
+<button class="close-btn" onclick="closeModal('cust-view-modal')">✕</button>
+</div>
+<div class="modal-body" id="cust-view-body"></div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closeModal('cust-view-modal')" style="padding:9px 20px;font-size:13px">Close</button>
+<button class="btn btn-primary" id="cust-view-edit-btn" onclick="closeModal('cust-view-modal');openEditCustomer(this.getAttribute('data-cid'))" style="padding:9px 20px;font-size:13px"><i class="ti ti-edit"></i>Edit customer</button>
+</div>
+</div>
+</div>
+<!-- ═══════════════════════════════════════════════════════════
+     SALES ORDER MODALS
+═══════════════════════════════════════════════════════════ -->
+<!-- CREATE SALES ORDER MODAL -->
+<div class="modal-overlay" id="so-create-modal">
+<div class="modal modal-normal">
+<div class="modal-header">
+<h2 id="so-create-title">Create Sales Order</h2>
+<button class="close-btn" onclick="closeModal('so-create-modal')">✕</button>
+</div>
+<div class="modal-body">
+<!-- SO header fields -->
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+<div class="form-group"><label>SO Number</label><input id="so-no" readonly="" style="background:#f8f9fa;font-weight:600"/></div>
+<div class="form-group"><label>Date</label><input id="so-date" type="date"/></div>
+<div class="form-group"><label>Customer PO Number *</label><input id="so-po-no" placeholder="e.g. PO-2026-00451"/></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+<div class="form-group"><label>Customer</label><input id="so-customer" readonly="" style="background:#f8f9fa"/></div>
+<div class="form-group"><label>Linked quotation</label><input id="so-quote-ref" readonly="" style="background:#f8f9fa"/></div>
+</div>
+<div class="form-group" style="margin-bottom:16px"><label>Notes / instructions</label><textarea id="so-notes" placeholder="Any special instructions for this order…" style="height:52px;width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;resize:vertical;outline:none"></textarea></div>
+<!-- Item selector -->
+<div class="section-title" style="display:flex;align-items:center;justify-content:space-between">
+<span><i class="ti ti-list-check" style="margin-right:6px"></i>Select items from quotation</span>
+<div style="display:flex;gap:8px">
+<button class="btn btn-secondary btn-sm" onclick="soSelectAll(true)"><i class="ti ti-check"></i>Select all</button>
+<button class="btn btn-secondary btn-sm" onclick="soSelectAll(false)"><i class="ti ti-x"></i>Clear</button>
+</div>
+</div>
+<p style="font-size:12px;color:var(--gray);margin:-6px 0 10px">Check the items the customer has ordered. Adjust quantity if partial PO.</p>
+<div id="so-items-list"></div>
+<!-- Summary -->
+<div id="so-summary" style="background:var(--blue-pale);border:1px solid var(--blue-light);border-radius:var(--radius);padding:12px 16px;margin-top:12px;display:none">
+<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>Sub-total</span><span id="so-sum-sub">SAR 0.00</span></div>
+<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span id="so-sum-vat-label">VAT (15%)</span><span id="so-sum-vat">SAR 0.00</span></div>
+<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;color:var(--blue);border-top:1px solid var(--blue-light);padding-top:8px;margin-top:6px"><span>Total</span><span id="so-sum-total">SAR 0.00</span></div>
+<div id="so-remaining-note" style="font-size:11px;color:var(--gray);margin-top:6px"></div>
+</div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closeModal('so-create-modal')">Cancel</button>
+<button class="btn btn-primary" id="so-save-btn" onclick="saveSalesOrder()"><i class="ti ti-shopping-cart"></i><span id="so-save-btn-text">Create Sales Order</span></button>
+</div>
+</div>
+</div>
+<!-- VIEW SALES ORDER MODAL -->
+<div class="modal-overlay" id="so-view-modal">
+<div class="modal modal-normal">
+<div class="modal-header">
+<h2 id="so-view-title">Sales Order</h2>
+<div style="display:flex;align-items:center;gap:8px">
+
+<button class="close-btn" onclick="closeModal('so-view-modal')">✕</button>
+</div>
+</div>
+<!-- Frozen status pipeline bar -->
+<div id="so-pipeline-bar" style="flex-shrink:0;background:#F0F6FF;border-bottom:2px solid var(--blue-light);padding:12px 24px"></div>
+<div class="modal-body" id="so-view-body"></div>
+<div class="modal-footer" id="so-view-footer"></div>
+</div>
+</div>
+<!-- RECORD DELIVERY MODAL -->
+<div class="modal-overlay" id="so-delivery-modal">
+<div class="modal modal-compact">
+<div class="modal-header">
+<h2 id="dn-title">Dispatch Delivery</h2>
+<button class="close-btn" onclick="closeModal('so-delivery-modal')">✕</button>
+</div>
+<div class="modal-body">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+<div class="form-group"><label>Delivery Note No</label><input id="dn-no" readonly="" style="background:#f8f9fa;font-weight:600"/></div>
+<div class="form-group"><label>Delivery date *</label><input id="dn-date" type="date"/></div>
+<div class="form-group"><label>Delivered by</label><input id="dn-by" placeholder="Driver / courier name"/></div>
+<div class="form-group"><label>Vehicle / AWB No</label><input id="dn-vehicle" placeholder="Vehicle plate or tracking no."/></div>
+</div>
+<div class="form-group" style="margin-bottom:14px"><label>Delivery remarks</label><textarea id="dn-remarks" placeholder="Received in good condition, partial delivery, etc." style="height:52px;width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;resize:vertical;outline:none"></textarea></div>
+<div class="section-title" style="margin-top:0"><i class="ti ti-package" style="margin-right:6px"></i>Items delivered</div>
+<p style="font-size:12px;color:var(--gray);margin:-6px 0 10px">Select and confirm quantities physically delivered.</p>
+<div id="dn-items-list"></div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closeModal('so-delivery-modal')">Cancel</button>
+<button class="btn btn-success" onclick="saveDelivery()"><i class="ti ti-truck"></i>Dispatch</button>
+</div>
+</div>
+</div>
+<!-- CREATE INVOICE MODAL -->
+<div class="modal-overlay" id="so-invoice-modal">
+<div class="modal modal-compact">
+<div class="modal-header">
+<h2 id="inv-modal-title">Create Invoice</h2>
+<button class="close-btn" onclick="closeModal('so-invoice-modal')">✕</button>
+</div>
+<div class="modal-body">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+<div class="form-group"><label>Invoice No (BizCore)</label><input id="inv-no" readonly="" style="background:#f8f9fa;font-weight:600"/></div>
+<div class="form-group"><label>Invoice date *</label><input id="inv-date" type="date"/></div>
+<div class="form-group"><label>Zoho Invoice No</label><input id="inv-zoho" placeholder="Zoho Books invoice number"/></div>
+<div class="form-group"><label>Payment due date</label><input id="inv-due" type="date"/></div>
+</div>
+<div class="form-group" style="margin-bottom:14px"><label>Invoice notes</label><textarea id="inv-notes" placeholder="Payment terms, bank details reference, etc." style="height:52px;width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;resize:vertical;outline:none"></textarea></div>
+<div id="inv-summary" style="background:var(--blue-pale);border:1px solid var(--blue-light);border-radius:var(--radius);padding:12px 16px">
+<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>Sub-total (ex-VAT)</span><span id="inv-sum-sub">SAR 0.00</span></div>
+<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span id="inv-sum-vat-label">VAT (15%)</span><span id="inv-sum-vat">SAR 0.00</span></div>
+<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;color:var(--blue);border-top:1px solid var(--blue-light);padding-top:8px;margin-top:6px"><span>Invoice total</span><span id="inv-sum-total">SAR 0.00</span></div>
+</div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closeModal('so-invoice-modal')">Cancel</button>
+<button class="btn btn-primary" onclick="saveInvoice()"><i class="ti ti-file-invoice"></i>Create invoice</button>
+</div>
+</div>
+</div>
+<!-- RECORD PAYMENT MODAL -->
+<div class="modal-overlay" id="so-payment-modal">
+<div class="modal modal-compact">
+<div class="modal-header">
+<h2 id="pay-modal-title">Record Payment</h2>
+<button class="close-btn" onclick="closeModal('so-payment-modal')">✕</button>
+</div>
+<div class="modal-body">
+<div id="pay-outstanding-info" style="background:var(--orange-bg);border:1px solid #ffc107;border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13px"></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+<div class="form-group"><label>Payment date *</label><input id="pay-date" type="date"/></div>
+<div class="form-group"><label>Amount received (SAR) *</label><input id="pay-amount" min="0" oninput="updatePaymentBalance()" placeholder="0.00" step="0.01" type="number"/></div>
+<div class="form-group"><label>Payment method</label>
+<select id="pay-method">
+<option>Bank transfer</option><option>Cheque</option><option>Cash</option><option>SADAD</option><option>Letter of credit</option>
+</select>
+</div>
+<div class="form-group"><label>Reference / Cheque No</label><input id="pay-ref" placeholder="Bank ref or cheque no."/></div>
+</div>
+<div class="form-group" style="margin-bottom:10px"><label>Remarks</label><input id="pay-remarks" placeholder="Any notes about this payment"/></div>
+<div id="pay-balance-info" style="background:var(--blue-pale);border:1px solid var(--blue-light);border-radius:var(--radius);padding:10px 14px;font-size:13px"></div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closeModal('so-payment-modal')">Cancel</button>
+<button class="btn btn-success" onclick="savePayment()"><i class="ti ti-cash"></i>Record payment</button>
+</div>
+</div>
+</div>
+<!-- DELIVERY NOTE PRINT MODAL -->
+<div class="modal-overlay" id="dn-print-modal">
+<div class="modal modal-normal">
+<div class="modal-header">
+<h2 id="dn-print-title">Delivery Note</h2>
+<div style="display:flex;gap:8px;align-items:center">
+<button class="btn btn-secondary btn-sm" onclick="setModalSize('dn-print-modal','fullscreen')"><i class="ti ti-maximize"></i>Full screen</button>
+<button class="btn btn-primary btn-sm" onclick="printDeliveryNote()"><i class="ti ti-printer"></i>Print / PDF</button>
+<button class="close-btn" onclick="closeModal('dn-print-modal')">✕</button>
+</div>
+</div>
+<div class="modal-body" id="dn-print-body" style="padding:0;overflow-y:auto"></div>
+</div>
+</div>
+<!-- TEMPLATE PICKER MODAL -->
+<div class="modal-overlay" id="template-picker-modal">
+<div class="modal modal-compact" style="max-width:920px;height:auto;max-height:88vh">
+<div class="modal-header">
+<h2><i class="ti ti-layout-grid" style="margin-right:8px"></i>Quotation Gallery</h2>
+<button class="close-btn" onclick="closeModal('template-picker-modal')">✕</button>
+</div>
+<div class="modal-body" style="overflow-y:auto">
+<p style="font-size:12px;color:var(--gray);margin-bottom:10px">Choose a quotation layout. Your selection will be remembered.</p>
+<div id="template-cards" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px"></div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closeModal('template-picker-modal')">Cancel</button>
+<button class="btn btn-primary" onclick="printWithSelectedTemplate()"><i class="ti ti-printer"></i>Print / PDF</button>
+</div>
+</div>
+</div>
+<!-- REUSABLE VALIDATION DIALOG -->
+<div aria-describedby="validation-dialog-message" aria-labelledby="validation-dialog-title" aria-modal="true" class="validation-dialog-overlay" id="validation-dialog" role="dialog">
+<div class="validation-dialog">
+<div class="validation-dialog-head">
+<div class="validation-dialog-icon"><i class="ti ti-alert-triangle"></i></div>
+<div class="validation-dialog-title" id="validation-dialog-title">Validation Required</div>
+</div>
+<div class="validation-dialog-body" id="validation-dialog-message">Please complete the required field.</div>
+<div class="validation-dialog-footer">
+<button class="btn btn-primary" id="validation-dialog-ok" onclick="closeValidationDialog()" type="button">OK</button>
+</div>
+</div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="js/app.js"></script>
+
+<!-- ═══════════════════════════════════════════════
+     EXCEL IMPORT MODAL
+═══════════════════════════════════════════════ -->
+<div class="modal-overlay" id="import-modal">
+  <div class="modal" style="max-width:680px;height:auto;max-height:88vh">
+    <div class="modal-header">
+      <h2><i class="ti ti-table-import" style="margin-right:8px;color:var(--blue)"></i><span id="import-modal-title">Import from Excel</span></h2>
+      <button class="close-btn" onclick="closeModal('import-modal')">&#10005;</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;padding:20px 24px">
+
+      <!-- Step 1: Download template -->
+      <div class="import-step" id="import-step-1">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div style="background:var(--blue);color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">1</div>
+          <div>
+            <div style="font-weight:700;font-size:14px">Download the template</div>
+            <div style="font-size:12px;color:var(--gray);margin-top:2px">Get the Excel template with the correct column headers already set up.</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary" onclick="downloadImportTemplate()" style="margin-left:40px">
+          <i class="ti ti-download"></i> Download Excel Template
+        </button>
+      </div>
+
+      <div style="border-left:2px dashed var(--border);margin:16px 0 16px 13px;height:20px"></div>
+
+      <!-- Step 2: Fill and upload -->
+      <div class="import-step" id="import-step-2">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div style="background:var(--blue);color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">2</div>
+          <div>
+            <div style="font-weight:700;font-size:14px">Fill in your data and upload</div>
+            <div style="font-size:12px;color:var(--gray);margin-top:2px">Fill the downloaded template in Excel, then upload it here.</div>
+          </div>
+        </div>
+        <div style="margin-left:40px">
+          <div id="import-drop-zone"
+               style="border:2px dashed var(--border);border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all .15s;background:#fafbfc"
+               onclick="document.getElementById('import-file-input').click()"
+               ondragover="event.preventDefault();this.style.borderColor='var(--blue)';this.style.background='#EAF2FA'"
+               ondragleave="this.style.borderColor='';this.style.background='#fafbfc'"
+               ondrop="handleImportDrop(event)">
+            <i class="ti ti-file-spreadsheet" style="font-size:36px;color:var(--blue);opacity:.7;display:block;margin-bottom:8px"></i>
+            <div style="font-weight:600;color:var(--blue);margin-bottom:4px">Click to browse or drag & drop your Excel file</div>
+            <div style="font-size:11px;color:var(--gray)">.xlsx or .xls files only</div>
+          </div>
+          <input type="file" id="import-file-input" accept=".xlsx,.xls" style="display:none" onchange="handleImportFile(event)">
+        </div>
+      </div>
+
+      <div style="border-left:2px dashed var(--border);margin:16px 0 16px 13px;height:20px"></div>
+
+      <!-- Step 3: Review and confirm -->
+      <div class="import-step" id="import-step-3">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div id="import-step3-num" style="background:var(--gray-light);color:var(--gray);border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">3</div>
+          <div>
+            <div style="font-weight:700;font-size:14px">Review and import</div>
+            <div style="font-size:12px;color:var(--gray);margin-top:2px">Check the summary then click Import to save records.</div>
+          </div>
+        </div>
+        <div id="import-preview-area" style="margin-left:40px;display:none">
+          <!-- Filled dynamically after file is read -->
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('import-modal')">Cancel</button>
+      <button class="btn btn-primary" id="import-confirm-btn" onclick="confirmImport()" disabled style="opacity:.5;cursor:not-allowed">
+        <i class="ti ti-check"></i> Import Records
+      </button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
