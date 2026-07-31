@@ -204,59 +204,55 @@ function loadThemeAndFont() {
 
 
 async function loadData() {
-  // Try localStorage first (works when opened as a local file in Chrome)
-  try {
-    const rq = localStorage.getItem('dtq_quotations');
-    if (rq) quotations = JSON.parse(rq);
-    const rc = localStorage.getItem('dtq_customers');
-    if (rc) customers = JSON.parse(rc);
-    const rs = localStorage.getItem('dtq_settings');
-    if (rs) settings = JSON.parse(rs);
-    const rp = localStorage.getItem('dtq_products');
-    if (rp) products = JSON.parse(rp);
-    const rdt = localStorage.getItem('dtq_delivery_terms');
-    if (rdt) deliveryTerms = JSON.parse(rdt);
-    const rpt = localStorage.getItem('dtq_payment_terms');
-    if (rpt) paymentTerms = JSON.parse(rpt);
-    const rs2 = localStorage.getItem('dtq_suppliers');
-    if (rs2) suppliers = JSON.parse(rs2);
-    const rr = localStorage.getItem('dtq_rfqs');
-    if (rr) rfqs = JSON.parse(rr);
-    const re = localStorage.getItem('dtq_employees');
-    if (re) employees = JSON.parse(re);
-    // Remove only the untouched three-record demo seed from earlier builds.
-    const demoIds=['emp-musthafa','emp-shabeeb','emp-sajeer'];
-    const untouchedDemo=employees.length===3 && demoIds.every(id=>employees.some(e=>e.id===id)) && employees.every(e=>!e.iqamaNo&&!e.passportNo&&!e.licenseNo&&!e.email&&!e.mobile);
-    if(untouchedDemo){ employees=[]; localStorage.removeItem('dtq_employees'); }
-    const rso = localStorage.getItem('dtq_salesorders');
-    if (rso) salesOrders = JSON.parse(rso);
-  } catch(e) {}
+  // ── Load from Firebase first (shared cloud data) ──
+  if (window.FB) {
+    try {
+      const [fbQ, fbC, fbS, fbP, fbDT, fbPT, fbSup, fbR, fbE, fbSO, fbSet] = await Promise.all([
+        window.FB.fbLoad('quotations'),
+        window.FB.fbLoad('customers'),
+        window.FB.fbLoad('suppliers'),
+        window.FB.fbLoad('products'),
+        window.FB.fbLoad('deliveryTerms'),
+        window.FB.fbLoad('paymentTerms'),
+        window.FB.fbLoad('suppliers'),
+        window.FB.fbLoad('rfqs'),
+        window.FB.fbLoad('employees'),
+        window.FB.fbLoad('salesOrders'),
+        window.FB.fbLoadSettings(),
+      ]);
+      if (fbQ   && fbQ.length)    quotations    = fbQ;
+      if (fbC   && fbC.length)    customers     = fbC;
+      if (fbP   && fbP.length)    products      = fbP;
+      if (fbDT  && fbDT.length)   deliveryTerms = fbDT;
+      if (fbPT  && fbPT.length)   paymentTerms  = fbPT;
+      if (fbSup && fbSup.length)  suppliers     = fbSup;
+      if (fbR   && fbR.length)    rfqs          = fbR;
+      if (fbE   && fbE.length)    employees     = fbE;
+      if (fbSO  && fbSO.length)   salesOrders   = fbSO;
+      if (fbSet && fbSet.coname)  settings      = fbSet;
+      console.log('Data loaded from Firebase ✅');
+    } catch(e) {
+      console.warn('Firebase load error, falling back to localStorage:', e.message);
+    }
+  }
 
-  // Fall back to window.storage (Claude environment)
-  if (!quotations.length) {
-    try {
-      const rq = await window.storage.get('quotations');
-      if (rq && rq.value) quotations = JSON.parse(rq.value);
-    } catch(e) {}
-  }
-  if (!customers.length) {
-    try {
-      const rc = await window.storage.get('customers_v2');
-      if (rc && rc.value) customers = JSON.parse(rc.value);
-    } catch(e) {}
-  }
-  if (!settings.coname) {
-    try {
-      const rs = await window.storage.get('settings_v2');
-      if (rs && rs.value) settings = JSON.parse(rs.value);
-    } catch(e) {}
-  }
-  if (!employees.length) {
-    try {
-      const re = await window.storage.get('employees_v1');
-      if (re && re.value) employees = JSON.parse(re.value);
-    } catch(e) {}
-  }
+  // ── Fall back to localStorage if Firebase load failed or returned nothing ──
+  try {
+    if (!quotations.length) { const r=localStorage.getItem('dtq_quotations'); if(r) quotations=JSON.parse(r); }
+    if (!customers.length)  { const r=localStorage.getItem('dtq_customers');  if(r) customers=JSON.parse(r); }
+    if (!settings.coname)   { const r=localStorage.getItem('dtq_settings');   if(r) settings=JSON.parse(r); }
+    if (!products.length)   { const r=localStorage.getItem('dtq_products');   if(r) products=JSON.parse(r); }
+    if (!deliveryTerms.length){ const r=localStorage.getItem('dtq_delivery_terms'); if(r) deliveryTerms=JSON.parse(r); }
+    if (!paymentTerms.length) { const r=localStorage.getItem('dtq_payment_terms');  if(r) paymentTerms=JSON.parse(r); }
+    if (!suppliers.length)  { const r=localStorage.getItem('dtq_suppliers');   if(r) suppliers=JSON.parse(r); }
+    if (!rfqs.length)       { const r=localStorage.getItem('dtq_rfqs');        if(r) rfqs=JSON.parse(r); }
+    if (!employees.length)  { const r=localStorage.getItem('dtq_employees');   if(r) employees=JSON.parse(r); }
+    if (!salesOrders.length){ const r=localStorage.getItem('dtq_salesorders'); if(r) salesOrders=JSON.parse(r); }
+    // Clean up old demo seed
+    const demoIds=['emp-musthafa','emp-shabeeb','emp-sajeer'];
+    const untouchedDemo=employees.length===3&&demoIds.every(id=>employees.some(e=>e.id===id))&&employees.every(e=>!e.iqamaNo&&!e.passportNo&&!e.licenseNo&&!e.email&&!e.mobile);
+    if(untouchedDemo){ employees=[]; localStorage.removeItem('dtq_employees'); }
+  } catch(e) {}
 
   // Always seed from built-in data if still empty
   if (!quotations.length) quotations = getSampleData();
@@ -307,19 +303,19 @@ async function loadData() {
 
 async function saveQuotations() {
   try { localStorage.setItem('dtq_quotations', JSON.stringify(quotations)); } catch(e) {}
-  try { await window.storage.set('quotations', JSON.stringify(quotations)); } catch(e) {}
+  if (window.FB) await window.FB.fbSave('quotations', quotations);
 }
 async function saveCustomers() {
   try { localStorage.setItem('dtq_customers', JSON.stringify(customers)); } catch(e) {}
-  try { await window.storage.set('customers_v2', JSON.stringify(customers)); } catch(e) {}
+  if (window.FB) await window.FB.fbSave('customers', customers);
 }
 async function saveEmployees() {
   try { localStorage.setItem('dtq_employees', JSON.stringify(employees)); } catch(e) {}
-  try { await window.storage.set('employees_v1', JSON.stringify(employees)); } catch(e) {}
+  if (window.FB) await window.FB.fbSave('employees', employees);
 }
 async function saveSettings() {
   try { localStorage.setItem('dtq_settings', JSON.stringify(settings)); } catch(e) {}
-  try { await window.storage.set('settings_v2', JSON.stringify(settings)); } catch(e) {}
+  if (window.FB) await window.FB.fbSaveSettings(settings);
 }
 async function saveProducts() {
   try { localStorage.setItem('dtq_products', JSON.stringify(products)); } catch(e) {}
@@ -327,6 +323,11 @@ async function saveProducts() {
   try { localStorage.setItem('dtq_payment_terms', JSON.stringify(paymentTerms)); } catch(e) {}
   try { localStorage.setItem('dtq_suppliers', JSON.stringify(suppliers)); } catch(e) {}
   try { localStorage.setItem('dtq_rfqs', JSON.stringify(rfqs)); } catch(e) {}
+  if (window.FB) {
+    await window.FB.fbSave('products', products);
+    await window.FB.fbSave('deliveryTerms', deliveryTerms);
+    await window.FB.fbSave('paymentTerms', paymentTerms);
+  }
 }
 async function saveTerms() {
   try { localStorage.setItem('dtq_delivery_terms', JSON.stringify(deliveryTerms)); } catch(e) {}
@@ -334,6 +335,7 @@ async function saveTerms() {
 }
 async function saveSalesOrders() {
   try { localStorage.setItem('dtq_salesorders', JSON.stringify(salesOrders)); } catch(e) {}
+  if (window.FB) await window.FB.fbSave('salesOrders', salesOrders);
 }
 
 /* ── SAMPLE DATA ── */
@@ -4170,11 +4172,13 @@ function viewRFQFromQuote(btn) {
 /* ══════════════════════════════════════════════════
    SUPPLIERS
 ══════════════════════════════════════════════════ */
-async function saveSuppliers() {
+async async function saveSuppliers() {
   try { localStorage.setItem('dtq_suppliers', JSON.stringify(suppliers)); } catch(e) {}
+  if (window.FB) await window.FB.fbSave('suppliers', suppliers);
 }
 async function saveRFQs() {
   try { localStorage.setItem('dtq_rfqs', JSON.stringify(rfqs)); } catch(e) {}
+  if (window.FB) await window.FB.fbSave('rfqs', rfqs);
 }
 
 function renderSuppliers() {

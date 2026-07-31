@@ -7,6 +7,8 @@
 <title>BizCore — Downtown Trading Est.</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Firebase SDKs -->
+  <script type="module" src="js/firebase-init.js"></script>
 <link href="css/main.css" rel="stylesheet"/>
 <link href="css/bizcore-design.css" rel="stylesheet"/>
 <link href="css/typography.css" rel="stylesheet"/>
@@ -29,6 +31,14 @@ button,.btn{font-size:14px!important;font-weight:600!important;}
 
 </head>
 <body>
+<!-- Auth guard: shown while checking login state -->
+<div id="auth-loading" style="position:fixed;inset:0;background:#0B539D;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;color:#fff">
+  <div style="font-size:28px;font-weight:800;letter-spacing:-.3px;margin-bottom:8px">BizCore</div>
+  <div style="font-size:13px;color:rgba(255,255,255,.7);margin-bottom:28px">Downtown Trading Est.</div>
+  <div style="width:36px;height:36px;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite"></div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+</div>
+
 <div class="app">
 <div class="sidebar" id="app-sidebar">
 <div class="sidebar-logo" id="sidebar-logo">

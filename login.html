@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BizCore — Login</title>
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,"Segoe UI",Arial,sans-serif;background:linear-gradient(135deg,#0B539D 0%,#083d7a 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.login-card{background:#fff;border-radius:16px;padding:40px 40px 36px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.login-logo{text-align:center;margin-bottom:28px}
+.login-logo img{height:44px;width:auto;object-fit:contain}
+.login-logo-text{font-size:22px;font-weight:800;color:#0B539D;letter-spacing:-.3px}
+.login-logo-sub{font-size:12px;color:#8B98A8;margin-top:4px}
+.login-divider{height:1px;background:#EEF1F4;margin:20px 0}
+h2{font-size:16px;font-weight:700;color:#1a1a1a;margin-bottom:6px}
+.login-welcome{font-size:13px;color:#5A6677;margin-bottom:24px}
+.field{margin-bottom:16px}
+label{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px}
+input{width:100%;height:44px;border:1.5px solid #E2E8F0;border-radius:8px;padding:0 14px;font-size:14px;color:#1a1a1a;outline:none;transition:border-color .15s}
+input:focus{border-color:#0B539D;box-shadow:0 0 0 3px rgba(11,83,157,.1)}
+.password-wrap{position:relative}
+.password-wrap input{padding-right:44px}
+.toggle-pw{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#8B98A8;font-size:16px;padding:4px}
+.login-btn{width:100%;height:46px;background:#0B539D;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;transition:background .15s;display:flex;align-items:center;justify-content:center;gap:8px}
+.login-btn:hover{background:#0943820}
+.login-btn:disabled{background:#93b8d6;cursor:not-allowed}
+.login-btn .spinner{width:18px;height:18px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
+.login-btn.loading .spinner{display:block}
+.login-btn.loading .btn-text{display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error-box{background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:13px;color:#DC2626;margin-top:14px;display:none;align-items:center;gap:8px}
+.error-box.show{display:flex}
+.login-footer{text-align:center;margin-top:24px;font-size:11px;color:#8B98A8}
+.login-footer b{color:#0B539D}
+@media(max-width:480px){.login-card{padding:28px 20px 24px}}
+</style>
+</head>
+<body>
+
+<div class="login-card">
+
+  <div class="login-logo">
+    <div id="logo-area">
+      <div class="login-logo-text">BizCore</div>
+    </div>
+    <div class="login-logo-sub">Downtown Trading Est. — Business Operations</div>
+  </div>
+
+  <div class="login-divider"></div>
+
+  <h2>Welcome back</h2>
+  <p class="login-welcome">Sign in with your BizCore account to continue.</p>
+
+  <div class="field">
+    <label for="login-email">Email address</label>
+    <input type="email" id="login-email" placeholder="you@downtowntrading.com" autocomplete="email">
+  </div>
+
+  <div class="field">
+    <label for="login-password">Password</label>
+    <div class="password-wrap">
+      <input type="password" id="login-password" placeholder="Enter your password" autocomplete="current-password">
+      <button class="toggle-pw" onclick="togglePassword()" type="button" tabindex="-1">
+        <i class="ti ti-eye" id="pw-eye"></i>
+      </button>
+    </div>
+  </div>
+
+  <button class="login-btn" id="login-btn" onclick="doLogin()">
+    <div class="spinner"></div>
+    <span class="btn-text"><i class="ti ti-login"></i> &nbsp;Sign in</span>
+  </button>
+
+  <div class="error-box" id="error-box">
+    <i class="ti ti-alert-circle" style="flex-shrink:0"></i>
+    <span id="error-msg">Invalid email or password. Please try again.</span>
+  </div>
+
+  <div class="login-footer">
+    <b>BizCore</b> &nbsp;·&nbsp; Downtown Trading Est. &nbsp;·&nbsp; Riyadh, KSA
+  </div>
+
+</div>
+
+<script type="module">
+import { initializeApp }                         from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword,
+         onAuthStateChanged }                    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, getDoc }             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey:            "AIzaSyCsgVVIU_AZpWgTrZo_jrlCQVgZusCI_zY",
+  authDomain:        "bizcore-downtown.firebaseapp.com",
+  projectId:         "bizcore-downtown",
+  storageBucket:     "bizcore-downtown.firebasestorage.app",
+  messagingSenderId: "864406054158",
+  appId:             "1:864406054158:web:190929f0cc60e12e77e35f"
+};
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+// If already logged in, go straight to app
+onAuthStateChanged(auth, user => {
+  if (user) {
+    window.location.href = 'index.html';
+  }
+});
+
+// Try to load logo from Firestore settings
+async function loadLogo() {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'main'));
+    if (snap.exists()) {
+      const s = JSON.parse(snap.data().data || '{}');
+      if (s.logo) {
+        document.getElementById('logo-area').innerHTML =
+          `<img src="${s.logo}" style="height:44px;width:auto;object-fit:contain">`;
+      }
+    }
+  } catch(e) {}
+}
+loadLogo();
+
+// Login handler
+window.doLogin = async function() {
+  const email    = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const btn      = document.getElementById('login-btn');
+  const errBox   = document.getElementById('error-box');
+  const errMsg   = document.getElementById('error-msg');
+
+  errBox.classList.remove('show');
+
+  if (!email || !password) {
+    errMsg.textContent = 'Please enter your email and password.';
+    errBox.classList.add('show');
+    return;
+  }
+
+  btn.classList.add('loading');
+  btn.disabled = true;
+
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+    // onAuthStateChanged above will redirect to index.html
+  } catch(e) {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+    let msg = 'Invalid email or password. Please try again.';
+    if (e.code === 'auth/user-not-found')    msg = 'No account found with this email address.';
+    if (e.code === 'auth/wrong-password')    msg = 'Incorrect password. Please try again.';
+    if (e.code === 'auth/invalid-email')     msg = 'Please enter a valid email address.';
+    if (e.code === 'auth/too-many-requests') msg = 'Too many failed attempts. Please try again in a few minutes.';
+    if (e.code === 'auth/network-request-failed') msg = 'Network error. Please check your internet connection.';
+    errMsg.textContent = msg;
+    errBox.classList.add('show');
+    document.getElementById('login-password').focus();
+  }
+};
+
+// Toggle password visibility
+window.togglePassword = function() {
+  const input = document.getElementById('login-password');
+  const icon  = document.getElementById('pw-eye');
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.className = 'ti ti-eye-off';
+  } else {
+    input.type = 'password';
+    icon.className = 'ti ti-eye';
+  }
+};
+
+// Allow Enter key to submit
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') window.doLogin();
+});
+</script>
+</body>
+</html>
