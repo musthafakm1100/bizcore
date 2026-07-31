@@ -4172,7 +4172,7 @@ function viewRFQFromQuote(btn) {
 /* ══════════════════════════════════════════════════
    SUPPLIERS
 ══════════════════════════════════════════════════ */
-async async function saveSuppliers() {
+async function saveSuppliers() {
   try { localStorage.setItem('dtq_suppliers', JSON.stringify(suppliers)); } catch(e) {}
   if (window.FB) await window.FB.fbSave('suppliers', suppliers);
 }
