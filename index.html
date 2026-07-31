@@ -7,8 +7,6 @@
 <title>BizCore — Downtown Trading Est.</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <!-- Firebase SDKs -->
-  <script type="module" src="js/firebase-init.js"></script>
 <link href="css/main.css" rel="stylesheet"/>
 <link href="css/bizcore-design.css" rel="stylesheet"/>
 <link href="css/typography.css" rel="stylesheet"/>
@@ -1550,7 +1548,123 @@ button,.btn{font-size:14px!important;font-weight:600!important;}
 </div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="js/app.js"></script>
+<!-- Firebase: loaded as module, exposes window.FB then loads app.js -->
+<script type="module">
+import { initializeApp }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey:            "AIzaSyCsgVVIU_AZpWgTrZo_jrlCQVgZusCI_zY",
+  authDomain:        "bizcore-downtown.firebaseapp.com",
+  projectId:         "bizcore-downtown",
+  storageBucket:     "bizcore-downtown.firebasestorage.app",
+  messagingSenderId: "864406054158",
+  appId:             "1:864406054158:web:190929f0cc60e12e77e35f"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const auth  = getAuth(fbApp);
+const db    = getFirestore(fbApp);
+
+async function fbSave(col, arr) {
+  try {
+    await setDoc(doc(db, col, 'data'), { records: JSON.stringify(arr), updatedAt: Date.now() });
+    return true;
+  } catch(e) { console.warn('FB save failed:', col, e.message); return false; }
+}
+
+async function fbLoad(col) {
+  try {
+    const snap = await getDoc(doc(db, col, 'data'));
+    if (!snap.exists()) return null;
+    return JSON.parse(snap.data().records || '[]');
+  } catch(e) { console.warn('FB load failed:', col, e.message); return null; }
+}
+
+async function fbSaveSettings(obj) {
+  try {
+    await setDoc(doc(db, 'settings', 'main'), { data: JSON.stringify(obj), updatedAt: Date.now() });
+    return true;
+  } catch(e) { console.warn('FB settings save failed:', e.message); return false; }
+}
+
+async function fbLoadSettings() {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'main'));
+    if (!snap.exists()) return null;
+    return JSON.parse(snap.data().data || 'null');
+  } catch(e) { console.warn('FB settings load failed:', e.message); return null; }
+}
+
+// Expose Firebase API to app.js
+window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings };
+window.fbAuthInstance = auth;
+
+// Auth guard — check login before loading app
+onAuthStateChanged(auth, user => {
+  if (!user) {
+    // Not logged in → go to login page
+    window.location.href = 'login.html';
+    return;
+  }
+
+  // Store current user globally
+  window.currentUser = {
+    uid:   user.uid,
+    email: user.email,
+    name:  user.displayName || user.email.split('@')[0]
+  };
+
+  // Hide loading overlay
+  const overlay = document.getElementById('auth-loading');
+  if (overlay) {
+    overlay.style.transition = 'opacity .4s';
+    overlay.style.opacity = '0';
+    setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 450);
+  }
+
+  // Add user info + sign-out button to topbar
+  setTimeout(() => {
+    const actions = document.querySelector('.topbar-actions');
+    if (actions && !document.getElementById('fb-user-pill')) {
+      const pill = document.createElement('div');
+      pill.id = 'fb-user-pill';
+      pill.style.cssText = 'display:flex;align-items:center;gap:8px;padding:0 8px;border-left:1px solid var(--border,#E2E8F0);margin-left:4px';
+      pill.innerHTML =
+        '<div style="text-align:right;line-height:1.25">'
+        + '<div style="font-size:11px;font-weight:700;color:var(--blue,#0B539D)">' + (user.displayName || user.email.split('@')[0]) + '</div>'
+        + '<div style="font-size:10px;color:var(--gray,#8B98A8)">' + user.email + '</div>'
+        + '</div>'
+        + '<button onclick="window.FB_SIGNOUT()" style="height:30px;padding:0 10px;border:1.5px solid var(--border,#E2E8F0);border-radius:6px;background:#fff;cursor:pointer;font-size:11px;color:var(--gray,#8B98A8);display:flex;align-items:center;gap:4px;white-space:nowrap">'
+        + '<i class="ti ti-logout" style="font-size:13px"></i> Sign out'
+        + '</button>';
+      actions.insertBefore(pill, actions.firstChild);
+    }
+  }, 800);
+
+  // Now load app.js — window.FB is ready
+  if (!document.getElementById('bizcore-app-script')) {
+    const s = document.createElement('script');
+    s.id  = 'bizcore-app-script';
+    s.src = 'js/app.js';
+    document.body.appendChild(s);
+  }
+});
+
+// Global sign-out
+window.FB_SIGNOUT = async function() {
+  if (!confirm('Sign out of BizCore?')) return;
+  try { await signOut(auth); } catch(e) {}
+  window.location.href = 'login.html';
+};
+
+console.log('BizCore Firebase module ready ✅');
+</script>
+
 
 <!-- ═══════════════════════════════════════════════
      EXCEL IMPORT MODAL
