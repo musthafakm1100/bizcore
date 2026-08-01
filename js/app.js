@@ -6293,7 +6293,7 @@ function importAllData(event) {
     appRoles      = data.appRoles      || appRoles;
     saveAccessSetup();
 
-    // Persist everything to localStorage
+    // Persist everything to localStorage AND Firebase
     try { localStorage.setItem('dtq_quotations',     JSON.stringify(quotations));    } catch(e) {}
     try { localStorage.setItem('dtq_customers',      JSON.stringify(customers));     } catch(e) {}
     try { localStorage.setItem('dtq_suppliers',      JSON.stringify(suppliers));     } catch(e) {}
@@ -6304,9 +6304,32 @@ function importAllData(event) {
     try { localStorage.setItem('dtq_payment_terms',  JSON.stringify(paymentTerms));  } catch(e) {}
     try { localStorage.setItem('dtq_salesorders',    JSON.stringify(salesOrders));   } catch(e) {}
 
+    // Sync restored data to Firebase so all devices see it
+    if (window.FB) {
+      showToast('Syncing to cloud...', 'success');
+      try {
+        await Promise.all([
+          window.FB.fbSave('quotations',    quotations),
+          window.FB.fbSave('customers',     customers),
+          window.FB.fbSave('suppliers',     suppliers),
+          window.FB.fbSave('products',      products),
+          window.FB.fbSave('rfqs',          rfqs),
+          window.FB.fbSave('salesOrders',   salesOrders),
+          window.FB.fbSave('deliveryTerms', deliveryTerms),
+          window.FB.fbSave('paymentTerms',  paymentTerms),
+          window.FB.fbSaveSettings(settings),
+        ]);
+        showToast('Backup restored and synced to cloud ✓ — all devices will now see this data', 'success');
+      } catch(fbErr) {
+        showToast('Restored locally — cloud sync failed. Check internet and try again.', 'error');
+      }
+    }
+
     applySettings();
     renderAll();
-    showToast('Backup restored successfully ✓ — ' + qCount + ' quotations, ' + rfqCount + ' RFQs', 'success');
+    if (!window.FB) {
+      showToast('Backup restored successfully ✓ — ' + qCount + ' quotations, ' + rfqCount + ' RFQs', 'success');
+    }
   };
   reader.readAsText(file);
 }
