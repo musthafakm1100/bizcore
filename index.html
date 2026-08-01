@@ -1558,28 +1558,31 @@ document.addEventListener('error', function(e) {
 <!-- Firebase: loaded as module, exposes window.FB then loads app.js -->
 <script type="module">
 import { initializeApp }
-  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged }
-  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc }
-  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, doc, getDoc, setDoc, onSnapshot }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-const firebaseConfig = {
-  apiKey:            "AIzaSyCsgVVIU_AZpWgTrZo_jrlCQVgZusCI_zY",
-  authDomain:        "bizcore-downtown.firebaseapp.com",
-  projectId:         "bizcore-downtown",
-  storageBucket:     "bizcore-downtown.firebasestorage.app",
-  messagingSenderId: "864406054158",
-  appId:             "1:864406054158:web:190929f0cc60e12e77e35f"
+const cfg = {
+  apiKey:            'AIzaSyCsgVVIU_AZpWgTrZo_jrlCQVgZusCI_zY',
+  authDomain:        'bizcore-downtown.firebaseapp.com',
+  projectId:         'bizcore-downtown',
+  storageBucket:     'bizcore-downtown.firebasestorage.app',
+  messagingSenderId: '864406054158',
+  appId:             '1:864406054158:web:190929f0cc60e12e77e35f'
 };
 
-const fbApp = initializeApp(firebaseConfig);
+const fbApp = initializeApp(cfg);
 const auth  = getAuth(fbApp);
 const db    = getFirestore(fbApp);
 
+/* ── One-time save ── */
 async function fbSave(col, arr) {
   try {
-    await setDoc(doc(db, col, 'data'), { records: JSON.stringify(arr), updatedAt: Date.now() });
+    await setDoc(doc(db, col, 'data'), {
+      records: JSON.stringify(arr), updatedAt: Date.now()
+    });
     return true;
   } catch(e) { console.warn('FB save failed:', col, e.message); return false; }
 }
@@ -1594,7 +1597,9 @@ async function fbLoad(col) {
 
 async function fbSaveSettings(obj) {
   try {
-    await setDoc(doc(db, 'settings', 'main'), { data: JSON.stringify(obj), updatedAt: Date.now() });
+    await setDoc(doc(db, 'settings', 'main'), {
+      data: JSON.stringify(obj), updatedAt: Date.now()
+    });
     return true;
   } catch(e) { console.warn('FB settings save failed:', e.message); return false; }
 }
@@ -1607,19 +1612,45 @@ async function fbLoadSettings() {
   } catch(e) { console.warn('FB settings load failed:', e.message); return null; }
 }
 
-// Expose Firebase API to app.js
-window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings };
+/* ── Real-time listeners ──
+   Each listener fires immediately on load (replaces initial fetch)
+   then fires again whenever another device saves a change.
+   We skip the first fire (local) to avoid double-render on startup. ── */
+const _listenerReady = {};
+
+function fbListen(col, onUpdate) {
+  const ref = doc(db, col, 'data');
+  return onSnapshot(ref, snap => {
+    if (!snap.exists()) return;
+    try {
+      const arr = JSON.parse(snap.data().records || '[]');
+      // Skip if this update came from THIS device (metadata.hasPendingWrites = true)
+      if (snap.metadata.hasPendingWrites) return;
+      onUpdate(arr);
+    } catch(e) { console.warn('RT parse error:', col, e.message); }
+  }, err => console.warn('RT listener error:', col, err.message));
+}
+
+function fbListenSettings(onUpdate) {
+  const ref = doc(db, 'settings', 'main');
+  return onSnapshot(ref, snap => {
+    if (!snap.exists()) return;
+    try {
+      const obj = JSON.parse(snap.data().data || '{}');
+      if (snap.metadata.hasPendingWrites) return;
+      onUpdate(obj);
+    } catch(e) {}
+  });
+}
+
+/* Expose to app.js */
+window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings, fbListen, fbListenSettings };
 window.fbAuthInstance = auth;
 
-// Auth guard — check login before loading app
+/* ── Auth guard ── */
 onAuthStateChanged(auth, user => {
-  if (!user) {
-    // Not logged in → go to login page
-    window.location.href = 'login.html';
-    return;
-  }
+  if (!user) { window.location.href = 'login.html'; return; }
 
-  // Store current user globally
   window.currentUser = {
     uid:   user.uid,
     email: user.email,
@@ -1634,7 +1665,7 @@ onAuthStateChanged(auth, user => {
     setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 450);
   }
 
-  // Add user info + sign-out button to topbar
+  // Add user pill + sign-out to topbar
   setTimeout(() => {
     const actions = document.querySelector('.topbar-actions');
     if (actions && !document.getElementById('fb-user-pill')) {
@@ -1653,23 +1684,22 @@ onAuthStateChanged(auth, user => {
     }
   }, 800);
 
-  // Now load app.js — window.FB is ready
+  // Load app.js — window.FB is ready
   if (!document.getElementById('bizcore-app-script')) {
-    const s = document.createElement('script');
+    const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
     s.src = 'js/app.js';
     document.body.appendChild(s);
   }
 });
 
-// Global sign-out
 window.FB_SIGNOUT = async function() {
   if (!confirm('Sign out of BizCore?')) return;
   try { await signOut(auth); } catch(e) {}
   window.location.href = 'login.html';
 };
 
-console.log('BizCore Firebase module ready ✅');
+console.log('BizCore Firebase ready ✅');
 </script>
 
 

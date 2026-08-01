@@ -207,14 +207,13 @@ async function loadData() {
   // ── Load from Firebase first (shared cloud data) ──
   if (window.FB) {
     try {
-      const [fbQ, fbC, fbS, fbP, fbDT, fbPT, fbSup, fbR, fbE, fbSO, fbSet] = await Promise.all([
+      const [fbQ, fbC, fbSup, fbP, fbDT, fbPT, fbR, fbE, fbSO, fbSet] = await Promise.all([
         window.FB.fbLoad('quotations'),
         window.FB.fbLoad('customers'),
         window.FB.fbLoad('suppliers'),
         window.FB.fbLoad('products'),
         window.FB.fbLoad('deliveryTerms'),
         window.FB.fbLoad('paymentTerms'),
-        window.FB.fbLoad('suppliers'),
         window.FB.fbLoad('rfqs'),
         window.FB.fbLoad('employees'),
         window.FB.fbLoad('salesOrders'),
@@ -231,6 +230,122 @@ async function loadData() {
       if (fbSO  && fbSO.length)   salesOrders   = fbSO;
       if (fbSet && fbSet.coname)  settings      = fbSet;
       console.log('Data loaded from Firebase ✅');
+
+      // ── Real-time listeners: auto-update when another device saves ──
+      // Uses smart refresh — updates data in background, only re-renders
+      // the currently active page so users are never navigated away
+      if (window.FB.fbListen) {
+
+        // Helper: get the currently active page ID
+        function getActivePage() {
+          const active = document.querySelector('.page.active');
+          return active ? active.id.replace('page-','') : 'dashboard';
+        }
+
+        // Helper: show a subtle "Updated" badge without disrupting the user
+        function showSyncBadge(label) {
+          let badge = document.getElementById('rt-sync-badge');
+          if (!badge) {
+            badge = document.createElement('div');
+            badge.id = 'rt-sync-badge';
+            badge.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);'
+              + 'background:rgba(11,83,157,.9);color:#fff;font-size:11px;padding:5px 14px;'
+              + 'border-radius:20px;z-index:9999;pointer-events:none;'
+              + 'transition:opacity .4s;white-space:nowrap';
+            document.body.appendChild(badge);
+          }
+          badge.textContent = '🔄 ' + label + ' updated by another user';
+          badge.style.opacity = '1';
+          clearTimeout(badge._t);
+          badge._t = setTimeout(function() { badge.style.opacity = '0'; }, 2500);
+        }
+
+        // Helper: smart render — only re-render if user is on that page
+        // and not currently editing anything (no open modal)
+        function smartRender(page, renderFn, label) {
+          // Don't interrupt if a modal is open
+          const modalOpen = document.querySelector('.modal-overlay.open, .modal-overlay[style*="flex"]');
+          if (modalOpen) {
+            showSyncBadge(label);
+            return;
+          }
+          const active = getActivePage();
+          if (active === page || active === 'dashboard') {
+            renderFn();
+          }
+          showSyncBadge(label);
+        }
+
+        window.FB.fbListen('quotations', function(data) {
+          quotations = data;
+          try { localStorage.setItem('dtq_quotations', JSON.stringify(quotations)); } catch(e) {}
+          smartRender('quotations', function() {
+            renderTable();
+            renderDashboard();
+          }, 'Quotations');
+        });
+
+        window.FB.fbListen('customers', function(data) {
+          customers = data;
+          try { localStorage.setItem('dtq_customers', JSON.stringify(customers)); } catch(e) {}
+          smartRender('masters', function() {
+            if (typeof renderCustomers === 'function') renderCustomers();
+            renderSetupCustTable();
+          }, 'Customers');
+        });
+
+        window.FB.fbListen('suppliers', function(data) {
+          suppliers = data;
+          try { localStorage.setItem('dtq_suppliers', JSON.stringify(suppliers)); } catch(e) {}
+          smartRender('masters', function() {
+            if (typeof renderSuppliers === 'function') renderSuppliers();
+          }, 'Suppliers');
+        });
+
+        window.FB.fbListen('products', function(data) {
+          products = data;
+          try { localStorage.setItem('dtq_products', JSON.stringify(products)); } catch(e) {}
+          smartRender('masters', function() {
+            if (typeof renderProducts === 'function') renderProducts();
+          }, 'Products');
+        });
+
+        window.FB.fbListen('rfqs', function(data) {
+          rfqs = data;
+          try { localStorage.setItem('dtq_rfqs', JSON.stringify(rfqs)); } catch(e) {}
+          smartRender('rfq', function() {
+            if (typeof renderRFQPage === 'function') renderRFQPage();
+            renderDashboard();
+          }, 'RFQs');
+        });
+
+        window.FB.fbListen('salesOrders', function(data) {
+          salesOrders = data;
+          try { localStorage.setItem('dtq_salesorders', JSON.stringify(salesOrders)); } catch(e) {}
+          smartRender('salesorders', function() {
+            if (typeof renderSOPage === 'function') renderSOPage();
+            renderDashboard();
+          }, 'Sales Orders');
+        });
+
+        window.FB.fbListen('employees', function(data) {
+          employees = data;
+          try { localStorage.setItem('dtq_employees', JSON.stringify(employees)); } catch(e) {}
+          smartRender('masters', function() {
+            if (typeof renderEmployees === 'function') renderEmployees();
+          }, 'Employees');
+        });
+
+        window.FB.fbListenSettings(function(data) {
+          if (data && data.coname) {
+            settings = data;
+            try { localStorage.setItem('dtq_settings', JSON.stringify(settings)); } catch(e) {}
+            if (typeof applySettings === 'function') applySettings();
+          }
+        });
+
+        console.log('Real-time listeners active ✅ — smart background sync enabled');
+      }
     } catch(e) {
       console.warn('Firebase load error, falling back to localStorage:', e.message);
     }
@@ -8226,7 +8341,18 @@ function initPremiumTopbar(){
 loadThemeAndFont();
 initPremiumSidebar();
 initPremiumTopbar();
-loadData();
+loadData().then(function() {
+  // After data loads, restore the page the user was on before refresh
+  // This prevents F5 always jumping back to Dashboard
+  try {
+    const lastPage = localStorage.getItem('bc_last_nav_page');
+    if (lastPage && lastPage !== 'dashboard') {
+      setTimeout(function() {
+        if (typeof showPage === 'function') showPage(lastPage);
+      }, 300);
+    }
+  } catch(e) {}
+});
 initialiseCostComponents(true);
 initMarginStatuses();
 initPricingSettings();
