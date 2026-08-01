@@ -9459,3 +9459,343 @@ async function confirmImport() {
 /* ═══════════════════════════════════════════════════════════════════
    END EXCEL IMPORT SYSTEM
 ═══════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   DOCUMENT PRESENCE LOCKING SYSTEM
+   Prevents two users editing the same document at the same time.
+   Uses Firebase Firestore 'locks' collection.
+═══════════════════════════════════════════════════════════════════ */
+
+/* Active lock state for this session */
+let _activeLock      = null;  // { docType, docId }
+let _heartbeatTimer  = null;  // setInterval handle
+let _activityTimer   = null;  // setTimeout handle for idle detection
+let _lastActivity    = Date.now();
+let _lockWatcher     = null;  // onSnapshot unsubscribe
+
+const IDLE_TIMEOUT_MS   = 30 * 60 * 1000;  // 30 min idle → auto-release
+const HEARTBEAT_MS      = 60 * 1000;        // ping Firebase every 60s
+
+/* ── Track user activity to reset idle timer ── */
+['keydown','mousedown','touchstart','scroll'].forEach(function(evt) {
+  document.addEventListener(evt, function() {
+    _lastActivity = Date.now();
+    if (_activeLock) resetIdleTimer();
+  }, { passive: true });
+});
+
+function resetIdleTimer() {
+  clearTimeout(_activityTimer);
+  _activityTimer = setTimeout(function() {
+    // User has been idle for 30 minutes — release lock
+    if (_activeLock) {
+      console.log('Idle 30min — auto-releasing lock');
+      releaseLock();
+      showToast('Lock released after 30 minutes of inactivity. Your work is saved.', 'error');
+    }
+  }, IDLE_TIMEOUT_MS);
+}
+
+/* ── Acquire lock before opening a document for editing ──
+   Returns true if lock granted, false if locked by someone else.
+   Shows the lock conflict UI automatically if blocked. ── */
+async function acquireDocLock(docType, docId, docLabel) {
+  if (!window.FB || !window.FB.acquireLock) return true; // Firebase not ready
+  if (!window.currentUser) return true; // not logged in
+
+  const result = await window.FB.acquireLock(docType, docId);
+
+  if (result.granted) {
+    // Lock acquired — set up heartbeat and idle timer
+    _activeLock = { docType, docId };
+    startHeartbeat();
+    resetIdleTimer();
+
+    // Watch for takeover by another user
+    _lockWatcher = window.FB.watchLock(docType, docId, function(lockData) {
+      if (!lockData) return; // lock released
+      if (lockData.uid !== window.currentUser.uid) {
+        // Someone took over our lock
+        showToast(
+          (lockData.name || lockData.email) + ' has taken over this document.',
+          'error'
+        );
+        stopHeartbeat();
+        _activeLock = null;
+      }
+    });
+    return true;
+  }
+
+  // Lock denied — show conflict dialog
+  showLockConflict(docType, docId, docLabel, result);
+  return false;
+}
+
+/* ── Release the current lock ── */
+async function releaseLock() {
+  if (!_activeLock) return;
+  const { docType, docId } = _activeLock;
+  stopHeartbeat();
+  if (_lockWatcher) { _lockWatcher(); _lockWatcher = null; }
+  clearTimeout(_activityTimer);
+  if (window.FB && window.FB.releaseLock) {
+    await window.FB.releaseLock(docType, docId);
+  }
+  _activeLock = null;
+}
+
+/* ── Start/stop heartbeat ── */
+function startHeartbeat() {
+  stopHeartbeat();
+  _heartbeatTimer = setInterval(function() {
+    if (_activeLock && window.FB && window.FB.heartbeat) {
+      window.FB.heartbeat(_activeLock.docType, _activeLock.docId);
+    }
+  }, HEARTBEAT_MS);
+}
+
+function stopHeartbeat() {
+  if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
+}
+
+/* ── Release lock when user navigates away or closes tab ── */
+window.addEventListener('beforeunload', function() {
+  // Synchronous lock release via navigator.sendBeacon not possible with Firestore
+  // Best effort: stop heartbeat so lock expires on next idle check
+  stopHeartbeat();
+});
+
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden) {
+    // Page hidden (tab switched) — continue heartbeat but note time
+    _lastActivity = Date.now();
+  }
+});
+
+/* ── Lock conflict dialog ── */
+function showLockConflict(docType, docId, docLabel, lockInfo) {
+  // Remove any existing conflict dialog
+  const existing = document.getElementById('lock-conflict-modal');
+  if (existing) existing.remove();
+
+  const since     = lockInfo.since ? new Date(lockInfo.since) : null;
+  const sinceStr  = since ? since.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }) : '—';
+  const idleStr   = lockInfo.idleMins > 0
+    ? `<span style="color:#F15A25">Idle for ${lockInfo.idleMins} min</span>`
+    : '<span style="color:#16a34a">Active just now</span>';
+
+  const modal = document.createElement('div');
+  modal.id = 'lock-conflict-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;padding:32px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+        <div style="width:44px;height:44px;border-radius:50%;background:#FEF3F2;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <i class="ti ti-lock" style="font-size:22px;color:#DC2626"></i>
+        </div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#1a1a1a">Document in use</div>
+          <div style="font-size:12px;color:#8B98A8;margin-top:2px">${docLabel || docType + ' ' + docId}</div>
+        </div>
+      </div>
+
+      <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:16px;margin-bottom:20px">
+        <div style="font-size:13px;color:#1a1a1a;margin-bottom:10px">
+          <i class="ti ti-user" style="color:#0B539D;margin-right:6px"></i>
+          <strong>${lockInfo.lockedBy || lockInfo.lockedByEmail}</strong> is currently editing this document.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:10px">
+            <div style="font-size:10px;color:#8B98A8;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">Editing since</div>
+            <div style="font-size:13px;font-weight:600;color:#1a1a1a">${sinceStr}</div>
+          </div>
+          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:10px">
+            <div style="font-size:10px;color:#8B98A8;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">Status</div>
+            <div style="font-size:13px;font-weight:600">${idleStr}</div>
+          </div>
+        </div>
+        ${lockInfo.idleMins >= 5
+          ? `<div style="margin-top:10px;padding:8px 12px;background:#FFFBEA;border:1px solid #F0D77B;border-radius:6px;font-size:12px;color:#7A5A00">
+              <i class="ti ti-info-circle" style="margin-right:4px"></i>
+              This user has been idle for ${lockInfo.idleMins} minutes — they may have stepped away.
+             </div>`
+          : ''}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <button onclick="closeLockConflict()"
+          style="height:38px;border:1.5px solid #E2E8F0;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600;color:#5A6677">
+          Cancel
+        </button>
+        <button onclick="viewDocReadOnly('${docType}','${docId}')"
+          style="height:38px;border:1.5px solid #0B539D;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600;color:#0B539D">
+          <i class="ti ti-eye" style="margin-right:4px"></i>View only
+        </button>
+        <button onclick="takeoverLock('${docType}','${docId}','${(lockInfo.lockedBy||lockInfo.lockedByEmail).replace(/'/g,"\\'")}','${docLabel||''}')"
+          style="height:38px;border:none;border-radius:8px;background:#DC2626;cursor:pointer;font-size:12px;font-weight:600;color:#fff">
+          <i class="ti ti-lock-open" style="margin-right:4px"></i>Take over
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function closeLockConflict() {
+  const m = document.getElementById('lock-conflict-modal');
+  if (m) m.remove();
+}
+
+/* ── View document in read-only mode ── */
+function viewDocReadOnly(docType, docId) {
+  closeLockConflict();
+  // Route to the appropriate view function (read-only — no edit)
+  if (docType === 'quotation') {
+    const q = quotations.find(x => x.id === docId);
+    if (q) viewQuotation(docId);
+  } else if (docType === 'rfq') {
+    viewRFQ(docId);
+  } else if (docType === 'salesorder') {
+    viewSO(docId);
+  } else if (docType === 'customer') {
+    viewCustomer(docId);
+  } else if (docType === 'supplier') {
+    viewSupplier && viewSupplier(docId);
+  }
+}
+
+/* ── Take over a lock from another user ── */
+async function takeoverLock(docType, docId, lockedByName, docLabel) {
+  const confirmed = await showConfirmAsync({
+    icon: '⚠️',
+    title: 'Take over editing?',
+    message: lockedByName + ' is editing this document. If they have unsaved changes, those will be lost when they try to save.\n\nAre you sure you want to take over?',
+    confirmText: 'Take over',
+    confirmClass: 'btn-danger'
+  });
+  if (!confirmed) return;
+
+  closeLockConflict();
+  if (window.FB && window.FB.takeover) {
+    await window.FB.takeover(docType, docId);
+  }
+  _activeLock = { docType, docId };
+  startHeartbeat();
+  resetIdleTimer();
+
+  // Now open the document for editing
+  if (docType === 'quotation')  editQuotation(docId);
+  else if (docType === 'rfq')   editRFQ(docId);
+  else if (docType === 'customer') { /* trigger edit mode in customer view */ }
+
+  showToast('You now have exclusive editing access to this document.', 'success');
+}
+
+/* ── Helper: Promise-based confirm dialog ── */
+function showConfirmAsync(opts) {
+  return new Promise(function(resolve) {
+    const existing = document.getElementById('confirm-async-modal');
+    if (existing) existing.remove();
+    const modal = document.createElement('div');
+    modal.id = 'confirm-async-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:12px;padding:28px;max-width:380px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.2)">
+        <div style="font-size:22px;margin-bottom:10px">${opts.icon||'⚠️'}</div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:8px">${opts.title||'Confirm'}</div>
+        <div style="font-size:13px;color:#5A6677;margin-bottom:20px;white-space:pre-line">${opts.message||''}</div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button onclick="document.getElementById('confirm-async-modal').remove();window._confirmResolve(false)"
+            style="height:36px;padding:0 16px;border:1.5px solid #E2E8F0;border-radius:7px;background:#fff;cursor:pointer;font-size:13px;font-weight:600">
+            Cancel
+          </button>
+          <button onclick="document.getElementById('confirm-async-modal').remove();window._confirmResolve(true)"
+            style="height:36px;padding:0 16px;border:none;border-radius:7px;background:#DC2626;color:#fff;cursor:pointer;font-size:13px;font-weight:600">
+            ${opts.confirmText||'Confirm'}
+          </button>
+        </div>
+      </div>`;
+    window._confirmResolve = resolve;
+    document.body.appendChild(modal);
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   HOOK LOCKS INTO EXISTING EDIT FUNCTIONS
+   Wrap the existing edit functions to check locks first
+═══════════════════════════════════════════════════════════════════ */
+
+/* Store original functions */
+const _origEditQuotation = typeof editQuotation === 'function' ? editQuotation : null;
+const _origEditRFQ       = typeof editRFQ       === 'function' ? editRFQ       : null;
+
+/* Wrap editQuotation */
+if (_origEditQuotation) {
+  editQuotation = async function(id, skipVatCheck) {
+    const q = quotations.find(x => x.id === id);
+    const label = q ? ('Quotation ' + (q.qno || id)) : ('Quotation ' + id);
+    // Release any existing lock first
+    if (_activeLock && (_activeLock.docId !== id || _activeLock.docType !== 'quotation')) {
+      await releaseLock();
+    }
+    if (_activeLock && _activeLock.docId === id) {
+      // Already have this lock
+      _origEditQuotation(id, skipVatCheck);
+      return;
+    }
+    const granted = await acquireDocLock('quotation', id, label);
+    if (granted) _origEditQuotation(id, skipVatCheck);
+  };
+}
+
+/* Wrap editRFQ */
+if (_origEditRFQ) {
+  editRFQ = async function(id) {
+    const r = rfqs.find(x => x.id === id);
+    const label = r ? ('RFQ ' + (r.rfqno || id)) : ('RFQ ' + id);
+    if (_activeLock && (_activeLock.docId !== id || _activeLock.docType !== 'rfq')) {
+      await releaseLock();
+    }
+    if (_activeLock && _activeLock.docId === id) {
+      _origEditRFQ(id); return;
+    }
+    const granted = await acquireDocLock('rfq', id, label);
+    if (granted) _origEditRFQ(id);
+  };
+}
+
+/* Release lock when save modals close */
+const _origSaveQuotation = typeof saveQuotation === 'function' ? saveQuotation : null;
+if (_origSaveQuotation) {
+  saveQuotation = async function() {
+    await _origSaveQuotation();
+    await releaseLock();
+  };
+}
+
+const _origSaveRFQ = typeof saveRFQ === 'function' ? saveRFQ : null;
+if (_origSaveRFQ) {
+  saveRFQ = async function() {
+    await _origSaveRFQ();
+    await releaseLock();
+  };
+}
+
+/* Release lock when cancel buttons are clicked (modal close) */
+(function() {
+  const orig = window.closeModal;
+  if (typeof orig === 'function') {
+    window.closeModal = async function(id) {
+      if (id === 'quote-modal' || id === 'rfq-modal') {
+        await releaseLock();
+      }
+      orig(id);
+    };
+  }
+})();
+
+console.log('Document locking system active ✅');
+
+/* ═══════════════════════════════════════════════════════════════════
+   END DOCUMENT PRESENCE LOCKING SYSTEM
+═══════════════════════════════════════════════════════════════════ */

@@ -1561,7 +1561,7 @@ import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, getDoc, setDoc, onSnapshot }
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, deleteDoc }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const cfg = {
@@ -1644,7 +1644,118 @@ function fbListenSettings(onUpdate) {
 }
 
 /* Expose to app.js */
-window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings, fbListen, fbListenSettings };
+window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings, fbListen, fbListenSettings,
+
+  /* ═══════════════════════════════════════════════════
+     PRESENCE LOCKING SYSTEM
+     Prevents two users editing the same document simultaneously
+  ═══════════════════════════════════════════════════ */
+
+  /* Acquire a lock on a document.
+     Returns: { granted:true } if lock acquired
+              { granted:false, lockedBy, lockedByEmail, since, lastActive } if locked by someone else */
+  async acquireLock(docType, docId) {
+    if (!window.currentUser) return { granted: true }; // no auth = no lock
+    const lockRef = doc(db, 'locks', docType + '_' + docId);
+    try {
+      const snap = await getDoc(lockRef);
+      const now  = Date.now();
+
+      if (snap.exists()) {
+        const lock = snap.data();
+        // If locked by same user (e.g. another tab), allow
+        if (lock.uid === window.currentUser.uid) {
+          await setDoc(lockRef, { ...lock, lastActive: now });
+          return { granted: true };
+        }
+        // If lock is idle for 30+ minutes, auto-expire it
+        const idleMins = (now - lock.lastActive) / 60000;
+        if (idleMins >= 30) {
+          await setDoc(lockRef, {
+            uid: window.currentUser.uid,
+            name: window.currentUser.name,
+            email: window.currentUser.email,
+            since: now,
+            lastActive: now,
+            docType, docId
+          });
+          return { granted: true };
+        }
+        // Actively locked by someone else
+        return {
+          granted: false,
+          lockedBy: lock.name || lock.email,
+          lockedByEmail: lock.email,
+          since: lock.since,
+          lastActive: lock.lastActive,
+          idleMins: Math.floor(idleMins)
+        };
+      }
+
+      // No lock exists — acquire it
+      await setDoc(lockRef, {
+        uid: window.currentUser.uid,
+        name: window.currentUser.name,
+        email: window.currentUser.email,
+        since: now,
+        lastActive: now,
+        docType, docId
+      });
+      return { granted: true };
+    } catch(e) {
+      console.warn('Lock acquire failed:', e.message);
+      return { granted: true }; // fail open — better to allow editing than block everything
+    }
+  },
+
+  /* Release a lock when done editing */
+  async releaseLock(docType, docId) {
+    if (!window.currentUser) return;
+    const lockRef = doc(db, 'locks', docType + '_' + docId);
+    try {
+      const snap = await getDoc(lockRef);
+      if (snap.exists() && snap.data().uid === window.currentUser.uid) {
+        await deleteDoc(lockRef);
+      }
+    } catch(e) { console.warn('Lock release failed:', e.message); }
+  },
+
+  /* Force take over a lock (override another user) */
+  async takeover(docType, docId) {
+    if (!window.currentUser) return;
+    const lockRef = doc(db, 'locks', docType + '_' + docId);
+    try {
+      await setDoc(lockRef, {
+        uid: window.currentUser.uid,
+        name: window.currentUser.name,
+        email: window.currentUser.email,
+        since: Date.now(),
+        lastActive: Date.now(),
+        docType, docId
+      });
+    } catch(e) { console.warn('Takeover failed:', e.message); }
+  },
+
+  /* Send heartbeat — call every 60s while editing to prove still active */
+  async heartbeat(docType, docId) {
+    if (!window.currentUser) return;
+    const lockRef = doc(db, 'locks', docType + '_' + docId);
+    try {
+      const snap = await getDoc(lockRef);
+      if (snap.exists() && snap.data().uid === window.currentUser.uid) {
+        await setDoc(lockRef, { ...snap.data(), lastActive: Date.now() });
+      }
+    } catch(e) {}
+  },
+
+  /* Watch a lock in real time — calls cb(lockData|null) when it changes */
+  watchLock(docType, docId, cb) {
+    const lockRef = doc(db, 'locks', docType + '_' + docId);
+    return onSnapshot(lockRef, snap => {
+      cb(snap.exists() ? snap.data() : null);
+    });
+  }
+};
 window.fbAuthInstance = auth;
 
 /* ── Auth guard ── */
