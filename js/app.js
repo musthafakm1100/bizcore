@@ -765,12 +765,107 @@ function validUntil(q) {
   return d.toISOString().split('T')[0];
 }
 
+/* ── Quotation numbering ──
+   Online: uses Firestore atomic counter — guarantees no two users
+           (even saving in the same second) ever get the same number.
+   Offline: falls back to a device-tagged number so it never collides
+            with another offline user's number, then gets renumbered
+            to a proper sequential number once back online. ── */
 function nextQNo() {
+  // Synchronous fallback used only while the async atomic version
+  // is being fetched, or if the device is offline.
   const t=new Date();
   const prefix='Q-'+String(t.getFullYear()).slice(2)+String(t.getMonth()+1).padStart(2,'0')+'-';
   const nums=quotations.filter(q=>q.qno.startsWith(prefix)).map(q=>parseInt(q.qno.split('-').pop())||0);
   return prefix+((nums.length?Math.max(...nums):3960)+1);
 }
+
+/* ── Reserve the real atomic number into an open form field ──
+   Called right after a placeholder number is shown, so the user
+   sees a number immediately but the FINAL saved number is always
+   collision-safe. If the field's value hasn't been touched by the
+   user by the time the real number arrives, it's swapped in. ── */
+async function reserveQNoForForm(fieldId) {
+  const field = document.getElementById(fieldId);
+  if (!field) return;
+  const placeholderShown = field.value;
+
+  const result = await nextQNoSafe();
+
+  // Only swap if the user hasn't manually edited the ref field themselves
+  // and the modal is still open with the same placeholder showing
+  if (field && field.value === placeholderShown) {
+    field.value = result.qno;
+    field.dataset.reservedQno = result.qno;
+    field.dataset.isProvisional = result.isProvisional ? '1' : '0';
+    if (result.isProvisional) {
+      showToast('Offline — this quotation will get its final number once you\'re back online', 'error');
+    }
+  }
+}
+
+/* ── Async, collision-safe version — use this when creating NEW documents ── */
+async function nextQNoSafe() {
+  const t = new Date();
+  const prefix = 'Q-'+String(t.getFullYear()).slice(2)+String(t.getMonth()+1).padStart(2,'0')+'-';
+  const counterKey = 'quotation_' + String(t.getFullYear()).slice(2) + String(t.getMonth()+1).padStart(2,'0');
+
+  if (window.FB && window.FB.getNextDocNumber && navigator.onLine) {
+    const atomicNo = await window.FB.getNextDocNumber(counterKey, prefix);
+    if (atomicNo) return { qno: atomicNo, isProvisional: false };
+  }
+
+  // Offline or Firebase unavailable — generate a provisional number
+  // tagged with a short device ID so it can NEVER collide with another
+  // offline user's provisional number. Format: Q-2608-OFF-x7f2-1
+  const localNums = quotations.filter(q=>q.qno.startsWith(prefix)).map(q=>parseInt(q.qno.split('-').pop())||0);
+  const localNext = (localNums.length ? Math.max(...localNums) : 3960) + 1;
+  const deviceTag = getDeviceTag();
+  return { qno: prefix + 'OFF-' + deviceTag + '-' + localNext, isProvisional: true };
+}
+
+/* ── Small stable per-device identifier (persisted in localStorage) ──
+   Used only to keep offline-generated numbers from colliding with
+   another offline device's numbers. Not shown to the customer unless
+   the document is still provisional at print time. ── */
+function getDeviceTag() {
+  let tag = localStorage.getItem('bc_device_tag');
+  if (!tag) {
+    tag = Math.random().toString(36).slice(2, 6);
+    localStorage.setItem('bc_device_tag', tag);
+  }
+  return tag;
+}
+
+/* ── Renumber provisional (offline-created) quotations once back online ──
+   Call this after reconnecting — finds any "OFF-" tagged quotations
+   this device created and assigns them a real sequential number. ── */
+async function renumberProvisionalQuotations() {
+  if (!navigator.onLine || !window.FB || !window.FB.getNextDocNumber) return;
+  const provisional = quotations.filter(q => q.qno && q.qno.includes('-OFF-'));
+  if (!provisional.length) return;
+
+  console.log('Renumbering ' + provisional.length + ' offline-created quotation(s)...');
+  for (const q of provisional) {
+    const t = new Date(q.date || q.created || Date.now());
+    const prefix = 'Q-'+String(t.getFullYear()).slice(2)+String(t.getMonth()+1).padStart(2,'0')+'-';
+    const counterKey = 'quotation_' + String(t.getFullYear()).slice(2) + String(t.getMonth()+1).padStart(2,'0');
+    const realNo = await window.FB.getNextDocNumber(counterKey, prefix);
+    if (realNo) {
+      const oldQno = q.qno;
+      q.qno = realNo;
+      console.log('Renumbered ' + oldQno + ' → ' + realNo);
+    }
+  }
+  await saveQuotations();
+  renderAll();
+  showToast(provisional.length + ' offline quotation(s) assigned final numbers', 'success');
+}
+
+// Run renumbering automatically whenever the app comes back online
+window.addEventListener('online', function() {
+  setTimeout(renumberProvisionalQuotations, 3000); // small delay to let sync settle first
+});
 
 /* ── RENDER ALL ── */
 function setDatePreset(preset) {
@@ -3039,7 +3134,8 @@ function openNewQuotation(templateType) {
   clearCustomerSelection();
   document.getElementById('f-ref').value='';
   document.getElementById('f-project').value='';
-  document.getElementById('f-qno').value=nextQNo();
+  document.getElementById('f-qno').value=nextQNo(); // instant placeholder
+  reserveQNoForForm('f-qno'); // then swap in the real atomic number
   document.getElementById('f-date').value=todayQuoteDateDisplay();
   document.getElementById('f-status').value='Draft';
   document.getElementById('f-validity').value=settings.validity||7;
@@ -3805,7 +3901,8 @@ async function duplicateQuotation(id) {
   });
   if (!confirmed) return;
   closeModal('view-modal');
-  const newQno=nextQNo();
+  const numResult = await nextQNoSafe();
+  const newQno = numResult.qno;
   const copy={...JSON.parse(JSON.stringify(q)),id:newQno,qno:newQno,
     rfqId:null, // don't inherit RFQ link — it's a new quotation
     date:new Date().toISOString().split('T')[0],
@@ -3813,7 +3910,11 @@ async function duplicateQuotation(id) {
     created:new Date().toISOString(),
     updated:new Date().toISOString()};
   quotations.unshift(copy); saveQuotations(); renderAll();
-  showToast('Duplicated as '+newQno,'success');
+  if (numResult.isProvisional) {
+    showToast('Duplicated as '+newQno+' (offline — will get final number once reconnected)','error');
+  } else {
+    showToast('Duplicated as '+newQno,'success');
+  }
   editQuotation(newQno);
 }
 
@@ -6148,7 +6249,8 @@ async function convertToQuotation() {
   const activePricingVersion=getCurrentPricingVersion(r);
   const isRevision=Number(activePricingVersion?.version||1)>1 || !!r.quotationId;
   const revisionInfo=isRevision ? nextQuotationRevisionNo(r) : null;
-  document.getElementById('f-qno').value = revisionInfo ? revisionInfo.qno : nextQNo();
+  document.getElementById('f-qno').value = revisionInfo ? revisionInfo.qno : nextQNo(); // instant placeholder
+  if (!revisionInfo) reserveQNoForForm('f-qno'); // then swap in the real atomic number
   document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('f-status').value = 'Draft';
   document.getElementById('f-validity').value = Math.max(1,Number(activePricingSettings().validity)||7);

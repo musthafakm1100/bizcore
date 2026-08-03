@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BizCore Login</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABEUlEQVR4nGNgGAWjYIABIzmavtRo/Ufm87RcI8scshzwqUrjPzZxvrYbZDmChVQN//9jtZ9sMAQd8G+gHTDQIfBvoB1ASgho1T9AUXytUQEjpzCR7IB//7BidKBRffv/vz+/GZCxRvVtDNfTLAT+/flDlLph7IC/NHLAPyLLAbJDQCr/CooNzybqoKRcakcBSi6QyDr3/9/vXwzIWCLrHIqN////x4qxOQAbRgcoIfD/z2+CLqZpGvj3+xdhB2DJ81gdQIRnMBxA1RAgJxES42pi6wKyHPCfmCigaRogJgpoWQ5QNQSIdABG9cjjvhjFhi87YzHU3EoQRFGjtuA91gYpj9siVLN2xZHdeh4FwxcAACb84Rmry2tMAAAAAElFTkSuQmCC">
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -41,8 +42,31 @@ body{font-family:Arial,Helvetica,sans-serif;background:linear-gradient(135deg,#0
 
 <div class="card">
   <div class="logo-area" id="logo-area">
-    <div class="app-name">BizCore</div>
-    <div class="app-sub">Downtown Trading Est.</div>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 88" width="220" height="64" style="display:block;margin:0 auto">
+      <defs>
+        <linearGradient id="loginBar1" x1="0%" y1="100%" x2="0%" y2="0%">
+          <stop offset="0%" stop-color="#0B439E"/><stop offset="100%" stop-color="#1A6FD4"/>
+        </linearGradient>
+        <linearGradient id="loginBar2" x1="0%" y1="100%" x2="0%" y2="0%">
+          <stop offset="0%" stop-color="#0B439E"/><stop offset="100%" stop-color="#2A7FE0"/>
+        </linearGradient>
+        <linearGradient id="loginBarO" x1="0%" y1="100%" x2="0%" y2="0%">
+          <stop offset="0%" stop-color="#D95F10"/><stop offset="100%" stop-color="#F47C2A"/>
+        </linearGradient>
+      </defs>
+      <g transform="translate(14,10)">
+        <rect x="0" y="58" width="56" height="2.5" rx="1.25" fill="#0B439E" opacity="0.15"/>
+        <rect x="2" y="38" width="13" height="20" rx="2.5" fill="url(#loginBar1)"/>
+        <rect x="21.5" y="14" width="13" height="44" rx="2.5" fill="url(#loginBarO)"/>
+        <rect x="41" y="26" width="13" height="32" rx="2.5" fill="url(#loginBar2)"/>
+      </g>
+      <g transform="translate(90,4)">
+        <text x="0" y="54" font-family="Arial,Helvetica,sans-serif" font-size="38" font-weight="300" fill="#0B439E">Biz</text>
+        <text x="62" y="54" font-family="Arial,Helvetica,sans-serif" font-size="38" font-weight="800" fill="#0B439E">Core</text>
+        <text x="1" y="70" font-family="Arial,Helvetica,sans-serif" font-size="10" font-weight="400" letter-spacing="3" fill="#5A7BB5">BUSINESS OPERATIONS</text>
+      </g>
+    </svg>
+    <div class="app-sub" style="margin-top:6px">Downtown Trading Est.</div>
   </div>
 
   <div class="divider"></div>
