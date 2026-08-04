@@ -757,7 +757,7 @@ function calcQuote(q) {
 }
 
 function getStatusClass(s) {
-  return {Draft:'badge-draft',Sent:'badge-sent',Won:'badge-won',Lost:'badge-lost',Expired:'badge-expired',Revised:'badge-revised'}[s]||'badge-draft';
+  return {Draft:'badge-draft',Sent:'badge-sent',Won:'badge-won',Lost:'badge-lost',Expired:'badge-expired',Revised:'badge-revised',Cancelled:'badge-cancelled'}[s]||'badge-draft';
 }
 
 function validUntil(q) {
@@ -2474,8 +2474,8 @@ function renderAnalytics() {
   document.getElementById('top-cust-tbody').innerHTML=Object.entries(custMap).sort((a,b)=>b[1].total-a[1].total).slice(0,8)
     .map(([n,v])=>`<tr><td>${n}</td><td class="right">${fmtShort(v.total)}</td><td class="right" style="color:var(--green);font-weight:500">${fmtShort(v.won)}</td></tr>`).join('');
 
-  const statuses=['Draft','Sent','Won','Lost','Expired','Revised'];
-  const colors={Draft:'#6c757d',Sent:'#185FA5',Won:'#1e7e34',Lost:'#c0392b',Expired:'#e67e22',Revised:'#6f42c1'};
+  const statuses=['Draft','Sent','Won','Lost','Expired','Revised','Cancelled'];
+  const colors={Draft:'#6c757d',Sent:'#185FA5',Won:'#1e7e34',Lost:'#c0392b',Expired:'#e67e22',Revised:'#6f42c1',Cancelled:'#9CA3AF'};
   const tot=quotations.length||1;
   document.getElementById('an-status-chart').innerHTML=statuses.map(s=>{
     const cnt=quotations.filter(q=>q.status===s).length;
@@ -3784,6 +3784,14 @@ function viewQuotation(id, skipVatCheck=false) {
   if(linkedSO) buttons.push('<button class="btn btn-success" data-soid="'+linkedSO.id+'" onclick="openSalesOrderDocument(this.dataset.soid)"><i class="ti ti-external-link"></i>'+escapeHtml(linkedSO.soNo)+'</button>');
   else if(status==='Won') buttons.push('<button class="btn btn-success" data-qid="'+q.id+'" onclick="closeModal(\'view-modal\');openCreateSO(this.dataset.qid)"><i class="ti ti-shopping-cart"></i>Create Sales Order</button>');
   buttons.push('<button class="btn btn-primary" data-qid="'+q.id+'" onclick="openTemplatePicker(this.dataset.qid)"><i class="ti ti-printer"></i>Print / PDF</button>');
+  // Delete / Cancel — mutually exclusive, rules enforced inside each function
+  if (!linkedSO) {
+    if (status === 'Draft') {
+      buttons.push('<button class="btn btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA" data-qid="'+q.id+'" onclick="deleteQuotation(this.dataset.qid)"><i class="ti ti-trash"></i> Delete</button>');
+    } else if (status !== 'Cancelled') {
+      buttons.push('<button class="btn btn-sm" style="background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA" data-qid="'+q.id+'" onclick="cancelQuotation(this.dataset.qid)"><i class="ti ti-ban"></i> Cancel</button>');
+    }
+  }
   document.getElementById('view-footer').innerHTML=buttons.join('');
   openModalWithSize('view-modal');
 }
@@ -3918,8 +3926,41 @@ async function duplicateQuotation(id) {
   editQuotation(newQno);
 }
 
+/* ── DELETE QUOTATION ──
+   Rules (matches professional ERP practice):
+   1. Only Draft quotations that have NEVER been converted to a Sales Order
+      can be deleted at all.
+   2. Deleting moves it to a Recycle Bin — never an immediate hard delete —
+      so an accidental delete is always recoverable.
+   3. Quotations linked to a Sales Order can NEVER be deleted, regardless
+      of status — use Cancel instead (see cancelQuotation).
+   4. For anything past Draft (Sent/Won/Lost/Expired), use Cancel — the
+      number and record stay visible permanently for audit purposes. ── */
 async function deleteQuotation(id) {
-  if(!confirm('Delete this quotation? This cannot be undone.')) return;
+  const q = quotations.find(x => x.id === id);
+  if (!q) return;
+
+  const status = q.status || 'Draft';
+  const linkedSO = getSalesOrderForQuotation(id);
+
+  if (linkedSO) {
+    showToast('This quotation is linked to Sales Order ' + (linkedSO.soNo||'') + ' and cannot be deleted.', 'error');
+    return;
+  }
+  if (status !== 'Draft') {
+    showToast('Only Draft quotations can be deleted. Use Cancel for quotations that have been sent.', 'error');
+    return;
+  }
+
+  const confirmed = await showConfirmAsync({
+    icon: '🗑️',
+    title: 'Move to Recycle Bin?',
+    message: 'Quotation ' + q.qno + ' will be moved to the Recycle Bin. You can restore it later, or it will remain there until permanently removed.',
+    confirmText: 'Move to Recycle Bin',
+    confirmClass: 'btn-danger'
+  });
+  if (!confirmed) return;
+
   // Unlink from any RFQ that references this quotation
   const linkedRFQ = rfqs.find(r => r.quotationId === id);
   if (linkedRFQ) {
@@ -3927,14 +3968,207 @@ async function deleteQuotation(id) {
     linkedRFQ.quotedDate  = null;
     linkedRFQ.status      = 'Pricing';
     await saveRFQs();
-    showToast('Quotation deleted — RFQ reset to Pricing status');
-  } else {
-    showToast('Quotation deleted');
   }
-  quotations = quotations.filter(x=>x.id!==id);
+
+  // Move to recycle bin instead of deleting outright
+  const binEntry = {
+    ...JSON.parse(JSON.stringify(q)),
+    deletedAt: new Date().toISOString(),
+    deletedBy: (window.currentUser && window.currentUser.email) || 'unknown',
+    originalCollection: 'quotations'
+  };
+  recycleBin.push(binEntry);
+  await saveRecycleBin();
+
+  // Remove from active quotations — but the number is NEVER reused,
+  // since nextQNoSafe() always pulls from the atomic Firestore counter,
+  // not from the local quotations array.
+  quotations = quotations.filter(x => x.id !== id);
   await saveQuotations();
+
   renderAll();
   renderRFQPage();
+  showToast('Moved to Recycle Bin — ' + q.qno + ' can be restored anytime', 'success');
+}
+
+/* ── CANCEL QUOTATION ──
+   Used once a quotation has left Draft status. The record and its number
+   stay permanently — status changes to "Cancelled" with a required reason
+   for the audit trail. ── */
+async function cancelQuotation(id) {
+  const q = quotations.find(x => x.id === id);
+  if (!q) return;
+
+  const linkedSO = getSalesOrderForQuotation(id);
+  if (linkedSO) {
+    showToast('This quotation is linked to Sales Order ' + (linkedSO.soNo||'') + ' and cannot be cancelled here.', 'error');
+    return;
+  }
+  if (q.status === 'Cancelled') {
+    showToast('This quotation is already cancelled.', 'error');
+    return;
+  }
+
+  const reason = await showReasonPrompt({
+    icon: '⛔',
+    title: 'Cancel ' + q.qno + '?',
+    message: 'This quotation will be marked Cancelled. It stays visible in reports and history — its number is never reused.',
+    placeholder: 'Reason for cancellation (required)',
+    confirmText: 'Cancel Quotation'
+  });
+  if (!reason) return; // user backed out or gave no reason
+
+  q.previousStatus  = q.status;
+  q.status          = 'Cancelled';
+  q.cancelledAt     = new Date().toISOString();
+  q.cancelledBy     = (window.currentUser && window.currentUser.email) || 'unknown';
+  q.cancellationReason = reason;
+  q.updated         = new Date().toISOString();
+
+  await saveQuotations();
+  renderAll();
+  closeModal('view-modal');
+  showToast(q.qno + ' has been cancelled', 'success');
+}
+
+/* ── Small prompt dialog that requires a typed reason before confirming ── */
+function showReasonPrompt(opts) {
+  return new Promise(function(resolve) {
+    const existing = document.getElementById('reason-prompt-modal');
+    if (existing) existing.remove();
+    const modal = document.createElement('div');
+    modal.id = 'reason-prompt-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.innerHTML =
+      '<div style="background:#fff;border-radius:12px;padding:28px;max-width:400px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.2)">'
+      + '<div style="font-size:22px;margin-bottom:10px">' + (opts.icon||'⚠️') + '</div>'
+      + '<div style="font-size:15px;font-weight:700;margin-bottom:8px">' + (opts.title||'Confirm') + '</div>'
+      + '<div style="font-size:13px;color:#5A6677;margin-bottom:14px">' + (opts.message||'') + '</div>'
+      + '<textarea id="reason-prompt-input" placeholder="' + (opts.placeholder||'Reason') + '" '
+      + 'style="width:100%;min-height:70px;border:1.5px solid #E2E8F0;border-radius:7px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;margin-bottom:16px"></textarea>'
+      + '<div style="display:flex;gap:10px;justify-content:flex-end">'
+      + '<button id="reason-prompt-cancel" style="height:36px;padding:0 16px;border:1.5px solid #E2E8F0;border-radius:7px;background:#fff;cursor:pointer;font-size:13px;font-weight:600">Back</button>'
+      + '<button id="reason-prompt-confirm" style="height:36px;padding:0 16px;border:none;border-radius:7px;background:#DC2626;color:#fff;cursor:pointer;font-size:13px;font-weight:600">' + (opts.confirmText||'Confirm') + '</button>'
+      + '</div></div>';
+    document.body.appendChild(modal);
+
+    const input = document.getElementById('reason-prompt-input');
+    input.focus();
+
+    document.getElementById('reason-prompt-cancel').onclick = function() {
+      modal.remove();
+      resolve(null);
+    };
+    document.getElementById('reason-prompt-confirm').onclick = function() {
+      const val = input.value.trim();
+      if (!val) {
+        input.style.borderColor = '#DC2626';
+        input.placeholder = 'A reason is required';
+        return;
+      }
+      modal.remove();
+      resolve(val);
+    };
+  });
+}
+
+/* ── RECYCLE BIN ── */
+let recycleBin = [];
+
+async function saveRecycleBin() {
+  try { localStorage.setItem('dtq_recycle_bin', JSON.stringify(recycleBin)); } catch(e) {}
+  if (window.FB) await window.FB.fbSave('recycleBin', recycleBin);
+}
+
+async function loadRecycleBin() {
+  if (window.FB) {
+    try {
+      const fbBin = await window.FB.fbLoad('recycleBin');
+      if (fbBin) { recycleBin = fbBin; return; }
+    } catch(e) {}
+  }
+  try {
+    const r = localStorage.getItem('dtq_recycle_bin');
+    if (r) recycleBin = JSON.parse(r);
+  } catch(e) {}
+}
+
+function openRecycleBin() {
+  renderRecycleBin();
+  openModalWithSize('recycle-bin-modal');
+}
+
+function renderRecycleBin() {
+  const list = document.getElementById('recycle-bin-list');
+  if (!list) return;
+
+  const quotationItems = recycleBin.filter(x => x.originalCollection === 'quotations');
+
+  if (!quotationItems.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--gray)">'
+      + '<i class="ti ti-trash" style="font-size:36px;opacity:.3;display:block;margin-bottom:10px"></i>'
+      + 'Recycle Bin is empty</div>';
+    return;
+  }
+
+  list.innerHTML = quotationItems.map(function(item) {
+    const daysAgo = Math.floor((Date.now() - new Date(item.deletedAt).getTime()) / 86400000);
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #EEF1F4">'
+      + '<div>'
+      + '<div style="font-weight:700;font-size:13px;color:var(--blue)">' + item.qno + '</div>'
+      + '<div style="font-size:11px;color:var(--gray);margin-top:2px">' + (item.company||'') + ' &middot; Deleted ' + (daysAgo===0?'today':daysAgo+' day(s) ago') + ' by ' + (item.deletedBy||'unknown') + '</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:6px">'
+      + '<button class="btn btn-secondary btn-sm" onclick="restoreFromBin(\'' + item.id + '\')"><i class="ti ti-restore"></i> Restore</button>'
+      + '<button class="btn btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA" onclick="purgeFromBin(\'' + item.id + '\')"><i class="ti ti-trash-x"></i> Purge</button>'
+      + '</div></div>';
+  }).join('');
+}
+
+async function restoreFromBin(id) {
+  const idx = recycleBin.findIndex(x => x.id === id);
+  if (idx === -1) return;
+  const item = recycleBin[idx];
+
+  const confirmed = await showConfirmAsync({
+    icon: '♻️',
+    title: 'Restore ' + item.qno + '?',
+    message: 'This will bring the quotation back to your active list with the same number.',
+    confirmText: 'Restore',
+  });
+  if (!confirmed) return;
+
+  const restored = { ...item };
+  delete restored.deletedAt;
+  delete restored.deletedBy;
+  delete restored.originalCollection;
+  quotations.push(restored);
+  recycleBin.splice(idx, 1);
+
+  await saveQuotations();
+  await saveRecycleBin();
+  renderAll();
+  renderRecycleBin();
+  showToast(item.qno + ' restored', 'success');
+}
+
+async function purgeFromBin(id) {
+  const idx = recycleBin.findIndex(x => x.id === id);
+  if (idx === -1) return;
+  const item = recycleBin[idx];
+
+  const confirmed = await showConfirmAsync({
+    icon: '⚠️',
+    title: 'Permanently delete ' + item.qno + '?',
+    message: 'This cannot be undone. The document content will be permanently removed. The quotation number ' + item.qno + ' will never be reused.',
+    confirmText: 'Permanently Delete',
+  });
+  if (!confirmed) return;
+
+  recycleBin.splice(idx, 1);
+  await saveRecycleBin();
+  renderRecycleBin();
+  showToast(item.qno + ' permanently deleted', 'success');
 }
 
 /* ── PRINT ── */
@@ -8443,6 +8677,7 @@ function initPremiumTopbar(){
 loadThemeAndFont();
 initPremiumSidebar();
 initPremiumTopbar();
+loadRecycleBin();
 loadData().then(function() {
   // After data loads, restore the page the user was on before refresh
   // This prevents F5 always jumping back to Dashboard

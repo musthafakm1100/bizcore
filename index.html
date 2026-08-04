@@ -191,13 +191,14 @@ document.addEventListener('error', function(e) {
 <div class="card-header page-command-header">
 <h3>All quotations</h3>
 <span id="q-count" class="quotation-count"></span>
+<button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="openRecycleBin()" title="View deleted draft quotations"><i class="ti ti-trash"></i> Recycle Bin</button>
 </div>
 <div class="card-body" style="padding:14px 16px 0">
 <div aria-label="Quotation filters" class="filter-bar page-filter-bar page-control-bar" role="toolbar">
 <input id="search-input" oninput="renderTable()" placeholder="Search Q No, customer, ref, product, description…" style="width:320px" type="text"/>
 <select id="filter-status" onchange="renderTable()">
 <option value="">All statuses</option>
-<option>Draft</option><option>Sent</option><option>Won</option><option>Lost</option><option>Expired</option><option>Revised</option>
+<option>Draft</option><option>Sent</option><option>Won</option><option>Lost</option><option>Expired</option><option>Revised</option><option>Cancelled</option>
 </select>
 <select id="filter-customer" onchange="renderTable()"><option value="">All customers</option></select>
 <select id="filter-sort" onchange="renderTable()">
@@ -1539,6 +1540,22 @@ document.addEventListener('error', function(e) {
 <div class="modal-footer">
 <button class="btn btn-secondary" onclick="closeModal('template-picker-modal')">Cancel</button>
 <button class="btn btn-primary" onclick="printWithSelectedTemplate()"><i class="ti ti-printer"></i>Print / PDF</button>
+</div>
+</div>
+</div>
+<!-- RECYCLE BIN MODAL -->
+<div class="modal-overlay" id="recycle-bin-modal">
+<div class="modal modal-compact" style="max-width:600px;height:auto;max-height:80vh">
+<div class="modal-header">
+<h2><i class="ti ti-trash" style="margin-right:8px"></i>Recycle Bin — Deleted Quotations</h2>
+<button class="close-btn" onclick="closeModal('recycle-bin-modal')">✕</button>
+</div>
+<div class="modal-body" style="overflow-y:auto;padding:0">
+<p style="font-size:12px;color:var(--gray);padding:14px 20px 0">Only Draft quotations deleted by a user appear here. Restore anytime, or permanently remove them.</p>
+<div id="recycle-bin-list" style="margin-top:10px"></div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closeModal('recycle-bin-modal')">Close</button>
 </div>
 </div>
 </div>
