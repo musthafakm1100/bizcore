@@ -23,6 +23,7 @@ let editingRFQId = null;
 let navFromQuoteId = null;  // tracks if user navigated here from a quotation
 let pricingRFQId = null;
 let rfqFilter = 'all';
+let rfqDateFilter = { preset: 'all', from: '', to: '' };
 let rfqAttachment = null;
 let pricingAttachment = null;
 let pricingVendorQuotes = [];
@@ -98,8 +99,57 @@ let selectedCustId = null;
 let currentQuoteType = 'product';
 let currentPage = 1;
 let prodPage = 1;
-const PER_PAGE = 15;
-const PROD_PER_PAGE = 20;
+let rfqPage = 1;
+let pricingDocPage = 1;
+let soPage = 1;
+let customerPage = 1;
+let supplierPage = 1;
+let employeePage = 1;
+const ROWS_PER_PAGE_OPTIONS = [15,25,50,100,200];
+function getRowsPerPage(){
+  const v = parseInt(localStorage.getItem('bc-rows-per-page'),10);
+  return ROWS_PER_PAGE_OPTIONS.includes(v) ? v : 15;
+}
+function setRowsPerPage(v){
+  v = parseInt(v,10);
+  if(!ROWS_PER_PAGE_OPTIONS.includes(v)) return;
+  localStorage.setItem('bc-rows-per-page', v);
+  PER_PAGE = v; PROD_PER_PAGE = v; RFQ_PER_PAGE = v; PRICING_DOC_PER_PAGE = v; SO_PER_PAGE = v;
+  currentPage = 1; prodPage = 1; rfqPage = 1; pricingDocPage = 1; soPage = 1; customerPage = 1; supplierPage = 1; employeePage = 1;
+  document.querySelectorAll('.rows-per-page-select').forEach(el=>{ el.value = v; });
+  renderTable();
+  renderProducts();
+  if (document.getElementById('page-rfq')?.classList.contains('active')) renderRFQPage();
+  if (document.getElementById('page-costing')?.classList.contains('active')) renderPricingDocuments();
+  if (document.getElementById('page-salesorders')?.classList.contains('active')) renderSOPage();
+  if (document.getElementById('masters-tab-customers')?.classList.contains('active')) renderCustomers();
+  if (document.getElementById('masters-tab-suppliers')?.classList.contains('active')) renderSuppliers();
+  if (document.getElementById('masters-tab-employees')?.classList.contains('active')) renderEmployees();
+}
+let PER_PAGE = getRowsPerPage();
+let PROD_PER_PAGE = getRowsPerPage();
+let RFQ_PER_PAGE = getRowsPerPage();
+let PRICING_DOC_PER_PAGE = getRowsPerPage();
+let SO_PER_PAGE = getRowsPerPage();
+
+/* Builds a compact "◀ 1 … 4 5 6 … 8 ▶" pagination control.
+   fn = name of the global function to call with the target page number. */
+function buildPaginationHTML(current, total, fn) {
+  if (total <= 1) return '';
+  const btn = (p, label, disabled, active) =>
+    `<button ${disabled?'disabled':''} class="${active?'active':''}" onclick="${fn}(${p})" aria-label="${typeof label==='number'?'Page '+label:label}">${label}</button>`;
+  let html = btn(current-1, '◀', current<=1, false);
+  const pages = [1];
+  if (current > 3) pages.push('…');
+  for (let p = Math.max(2, current-1); p <= Math.min(total-1, current+1); p++) pages.push(p);
+  if (current < total-2) pages.push('…');
+  if (total > 1) pages.push(total);
+  pages.forEach(p => {
+    html += p === '…' ? `<span class="pg-ellipsis">…</span>` : btn(p, p, false, p===current);
+  });
+  html += btn(current+1, '▶', current>=total, false);
+  return html;
+}
 const DEFAULT_UOM_MASTER = [
   {id:'uom-pcs',code:'Pcs',name:'Pieces',decimals:0,step:1,active:true},
   {id:'uom-box',code:'Box',name:'Box',decimals:0,step:1,active:true},
@@ -1056,6 +1106,7 @@ function getDefaultProducts() {
 
 /* ── PRODUCT CRUD ── */
 function renderProducts() {
+  document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PROD_PER_PAGE)) el.value = String(PROD_PER_PAGE); });
   const search = (document.getElementById('prod-search-filter')?.value||'').toLowerCase();
   const cat    = document.getElementById('prod-cat-filter')?.value||'';
   let list = products.filter(p => {
@@ -1091,11 +1142,10 @@ function renderProducts() {
     </tr>`;
   }).join('') : `<tr><td colspan="9"><div class="empty-state"><i class="ti ti-package-off"></i><strong>No products found</strong><p>Add products to the database to use them in quotations.</p></div></td></tr>`;
 
-  let pg = '';
-  if (pages > 1) for (let p=1;p<=pages;p++) pg+=`<button class="${p===prodPage?'active':''}" onclick="prodPage=${p};renderProducts()">${p}</button>`;
   const pp = document.getElementById('prod-pagination');
-  if (pp) pp.innerHTML = pg;
+  if (pp) pp.innerHTML = buildPaginationHTML(prodPage, pages, 'goProdPage');
 }
+function goProdPage(p){ prodPage=p; renderProducts(); }
 
 function clearProductImage() {
   document.getElementById('pm-img-thumb').src = '';
@@ -2295,30 +2345,192 @@ function renderDashboard() {
   document.getElementById('monthly-chart').innerHTML=months.map((m,i)=>{const val=values[i];const h=Math.round(val/maxVal*72);return `<div class="bar-wrap"><div class="bar-val">${val>0?fmtShort(val):''}</div><div class="bar" style="height:${Math.max(h,2)}px"></div><div class="bar-label">${m.label}</div></div>`;}).join('');
 }
 
+/* ── QUOTATION REGISTER DATE FILTER ── */
+let quotationDatePreset = 'all';
+
+function quotationISODate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function toggleQuotationDateMenu(event) {
+  if (event) event.stopPropagation();
+  const menu = document.getElementById('quotation-date-menu');
+  const btn = document.getElementById('quotation-date-filter-btn');
+  if (!menu) return;
+  const open = !menu.classList.contains('open');
+  menu.classList.toggle('open', open);
+  if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function closeQuotationDateMenu() {
+  const menu = document.getElementById('quotation-date-menu');
+  const btn = document.getElementById('quotation-date-filter-btn');
+  if (menu) menu.classList.remove('open');
+  if (btn) btn.setAttribute('aria-expanded','false');
+}
+
+function updateQuotationDateFilterUI(label, preset) {
+  quotationDatePreset = preset || 'custom';
+  const labelEl = document.getElementById('quotation-date-filter-label');
+  const btn = document.getElementById('quotation-date-filter-btn');
+  if (labelEl) labelEl.textContent = label || 'All Dates';
+  if (btn) btn.classList.toggle('active', quotationDatePreset !== 'all');
+  document.querySelectorAll('#quotation-date-menu .quotation-date-preset').forEach(b => b.classList.toggle('active', b.dataset.preset === quotationDatePreset));
+}
+
+function setQuotationDatePreset(preset) {
+  const fromEl = document.getElementById('filter-date-from');
+  const toEl = document.getElementById('filter-date-to');
+  if (!fromEl || !toEl) return;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const y=today.getFullYear(), m=today.getMonth(), dow=today.getDay();
+  let from=null, to=null, label='All Dates';
+  if (preset === 'today') { from=today; to=today; label='Today'; }
+  else if (preset === 'week') {
+    const mondayOffset = dow === 0 ? -6 : 1-dow;
+    from = new Date(y,m,today.getDate()+mondayOffset);
+    to = new Date(from); to.setDate(from.getDate()+6); label='This Week';
+  } else if (preset === 'month') { from=new Date(y,m,1); to=new Date(y,m+1,0); label='This Month'; }
+  else if (preset === 'lastmonth') { from=new Date(y,m-1,1); to=new Date(y,m,0); label='Last Month'; }
+  else if (preset === '30days') { from=new Date(today); from.setDate(from.getDate()-29); to=today; label='Last 30 Days'; }
+  else if (preset === 'last3months') { from=new Date(y,m-3,1); to=new Date(y,m,0); label='Last 3 Months'; }
+
+  fromEl.value = from ? quotationISODate(from) : '';
+  toEl.value = to ? quotationISODate(to) : '';
+  updateQuotationDateFilterUI(label, preset);
+  currentPage=1;
+  closeQuotationDateMenu();
+  renderTable();
+}
+
+function markQuotationDateCustom() {
+  updateQuotationDateFilterUI('Custom Range','custom');
+}
+
+function applyQuotationCustomDate() {
+  const from = document.getElementById('filter-date-from')?.value || '';
+  const to = document.getElementById('filter-date-to')?.value || '';
+  if (from && to && from > to) { showToast('From date cannot be after To date','warning'); return; }
+  const label = from || to ? [from,to].filter(Boolean).map(fmtDate).join(' → ') : 'All Dates';
+  updateQuotationDateFilterUI(label, from || to ? 'custom' : 'all');
+  currentPage=1;
+  closeQuotationDateMenu();
+  renderTable();
+}
+
+function clearQuotationDateFilter() {
+  const fromEl=document.getElementById('filter-date-from');
+  const toEl=document.getElementById('filter-date-to');
+  if(fromEl) fromEl.value='';
+  if(toEl) toEl.value='';
+  updateQuotationDateFilterUI('All Dates','all');
+  currentPage=1;
+  closeQuotationDateMenu();
+  renderTable();
+}
+
+document.addEventListener('click', function(e){
+  const wrap = e.target.closest ? e.target.closest('.quotation-date-filter-wrap') : null;
+  if (!wrap) closeQuotationDateMenu();
+});
+
 /* ── QUOTATIONS TABLE ── */
 function setQuotationMonitorFilter(status, btn) {
   const select = document.getElementById('filter-status');
   if (select) select.value = status;
-  document.querySelectorAll('.quotation-monitor-item').forEach(item => item.classList.remove('active'));
-  if (btn) btn.classList.add('active');
   currentPage = 1;
   renderTable();
 }
 
-function updateQuotationMonitor() {
-  const counts = {all: quotations.length, Draft:0, Sent:0, Won:0, Lost:0, Expired:0};
-  quotations.forEach(q => { if (Object.prototype.hasOwnProperty.call(counts, q.status)) counts[q.status]++; });
-  const map = {all:'quote-kpi-all', Draft:'quote-kpi-draft', Sent:'quote-kpi-sent', Won:'quote-kpi-won', Lost:'quote-kpi-lost', Expired:'quote-kpi-expired'};
-  Object.entries(map).forEach(([key,id]) => { const el=document.getElementById(id); if(el) el.textContent=counts[key]||0; });
-  const current = document.getElementById('filter-status')?.value || '';
-  document.querySelectorAll('.quotation-monitor-item').forEach(item => item.classList.remove('active'));
-  const buttons=[...document.querySelectorAll('.quotation-monitor-item')];
-  const index = {'':0,Draft:1,Sent:2,Won:3,Lost:4,Expired:5}[current];
-  if(index!==undefined && buttons[index]) buttons[index].classList.add('active');
+function getQuotationOverviewScope() {
+  const search=(document.getElementById('search-input')?.value || '').trim().toLowerCase();
+  const fCust=document.getElementById('filter-customer')?.value || '';
+  const fFrom=document.getElementById('filter-date-from')?.value || '';
+  const fTo=document.getElementById('filter-date-to')?.value || '';
+  return quotations.filter(q=>{
+    if(fCust && q.company!==fCust) return false;
+    if(fFrom && q.date < fFrom) return false;
+    if(fTo && q.date > fTo) return false;
+    if(search) {
+      const headerText = `${q.qno||''} ${q.company||''} ${q.contact||''} ${q.ref||''} ${q.notes||''}`.toLowerCase();
+      const itemsText = (q.items||[]).map(it => `${it.desc||''} ${it.brand||''} ${it.model||''} ${it.code||''} ${it.specs||''} ${it.uom||''}`).join(' ').toLowerCase();
+      if (!headerText.includes(search) && !itemsText.includes(search)) return false;
+    }
+    return true;
+  });
 }
 
+function updateQuotationFilterHighlights() {
+  const status=document.getElementById('filter-status')?.value || '';
+  const customer=document.getElementById('filter-customer')?.value || '';
+  const sort=document.getElementById('filter-sort')?.value || 'date-desc';
+  const search=(document.getElementById('search-input')?.value || '').trim();
+  const from=document.getElementById('filter-date-from')?.value || '';
+  const to=document.getElementById('filter-date-to')?.value || '';
+
+  const customerEl=document.getElementById('filter-customer');
+  const sortEl=document.getElementById('filter-sort');
+  const searchEl=document.getElementById('search-input');
+  if(customerEl) customerEl.classList.toggle('filter-active', !!customer);
+  if(sortEl) sortEl.classList.toggle('filter-active', sort !== 'date-desc');
+  if(searchEl) searchEl.classList.toggle('filter-active', !!search);
+
+  document.querySelectorAll('#page-quotations .quotation-monitor-item, #page-quotations .quotation-overview-total-btn').forEach(item => item.classList.remove('active'));
+  const target = status
+    ? document.querySelector(`#page-quotations .quotation-monitor-item[onclick*="'${status}'"]`)
+    : document.querySelector('#page-quotations .quotation-overview-total-btn');
+  if(target) target.classList.add('active');
+  updateQuotationOverviewTint();
+
+  const clearBtn=document.getElementById('quotation-clear-filters-btn');
+  const hasActive=!!(status || customer || search || from || to || sort !== 'date-desc');
+  if(clearBtn){
+    clearBtn.classList.toggle('active', hasActive);
+    clearBtn.disabled=!hasActive;
+    clearBtn.setAttribute('aria-disabled', hasActive ? 'false' : 'true');
+  }
+}
+
+function clearAllQuotationFilters() {
+  const status=document.getElementById('filter-status');
+  const customer=document.getElementById('filter-customer');
+  const search=document.getElementById('search-input');
+  const sort=document.getElementById('filter-sort');
+  const from=document.getElementById('filter-date-from');
+  const to=document.getElementById('filter-date-to');
+  if(status) status.value='';
+  if(customer) customer.value='';
+  if(search) search.value='';
+  if(sort) sort.value='date-desc';
+  if(from) from.value='';
+  if(to) to.value='';
+  updateQuotationDateFilterUI('All Dates','all');
+  closeQuotationDateMenu();
+  currentPage=1;
+  renderTable();
+}
+
+function updateQuotationMonitor() {
+  const scoped = getQuotationOverviewScope();
+  const counts = {all: scoped.length, Draft:0, Sent:0, Won:0, Lost:0, Expired:0, Revised:0, Cancelled:0};
+  scoped.forEach(q => { if (Object.prototype.hasOwnProperty.call(counts, q.status)) counts[q.status]++; });
+  const map = {
+    all:'quote-kpi-all', Draft:'quote-kpi-draft', Sent:'quote-kpi-sent', Won:'quote-kpi-won', Lost:'quote-kpi-lost',
+    Expired:'quote-kpi-expired', Revised:'quote-kpi-revised', Cancelled:'quote-kpi-cancelled'
+  };
+  Object.entries(map).forEach(([key,id]) => { const el=document.getElementById(id); if(el) el.textContent=counts[key]||0; });
+  const decided = counts.Won + counts.Lost;
+  const winRateEl = document.getElementById('quote-kpi-winrate');
+  if (winRateEl) winRateEl.textContent = decided ? `${Math.round((counts.Won / decided) * 100)}%` : '—';
+  const avgValueEl = document.getElementById('quote-kpi-avgvalue');
+  if (avgValueEl) {
+    const avgValue = scoped.length ? scoped.reduce((sum,q)=>sum + (calcQuote(q).net || 0),0) / scoped.length : 0;
+    avgValueEl.textContent = scoped.length ? `SAR ${Math.round(avgValue).toLocaleString()}` : '—';
+  }
+  updateQuotationFilterHighlights();
+}
 function renderTable() {
-  updateQuotationMonitor();
+  document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PER_PAGE)) el.value = String(PER_PAGE); });
   const search=document.getElementById('search-input').value.toLowerCase();
   const fStatus=document.getElementById('filter-status').value;
   const fCust=document.getElementById('filter-customer').value;
@@ -2329,10 +2541,13 @@ function renderTable() {
   const prev=sel.value;
   sel.innerHTML='<option value="">All customers</option>'+custSet.map(c=>`<option${c===prev?' selected':''}>${c}</option>`).join('');
 
+  updateQuotationMonitor();
+
   const fFrom = document.getElementById('filter-date-from').value;
   const fTo   = document.getElementById('filter-date-to').value;
   // show/hide clear button
-  document.getElementById('date-clear-btn').style.display = (fFrom||fTo) ? 'inline-flex' : 'none';
+  const legacyDateClear = document.getElementById('date-clear-btn');
+  if (legacyDateClear) legacyDateClear.style.display = (fFrom||fTo) ? 'inline-flex' : 'none';
 
   let filtered=quotations.filter(q=>{
     if(fStatus && q.status!==fStatus) return false;
@@ -2368,6 +2583,7 @@ function renderTable() {
   const slice=filtered.slice((currentPage-1)*PER_PAGE,currentPage*PER_PAGE);
 
   document.getElementById('quotes-tbody').innerHTML=slice.length?slice.map(q=>{
+   try {
     const {net}=calcQuote(q);
     const vu=validUntil(q);
     const isExpiring=q.status==='Sent'&&new Date(vu)<new Date(Date.now()+3*86400000);
@@ -2386,22 +2602,25 @@ function renderTable() {
       const soStBadge = {'Confirmed':'🔵','Delivered':'🟣','Invoiced':'🟠','Paid':'🟢','Partially Paid':'🟡'}[soSt]||'🔵';
       return `<a href="#" class="so-chip" onclick="event.stopPropagation();navigateToSO('${so.id}');return false" title="Status: ${soSt}">${soStBadge} ${so.soNo}</a>`;
     }).join('');
+    const qCellStyle = 'font-size:14px!important;font-weight:400!important;color:#111827!important;line-height:1.35!important';
     return `<tr class="quotation-clickable-row" tabindex="0" role="button" aria-label="Open quotation ${q.qno}" onclick="viewQuotation('${q.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewQuotation('${q.id}');}">
-      <td><span class="quotation-number-link">${q.qno}</span></td>
-      <td class="mob-hide">${fmtDate(q.date)}</td>
-      <td><strong>${q.company}</strong>${q.contact?`<br><span style="color:var(--gray);font-size:11px">${q.contact}</span>`:''}${itemMatchBadge}</td>
-      <td class="mob-hide" style="color:var(--gray)">${q.ref||'—'}</td>
-      <td class="mob-hide center">${q.items.length}</td>
-      <td class="right" style="font-weight:600">${fmt(net)}</td>
-      <td><span class="badge ${getStatusClass(q.status)}">${q.status}</span></td>
-      <td class="mob-hide">${soChips ? `<div style="display:flex;flex-direction:column;gap:3px">${soChips}</div>` : '<span style="color:var(--gray);font-size:11px">—</span>'}</td>
-      <td class="mob-hide" style="${isExpiring?'color:var(--red);font-weight:500':''}">${fmtDate(vu)}</td>
+      <td class="rfq-cell-no quotation-cell-regular" style="${qCellStyle}">${q.qno}</td>
+      <td class="mob-hide rfq-cell-muted" style="${qCellStyle}">${fmtDate(q.date)}</td>
+      <td class="rfq-cell-customer quotation-cell-regular" style="${qCellStyle}">${q.company}${itemMatchBadge}</td>
+      <td class="mob-hide" style="${qCellStyle}">${q.ref||'—'}</td>
+      <td class="mob-hide center" style="${qCellStyle}">${(q.items||[]).length}</td>
+      <td class="right" style="${qCellStyle}">${formatNumber(net,2)}</td>
+      <td style="${qCellStyle}"><span class="badge ${getStatusClass(q.status)}" style="font-size:14px!important;font-weight:400!important">${q.status}</span></td>
+      <td class="mob-hide" style="${qCellStyle}">${soChips ? `<div style="display:flex;flex-direction:column;gap:3px;${qCellStyle}">${soChips}</div>` : `<span style="${qCellStyle}">—</span>`}</td>
+      <td class="mob-hide" style="${qCellStyle}">${fmtDate(vu)}</td>
     </tr>`;
+   } catch(err) {
+    console.error('Skipped a quotation row that failed to render:', q && q.qno, err);
+    return `<tr><td colspan="9" style="color:#b91c1c;font-size:12px">⚠ Could not display quotation ${q&&q.qno?q.qno:'(unknown)'} — data may be incomplete.</td></tr>`;
+   }
   }).join(''):`<tr><td colspan="9"><div class="empty-state"><i class="ti ti-file-off"></i><strong>No quotations found</strong><p>Adjust your filters or create a new quotation.</p></div></td></tr>`;
 
-  let pg='';
-  if(pages>1) for(let p=1;p<=pages;p++) pg+=`<button class="${p===currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`;
-  document.getElementById('pagination').innerHTML=pg;
+  document.getElementById('pagination').innerHTML = buildPaginationHTML(currentPage, pages, 'goPage');
 }
 function goPage(p){currentPage=p;renderTable();}
 
@@ -2418,7 +2637,11 @@ function renderCustomers() {
   });
   const list=customers.filter(c=>!search||c.company.toLowerCase().includes(search)||
     (c.contact||'').toLowerCase().includes(search));
-  document.getElementById('customers-tbody').innerHTML=list.length?list.map(c=>{
+  const customerPages=Math.ceil(list.length/PER_PAGE)||1;
+  if(customerPage>customerPages) customerPage=1;
+  const customerSlice=list.slice((customerPage-1)*PER_PAGE,customerPage*PER_PAGE);
+  document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PER_PAGE)) el.value=String(PER_PAGE); });
+  document.getElementById('customers-tbody').innerHTML=customerSlice.length?customerSlice.map(c=>{
     const s=stats[c.company]||{count:0,total:0,won:0};
     const contacts = c.contacts || (c.contact ? [{name:c.contact,title:'',phone:c.phone||''}] : []);
     const defaultCt = contacts.find(x=>x.isDefault) || contacts[0];
@@ -2440,7 +2663,9 @@ function renderCustomers() {
       </td>
     </tr>`;
   }).join(''):`<tr><td colspan="8"><div class="empty-state"><i class="ti ti-users-off"></i><p>No customers found.</p></div></td></tr>`;
+  const cp=document.getElementById('customers-pagination'); if(cp) cp.innerHTML=buildPaginationHTML(customerPage,customerPages,'goCustomerPage');
 }
+function goCustomerPage(p){customerPage=p;renderCustomers();}
 
 function renderSetupCustTable() {
   const tbody=document.getElementById('setup-cust-tbody');
@@ -2692,6 +2917,7 @@ function showPlannedModule(title, el) {
 
 
 let pricingDocumentFilter='all';
+let pricingDateFilter={preset:'all',from:'',to:''};
 function getPricingDocuments(){
   const docs=[];
   rfqs.forEach(r=>{
@@ -2713,8 +2939,157 @@ function getPricingDocuments(){
   return docs.sort((a,b)=>String(b.updated).localeCompare(String(a.updated))||b.version-a.version);
 }
 function pricingDocMoney(n){return documentMoney('pricing','lineAmount',n);}
+function openPricingSourceRFQs(){
+  const nav=document.querySelector('[data-nav-page="rfq"]');
+  showPage('rfq',nav);
+  setTimeout(()=>{
+    const btn=document.getElementById('rfq-f-new')||document.getElementById('rfq-f-all');
+    if(btn) filterRFQ(btn.id==='rfq-f-new'?'New':'all',btn);
+  },0);
+}
+function pricingDateRangeForPreset(preset){return rfqDateRangeForPreset(preset);}
+function pricingMatchesDateFilter(d){
+  if(!pricingDateFilter||pricingDateFilter.preset==='all')return true;
+  const date=String(d?.updated||'').substring(0,10);
+  if(!date)return false;
+  const from=pricingDateFilter.from||'',to=pricingDateFilter.to||'';
+  if(from&&date<from)return false;
+  if(to&&date>to)return false;
+  return true;
+}
+function togglePricingDateMenu(event){
+  event?.stopPropagation();
+  const menu=document.getElementById('pricing-date-menu');if(!menu)return;
+  const willOpen=!menu.classList.contains('open');
+  closePricingDateMenu();
+  if(willOpen)menu.classList.add('open');
+  document.getElementById('pricing-date-filter-btn')?.setAttribute('aria-expanded',willOpen?'true':'false');
+}
+function closePricingDateMenu(){
+  document.getElementById('pricing-date-menu')?.classList.remove('open');
+  document.getElementById('pricing-date-filter-btn')?.setAttribute('aria-expanded','false');
+}
+function setPricingDatePreset(preset){
+  pricingDateFilter=preset==='all'?{preset:'all',from:'',to:''}:{preset,...pricingDateRangeForPreset(preset)};
+  document.querySelectorAll('#page-costing .pricing-overview-row').forEach(row=>{
+    const active=(row.dataset.pricingFilter||'')==='all';
+    row.classList.toggle('active',active);
+    row.setAttribute('aria-pressed',active?'true':'false');
+  });
+  updatePricingDateFilterUI();closePricingDateMenu();renderPricingDocuments();updatePricingOverviewTint();
+}
+function applyPricingCustomDate(){
+  const from=document.getElementById('pricing-date-from')?.value||'';
+  const to=document.getElementById('pricing-date-to')?.value||'';
+  if(!from&&!to){setPricingDatePreset('all');return;}
+  if(from&&to&&from>to){showToast('From date cannot be after To date','warning');return;}
+  pricingDateFilter={preset:'custom',from,to};
+  updatePricingDateFilterUI();closePricingDateMenu();renderPricingDocuments();
+}
+function clearPricingDateFilter(){
+  const from=document.getElementById('pricing-date-from'),to=document.getElementById('pricing-date-to');
+  if(from)from.value='';if(to)to.value='';setPricingDatePreset('all');
+}
+function updatePricingDateFilterUI(){
+  const label=document.getElementById('pricing-date-filter-label');
+  const btn=document.getElementById('pricing-date-filter-btn');
+  const labels={all:'All Dates',today:'Today',week:'This Week',month:'This Month',lastmonth:'Last Month','30days':'Last 30 Days',last3months:'Last 3 Months'};
+  let text=labels[pricingDateFilter.preset]||'Custom Range';
+  if(pricingDateFilter.preset==='custom'){
+    if(pricingDateFilter.from&&pricingDateFilter.to)text=`${fmtDate(pricingDateFilter.from)} – ${fmtDate(pricingDateFilter.to)}`;
+    else if(pricingDateFilter.from)text=`From ${fmtDate(pricingDateFilter.from)}`;
+    else if(pricingDateFilter.to)text=`To ${fmtDate(pricingDateFilter.to)}`;
+  }
+  if(label)label.textContent=text;
+  btn?.classList.toggle('active',pricingDateFilter.preset!=='all');
+  document.querySelectorAll('#page-costing .pricing-date-preset').forEach(el=>el.classList.toggle('active',el.dataset.preset===pricingDateFilter.preset));
+}
+if(!window.__bizcorePricingDateMenuBound){
+  window.__bizcorePricingDateMenuBound=true;
+  document.addEventListener('click',e=>{if(!e.target.closest('.pricing-date-filter-wrap'))closePricingDateMenu();});
+}
 function pricingDocMargin(n){return Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'%';}
-function filterPricingDocuments(filter,btn){pricingDocumentFilter=filter||'all';document.querySelectorAll('.pricing-register-filters .dash-period-btn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');renderPricingDocuments();}
+
+function applyOverviewTint(selector,key,styles){
+  document.querySelectorAll(selector).forEach(el=>{
+    const elKey=el.dataset.overviewKey||'';
+    const active=elKey===key;
+    el.classList.toggle('active',active);
+    el.setAttribute('aria-pressed',active?'true':'false');
+    if(active){
+      const s=styles[elKey]||styles.all;
+      el.style.setProperty('background-color',s.bg,'important');
+      el.style.setProperty('box-shadow',`inset 3px 0 0 ${s.accent}`,'important');
+    }else{
+      el.style.removeProperty('background-color');
+      el.style.removeProperty('box-shadow');
+    }
+  });
+}
+function updatePricingOverviewTint(){
+  const styles={
+    all:{bg:'#eef6ff',accent:'#2e75b6'},
+    Saved:{bg:'#fff8e5',accent:'#d7a323'},
+    Converted:{bg:'#eef9f2',accent:'#43a66b'}
+  };
+  applyOverviewTint('#page-costing .pricing-overview-row',pricingDocumentFilter||'all',styles);
+}
+function updateQuotationOverviewTint(){
+  const status=document.getElementById('filter-status')?.value||'';
+  const key=status||'all';
+  const styles={
+    all:{bg:'#eef6ff',accent:'#2e75b6'},
+    Draft:{bg:'#fff8e5',accent:'#d7a323'},
+    Sent:{bg:'#eef6ff',accent:'#3b82c4'},
+    Won:{bg:'#eef9f2',accent:'#43a66b'},
+    Lost:{bg:'#fff0f0',accent:'#d85b5b'},
+    Expired:{bg:'#fff4e8',accent:'#d9822b'},
+    Revised:{bg:'#f5f0ff',accent:'#8b6fc7'},
+    Cancelled:{bg:'#f2f4f6',accent:'#7b8794'}
+  };
+  applyOverviewTint('#page-quotations [data-overview-key]',key,styles);
+}
+function updateSOOverviewTint(){
+  const key=soKpiFilter==='none'?'all':soKpiFilter;
+  const styles={
+    all:{bg:'#eef6ff',accent:'#2e75b6'},
+    'status-confirmed':{bg:'#eef6ff',accent:'#3b82c4'},
+    'status-ofd':{bg:'#eef6ff',accent:'#3b82f6'},
+    'status-partdel':{bg:'#fff8e5',accent:'#d7a323'},
+    'status-delivered':{bg:'#eef9f2',accent:'#43a66b'},
+    'status-invoiced':{bg:'#fff4e8',accent:'#d9822b'},
+    'status-partpaid':{bg:'#fff8e5',accent:'#d7a323'},
+    'status-paid':{bg:'#eef9f2',accent:'#43a66b'},
+    open:{bg:'#fff8e5',accent:'#d7a323'},
+    'pending-invoice':{bg:'#eef6ff',accent:'#3b82c4'}
+  };
+  applyOverviewTint('#page-salesorders .so-kpi',key,styles);
+}
+
+function filterPricingDocuments(filter,btn){
+  pricingDocumentFilter=filter||'all';
+  pricingDocPage=1;
+  document.querySelectorAll('.pricing-register-filters .dash-period-btn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  document.querySelectorAll('#page-costing .pricing-overview-row').forEach(row=>{
+    const key=row.dataset.pricingFilter||'';
+    const active=key===pricingDocumentFilter;
+    row.classList.toggle('active',active);
+    row.setAttribute('aria-pressed',active?'true':'false');
+  });
+  renderPricingDocuments();
+  updatePricingOverviewTint();
+}
+function clearAllPricingFilters(){
+  pricingDocumentFilter='all';
+  pricingDateFilter={preset:'all',from:'',to:''};
+  const search=document.getElementById('pricing-doc-search');if(search)search.value='';
+  const from=document.getElementById('pricing-date-from');if(from)from.value='';
+  const to=document.getElementById('pricing-date-to');if(to)to.value='';
+  document.querySelectorAll('.pricing-register-filters .dash-period-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('pricing-doc-f-all')?.classList.add('active');
+  updatePricingDateFilterUI();closePricingDateMenu();renderPricingDocuments();
+}
 function openPricingDocument(rfqId,version){
   const r=rfqs.find(x=>x.id===rfqId);if(!r)return;
   const v=ensurePricingVersions(r).find(x=>Number(x.version)===Number(version));if(!v)return;
@@ -2727,20 +3102,32 @@ function renderPricingDocuments(){
   const all=getPricingDocuments();
   const saved=all.filter(d=>d.status==='Saved'), converted=all.filter(d=>d.status==='Converted');
   const set=(id,val)=>{const e=document.getElementById(id);if(e)e.textContent=val};
-  set('pricing-doc-k-total',all.length);set('pricing-doc-k-saved',saved.length);set('pricing-doc-k-converted',converted.length);
+  set('pricing-doc-k-total',all.length);set('pricing-doc-k-saved',saved.length);set('pricing-doc-k-converted',converted.length);updatePricingOverviewTint();
+  document.querySelectorAll('#page-costing .pricing-overview-row').forEach(row=>{
+    const key=row.dataset.pricingFilter||'';
+    const active=key===pricingDocumentFilter;
+    row.classList.toggle('active',active);
+    row.setAttribute('aria-pressed',active?'true':'false');
+  });
   set('pricing-doc-c-all',all.length?'('+all.length+')':'');set('pricing-doc-c-saved',saved.length?'('+saved.length+')':'');set('pricing-doc-c-converted',converted.length?'('+converted.length+')':'');
   const search=(document.getElementById('pricing-doc-search')?.value||'').trim().toLowerCase();
-  const rows=all.filter(d=>(pricingDocumentFilter==='all'||d.status===pricingDocumentFilter)&&(!search||[d.pricingNo,d.rfq.rfqNo,d.rfq.company,d.rfq.ref,d.quote?.qno].some(x=>String(x||'').toLowerCase().includes(search))));
-  tbody.innerHTML=rows.length?rows.map(d=>`<tr class="pricing-doc-row" onclick="openPricingDocument('${d.rfq.id}',${d.version})" title="Open ${esc(d.pricingNo)}" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPricingDocument('${d.rfq.id}',${d.version})}">
+  const rows=all.filter(d=>(pricingDocumentFilter==='all'||d.status===pricingDocumentFilter)&&pricingMatchesDateFilter(d)&&(!search||[d.pricingNo,d.rfq.rfqNo,d.rfq.company,d.rfq.ref,d.quote?.qno].some(x=>String(x||'').toLowerCase().includes(search))));
+  const pricingDocPages = Math.ceil(rows.length / PRICING_DOC_PER_PAGE) || 1;
+  if (pricingDocPage > pricingDocPages) pricingDocPage = 1;
+  const pageRows = rows.slice((pricingDocPage-1)*PRICING_DOC_PER_PAGE, pricingDocPage*PRICING_DOC_PER_PAGE);
+  tbody.innerHTML=pageRows.length?pageRows.map(d=>`<tr class="pricing-doc-row" onclick="openPricingDocument('${d.rfq.id}',${d.version})" title="Open ${esc(d.pricingNo)}" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPricingDocument('${d.rfq.id}',${d.version})}">
     <td class="pricing-doc-no">${esc(d.pricingNo)}</td>
     <td class="pricing-doc-customer" title="${esc(d.rfq.company||'—')}">${esc(d.rfq.company||'—')}</td><td class="pricing-doc-muted center">V${d.version}</td><td class="pricing-doc-muted">${fmtDate(String(d.updated).slice(0,10))}</td>
     <td class="right">${pricingDocMoney(d.cost)}</td><td class="right">${pricingDocMoney(d.selling)}</td><td class="right pricing-doc-profit ${d.profit<0?'is-negative':''}">${pricingDocMoney(d.profit)}</td><td class="right pricing-doc-margin ${d.marginPct<0?'is-negative':''}">${pricingDocMargin(d.marginPct)}</td>
     <td class="center"><span class="status ${d.status==='Converted'?'status-won':'status-draft'}">${d.status}</span></td>
     <td>${d.quote?`<button class="pricing-doc-link" onclick="event.stopPropagation();openPricingLinkedQuotation('${d.quote.id}')">${esc(d.quote.qno)}</button>`:'—'}</td>
-    <td class="center"><button class="rfq-row-open" type="button" onclick="event.stopPropagation();openPricingDocument('${d.rfq.id}',${d.version})" aria-label="${d.status==='Converted'?'View':'Open'} ${esc(d.pricingNo)}"><i class="ti ti-chevron-right"></i></button></td>
-  </tr>`).join(''):`<tr><td colspan="11"><div class="empty-state"><i class="ti ti-calculator"></i><h3>No pricing documents found</h3><p>Pricing documents appear here after a pricing sheet is saved.</p></div></td></tr>`;
+  </tr>`).join(''):`<tr><td colspan="10"><div class="empty-state"><i class="ti ti-calculator"></i><h3>No pricing documents found</h3><p>Pricing documents appear here after a pricing sheet is saved.</p></div></td></tr>`;
+  document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PRICING_DOC_PER_PAGE)) el.value = String(PRICING_DOC_PER_PAGE); });
+  const pdp = document.getElementById('pricing-doc-pagination');
+  if (pdp) pdp.innerHTML = buildPaginationHTML(pricingDocPage, pricingDocPages, 'goPricingDocPage');
   const pb=document.getElementById('pricing-badge');if(pb){pb.textContent=saved.length;pb.style.display=saved.length?'inline-flex':'none';pb.title=saved.length+' saved pricing document'+(saved.length===1?'':'s');}
 }
+function goPricingDocPage(p){ pricingDocPage=p; renderPricingDocuments(); }
 
 function showPage(page, el) {
   const masterAliases=['customers','suppliers','products','employees','units'];
@@ -2781,10 +3168,10 @@ function switchMastersTab(tab){
   if(button){button.classList.add('active');button.setAttribute('aria-selected','true');button.tabIndex=0;}
   const labels={customers:'Customers',suppliers:'Suppliers',products:'Products',employees:'Employees',units:'Units of Measure'};
   const title=document.getElementById('page-title'); if(title) title.textContent=labels[tab]||'Masters';
-  if(tab==='customers'){currentPage=1;renderCustomers();}
-  if(tab==='suppliers') renderSuppliers();
+  if(tab==='customers'){customerPage=1;renderCustomers();}
+  if(tab==='suppliers'){supplierPage=1;renderSuppliers();}
   if(tab==='products'){prodPage=1;renderProducts();populateCategoryFilter();}
-  if(tab==='employees') renderEmployees();
+  if(tab==='employees'){employeePage=1;renderEmployees();}
   if(tab==='units') renderUomMaster();
 }
 function openMasters(tab){
@@ -4636,7 +5023,11 @@ function renderSuppliers() {
   const list = suppliers.filter(s => !search || `${s.company} ${s.contact} ${s.cat}`.toLowerCase().includes(search));
   const tbody = document.getElementById('suppliers-tbody');
   if (!tbody) return;
-  tbody.innerHTML = list.length ? list.map(s => {
+  const supplierPages=Math.ceil(list.length/PER_PAGE)||1;
+  if(supplierPage>supplierPages) supplierPage=1;
+  const supplierSlice=list.slice((supplierPage-1)*PER_PAGE,supplierPage*PER_PAGE);
+  document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PER_PAGE)) el.value=String(PER_PAGE); });
+  tbody.innerHTML = supplierSlice.length ? supplierSlice.map(s => {
     const quoteCount = rfqs.filter(r => r.supplierId === s.id).length;
     return `<tr>
       <td><strong>${s.company}</strong></td>
@@ -4652,7 +5043,9 @@ function renderSuppliers() {
       </div></td>
     </tr>`;
   }).join('') : `<tr><td colspan="8"><div class="empty-state"><i class="ti ti-building-store"></i><p>No suppliers yet. Add your first supplier.</p></div></td></tr>`;
+  const sp=document.getElementById('suppliers-pagination'); if(sp) sp.innerHTML=buildPaginationHTML(supplierPage,supplierPages,'goSupplierPage');
 }
+function goSupplierPage(p){supplierPage=p;renderSuppliers();}
 
 function openAddSupplier() {
   editingSupId = null;
@@ -4787,7 +5180,9 @@ function renderRFQPage() {
         ? rfqs.filter(r => ['Quoted','Sales Order'].includes(getRFQWorkflowStage(r)))
         : rfqs.filter(r => getRFQWorkflowStage(r) === rfqFilter);
 
-  const filtered = statusFiltered.filter(r => {
+  const dateFiltered = statusFiltered.filter(r => rfqMatchesDateFilter(r));
+
+  const filtered = dateFiltered.filter(r => {
     if (!search) return true;
     return [r.rfqNo, r.company, r.ref, r.desc, r.assigned, r.channel]
       .some(v => String(v || '').toLowerCase().includes(search));
@@ -4799,11 +5194,14 @@ function renderRFQPage() {
   const quoted  = rfqs.filter(r => ['Quoted','Sales Order'].includes(getRFQWorkflowStage(r)));
   const noBid   = rfqs.filter(r => getRFQWorkflowStage(r) === 'No Bid');
 
+  const totalRfqKpi = document.getElementById('rfq-k-total');
+  if (totalRfqKpi) totalRfqKpi.textContent = rfqs.length;
   document.getElementById('rfq-k-open').textContent    = open.length;
   document.getElementById('rfq-k-overdue').textContent = overdue.length;
   document.getElementById('rfq-k-pricing').textContent = rfqs.filter(r=>getRFQWorkflowStage(r)==='Pricing').length;
   document.getElementById('rfq-k-quoted').textContent  = quoted.length;
   document.getElementById('rfq-k-nobid').textContent   = noBid.length;
+  updateRFQMonitorSelection();
 
   const setCount = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val?'('+val+')':''; };
   setCount('rfq-cnt-all',     rfqs.length);
@@ -4836,10 +5234,14 @@ function renderRFQPage() {
   const list = document.getElementById('rfq-list');
   if (!sorted.length) {
     list.innerHTML = `<div class="empty-state"><i class="ti ti-clipboard-list"></i><strong>No RFQs found</strong><p>Try another filter or search term.</p></div>`;
+    const rp = document.getElementById('rfq-pagination'); if (rp) rp.innerHTML = '';
     return;
   }
+  const rfqPages = Math.ceil(sorted.length / RFQ_PER_PAGE) || 1;
+  if (rfqPage > rfqPages) rfqPage = 1;
+  const pageSlice = sorted.slice((rfqPage-1)*RFQ_PER_PAGE, rfqPage*RFQ_PER_PAGE);
 
-  const rows = sorted.map(r => {
+  const rows = pageSlice.map(r => {
     const {overdue, dueStr} = rfqAge(r);
     const displayStatus = overdue ? 'Overdue' : getRFQWorkflowStage(r);
     const stClassMap = {'New':'badge-rfq-new','Pricing':'badge-rfq-pricing','Quoted':'badge-rfq-quoted','Sales Order':'badge-rfq-quoted','No Bid':'badge-rfq-nobid','Overdue':'badge-rfq-overdue'};
@@ -4862,58 +5264,262 @@ function renderRFQPage() {
       <td class="rfq-cell-muted" style="${overdue?'color:var(--red);font-weight:700':''}">${dueStr}</td>
       <td><span class="badge ${stClass}">${displayStatus}</span></td>
       <td><span class="rfq-progress">${progress}</span></td>
-      <td class="center"><button class="rfq-row-open" type="button" onclick="event.stopPropagation();viewRFQ('${r.id}')" aria-label="Open ${r.rfqNo}"><i class="ti ti-chevron-right"></i></button></td>
     </tr>`;
   }).join('');
 
   list.innerHTML = `<div class="rfq-register"><table>
-    <colgroup><col style="width:15%"><col style="width:24%"><col style="width:15%"><col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:10%"><col style="width:4%"></colgroup>
-    <thead><tr><th>RFQ No.</th><th>Customer</th><th>Reference</th><th>RFQ Date</th><th>Due Date</th><th>Status</th><th>Progress</th><th></th></tr></thead>
+    <colgroup><col style="width:15%"><col style="width:26%"><col style="width:16%"><col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:11%"></colgroup>
+    <thead><tr><th>RFQ No.</th><th>Customer</th><th>Reference</th><th>RFQ Date</th><th>Due Date</th><th>Status</th><th>Progress</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
+  document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(RFQ_PER_PAGE)) el.value = String(RFQ_PER_PAGE); });
+  const rp = document.getElementById('rfq-pagination');
+  if (rp) rp.innerHTML = buildPaginationHTML(rfqPage, rfqPages, 'goRFQPage');
+}
+function goRFQPage(p){ rfqPage=p; renderRFQPage(); }
+
+
+function updateRFQMonitorSelection(){
+  const styles={
+    all:{bg:'#eef6ff',accent:'#2e75b6'},
+    Open:{bg:'#eef9f2',accent:'#43a66b'},
+    Pricing:{bg:'#fff8e5',accent:'#d7a323'},
+    Quoted:{bg:'#eef6ff',accent:'#3b82c4'},
+    'No Bid':{bg:'#f2f4f6',accent:'#7b8794'},
+    Overdue:{bg:'#fff0f0',accent:'#d85b5b'}
+  };
+  document.querySelectorAll('#page-rfq [data-rfq-monitor-filter]').forEach(el=>{
+    const key=el.dataset.rfqMonitorFilter||'';
+    const active=key===rfqFilter;
+    el.classList.toggle('active',active);
+    el.setAttribute('aria-pressed',active?'true':'false');
+    if(active){
+      const s=styles[key]||styles.all;
+      el.style.setProperty('background-color',s.bg,'important');
+      el.style.setProperty('box-shadow',`inset 3px 0 0 ${s.accent}`,'important');
+    }else{
+      el.style.removeProperty('background-color');
+      el.style.removeProperty('box-shadow');
+    }
+  });
 }
 
 function applyRFQMonitorFilter(status, btn) {
-  rfqFilter = status;
+  rfqFilter = status || 'all'; rfqPage = 1;
   document.querySelectorAll('[id^="rfq-f-"]').forEach(b=>b.classList.remove('active'));
-  const map={Open:'rfq-f-all',Overdue:'rfq-f-overdue',Pricing:'rfq-f-pricing',Quoted:'rfq-f-quoted','No Bid':'rfq-f-nobid'};
-  const toolbarBtn=document.getElementById(map[status]);
+  const map={all:'rfq-f-all',Open:'rfq-f-all',Overdue:'rfq-f-overdue',Pricing:'rfq-f-pricing',Quoted:'rfq-f-quoted','No Bid':'rfq-f-nobid'};
+  const toolbarBtn=document.getElementById(map[rfqFilter]);
   if(toolbarBtn) toolbarBtn.classList.add('active');
+  updateRFQMonitorSelection();
   renderRFQPage();
-  document.querySelectorAll('.rfq-main-monitor-item').forEach(el=>el.classList.remove('active'));
-  btn?.classList.add('active');
+  updateRFQMonitorSelection();
 }
-function toggleRFQMainMonitor() {
-  const workspace=document.getElementById('rfq-main-workspace');
+function moduleMonitorStorageKey(moduleKey){ return `bizcore-${moduleKey}-monitor-collapsed`; }
+function getModuleMonitorWorkspace(moduleKey){
+  const ids={rfq:'rfq-main-workspace',quotations:'quotation-main-workspace',pricing:'pricing-main-workspace',salesorders:'salesorders-main-workspace'};
+  return document.getElementById(ids[moduleKey]||'');
+}
+function setModuleMonitorState(moduleKey, collapsed, persist=true){
+  const workspace=getModuleMonitorWorkspace(moduleKey);
   if(!workspace) return;
-  const collapsed=workspace.classList.toggle('monitor-collapsed');
-  localStorage.setItem('bizcore-rfq-monitor-collapsed',collapsed?'1':'0');
+  workspace.classList.toggle('monitor-collapsed',!!collapsed);
+  workspace.classList.toggle('monitor-expanded',!collapsed);
+  if(persist) localStorage.setItem(moduleMonitorStorageKey(moduleKey),collapsed?'1':'0');
 }
-function restoreRFQMainMonitor() {
-  const workspace=document.getElementById('rfq-main-workspace');
-  if(workspace && localStorage.getItem('bizcore-rfq-monitor-collapsed')==='1') workspace.classList.add('monitor-collapsed');
+function toggleModuleMonitor(moduleKey){
+  const workspace=getModuleMonitorWorkspace(moduleKey);
+  if(!workspace) return;
+  setModuleMonitorState(moduleKey,!workspace.classList.contains('monitor-collapsed'),true);
 }
+function restoreModuleMonitors(){
+  ['rfq','quotations','pricing','salesorders'].forEach(moduleKey=>{
+    const workspace=getModuleMonitorWorkspace(moduleKey);
+    if(!workspace) return;
+    const saved=localStorage.getItem(moduleMonitorStorageKey(moduleKey));
+    // On smaller screens reclaim register width by default; once the user
+    // chooses a state, that preference wins on later visits.
+    const collapsed=saved===null ? window.innerWidth<=1100 : saved==='1';
+    setModuleMonitorState(moduleKey,collapsed,false);
+  });
+}
+function toggleRFQMainMonitor(){ toggleModuleMonitor('rfq'); }
+function restoreRFQMainMonitor(){ restoreModuleMonitors(); }
 
 function filterRFQ(status, btn) {
-  rfqFilter = status;
+  rfqFilter = status; rfqPage = 1;
   document.querySelectorAll('[id^="rfq-f-"]').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   renderRFQPage();
 }
 
+function clearAllRFQFilters() {
+  rfqFilter = 'all'; rfqPage = 1;
+  const search=document.getElementById('rfq-search'); if(search) search.value='';
+  const from=document.getElementById('rfq-date-from'); if(from) from.value='';
+  const to=document.getElementById('rfq-date-to'); if(to) to.value='';
+  rfqDateFilter={preset:'all',from:'',to:''};
+  updateRFQDateFilterUI();
+  document.querySelectorAll('[id^="rfq-f-"]').forEach(b=>b.classList.remove('active'));
+  document.getElementById('rfq-f-all')?.classList.add('active');
+  updateRFQMonitorSelection();
+  closeRFQDateMenu();
+  renderRFQPage();
+}
+
+
+function rfqISODateLocal(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth()+1).padStart(2,'0');
+  const d = String(date.getDate()).padStart(2,'0');
+  return `${y}-${m}-${d}`;
+}
+
+function rfqDateRangeForPreset(preset) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (preset === 'today') {
+    const iso = rfqISODateLocal(today);
+    return {from:iso,to:iso};
+  }
+  if (preset === 'week') {
+    const from = new Date(today);
+    from.setDate(today.getDate() - today.getDay()); // Sunday
+    const to = new Date(from);
+    to.setDate(from.getDate()+6);
+    return {from:rfqISODateLocal(from),to:rfqISODateLocal(to)};
+  }
+  if (preset === 'month') {
+    const from = new Date(today.getFullYear(), today.getMonth(), 1);
+    const to = new Date(today.getFullYear(), today.getMonth()+1, 0);
+    return {from:rfqISODateLocal(from),to:rfqISODateLocal(to)};
+  }
+  if (preset === 'lastmonth') {
+    const from = new Date(today.getFullYear(), today.getMonth()-1, 1);
+    const to = new Date(today.getFullYear(), today.getMonth(), 0);
+    return {from:rfqISODateLocal(from),to:rfqISODateLocal(to)};
+  }
+  if (preset === '30days') {
+    const from = new Date(today);
+    from.setDate(today.getDate()-29);
+    return {from:rfqISODateLocal(from),to:rfqISODateLocal(today)};
+  }
+  if (preset === 'last3months') {
+    const from = new Date(today.getFullYear(), today.getMonth()-3, 1);
+    const to = new Date(today.getFullYear(), today.getMonth(), 0);
+    return {from:rfqISODateLocal(from),to:rfqISODateLocal(to)};
+  }
+  return {from:'',to:''};
+}
+
+function rfqMatchesDateFilter(r) {
+  if (!rfqDateFilter || rfqDateFilter.preset === 'all') return true;
+  const date = String(r?.date || '').substring(0,10);
+  if (!date) return false;
+  const from = rfqDateFilter.from || '';
+  const to = rfqDateFilter.to || '';
+  if (from && date < from) return false;
+  if (to && date > to) return false;
+  return true;
+}
+
+function toggleRFQDateMenu(event) {
+  event?.stopPropagation();
+  const menu = document.getElementById('rfq-date-menu');
+  if (!menu) return;
+  const willOpen = !menu.classList.contains('open');
+  closeRFQDateMenu();
+  if (willOpen) menu.classList.add('open');
+}
+
+function closeRFQDateMenu() {
+  document.getElementById('rfq-date-menu')?.classList.remove('open');
+}
+
+function setRFQDatePreset(preset) {
+  if (preset === 'all') rfqDateFilter = {preset:'all',from:'',to:''};
+  else {
+    const range = rfqDateRangeForPreset(preset);
+    rfqDateFilter = {preset, ...range};
+  }
+  updateRFQDateFilterUI();
+  closeRFQDateMenu();
+  renderRFQPage();
+}
+
+function applyRFQCustomDate() {
+  const from = document.getElementById('rfq-date-from')?.value || '';
+  const to = document.getElementById('rfq-date-to')?.value || '';
+  if (!from && !to) {
+    setRFQDatePreset('all');
+    return;
+  }
+  if (from && to && from > to) {
+    showToast('From date cannot be after To date','warning');
+    return;
+  }
+  rfqDateFilter = {preset:'custom',from,to};
+  updateRFQDateFilterUI();
+  closeRFQDateMenu();
+  renderRFQPage();
+}
+
+function clearRFQDateFilter() {
+  const from = document.getElementById('rfq-date-from');
+  const to = document.getElementById('rfq-date-to');
+  if (from) from.value='';
+  if (to) to.value='';
+  setRFQDatePreset('all');
+}
+
+function updateRFQDateFilterUI() {
+  const label = document.getElementById('rfq-date-filter-label');
+  const btn = document.getElementById('rfq-date-filter-btn');
+  const labels = {all:'All Dates',today:'Today',week:'This Week',month:'This Month',lastmonth:'Last Month','30days':'Last 30 Days',last3months:'Last 3 Months'};
+  let text = labels[rfqDateFilter.preset] || 'Custom Range';
+  if (rfqDateFilter.preset === 'custom') {
+    if (rfqDateFilter.from && rfqDateFilter.to) text = `${fmtDate(rfqDateFilter.from)} – ${fmtDate(rfqDateFilter.to)}`;
+    else if (rfqDateFilter.from) text = `From ${fmtDate(rfqDateFilter.from)}`;
+    else if (rfqDateFilter.to) text = `To ${fmtDate(rfqDateFilter.to)}`;
+  }
+  if (label) label.textContent = text;
+  btn?.classList.toggle('active', rfqDateFilter.preset !== 'all');
+  document.querySelectorAll('.rfq-date-preset').forEach(el=>el.classList.toggle('active',el.dataset.preset===rfqDateFilter.preset));
+}
+
+if (!window.__bizcoreRFQDateMenuBound) {
+  window.__bizcoreRFQDateMenuBound = true;
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.rfq-date-filter-wrap')) closeRFQDateMenu();
+  });
+}
+
 // RFQ Customer dropdown
-function openRFQCustDD() { filterRFQCustDD(); }
-function closeRFQCustDD() { document.getElementById('rfq-cust-dd').classList.remove('open'); }
+let rfqCustActiveIndex = -1;
+function openRFQCustDD() { rfqCustActiveIndex=-1; filterRFQCustDD(); const input=document.getElementById('rfq-cust-search'); if(input) input.setAttribute('aria-expanded','true'); }
+function closeRFQCustDD() { const dd=document.getElementById('rfq-cust-dd'); if(dd) dd.classList.remove('open'); const input=document.getElementById('rfq-cust-search'); if(input) input.setAttribute('aria-expanded','false'); rfqCustActiveIndex=-1; }
 function filterRFQCustDD() {
   const searchEl = document.getElementById('rfq-cust-search');
   const q = searchEl.value.toLowerCase();
   const dd = document.getElementById('rfq-cust-dd');
   const matches = customers.filter(c=>!q||c.company.toLowerCase().includes(q));
-  const customerRows = matches.map(c=>`<div class="cust-option" onmousedown="selectRFQCustomer('${c.id}')"><div class="co-name">${c.company}</div><div class="co-sub">${c.contact||''}</div></div>`).join('');
+  const customerRows = matches.map(c=>`<div class="cust-option" data-rfq-customer-id="${c.id}" role="option" aria-selected="false" onmousedown="selectRFQCustomer('${c.id}')"><div class="co-name">${c.company}</div><div class="co-sub">${c.contact||''}</div></div>`).join('');
   const addLabel = searchEl.value.trim() ? `Add “${searchEl.value.trim()}” as new customer` : 'Add new customer';
-  dd.innerHTML = customerRows + `<div class="cust-option add-new" onmousedown="quickAddCustomerFromRFQ(event)"><i class="ti ti-plus" style="margin-right:6px"></i>${addLabel}</div>`;
-  dd.classList.add('open');
+  dd.innerHTML = customerRows + `<div class="cust-option add-new" data-rfq-add-new="1" role="option" aria-selected="false" onmousedown="quickAddCustomerFromRFQ(event)"><i class="ti ti-plus" style="margin-right:6px"></i>${addLabel}</div>`;
+  dd.classList.add('open'); searchEl.setAttribute('aria-expanded','true'); rfqCustActiveIndex=-1;
 }
+function getRFQCustomerOptions(){ return Array.from(document.querySelectorAll('#rfq-cust-dd .cust-option')); }
+function highlightRFQCustomerOption(index){ const opts=getRFQCustomerOptions(); if(!opts.length){rfqCustActiveIndex=-1;return;} rfqCustActiveIndex=Math.max(0,Math.min(index,opts.length-1)); opts.forEach((opt,i)=>{const active=i===rfqCustActiveIndex;opt.classList.toggle('keyboard-active',active);opt.setAttribute('aria-selected',active?'true':'false');}); opts[rfqCustActiveIndex]?.scrollIntoView({block:'nearest'}); }
+function handleRFQCustomerKeydown(event){ const dd=document.getElementById('rfq-cust-dd'); const open=dd?.classList.contains('open'); if(event.key==='ArrowDown'){event.preventDefault();if(!open)openRFQCustDD();highlightRFQCustomerOption(rfqCustActiveIndex<0?0:rfqCustActiveIndex+1);return;} if(event.key==='ArrowUp'){event.preventDefault();if(!open)openRFQCustDD();const opts=getRFQCustomerOptions();highlightRFQCustomerOption(rfqCustActiveIndex<0?Math.max(0,opts.length-1):rfqCustActiveIndex-1);return;} if(event.key==='Enter'&&open){event.preventDefault();const opt=getRFQCustomerOptions()[rfqCustActiveIndex];if(!opt)return;if(opt.dataset.rfqAddNew==='1')quickAddCustomerFromRFQ(event);else if(opt.dataset.rfqCustomerId)selectRFQCustomer(opt.dataset.rfqCustomerId);return;} if(event.key==='Escape'&&open){event.preventDefault();closeRFQCustDD();return;} if(event.key==='Tab')closeRFQCustDD(); }
+function rfqISOToDisplay(value){ const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m?`${m[3]}/${m[2]}/${m[1]}`:String(value||''); }
+function rfqDisplayToISO(value){ const raw=String(value||'').trim(); if(!raw)return ''; let m=raw.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/); if(!m)m=raw.match(/^(\d{2})(\d{2})(\d{4})$/); if(!m)return ''; const d=Number(m[1]),mo=Number(m[2]),y=Number(m[3]); const test=new Date(y,mo-1,d); if(test.getFullYear()!==y||test.getMonth()!==mo-1||test.getDate()!==d)return ''; return `${String(y).padStart(4,'0')}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+function formatRFQDateTyping(input){ const digits=input.value.replace(/\D/g,'').slice(0,8); let out=digits; if(digits.length>2)out=digits.slice(0,2)+'/'+digits.slice(2); if(digits.length>4)out=digits.slice(0,2)+'/'+digits.slice(2,4)+'/'+digits.slice(4); input.value=out; }
+function normalizeRFQDateField(input){ if(!input.value.trim())return; const iso=rfqDisplayToISO(input.value); if(iso){input.value=rfqISOToDisplay(iso);input.classList.remove('field-invalid');const picker=document.getElementById(input.id+'-picker');if(picker)picker.value=iso;}else input.classList.add('field-invalid'); }
+function syncRFQDateFromPicker(textId,picker){ const input=document.getElementById(textId);if(!input)return;input.value=rfqISOToDisplay(picker.value);input.classList.remove('field-invalid');input.dispatchEvent(new Event('input',{bubbles:true})); }
+function openRFQDatePicker(textId,pickerId){ const text=document.getElementById(textId),picker=document.getElementById(pickerId);if(!picker)return;const iso=rfqDisplayToISO(text?.value||'');if(iso)picker.value=iso;if(typeof picker.showPicker==='function')picker.showPicker();else picker.click(); }
+function handleRFQDateKeydown(event,input,pickerId){ if((event.altKey&&event.key==='ArrowDown')||event.key==='F4'){event.preventDefault();openRFQDatePicker(input.id,pickerId);return;} if(event.key==='Enter'){event.preventDefault();normalizeRFQDateField(input);const fields=getRFQEntryTabFields();const idx=fields.indexOf(input);fields[idx+1]?.focus();} }
+function getRFQEntryTabFields(){ return ['rfq-cust-search','rfq-contact','rfq-ref','rfq-channel','rfq-assigned','rfq-date','rfq-due','rfq-desc'].map(id=>document.getElementById(id)).filter(Boolean); }
+function setupRFQEntryKeyboard(){ const modal=document.getElementById('rfq-modal');if(!modal)return;getRFQEntryTabFields().forEach(el=>el.removeAttribute('tabindex'));const attach=modal.querySelector('.rfq-attach-compact');if(attach)attach.setAttribute('tabindex','0');closeRFQCustDD();requestAnimationFrame(()=>{const el=document.getElementById('rfq-cust-search');if(el)el.focus();closeRFQCustDD();}); }
+
 function populateRFQContacts(customer, selectedName='') {
   const select = document.getElementById('rfq-contact');
   const contacts = customer ? (customer.contacts||(customer.contact?[{name:customer.contact,isDefault:true}]:[])) : [];
@@ -5066,15 +5672,21 @@ function renderEmployees() {
   let list=employees.filter(e=>!q||[e.code,e.name,e.department,e.designation,e.mobile,e.iqamaNo,...(e.roles||[])].join(' ').toLowerCase().includes(q));
   if(mode==='active') list=list.filter(e=>e.active!==false);
   if(mode==='expiring') list=list.filter(e=>[e.iqamaExpiry,e.passportExpiry,e.licenseExpiry].some(d=>{const n=employeeDaysUntil(d);return n!==null&&n<=90;}));
+  const employeePages=Math.ceil(list.length/PER_PAGE)||1;
+  if(employeePage>employeePages) employeePage=1;
+  const employeeSlice=list.slice((employeePage-1)*PER_PAGE,employeePage*PER_PAGE);
+  document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PER_PAGE)) el.value=String(PER_PAGE); });
   const expiring=employees.flatMap(e=>[['Iqama',e.iqamaExpiry],['Passport',e.passportExpiry],['Driving licence',e.licenseExpiry]].map(([doc,date])=>({e,doc,date,days:employeeDaysUntil(date)}))).filter(x=>x.days!==null&&x.days<=90).sort((a,b)=>a.days-b.days);
   const summary=document.getElementById('employee-expiry-summary');
   if(summary) summary.innerHTML=expiring.length?`<div class="expiry-summary-icon"><i class="ti ti-bell-ringing"></i></div><div><strong>${expiring.length} document${expiring.length===1?'':'s'} need attention</strong><span>${expiring.filter(x=>x.days<0).length} expired · ${expiring.filter(x=>x.days>=0&&x.days<=30).length} due within 30 days · notification-ready for the future reminder module</span></div>`:`<div class="expiry-summary-icon safe"><i class="ti ti-shield-check"></i></div><div><strong>No document expiries within 90 days</strong><span>The employee records are ready for future expiry notifications.</span></div>`;
-  tbody.innerHTML=list.length?list.map(e=>{
+  tbody.innerHTML=employeeSlice.length?employeeSlice.map(e=>{
     const iq=employeeExpiryMeta(e.iqamaExpiry,'Iqama'), pp=employeeExpiryMeta(e.passportExpiry,'Passport'), dl=employeeExpiryMeta(e.licenseExpiry,'Driving licence');
     const doc=(no,date,meta)=>`<div class="employee-doc-cell"><strong>${esc(no||'—')}</strong><span class="expiry-pill ${meta.cls}">${esc(meta.text)}</span></div>`;
     return `<tr class="employee-clickable-row" tabindex="0" role="button" aria-label="View ${esc(e.name)}" onclick="openEmployeeView('${e.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openEmployeeView('${e.id}')}"><td><div class="employee-name-cell"><span class="employee-avatar">${e.photo?`<img src="${e.photo}" alt=""/>`:esc((e.name||'?').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase())}</span><div><strong>${esc(e.name)}</strong><small>${esc(e.code)}</small></div></div></td><td><strong>${esc(e.department||'—')}</strong><small class="employee-muted">${esc(e.designation||'')}</small></td><td><div class="employee-role-pills">${(e.roles||[]).map(r=>`<span>${esc(r)}</span>`).join('')||'<em>No role</em>'}</div></td><td>${esc(e.mobile||'—')}<small class="employee-muted">${esc(e.email||'')}</small></td><td>${doc(e.iqamaNo,e.iqamaExpiry,iq)}</td><td>${doc(e.passportNo,e.passportExpiry,pp)}</td><td>${doc(e.licenseNo,e.licenseExpiry,dl)}</td><td><span class="employee-status ${e.active!==false?'active':'inactive'}">${e.active!==false?'Active':'Inactive'}</span></td><td class="center"><button class="btn-icon employee-view-btn" title="View employee" onclick="event.stopPropagation();openEmployeeView('${e.id}')"><i class="ti ti-eye"></i></button></td></tr>`;
   }).join(''):`<tr><td colspan="9"><div class="empty-state compact"><i class="ti ti-users-off"></i><p>No employees found.</p></div></td></tr>`;
+  const ep=document.getElementById('employees-pagination'); if(ep) ep.innerHTML=buildPaginationHTML(employeePage,employeePages,'goEmployeePage');
 }
+function goEmployeePage(p){employeePage=p;renderEmployees();}
 
 function handleRFQAttach(e) {
   const file = e.target.files[0]; if (!file) return;
@@ -5109,23 +5721,83 @@ function openNewRFQ() {
   const today=new Date(), due=new Date(today);
   due.setHours(due.getHours()+(settings.rfqDefaultHours||48));
   const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  document.getElementById('rfq-date').value=fmt(today);
-  document.getElementById('rfq-due').value=fmt(due);
+  const receivedISO=fmt(today), dueISO=fmt(due);
+  document.getElementById('rfq-date').value=rfqISOToDisplay(receivedISO);
+  document.getElementById('rfq-due').value=rfqISOToDisplay(dueISO);
+  const receivedPicker=document.getElementById('rfq-date-picker');if(receivedPicker)receivedPicker.value=receivedISO;
+  const duePicker=document.getElementById('rfq-due-picker');if(duePicker)duePicker.value=dueISO;
   openModalWithSize('rfq-modal');
+  setupRFQEntryKeyboard();
 }
+
+
+function confirmCancelRFQEntry(){
+  const isEdit=!!editingRFQId;
+  const title=isEdit?'Discard RFQ changes?':'Discard new RFQ?';
+  const message=isEdit
+    ? 'Changes made in this RFQ have not been saved.'
+    : 'This RFQ has not been saved yet.';
+  const secondary=isEdit
+    ? 'Discarding will close the form without saving the latest changes.'
+    : 'Discarding will close the form and remove this new entry.';
+  if(typeof window.bizcoreShowSafeDialog==='function'){
+    window.bizcoreShowSafeDialog({
+      icon:'ti-alert-triangle',
+      title,
+      message,
+      secondary,
+      buttons:[
+        {text:'Continue editing',cls:'secondary',action:()=>{}},
+        {text:isEdit?'Discard changes':'Discard RFQ',cls:'danger-outline',action:()=>{
+          if(typeof window.bizcorePerformClose==='function') window.bizcorePerformClose('rfq-modal',true);
+          else closeModal('rfq-modal');
+        }}
+      ]
+    });
+  }
+}
+
+function confirmSaveRFQEntry(){
+  const isEdit=!!editingRFQId;
+  const title=isEdit?'Update RFQ?':'Save new RFQ?';
+  const message=isEdit
+    ? 'Please confirm that the changes to this RFQ are ready to save.'
+    : 'Please confirm that this RFQ is ready to create.';
+  const secondary=isEdit
+    ? 'The existing RFQ record will be updated.'
+    : 'A new RFQ record will be created.';
+  if(typeof window.bizcoreShowSafeDialog==='function'){
+    window.bizcoreShowSafeDialog({
+      icon:'ti-device-floppy',
+      title,
+      message,
+      secondary,
+      buttons:[
+        {text:'Back',cls:'secondary',action:()=>{}},
+        {text:isEdit?'Update RFQ':'Save RFQ',cls:'primary',action:()=>saveRFQ()}
+      ]
+    });
+  }
+}
+window.confirmCancelRFQEntry=confirmCancelRFQEntry;
+window.confirmSaveRFQEntry=confirmSaveRFQEntry;
 
 async function saveRFQ() {
   const custSearch = document.getElementById('rfq-cust-search');
   const company = custSearch.value.trim();
   if (!company) { showValidationDialog('Customer required','Select a customer before saving the RFQ.',custSearch); return; }
+  const receivedISO=rfqDisplayToISO(document.getElementById('rfq-date').value);
+  const dueISO=rfqDisplayToISO(document.getElementById('rfq-due').value);
+  if(!receivedISO){showValidationDialog('Invalid received date','Enter the date as DD/MM/YYYY.',document.getElementById('rfq-date'));return;}
+  if(!dueISO){showValidationDialog('Invalid due date','Enter the date as DD/MM/YYYY.',document.getElementById('rfq-due'));return;}
   const r = {
     id: editingRFQId || ('r'+Date.now().toString(36)),
     rfqNo: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.rfqNo : nextRFQNo(),
     company, custId: custSearch.dataset.custId||'',
     contact: document.getElementById('rfq-contact').value.trim(),
     channel: document.getElementById('rfq-channel').value,
-    date: document.getElementById('rfq-date').value,
-    due: document.getElementById('rfq-due').value,
+    date: receivedISO,
+    due: dueISO,
     assignedEmployeeId: document.getElementById('rfq-assigned').value,
     assigned: getEmployeeDisplay(document.getElementById('rfq-assigned').value),
     ref: document.getElementById('rfq-ref').value.trim(),
@@ -5223,18 +5895,50 @@ function viewRFQ(id) {
       </div>
     </div>`;
 
-  const left=[]; const right=[];
-  left.push(navFromQuoteId?'<button class="btn btn-secondary" onclick="backToQuoteFromRFQ()"><i class="ti ti-arrow-left"></i>Back to quotation</button>':'<button class="btn btn-secondary" onclick="closeRFQView()">Close</button>');
-  if (!isNoBid && !hasQuote) left.push(`<button class="btn btn-secondary" data-rid="${r.id}" onclick="editRFQFromView(this)"><i class="ti ti-edit"></i>Edit RFQ</button>`);
-  if (isNoBid) left.push(`<button class="btn btn-secondary" data-rid="${r.id}" onclick="reopenRFQFromBtn(this)"><i class="ti ti-refresh"></i>Reopen RFQ</button>`);
-  else if (!hasQuote) left.push(`<button class="btn btn-secondary" data-rid="${r.id}" onclick="openNoBidDialogFromBtn(this)"><i class="ti ti-circle-off"></i>Close as No Bid</button>`);
-  if (canDelete) left.push(`<button class="btn btn-quiet-danger" data-rid="${r.id}" onclick="deleteRFQFromBtn(this)"><i class="ti ti-trash"></i>Delete</button>`);
-  if (!isNoBid) {
-    if (hasPricing) { right.push(`<button class="btn btn-secondary" data-rid="${r.id}" onclick="viewPricingROFromBtn(this)"><i class="ti ti-eye"></i>View pricing</button>`); if(isPricingVersionLocked(r)) right.push(`<button class="btn btn-primary" data-rid="${r.id}" onclick="closeModal('rfq-view-modal');viewPricingReadOnly('${r.id}')"><i class="ti ti-git-branch"></i>Revise pricing</button>`); else right.push(`<button class="btn btn-primary" data-rid="${r.id}" onclick="openPricingFromBtn(this)"><i class="ti ti-calculator"></i>Edit pricing</button>`); }
-    else right.push(`<button class="btn btn-primary" data-rid="${r.id}" onclick="openPricingFromBtn(this)"><i class="ti ti-calculator"></i>Start pricing</button>`);
-    if (hasQuote) right.push(`<button class="btn btn-success" data-qid="${r.quotationId}" onclick="viewQuoteFromRFQ(this)"><i class="ti ti-file-text"></i>Open quotation</button>`);
+  const navActions=[]; const recordActions=[]; const dangerActions=[];
+  navActions.push(navFromQuoteId
+    ? '<button class="btn btn-secondary detail-action-close" onclick="backToQuoteFromRFQ()"><i class="ti ti-arrow-left"></i>Back to quotation</button>'
+    : '<button class="btn btn-secondary detail-action-close" onclick="closeRFQView()"><i class="ti ti-x"></i>Close</button>');
+
+  // Standard detail action order:
+  // Edit -> state/workflow secondary actions -> primary workflow -> destructive action last.
+  if (!isNoBid && !hasQuote) {
+    recordActions.push(`<button class="btn btn-secondary" data-rid="${r.id}" onclick="editRFQFromView(this)"><i class="ti ti-edit"></i>Edit RFQ</button>`);
   }
-  document.getElementById('rfq-view-footer').innerHTML = `<div class="rfq-view-footer-left">${left.join('')}</div><div class="rfq-view-footer-right">${right.join('')}</div>`;
+
+  if (isNoBid) {
+    recordActions.push(`<button class="btn btn-secondary" data-rid="${r.id}" onclick="reopenRFQFromBtn(this)"><i class="ti ti-refresh"></i>Reopen RFQ</button>`);
+  } else if (!hasQuote) {
+    recordActions.push(`<button class="btn btn-secondary" data-rid="${r.id}" onclick="openNoBidDialogFromBtn(this)"><i class="ti ti-circle-off"></i>Close as No Bid</button>`);
+  }
+
+  if (!isNoBid) {
+    if (hasPricing) {
+      recordActions.push(`<button class="btn btn-secondary" data-rid="${r.id}" onclick="viewPricingROFromBtn(this)"><i class="ti ti-eye"></i>View pricing</button>`);
+      if (isPricingVersionLocked(r)) {
+        recordActions.push(`<button class="btn btn-primary" data-rid="${r.id}" onclick="closeModal('rfq-view-modal');viewPricingReadOnly('${r.id}')"><i class="ti ti-git-branch"></i>Revise pricing</button>`);
+      } else {
+        recordActions.push(`<button class="btn btn-primary" data-rid="${r.id}" onclick="openPricingFromBtn(this)"><i class="ti ti-calculator"></i>Edit pricing</button>`);
+      }
+    } else {
+      recordActions.push(`<button class="btn btn-primary" data-rid="${r.id}" onclick="openPricingFromBtn(this)"><i class="ti ti-calculator"></i>Start pricing</button>`);
+    }
+
+    if (hasQuote) {
+      recordActions.push(`<button class="btn btn-success" data-qid="${r.quotationId}" onclick="viewQuoteFromRFQ(this)"><i class="ti ti-file-text"></i>Open quotation</button>`);
+    }
+  }
+
+  if (canDelete) {
+    dangerActions.push(`<button class="btn btn-quiet-danger detail-action-danger" data-rid="${r.id}" onclick="deleteRFQFromBtn(this)"><i class="ti ti-trash"></i>Delete</button>`);
+  }
+
+  document.getElementById('rfq-view-footer').innerHTML =
+    `<div class="detail-action-footer-left rfq-view-footer-left">` +
+      `${dangerActions.length?`<div class="detail-action-danger-group detail-action-danger-left">${dangerActions.join('')}</div>`:''}` +
+    `</div>` +
+    `<div class="detail-action-footer-center"><div class="detail-action-group">${recordActions.join('')}</div></div>` +
+    `<div class="detail-action-footer-close">${navActions.join('')}</div>`;
   openModalWithSize('rfq-view-modal');
 }
 
@@ -5256,14 +5960,17 @@ function editRFQ(id) {
     contactSelect.value=r.contact||'';
   }
   document.getElementById('rfq-channel').value = r.channel||'Email';
-  document.getElementById('rfq-date').value = r.date||'';
-  document.getElementById('rfq-due').value = r.due||'';
+  document.getElementById('rfq-date').value = rfqISOToDisplay(r.date||'');
+  document.getElementById('rfq-due').value = rfqISOToDisplay(r.due||'');
+  const editDatePicker=document.getElementById('rfq-date-picker');if(editDatePicker)editDatePicker.value=r.date||'';
+  const editDuePicker=document.getElementById('rfq-due-picker');if(editDuePicker)editDuePicker.value=r.due||'';
   populateRFQAssignees(r.assignedEmployeeId||r.assigned||'');
   document.getElementById('rfq-ref').value = r.ref||'';
   document.getElementById('rfq-desc').value = r.desc||'';
   document.getElementById('rfq-attach-list').innerHTML = rfqAttachment
     ? `<div class="attach-item"><i class="ti ti-paperclip"></i>${rfqAttachment.name}</div>` : '';
   openModalWithSize('rfq-modal');
+  setupRFQEntryKeyboard();
 }
 
 /* ══════════════════════════════════════════════════
@@ -6597,7 +7304,7 @@ document.addEventListener('keydown', function(e) {
   if(!modal || !modal.classList.contains('open')) return;
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s') {
     e.preventDefault();
-    saveRFQ();
+    confirmSaveRFQEntry();
   }
 });
 
@@ -6861,6 +7568,7 @@ function getSOBadgeClass(status) {
 function filterSO(status, btn) {
   soFilter = status;
   soKpiFilter = 'none';
+  soPage = 1;
   document.querySelectorAll('.so-kpi').forEach(card=>{ card.classList.remove('active'); card.setAttribute('aria-pressed','false'); });
   document.querySelectorAll('.so-filter-btn').forEach(b=>{ if(!b.id.startsWith('so-d-')) b.classList.remove('active'); });
   if (btn) btn.classList.add('active');
@@ -6875,24 +7583,25 @@ function handleSOKPIKey(event, filter, card) {
 }
 
 function filterSOKPI(filter, card) {
-  soKpiFilter = filter;
+  soKpiFilter = filter==='all' ? 'none' : filter;
   soFilter = 'all';
-  document.querySelectorAll('.so-filter-btn').forEach(b=>{ if(!b.id.startsWith('so-d-')) b.classList.remove('active'); });
-  const allBtn = document.getElementById('so-f-all');
-  if (allBtn) allBtn.classList.add('active');
-  document.querySelectorAll('.so-kpi').forEach(el=>{
-    const active = el === card;
+  soPage = 1;
+  document.querySelectorAll('#page-salesorders .so-kpi').forEach(el=>{
+    const key=el.dataset.kpiFilter||'';
+    const active=(soKpiFilter==='none'&&key==='all') || key===soKpiFilter;
     el.classList.toggle('active',active);
     el.setAttribute('aria-pressed',active?'true':'false');
   });
   renderSOPage();
-  document.getElementById('so-list')?.scrollIntoView({behavior:'smooth',block:'start'});
+  updateSOOverviewTint();
 }
 
 function clearSOKPIFilter() {
   soKpiFilter = 'none';
+  soPage = 1;
   document.querySelectorAll('.so-kpi').forEach(card=>{ card.classList.remove('active'); card.setAttribute('aria-pressed','false'); });
   renderSOPage();
+  updateSOOverviewTint();
 }
 
 /* ── Date filter for Sales Orders ── */
@@ -6916,6 +7625,17 @@ function filterSODate(mode, btn) {
     const start = new Date(today.getFullYear(), today.getMonth(), 1);
     const end = new Date(today.getFullYear(), today.getMonth()+1, 0);
     from = dToStr(start); to = dToStr(end);
+  } else if (mode === 'lastmonth') {
+    const start = new Date(today.getFullYear(), today.getMonth()-1, 1);
+    const end = new Date(today.getFullYear(), today.getMonth(), 0);
+    from = dToStr(start); to = dToStr(end);
+  } else if (mode === '30days') {
+    const start = new Date(today); start.setDate(today.getDate()-29);
+    from = dToStr(start); to = dToStr(today);
+  } else if (mode === 'last3months') {
+    const start = new Date(today.getFullYear(), today.getMonth()-3, 1);
+    const end = new Date(today.getFullYear(), today.getMonth(), 0);
+    from = dToStr(start); to = dToStr(end);
   } else if (mode === 'year') {
     from = today.getFullYear()+'-01-01';
     to   = today.getFullYear()+'-12-31';
@@ -6925,6 +7645,7 @@ function filterSODate(mode, btn) {
   }
 
   soDateFilter = { mode, from, to };
+  soPage = 1;
 
   // Update active button styling (quick buttons only; custom inputs handled separately)
   if (btn) {
@@ -6934,10 +7655,13 @@ function filterSODate(mode, btn) {
     document.querySelectorAll('[id^="so-d-"]').forEach(b=>{ if(b.tagName==='BUTTON') b.classList.remove('active'); });
   }
 
+  const preset=document.getElementById('so-date-preset');
+  if(preset && preset.value!==mode) preset.value=mode;
   renderSOPage();
 }
 
 function clearSODateFilter() {
+  soPage = 1;
   document.getElementById('so-d-from').value = '';
   document.getElementById('so-d-to').value = '';
   soDateFilter = { mode:'all', from:null, to:null };
@@ -6946,184 +7670,156 @@ function clearSODateFilter() {
   renderSOPage();
 }
 
+function clearAllSOFilters() {
+  soFilter='all';
+  soKpiFilter='none';
+  soPage=1;
+  soDateFilter={mode:'all',from:null,to:null};
+  const search=document.getElementById('so-search');if(search)search.value='';
+  const customer=document.getElementById('so-customer-filter');if(customer)customer.value='';
+  const sort=document.getElementById('so-sort');if(sort)sort.value='date-desc';
+  const preset=document.getElementById('so-date-preset');if(preset)preset.value='all';
+  const from=document.getElementById('so-d-from');if(from)from.value='';
+  const to=document.getElementById('so-d-to');if(to)to.value='';
+  document.querySelectorAll('#page-salesorders .so-kpi').forEach(card=>{card.classList.remove('active');card.setAttribute('aria-pressed','false');});
+  document.querySelector('#page-salesorders .so-overview-total')?.classList.add('active');
+  renderSOPage();
+}
+
 function renderSOPage() {
-  const search = (document.getElementById('so-search')?.value||'').toLowerCase();
-  let list = salesOrders.map(so => ({...so, _status: getSOStatus(so)}));
+  const search=(document.getElementById('so-search')?.value||'').trim().toLowerCase();
+  const customerFilter=document.getElementById('so-customer-filter')?.value||'';
+  const sortValue=document.getElementById('so-sort')?.value||'date-desc';
 
-  // Sales Order KPIs — focused on order fulfilment and invoicing
-  const open = list.filter(s=>['Confirmed','Out for Delivery','Partially Delivered'].includes(s._status));
-  const readyForDelivery = list.filter(s=>s._status==='Confirmed');
-  const partiallyDelivered = list.filter(s=>s._status==='Partially Delivered');
-  const pendingInvoice = list.filter(s=>
-    (s.deliveries||[]).some(d=>d.customerConfirmed) && !(s.invoices||[]).length
-  );
-  const totalOrderValue = list.reduce((sum,s)=>sum+(parseFloat(s.total)||0),0);
-  const outstandingReceivables = list.reduce((sum,s)=>{
-    if (!(s.invoices||[]).length) return sum;
-    const paid = (s.payments||[]).reduce((p,x)=>p+(parseFloat(x.amount)||0),0);
-    return sum + Math.max((parseFloat(s.total)||0)-paid,0);
+  let all=salesOrders.map(so=>({...so,_status:getSOStatus(so)}));
+
+  // Customer filter options, preserving current selection.
+  const customerSelect=document.getElementById('so-customer-filter');
+  if(customerSelect){
+    const selected=customerSelect.value;
+    const names=[...new Set(all.map(s=>s.customer).filter(Boolean))].sort();
+    customerSelect.innerHTML='<option value="">All customers</option>'+names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+    customerSelect.value=names.includes(selected)?selected:'';
+  }
+
+  // Overview scope reacts to Customer + Date + Search, but not status/KPI selection.
+  let scope=all.filter(s=>{
+    if(customerFilter && s.customer!==customerFilter) return false;
+    if(soDateFilter.from && (s.date||'')<soDateFilter.from) return false;
+    if(soDateFilter.to && (s.date||'')>soDateFilter.to) return false;
+    if(search){
+      const hay=`${s.soNo||''} ${s.customer||''} ${s.poNo||''}`.toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const statusCounts={};
+  scope.forEach(s=>statusCounts[s._status]=(statusCounts[s._status]||0)+1);
+  const open=scope.filter(s=>['Confirmed','Out for Delivery','Partially Delivered'].includes(s._status));
+  const ready=scope.filter(s=>s._status==='Confirmed');
+  const partial=scope.filter(s=>s._status==='Partially Delivered');
+  const pendingInvoice=scope.filter(s=>(s.deliveries||[]).some(d=>d.customerConfirmed)&&!(s.invoices||[]).length);
+  const totalOrderValue=scope.reduce((sum,s)=>sum+(parseFloat(s.total)||0),0);
+  const outstandingReceivables=scope.reduce((sum,s)=>{
+    if(!(s.invoices||[]).length)return sum;
+    const paid=(s.payments||[]).reduce((p,x)=>p+(parseFloat(x.amount)||0),0);
+    return sum+Math.max((parseFloat(s.total)||0)-paid,0);
   },0);
-  document.getElementById('so-k-total').textContent = list.length;
-  document.getElementById('so-k-open').textContent = open.length;
-  document.getElementById('so-k-ready').textContent = readyForDelivery.length;
-  document.getElementById('so-k-partial-delivery').textContent = partiallyDelivered.length;
-  document.getElementById('so-k-invoice').textContent = pendingInvoice.length;
-  document.getElementById('so-k-value').textContent = fmt(totalOrderValue);
-  document.getElementById('so-k-receivables').textContent = fmt(outstandingReceivables);
 
-  // Badge
-  const badge = document.getElementById('so-badge');
-  if (badge) { if (open.length) { badge.textContent=open.length; badge.style.display='inline-flex'; badge.title=open.length+' sales order'+(open.length===1?'':'s')+' requiring attention'; badge.setAttribute('aria-label',badge.title); } else badge.style.display='none'; }
+  const setText=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val};
+  setText('so-k-total',scope.length);
+  setText('so-k-confirmed',statusCounts['Confirmed']||0);
+  setText('so-k-ofd',statusCounts['Out for Delivery']||0);
+  setText('so-k-partial-delivery',statusCounts['Partially Delivered']||0);
+  setText('so-k-delivered',statusCounts['Delivered']||0);
+  setText('so-k-invoiced',statusCounts['Invoiced']||0);
+  setText('so-k-partpaid',statusCounts['Partially Paid']||0);
+  setText('so-k-paid',statusCounts['Paid']||0);
+  setText('so-k-open',open.length);
+  setText('so-k-invoice',pendingInvoice.length);
+  setText('so-k-value',formatNumber(totalOrderValue,2));
+  setText('so-k-receivables',formatNumber(outstandingReceivables,2));
 
-  // Related workflow badges use the same single-number standard.
-  const dnAttention = readyForDelivery.length + partiallyDelivered.length;
-  const dnBadge = document.getElementById('dn-badge');
-  if (dnBadge) {
-    dnBadge.textContent = dnAttention;
-    dnBadge.style.display = dnAttention ? 'inline-flex' : 'none';
-    dnBadge.title = dnAttention + ' order' + (dnAttention===1?'':'s') + ' requiring delivery action';
-    dnBadge.setAttribute('aria-label', dnBadge.title);
-  }
-  const invoiceBadge = document.getElementById('invoice-badge');
-  if (invoiceBadge) {
-    invoiceBadge.textContent = pendingInvoice.length;
-    invoiceBadge.style.display = pendingInvoice.length ? 'inline-flex' : 'none';
-    invoiceBadge.title = pendingInvoice.length + ' delivered order' + (pendingInvoice.length===1?'':'s') + ' ready for invoicing';
-    invoiceBadge.setAttribute('aria-label', invoiceBadge.title);
+  const badge=document.getElementById('so-badge');
+  if(badge){
+    badge.textContent=open.length;
+    badge.style.display=open.length?'inline-flex':'none';
   }
 
-  // Filter counts
-  const sc = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val?'('+val+')':''; };
-  const statusCounts = {};
-  list.forEach(s=>{ statusCounts[s._status]=(statusCounts[s._status]||0)+1; });
-  sc('so-cnt-all',       list.length);
-  sc('so-cnt-pending',   open.length);
-  sc('so-cnt-confirmed', statusCounts['Confirmed']||0);
-  sc('so-cnt-ofd',       statusCounts['Out for Delivery']||0);
-  sc('so-cnt-partdel',   statusCounts['Partially Delivered']||0);
-  sc('so-cnt-delivered', statusCounts['Delivered']||0);
-  sc('so-cnt-invoiced',  statusCounts['Invoiced']||0);
-  sc('so-cnt-paid',      statusCounts['Paid']||0);
-  sc('so-cnt-partial',   statusCounts['Partially Paid']||0);
+  // Start the table from the current non-status scope.
+  let list=[...scope];
 
-  // Filter
-  if (soFilter === 'pending') list = list.filter(s=>s._status!=='Paid');
-  else if (soFilter !== 'all') list = list.filter(s=>s._status===soFilter);
+  // Status / Overview drill-down.
+  if(soFilter==='pending') list=list.filter(s=>s._status!=='Paid');
+  else if(soFilter!=='all') list=list.filter(s=>s._status===soFilter);
 
-  const kpiLabels = {
-    'all':'All Sales Orders',
-    'open':'Open Orders',
-    'ready':'Ready for Delivery',
-    'partial-delivery':'Partially Delivered',
-    'pending-invoice':'Pending Customer Invoice',
-    'all-value':'Orders Included in Total Order Value',
-    'receivables':'Outstanding Receivables'
-  };
-  if (soKpiFilter === 'open') list = list.filter(s=>['Confirmed','Out for Delivery','Partially Delivered'].includes(s._status));
-  else if (soKpiFilter === 'ready') list = list.filter(s=>s._status==='Confirmed');
-  else if (soKpiFilter === 'partial-delivery') list = list.filter(s=>s._status==='Partially Delivered');
-  else if (soKpiFilter === 'pending-invoice') list = list.filter(s=>(s.deliveries||[]).some(d=>d.customerConfirmed) && !(s.invoices||[]).length);
-  else if (soKpiFilter === 'receivables') list = list.filter(s=>{
-    if (!(s.invoices||[]).length) return false;
+  if(soKpiFilter==='status-confirmed') list=list.filter(s=>s._status==='Confirmed');
+  else if(soKpiFilter==='status-ofd') list=list.filter(s=>s._status==='Out for Delivery');
+  else if(soKpiFilter==='status-partdel') list=list.filter(s=>s._status==='Partially Delivered');
+  else if(soKpiFilter==='status-delivered') list=list.filter(s=>s._status==='Delivered');
+  else if(soKpiFilter==='status-invoiced') list=list.filter(s=>s._status==='Invoiced');
+  else if(soKpiFilter==='status-partpaid') list=list.filter(s=>s._status==='Partially Paid');
+  else if(soKpiFilter==='status-paid') list=list.filter(s=>s._status==='Paid');
+  else if(soKpiFilter==='open') list=list.filter(s=>['Confirmed','Out for Delivery','Partially Delivered'].includes(s._status));
+  else if(soKpiFilter==='pending-invoice') list=list.filter(s=>(s.deliveries||[]).some(d=>d.customerConfirmed)&&!(s.invoices||[]).length);
+  else if(soKpiFilter==='receivables') list=list.filter(s=>{
+    if(!(s.invoices||[]).length)return false;
     const paid=(s.payments||[]).reduce((p,x)=>p+(parseFloat(x.amount)||0),0);
     return Math.max((parseFloat(s.total)||0)-paid,0)>0;
   });
 
-  if (search) list = list.filter(s=>
-    (s.soNo||'').toLowerCase().includes(search) ||
-    (s.customer||'').toLowerCase().includes(search) ||
-    (s.poNo||'').toLowerCase().includes(search)
-  );
-  // Date range filter
-  if (soDateFilter.from) list = list.filter(s => (s.date||'') >= soDateFilter.from);
-  if (soDateFilter.to)   list = list.filter(s => (s.date||'') <= soDateFilter.to);
-  const dateSummaryEl = document.getElementById('so-date-summary');
-  if (dateSummaryEl) {
-    if (soDateFilter.from || soDateFilter.to) {
-      dateSummaryEl.textContent = `Showing ${list.length} order(s) · ${fmtDate(soDateFilter.from)} → ${fmtDate(soDateFilter.to)}`;
-    } else {
-      dateSummaryEl.textContent = '';
-    }
-  }
-  const kpiSummary = document.getElementById('so-kpi-filter-summary');
-  const kpiTitle = document.getElementById('so-kpi-filter-title');
-  const kpiMeta = document.getElementById('so-kpi-filter-meta');
-  if (kpiSummary) {
-    const activeKpi = soKpiFilter !== 'none';
-    kpiSummary.classList.toggle('show',activeKpi);
-    if (activeKpi) {
-      if (kpiTitle) kpiTitle.textContent = kpiLabels[soKpiFilter] || 'Filtered Sales Orders';
-      if (kpiMeta) kpiMeta.textContent = `${list.length} order${list.length===1?'':'s'} shown below`;
-    }
+  if(sortValue==='date-asc') list.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  else if(sortValue==='amount-desc') list.sort((a,b)=>(parseFloat(b.total)||0)-(parseFloat(a.total)||0));
+  else if(sortValue==='amount-asc') list.sort((a,b)=>(parseFloat(a.total)||0)-(parseFloat(b.total)||0));
+  else list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+
+  const countEl=document.getElementById('so-register-count');
+  if(countEl)countEl.textContent=`${list.length} order${list.length===1?'':'s'}`;
+
+  // Active filter highlighting.
+  document.querySelectorAll('#page-salesorders .so-kpi').forEach(el=>{
+    const key=el.dataset.kpiFilter||'';
+    const active=(soKpiFilter==='none'&&key==='all') || (soKpiFilter===key);
+    el.classList.toggle('active',active);
+    el.setAttribute('aria-pressed',active?'true':'false');
+  });
+  updateSOOverviewTint();
+  const clearBtn=document.getElementById('so-clear-filters-btn');
+  const hasFilters=!!(customerFilter||search||soDateFilter.mode!=='all'||sortValue!=='date-desc'||soKpiFilter!=='none'||soFilter!=='all');
+  if(clearBtn){
+    clearBtn.classList.toggle('active',hasFilters);
+    clearBtn.disabled=!hasFilters;
   }
 
-  list.sort((a,b)=>b.date.localeCompare(a.date));
+  const tbody=document.getElementById('so-register-tbody');
+  const soPages=Math.ceil(list.length/SO_PER_PAGE)||1;
+  if(soPage>soPages)soPage=1;
+  const slice=list.slice((soPage-1)*SO_PER_PAGE,soPage*SO_PER_PAGE);
 
-  const container = document.getElementById('so-list');
-  if (!list.length) {
-    container.innerHTML = soKpiFilter !== 'none' ? `<div class="empty-state"><i class="ti ti-filter-off"></i><strong>No matching sales orders</strong><p>There are no records for the selected KPI filter.</p></div>` : `<div class="empty-state"><i class="ti ti-shopping-cart"></i><strong>No sales orders yet</strong><p>Open a Won quotation and click "Create Sales Order" to get started.</p></div>`;
-    return;
+  if(tbody){
+    tbody.innerHTML=slice.length?slice.map(so=>{
+      const q=quotations.find(x=>x.id===so.quotationId);
+      const status=getSOStatus(so);
+      const rowStyle='font-size:14px!important;font-weight:400!important;color:#111827!important;line-height:1.35!important';
+      return `<tr class="so-register-row" tabindex="0" role="button" onclick="viewSO('${so.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewSO('${so.id}')}">
+        <td style="${rowStyle}">${escapeHtml(so.soNo||'—')}</td>
+        <td style="${rowStyle}">${fmtDate(so.date)}</td>
+        <td style="${rowStyle}">${escapeHtml(so.customer||'—')}</td>
+        <td style="${rowStyle}">${escapeHtml(so.poNo||'—')}</td>
+        <td style="${rowStyle}">${q?escapeHtml(q.qno):'—'}</td>
+        <td class="center" style="${rowStyle}">${(so.items||[]).length}</td>
+        <td class="right" style="${rowStyle}">${formatNumber(parseFloat(so.total)||0,2)}</td>
+        <td style="${rowStyle}"><span class="badge ${getSOBadgeClass(status)}">${status}</span></td>
+      </tr>`;
+    }).join(''):`<tr><td colspan="8"><div class="empty-state"><i class="ti ti-shopping-cart"></i><strong>No sales orders found</strong><p>Adjust the filters or create a Sales Order from an approved quotation.</p></div></td></tr>`;
   }
 
-  container.innerHTML = list.map(so => {
-    const st = so._status;
-    const badgeCls = getSOBadgeClass(st);
-    const totalPaid = (so.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
-    const outstanding = so.total - totalPaid;
-    const q = quotations.find(x=>x.id===so.quotationId);
-
-    // Compact pipeline as step pills
-    const steps = [
-      {s:'Confirmed',          icon:'ti-shopping-cart'},
-      {s:'Out for Delivery',   icon:'ti-truck'},
-      {s:'Partially Delivered',icon:'ti-package'},
-      {s:'Delivered',          icon:'ti-circle-check'},
-      {s:'Invoiced',           icon:'ti-file-invoice'},
-      {s:'Paid',               icon:'ti-cash'},
-    ];
-    const stOrder = ['Confirmed','Out for Delivery','Partially Delivered','Delivered','Invoiced','Partially Paid','Paid'];
-    const curIdx = stOrder.indexOf(st);
-    const pillsHtml = steps.map(step => {
-      const sIdx = stOrder.indexOf(step.s);
-      const done = sIdx < curIdx || (step.s==='Paid' && st==='Paid');
-      const active = step.s === st || (step.s==='Paid' && st==='Partially Paid');
-      const col = done ? 'var(--green)' : active ? 'var(--blue)' : 'var(--border)';
-      const tcol = done||active ? '#fff' : 'var(--gray)';
-      return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:10px;font-size:10px;font-weight:600;background:${col};color:${tcol};white-space:nowrap"><i class="ti ${step.icon}" style="font-size:10px"></i>${step.s}</span>`;
-    }).join('<span style="color:var(--border);font-size:10px;margin:0 2px">›</span>');
-
-    // Item-level delivery summary for partial states
-    let itemDeliveryNote = '';
-    if (['Out for Delivery','Partially Delivered'].includes(st)) {
-      const confirmedQty = {};
-      (so.deliveries||[]).filter(d=>d.customerConfirmed).forEach(d=>{
-        (d.items||[]).forEach(it=>{ const idx=it.origIdx!==undefined?it.origIdx:it.soIdx; confirmedQty[idx]=(confirmedQty[idx]||0)+(parseFloat(it.qty)||0); });
-      });
-      const fullyDeliveredCount = (so.items||[]).filter((it,i)=>{
-        const ordered = parseFloat(it.qty)||0;
-        return ordered>0 && (confirmedQty[i]||0) >= ordered - 0.001;
-      }).length;
-      const totalItemCount = (so.items||[]).length;
-      itemDeliveryNote = `<span style="font-size:11px;font-weight:600;color:#b45309;background:#fff8f0;border:1px solid #fcd4a8;border-radius:10px;padding:2px 9px">📦 ${fullyDeliveredCount}/${totalItemCount} items delivered</span>`;
-    }
-
-    return `<div class="so-card" onclick="viewSO('${so.id}')" style="padding:10px 14px;margin-bottom:6px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-        <span class="so-no" style="font-size:15px;font-weight:800">${so.soNo}</span>
-        <span class="badge ${badgeCls}" style="font-size:12px;padding:4px 12px;font-weight:600">${st}</span>
-        <span style="font-size:12px;font-weight:600;color:var(--blue)">${so.customer}</span>
-        <span style="font-size:11px;color:var(--gray)">PO: ${so.poNo||'—'}</span>
-        <span style="margin-left:auto;font-size:13px;font-weight:700;color:var(--blue)">${fmt(so.total)}</span>
-        ${itemDeliveryNote}
-        ${outstanding>0.01?`<span style="font-size:11px;font-weight:600;color:var(--red)">Outstanding: ${fmt(outstanding)}</span>`:'<span style="font-size:11px;color:var(--green);font-weight:600">✓ Fully paid</span>'}
-      </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        ${pillsHtml}
-        <span style="margin-left:auto;font-size:11px;color:var(--gray)">${fmtDate(so.date)} · Ref: ${q?q.qno:'—'}</span>
-      </div>
-    </div>`;
-  }).join('');
+  document.querySelectorAll('.rows-per-page-select').forEach(el=>{if(el.value!==String(SO_PER_PAGE))el.value=String(SO_PER_PAGE)});
+  const sop=document.getElementById('so-pagination');
+  if(sop)sop.innerHTML=buildPaginationHTML(soPage,soPages,'goSOPage');
 }
+function goSOPage(p){soPage=p;renderSOPage();}
 
 /* ── Open Create SO modal ── */
 function openCreateSO(quotationId) {
@@ -8584,9 +9280,9 @@ function printQuotationBilingual(id) {
 ══════════════════════════════════════════════════ */
 const TOPBAR_CONTEXT={
   Dashboard:{group:'',action:null},
-  RFQs:{group:'Sales',action:{label:'New RFQ',icon:'ti-plus',run:()=>openNewRFQ()}},
+  RFQs:{group:'Sales',action:null},
   Pricing:{group:'Sales',action:null},
-  Quotations:{group:'Sales',action:{label:'New Quotation',icon:'ti-plus',run:()=>openQuotationWorkflowDialog()}},
+  Quotations:{group:'Sales',action:null},
   'Sales Orders':{group:'Sales',action:null},'Delivery Notes':{group:'Sales',action:null},Invoices:{group:'Sales',action:null},
   'Supplier RFQs':{group:'Purchasing',action:null},'Purchase Orders':{group:'Purchasing',action:null},'Purchase Invoices':{group:'Purchasing',action:null},
   'Master Data':{group:'',action:null},Customers:{group:'Master Data',action:{label:'New Customer',icon:'ti-plus',run:()=>openAddCustomer()}},Suppliers:{group:'Master Data',action:{label:'New Supplier',icon:'ti-plus',run:()=>openAddSupplier()}},Products:{group:'Master Data',action:{label:'New Product',icon:'ti-plus',run:()=>openAddProduct()}},Employees:{group:'Master Data',action:{label:'New Employee',icon:'ti-user-plus',run:()=>openEmployeeForm()}},'Units of Measure':{group:'Master Data',action:null},
@@ -8958,6 +9654,9 @@ document.addEventListener('DOMContentLoaded',initialiseWorkspaceControls);
     document.body.appendChild(wrap); safeDialog=wrap;
     setTimeout(()=>actions.lastElementChild?.focus(),20);
   }
+  window.bizcoreShowSafeDialog=showSafeDialog;
+  window.bizcorePerformClose=performClose;
+
   function findSaveButton(root){
     return [...root.querySelectorAll('.modal-footer button, button')].find(btn=>{
       const t=(btn.textContent||'').trim().toLowerCase();
@@ -9006,7 +9705,9 @@ document.addEventListener('DOMContentLoaded',initialiseWorkspaceControls);
     const btn=e.target.closest('button'); if(!btn)return;
     const text=(btn.textContent||'').trim().toLowerCase();
     if(btn.classList.contains('close-btn') || text==='cancel' || text==='close'){
-      e.preventDefault();e.stopImmediatePropagation();requestClose(root.id);
+      e.preventDefault();e.stopImmediatePropagation();
+      if(root.id==='rfq-modal' && typeof window.confirmCancelRFQEntry==='function') window.confirmCancelRFQEntry();
+      else requestClose(root.id);
     }
   },true);
   document.addEventListener('keydown',e=>{
@@ -9022,7 +9723,11 @@ document.addEventListener('DOMContentLoaded',initialiseWorkspaceControls);
       (supplierDD && supplierDD.classList.contains('open'));
     if(pricingDropdownOpen && e.target.closest?.('#pricing-modal')) return;
     const root=[...document.querySelectorAll('.modal-overlay')].reverse().find(x=>ENTRY_MODAL_IDS.has(x.id)&&isOpen(x));
-    if(root){e.preventDefault();e.stopImmediatePropagation();requestClose(root.id);}
+    if(root){
+      e.preventDefault();e.stopImmediatePropagation();
+      if(root.id==='rfq-modal' && typeof window.confirmCancelRFQEntry==='function') window.confirmCancelRFQEntry();
+      else requestClose(root.id);
+    }
   },true);
   window.addEventListener('beforeunload',e=>{
     const dirty=[...states.values()].some(s=>s.dirty);

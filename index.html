@@ -8,9 +8,9 @@
 <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABEUlEQVR4nGNgGAWjYIABIzmavtRo/Ufm87RcI8scshzwqUrjPzZxvrYbZDmChVQN//9jtZ9sMAQd8G+gHTDQIfBvoB1ASgho1T9AUXytUQEjpzCR7IB//7BidKBRffv/vz+/GZCxRvVtDNfTLAT+/flDlLph7IC/NHLAPyLLAbJDQCr/CooNzybqoKRcakcBSi6QyDr3/9/vXwzIWCLrHIqN////x4qxOQAbRgcoIfD/z2+CLqZpGvj3+xdhB2DJ81gdQIRnMBxA1RAgJxES42pi6wKyHPCfmCigaRogJgpoWQ5QNQSIdABG9cjjvhjFhi87YzHU3EoQRFGjtuA91gYpj9siVLN2xZHdeh4FwxcAACb84Rmry2tMAAAAAElFTkSuQmCC">
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css" rel="stylesheet"/>
-<link href="css/bizcore-design.css" rel="stylesheet"/>
-<link href="css/typography.css" rel="stylesheet"/>
+<link href="css/main.css?v=70f" rel="stylesheet"/>
+<link href="css/bizcore-design.css?v=35" rel="stylesheet"/>
+<link href="css/typography.css?v=35" rel="stylesheet"/>
 <link href="css/masters.css" rel="stylesheet"/>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
@@ -175,59 +175,106 @@ document.addEventListener('error', function(e) {
 </div>
 <!-- QUOTATIONS -->
 <div class="page" id="page-quotations">
-<div class="quotation-main-workspace">
-<aside aria-label="Quotation Monitor" class="quotation-main-monitor">
-  <div class="quotation-monitor-head"><div><strong>Quotation Monitor</strong><span>Sales quotation overview</span></div></div>
-  <div class="quotation-monitor-items">
-    <button class="quotation-monitor-item all active" type="button" onclick="setQuotationMonitorFilter('',this)"><span class="quotation-monitor-icon"><i class="ti ti-files"></i></span><span><small>All quotations</small><strong id="quote-kpi-all">0</strong></span><i class="ti ti-chevron-right"></i></button>
-    <button class="quotation-monitor-item draft" type="button" onclick="setQuotationMonitorFilter('Draft',this)"><span class="quotation-monitor-icon"><i class="ti ti-file-pencil"></i></span><span><small>Draft</small><strong id="quote-kpi-draft">0</strong></span><i class="ti ti-chevron-right"></i></button>
-    <button class="quotation-monitor-item sent" type="button" onclick="setQuotationMonitorFilter('Sent',this)"><span class="quotation-monitor-icon"><i class="ti ti-send"></i></span><span><small>Sent</small><strong id="quote-kpi-sent">0</strong></span><i class="ti ti-chevron-right"></i></button>
-    <button class="quotation-monitor-item won" type="button" onclick="setQuotationMonitorFilter('Won',this)"><span class="quotation-monitor-icon"><i class="ti ti-trophy"></i></span><span><small>Won</small><strong id="quote-kpi-won">0</strong></span><i class="ti ti-chevron-right"></i></button>
-    <button class="quotation-monitor-item lost" type="button" onclick="setQuotationMonitorFilter('Lost',this)"><span class="quotation-monitor-icon"><i class="ti ti-circle-x"></i></span><span><small>Lost</small><strong id="quote-kpi-lost">0</strong></span><i class="ti ti-chevron-right"></i></button>
-    <button class="quotation-monitor-item expired" type="button" onclick="setQuotationMonitorFilter('Expired',this)"><span class="quotation-monitor-icon"><i class="ti ti-clock-exclamation"></i></span><span><small>Expired</small><strong id="quote-kpi-expired">0</strong></span><i class="ti ti-chevron-right"></i></button>
+  <div class="quotation-page-header document-page-header" aria-label="Quotation page header">
+    <div class="quotation-page-heading">
+      <h2>Quotations</h2>
+      <span>Sales quotation register and conversion status</span>
+    </div>
+    <div class="document-page-actions quotation-page-actions">
+      <button class="btn btn-secondary page-recycle-action" onclick="openRecycleBin()" title="Open quotation Recycle Bin" type="button"><i class="ti ti-trash"></i><span>Recycle Bin</span></button>
+      <button class="btn btn-primary quotation-page-new-btn" onclick="openQuotationWorkflowDialog()" type="button"><i class="ti ti-plus"></i><span>New Quotation</span></button>
+    </div>
   </div>
-</aside>
-<div class="card quotation-register-card">
-<div class="card-header page-command-header">
-<h3>All quotations</h3>
-<span id="q-count" class="quotation-count"></span>
-<button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="openRecycleBin()" title="View deleted draft quotations"><i class="ti ti-trash"></i> Recycle Bin</button>
-</div>
-<div class="card-body" style="padding:14px 16px 0">
-<div aria-label="Quotation filters" class="filter-bar page-filter-bar page-control-bar" role="toolbar">
-<input id="search-input" oninput="renderTable()" placeholder="Search Q No, customer, ref, product, description…" style="width:320px" type="text"/>
-<select id="filter-status" onchange="renderTable()">
-<option value="">All statuses</option>
-<option>Draft</option><option>Sent</option><option>Won</option><option>Lost</option><option>Expired</option><option>Revised</option><option>Cancelled</option>
-</select>
-<select id="filter-customer" onchange="renderTable()"><option value="">All customers</option></select>
-<select id="filter-sort" onchange="renderTable()">
-<option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option>
-<option value="amount-desc">Highest amount</option><option value="amount-asc">Lowest amount</option>
-</select>
-<div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap">
-<span style="font-size:11px;color:var(--gray);white-space:nowrap">From</span>
-<input id="filter-date-from" onchange="renderTable()" style="width:136px" type="date"/>
-<span style="font-size:11px;color:var(--gray)">To</span>
-<input id="filter-date-to" onchange="renderTable()" style="width:136px" type="date"/>
-<button class="btn btn-secondary btn-sm" id="date-clear-btn" onclick="clearDateFilter()" style="display:none;padding:4px 8px" title="Clear date filter"><i class="ti ti-x"></i></button>
-</div>
-<div style="display:flex;gap:6px;flex-wrap:nowrap">
-<button class="btn btn-secondary btn-sm" onclick="setDatePreset('thismonth')">This month</button>
-<button class="btn btn-secondary btn-sm" onclick="setDatePreset('lastmonth')">Last month</button>
-<button class="btn btn-secondary btn-sm" onclick="setDatePreset('last3')">Last 3 months</button>
-</div>
-</div>
-</div>
-<div style="overflow-x:auto">
-<table id="quotes-table">
-<thead><tr><th>Q No</th><th class="mob-hide">Date</th><th>Customer</th><th class="mob-hide">Reference</th><th class="mob-hide">Items</th><th class="right">Net Amount</th><th>Status</th><th class="mob-hide">Sales Orders</th><th class="mob-hide">Valid until</th></tr></thead>
-<tbody id="quotes-tbody"></tbody>
-</table>
-</div>
-<div style="padding:8px 16px"><div class="pagination" id="pagination"></div></div>
-</div>
-</div>
+
+  <div class="quotation-register-toolbar page-toolbar page-toolbar--sticky page-control-bar" aria-label="Quotation filters" role="toolbar">
+    <div class="quotation-toolbar-left">
+      <select id="filter-sort" onchange="renderTable()" aria-label="Sort quotations">
+        <option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option>
+        <option value="amount-desc">Highest amount</option><option value="amount-asc">Lowest amount</option>
+      </select>
+      <span id="q-count" class="quotation-count quotation-toolbar-count"></span>
+      <select id="filter-status" onchange="currentPage=1;renderTable()" aria-hidden="true" tabindex="-1" style="display:none">
+        <option value="">All statuses</option>
+        <option>Draft</option><option>Sent</option><option>Won</option><option>Lost</option><option>Expired</option><option>Revised</option><option>Cancelled</option>
+      </select>
+    </div>
+    <div class="quotation-toolbar-right">
+      <select id="filter-customer" onchange="currentPage=1;renderTable()"><option value="">All customers</option></select>
+      <div class="quotation-date-filter-wrap">
+        <button class="quotation-date-filter-btn" id="quotation-date-filter-btn" type="button" onclick="toggleQuotationDateMenu(event)" aria-haspopup="true" aria-expanded="false">
+          <i class="ti ti-calendar"></i><span id="quotation-date-filter-label">All Dates</span><i class="ti ti-chevron-down quotation-date-chevron"></i>
+        </button>
+        <div class="quotation-date-menu" id="quotation-date-menu" onclick="event.stopPropagation()">
+          <div class="quotation-date-menu-title">Quotation Date</div>
+          <button class="quotation-date-preset active" data-preset="all" type="button" onclick="setQuotationDatePreset('all')">All Dates</button>
+          <button class="quotation-date-preset" data-preset="today" type="button" onclick="setQuotationDatePreset('today')">Today</button>
+          <button class="quotation-date-preset" data-preset="week" type="button" onclick="setQuotationDatePreset('week')">This Week</button>
+          <button class="quotation-date-preset" data-preset="month" type="button" onclick="setQuotationDatePreset('month')">This Month</button>
+          <button class="quotation-date-preset" data-preset="lastmonth" type="button" onclick="setQuotationDatePreset('lastmonth')">Last Month</button>
+          <button class="quotation-date-preset" data-preset="30days" type="button" onclick="setQuotationDatePreset('30days')">Last 30 Days</button>
+          <button class="quotation-date-preset" data-preset="last3months" type="button" onclick="setQuotationDatePreset('last3months')">Last 3 Months</button>
+          <div class="quotation-date-custom">
+            <div class="quotation-date-custom-title">Custom Range</div>
+            <label>From<input id="filter-date-from" type="date" onchange="markQuotationDateCustom()"/></label>
+            <label>To<input id="filter-date-to" type="date" onchange="markQuotationDateCustom()"/></label>
+            <div class="quotation-date-custom-actions">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="clearQuotationDateFilter()">Clear</button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="applyQuotationCustomDate()">Apply</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <input id="search-input" class="rfq-search" oninput="currentPage=1;renderTable()" placeholder="Search quotation, customer, reference or item…" type="text"/>
+      <button class="btn btn-secondary btn-sm register-clear-filters quotation-clear-filters-btn" id="quotation-clear-filters-btn" onclick="clearAllQuotationFilters()" title="Clear all quotation filters" type="button" disabled aria-disabled="true"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
+    </div>
+  </div>
+
+  <div class="quotation-main-workspace module-main-workspace" id="quotation-main-workspace" data-module-monitor="quotations">
+    <aside aria-label="Quotation Overview" class="quotation-main-monitor module-monitor">
+      <div class="module-monitor-head quotation-overview-head">
+        <div><strong>Quotation Overview</strong><span>Sales quotation status</span></div>
+        <button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('quotations')" aria-label="Collapse Quotation Overview" title="Collapse SO Overview"><i class="ti ti-chevron-left"></i></button>
+      </div>
+      <div class="quotation-overview-body module-monitor-body">
+        <div class="quotation-overview-total">
+          <button class="quotation-overview-total-btn active" data-overview-key="all" type="button" onclick="setQuotationMonitorFilter('',this)">
+            <span>Total Quotations</span><strong id="quote-kpi-all">0</strong>
+          </button>
+        </div>
+        <div class="quotation-overview-status">
+          <div class="quotation-overview-section-label">Status</div>
+          <button class="quotation-monitor-item quotation-overview-row draft" data-overview-key="Draft" type="button" onclick="setQuotationMonitorFilter('Draft',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-draft"></i>Draft</span><strong id="quote-kpi-draft">0</strong></button>
+          <button class="quotation-monitor-item quotation-overview-row sent" data-overview-key="Sent" type="button" onclick="setQuotationMonitorFilter('Sent',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-sent"></i>Sent</span><strong id="quote-kpi-sent">0</strong></button>
+          <button class="quotation-monitor-item quotation-overview-row won" data-overview-key="Won" type="button" onclick="setQuotationMonitorFilter('Won',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-won"></i>Won</span><strong id="quote-kpi-won">0</strong></button>
+          <button class="quotation-monitor-item quotation-overview-row lost" data-overview-key="Lost" type="button" onclick="setQuotationMonitorFilter('Lost',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-lost"></i>Lost</span><strong id="quote-kpi-lost">0</strong></button>
+          <button class="quotation-monitor-item quotation-overview-row expired" data-overview-key="Expired" type="button" onclick="setQuotationMonitorFilter('Expired',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-expired"></i>Expired</span><strong id="quote-kpi-expired">0</strong></button>
+          <button class="quotation-monitor-item quotation-overview-row revised" data-overview-key="Revised" type="button" onclick="setQuotationMonitorFilter('Revised',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-revised"></i>Revised</span><strong id="quote-kpi-revised">0</strong></button>
+          <button class="quotation-monitor-item quotation-overview-row cancelled" data-overview-key="Cancelled" type="button" onclick="setQuotationMonitorFilter('Cancelled',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-cancelled"></i>Cancelled</span><strong id="quote-kpi-cancelled">0</strong></button>
+        </div>
+        <div class="quotation-overview-performance">
+          <div class="quotation-overview-section-label">Performance</div>
+          <div class="quotation-overview-metric"><span>Win Rate</span><strong id="quote-kpi-winrate">—</strong></div>
+          <div class="quotation-overview-metric"><span>Avg Quotation Value</span><strong id="quote-kpi-avgvalue">—</strong></div>
+        </div>
+      </div>
+    </aside>
+    <button class="module-monitor-rail" type="button" onclick="toggleModuleMonitor('quotations')" aria-label="Expand Quotation Overview" title="Expand Quotation Overview"><i class="ti ti-layout-sidebar-left-expand"></i><span>Quotation</span></button>
+
+    <div class="quotation-register-area module-register-area">
+      <div class="card quotation-register-card">
+        <div class="list-table-scroll quotation-table-scroll">
+          <table id="quotes-table">
+            <thead><tr><th>Q No</th><th class="mob-hide">Date</th><th>Customer</th><th class="mob-hide">Reference</th><th class="mob-hide">Items</th><th class="right">Net Amount</th><th>Status</th><th class="mob-hide">Sales Orders</th><th class="mob-hide">Valid until</th></tr></thead>
+            <tbody id="quotes-tbody"></tbody>
+          </table>
+        </div>
+        <div class="quotation-pagination-wrap rows-per-page-bar"><label class="rows-per-page-label">Rows per page
+            <select class="rows-per-page-select" onchange="setRowsPerPage(this.value)">
+              <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
+            </select></label><div class="pagination" id="pagination"></div></div>
+      </div>
+    </div>
+  </div>
 </div>
 <!-- CUSTOMERS -->
 <!-- ANALYTICS -->
@@ -252,7 +299,14 @@ document.addEventListener('error', function(e) {
 <!-- SUPPLIERS PAGE -->
 <!-- RFQ TRACKER PAGE -->
 <div class="page" id="page-rfq">
-<div aria-label="RFQ actions and filters" class="rfq-main-toolbar page-toolbar page-toolbar--sticky page-control-bar" role="toolbar">
+<div class="rfq-page-header document-page-header" aria-label="RFQ page header">
+  <div class="rfq-page-heading">
+    <h2>RFQs</h2>
+    <span>Request for quotation register</span>
+  </div>
+  <button class="btn btn-primary rfq-page-new-btn" onclick="openNewRFQ()" type="button"><i class="ti ti-plus"></i><span>New RFQ</span></button>
+</div>
+<div aria-label="RFQ filters" class="rfq-main-toolbar page-toolbar page-toolbar--sticky page-control-bar" role="toolbar">
 <div class="rfq-filter-group">
 <button class="dash-period-btn active" id="rfq-f-all" onclick="filterRFQ('all',this)">All <span id="rfq-cnt-all"></span></button>
 <button class="dash-period-btn" id="rfq-f-new" onclick="filterRFQ('New',this)">New <span id="rfq-cnt-new"></span></button>
@@ -262,23 +316,63 @@ document.addEventListener('error', function(e) {
 <button class="dash-period-btn" id="rfq-f-overdue" onclick="filterRFQ('Overdue',this)" style="color:var(--red)">Overdue <span id="rfq-cnt-overdue"></span></button>
 </div>
 <div class="rfq-toolbar-actions">
-<input class="rfq-search" id="rfq-search" oninput="renderRFQPage()" placeholder="Search RFQ, customer or reference…" type="text"/>
-<button class="btn btn-primary btn-sm" onclick="openNewRFQ()"><i class="ti ti-plus"></i>New RFQ</button>
+<div class="rfq-date-filter-wrap">
+<button class="rfq-date-filter-btn" id="rfq-date-filter-btn" type="button" onclick="toggleRFQDateMenu(event)" aria-haspopup="true" aria-expanded="false">
+<i class="ti ti-calendar"></i><span id="rfq-date-filter-label">All Dates</span><i class="ti ti-chevron-down rfq-date-chevron"></i>
+</button>
+<div class="rfq-date-menu" id="rfq-date-menu" onclick="event.stopPropagation()">
+<div class="rfq-date-menu-title">RFQ Date</div>
+<button class="rfq-date-preset active" data-preset="all" type="button" onclick="setRFQDatePreset('all')">All Dates</button>
+<button class="rfq-date-preset" data-preset="today" type="button" onclick="setRFQDatePreset('today')">Today</button>
+<button class="rfq-date-preset" data-preset="week" type="button" onclick="setRFQDatePreset('week')">This Week</button>
+<button class="rfq-date-preset" data-preset="month" type="button" onclick="setRFQDatePreset('month')">This Month</button>
+<button class="rfq-date-preset" data-preset="lastmonth" type="button" onclick="setRFQDatePreset('lastmonth')">Last Month</button>
+<button class="rfq-date-preset" data-preset="30days" type="button" onclick="setRFQDatePreset('30days')">Last 30 Days</button>
+<button class="rfq-date-preset" data-preset="last3months" type="button" onclick="setRFQDatePreset('last3months')">Last 3 Months</button>
+<div class="rfq-date-custom">
+<div class="rfq-date-custom-title">Custom Range</div>
+<label>From<input id="rfq-date-from" type="date"/></label>
+<label>To<input id="rfq-date-to" type="date"/></label>
+<div class="rfq-date-custom-actions">
+<button type="button" class="btn btn-ghost btn-sm" onclick="clearRFQDateFilter()">Clear</button>
+<button type="button" class="btn btn-primary btn-sm" onclick="applyRFQCustomDate()">Apply</button>
 </div>
 </div>
-<div class="rfq-main-workspace" id="rfq-main-workspace">
-<aside aria-label="RFQ Monitor" class="rfq-main-monitor" id="rfq-main-monitor">
+</div>
+</div>
+<input class="rfq-search" id="rfq-search" oninput="rfqPage=1;renderRFQPage()" placeholder="Search RFQ, customer or reference…" type="text"/>
+<button class="btn btn-secondary btn-sm register-clear-filters" id="rfq-clear-filters-btn" onclick="clearAllRFQFilters()" type="button" title="Clear all RFQ filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
+</div>
+</div>
+<div class="rfq-main-workspace module-main-workspace" id="rfq-main-workspace" data-module-monitor="rfq">
+<aside aria-label="RFQ Overview" class="rfq-main-monitor module-monitor" id="rfq-main-monitor">
+<div class="rfq-overview-sticky">
 <div class="rfq-main-monitor-head">
-<div><strong>RFQ Monitor</strong><span>Sales response overview</span></div>
-<button aria-label="Collapse RFQ Monitor" class="rfq-monitor-collapse" onclick="toggleRFQMainMonitor()" title="Collapse monitor" type="button"><i class="ti ti-chevron-left"></i></button>
+<div><strong>RFQ Overview</strong><span>Current RFQ status</span></div>
+<button aria-label="Collapse RFQ Monitor" class="rfq-monitor-collapse" onclick="toggleRFQMainMonitor()" title="Collapse SO Overview" type="button"><i class="ti ti-chevron-left"></i></button>
 </div>
-<div class="rfq-main-monitor-items">
-<button class="rfq-main-monitor-item open" onclick="applyRFQMonitorFilter('Open',this)" type="button"><span class="rfq-main-monitor-icon"><i class="ti ti-folder-open"></i></span><span><small>Open RFQs</small><strong id="rfq-k-open">0</strong></span><i class="ti ti-chevron-right"></i></button>
-<button class="rfq-main-monitor-item overdue" onclick="applyRFQMonitorFilter('Overdue',this)" type="button"><span class="rfq-main-monitor-icon"><i class="ti ti-alert-triangle"></i></span><span><small>Overdue</small><strong id="rfq-k-overdue">0</strong></span><i class="ti ti-chevron-right"></i></button>
-<button class="rfq-main-monitor-item pricing" onclick="applyRFQMonitorFilter('Pricing',this)" type="button"><span class="rfq-main-monitor-icon"><i class="ti ti-calculator"></i></span><span><small>Waiting Pricing</small><strong id="rfq-k-pricing">0</strong></span><i class="ti ti-chevron-right"></i></button>
-<button class="rfq-main-monitor-item quoted" onclick="applyRFQMonitorFilter('Quoted',this)" type="button"><span class="rfq-main-monitor-icon"><i class="ti ti-file-check"></i></span><span><small>Closed — Quoted</small><strong id="rfq-k-quoted">0</strong></span><i class="ti ti-chevron-right"></i></button>
-<button class="rfq-main-monitor-item nobid" onclick="applyRFQMonitorFilter('No Bid',this)" type="button"><span class="rfq-main-monitor-icon"><i class="ti ti-circle-off"></i></span><span><small>Closed — No Bid</small><strong id="rfq-k-nobid">0</strong></span><i class="ti ti-chevron-right"></i></button>
-<button class="rfq-main-monitor-item age" onclick="applyRFQMonitorFilter('Open',this)" type="button"><span class="rfq-main-monitor-icon"><i class="ti ti-calendar-time"></i></span><span><small>Average Open Age</small><strong id="rfq-k-avg">—</strong></span><i class="ti ti-chevron-right"></i></button>
+<div class="rfq-monitor-pro-summary">
+<div class="rfq-monitor-section-label">Summary</div>
+<div class="rfq-monitor-summary-cards">
+<button class="rfq-monitor-summary-card total" data-rfq-monitor-filter="all" onclick="applyRFQMonitorFilter('all',this)" type="button" aria-label="Show all RFQs">
+<span class="rfq-monitor-summary-title">Total RFQs</span><strong id="rfq-k-total">0</strong>
+</button>
+<button class="rfq-monitor-summary-card open" data-rfq-monitor-filter="Open" onclick="applyRFQMonitorFilter('Open',this)" type="button" aria-label="Show open RFQs">
+<span class="rfq-monitor-summary-title">Open RFQs</span><strong id="rfq-k-open">0</strong>
+</button>
+</div>
+<div class="rfq-monitor-pro-list">
+<div class="rfq-monitor-section-label rfq-monitor-status-label">Status</div>
+<button class="rfq-main-monitor-item pricing rfq-monitor-pro-row" data-rfq-monitor-filter="Pricing" onclick="applyRFQMonitorFilter('Pricing',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-pricing"></i>Waiting Pricing</span><strong id="rfq-k-pricing">0</strong></button>
+<button class="rfq-main-monitor-item quoted rfq-monitor-pro-row" data-rfq-monitor-filter="Quoted" onclick="applyRFQMonitorFilter('Quoted',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-quoted"></i>Quoted / Sales Order</span><strong id="rfq-k-quoted">0</strong></button>
+<button class="rfq-main-monitor-item nobid rfq-monitor-pro-row" data-rfq-monitor-filter="No Bid" onclick="applyRFQMonitorFilter('No Bid',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-nobid"></i>No Bid</span><strong id="rfq-k-nobid">0</strong></button>
+<button class="rfq-main-monitor-item overdue rfq-monitor-pro-row" data-rfq-monitor-filter="Overdue" onclick="applyRFQMonitorFilter('Overdue',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-overdue"></i>Overdue</span><strong id="rfq-k-overdue">0</strong></button>
+</div>
+<div class="rfq-monitor-section-label rfq-monitor-performance-label">Performance</div>
+<div class="rfq-monitor-pro-footer">
+<button class="rfq-main-monitor-item age rfq-monitor-age" onclick="applyRFQMonitorFilter('Open',this)" type="button"><span><small>Average Open Age</small><strong id="rfq-k-avg">—</strong></span><i class="ti ti-chevron-right"></i></button>
+</div>
+</div>
 </div>
 <div aria-label="RFQ workflow" class="rfq-workflow-card">
 <div class="rfq-workflow-head"><span>Workflow</span><small>RFQ response process</small></div>
@@ -291,103 +385,222 @@ document.addEventListener('error', function(e) {
 </div>
 </div>
 </aside>
-<button aria-label="Open RFQ Monitor" class="rfq-monitor-expand" id="rfq-monitor-expand" onclick="toggleRFQMainMonitor()" title="Open RFQ Monitor" type="button"><i class="ti ti-layout-sidebar-left-expand"></i><span>RFQ Monitor</span></button>
-<div class="rfq-register-area"><div id="rfq-list"></div></div>
+<button aria-label="Open RFQ Monitor" class="rfq-monitor-expand module-monitor-rail" id="rfq-monitor-expand" onclick="toggleRFQMainMonitor()" title="Open RFQ Monitor" type="button"><i class="ti ti-layout-sidebar-left-expand"></i><span>RFQ Overview</span></button>
+<div class="rfq-register-area"><div id="rfq-list"></div>
+  <div class="rows-per-page-bar" style="padding:8px 12px"><label class="rows-per-page-label">Rows per page
+    <select class="rows-per-page-select" onchange="setRowsPerPage(this.value)">
+      <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
+    </select></label><div class="pagination" id="rfq-pagination"></div></div>
+</div>
 </div>
 </div>
 <!-- PRICING DOCUMENTS PAGE -->
 <div class="page" id="page-costing">
-  <div class="pricing-register-toolbar page-toolbar page-toolbar--sticky page-control-bar">
+  <div class="pricing-page-header document-page-header" aria-label="Pricing page header">
+    <div class="pricing-page-heading">
+      <h2>Pricing</h2>
+      <span>Saved pricing documents and quotation conversion status</span>
+    </div>
+    <button class="btn btn-primary pricing-page-new-btn" onclick="openPricingSourceRFQs()" type="button" title="Select an RFQ to start pricing"><i class="ti ti-plus"></i><span>Start Pricing</span></button>
+  </div>
+  <div class="pricing-register-toolbar page-toolbar page-toolbar--sticky page-control-bar" aria-label="Pricing filters" role="toolbar">
     <div class="pricing-register-filters">
       <button class="dash-period-btn active" id="pricing-doc-f-all" onclick="filterPricingDocuments('all',this)">All <span id="pricing-doc-c-all"></span></button>
       <button class="dash-period-btn" id="pricing-doc-f-saved" onclick="filterPricingDocuments('Saved',this)">Saved <span id="pricing-doc-c-saved"></span></button>
       <button class="dash-period-btn" id="pricing-doc-f-converted" onclick="filterPricingDocuments('Converted',this)">Converted <span id="pricing-doc-c-converted"></span></button>
     </div>
-    <input class="rfq-search" id="pricing-doc-search" oninput="renderPricingDocuments()" placeholder="Search pricing no., RFQ, customer or quotation…" type="text"/>
+    <div class="pricing-toolbar-actions">
+      <div class="pricing-date-filter-wrap">
+        <button class="pricing-date-filter-btn" id="pricing-date-filter-btn" type="button" onclick="togglePricingDateMenu(event)" aria-haspopup="true" aria-expanded="false">
+          <i class="ti ti-calendar"></i><span id="pricing-date-filter-label">All Dates</span><i class="ti ti-chevron-down pricing-date-chevron"></i>
+        </button>
+        <div class="pricing-date-menu" id="pricing-date-menu" onclick="event.stopPropagation()">
+          <div class="pricing-date-menu-title">Updated Date</div>
+          <button class="pricing-date-preset active" data-preset="all" type="button" onclick="setPricingDatePreset('all')">All Dates</button>
+          <button class="pricing-date-preset" data-preset="today" type="button" onclick="setPricingDatePreset('today')">Today</button>
+          <button class="pricing-date-preset" data-preset="week" type="button" onclick="setPricingDatePreset('week')">This Week</button>
+          <button class="pricing-date-preset" data-preset="month" type="button" onclick="setPricingDatePreset('month')">This Month</button>
+          <button class="pricing-date-preset" data-preset="lastmonth" type="button" onclick="setPricingDatePreset('lastmonth')">Last Month</button>
+          <button class="pricing-date-preset" data-preset="30days" type="button" onclick="setPricingDatePreset('30days')">Last 30 Days</button>
+          <button class="pricing-date-preset" data-preset="last3months" type="button" onclick="setPricingDatePreset('last3months')">Last 3 Months</button>
+          <div class="pricing-date-custom">
+            <div class="pricing-date-custom-title">Custom Range</div>
+            <label>From<input id="pricing-date-from" type="date"/></label>
+            <label>To<input id="pricing-date-to" type="date"/></label>
+            <div class="pricing-date-custom-actions">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="clearPricingDateFilter()">Clear</button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="applyPricingCustomDate()">Apply</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <input class="rfq-search" id="pricing-doc-search" oninput="pricingDocPage=1;renderPricingDocuments()" placeholder="Search pricing no., RFQ, customer or quotation…" type="text"/>
+      <button class="btn btn-secondary btn-sm register-clear-filters" id="pricing-clear-filters-btn" onclick="clearAllPricingFilters()" type="button" title="Clear all Pricing filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
+    </div>
   </div>
-  <div class="pricing-register-kpis">
-    <div class="kpi-mini"><div><div class="km-label">Pricing documents</div><div class="km-val" id="pricing-doc-k-total">0</div></div><i class="ti ti-calculator"></i></div>
-    <div class="kpi-mini"><div><div class="km-label">Saved drafts</div><div class="km-val" id="pricing-doc-k-saved">0</div></div><i class="ti ti-device-floppy"></i></div>
-    <div class="kpi-mini"><div><div class="km-label">Converted</div><div class="km-val" id="pricing-doc-k-converted">0</div></div><i class="ti ti-file-check"></i></div>
-  </div>
-  <div class="card pricing-register-card">
-    <div class="card-header page-command-header"><div><h3>Pricing register</h3><p>Saved pricing documents and their quotation conversion status.</p></div></div>
-    <div class="pricing-register-table-wrap"><table class="pricing-register-table"><colgroup><col class="col-pricing-no"><col class="col-customer"><col class="col-version"><col class="col-updated"><col class="col-money"><col class="col-money"><col class="col-money"><col class="col-margin"><col class="col-status"><col class="col-quotation"><col class="col-action"></colgroup><thead><tr><th>Pricing No.</th><th>Customer</th><th class="center">Version</th><th>Updated</th><th class="right">Cost</th><th class="right">Selling</th><th class="right">Profit</th><th class="right">Margin %</th><th class="center">Status</th><th>Quotation</th><th class="center"></th></tr></thead><tbody id="pricing-doc-tbody"></tbody></table></div>
+  <div class="pricing-main-workspace module-main-workspace" id="pricing-main-workspace" data-module-monitor="pricing">
+    <aside class="pricing-main-monitor module-monitor" aria-label="Pricing Overview">
+      <div class="module-monitor-head"><div><strong>Pricing Overview</strong><span>Current pricing status</span></div><button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('pricing')" aria-label="Collapse Pricing Overview" title="Collapse SO Overview"><i class="ti ti-chevron-left"></i></button></div>
+      <div class="pricing-register-kpis module-monitor-body">
+        <button class="pricing-overview-row total" data-pricing-filter="all" data-overview-key="all" type="button" onclick="filterPricingDocuments('all',document.getElementById('pricing-doc-f-all'))"><span><i class="ti ti-calculator"></i>Pricing Documents</span><strong id="pricing-doc-k-total">0</strong></button>
+        <button class="pricing-overview-row saved" data-pricing-filter="Saved" data-overview-key="Saved" type="button" onclick="filterPricingDocuments('Saved',document.getElementById('pricing-doc-f-saved'))"><span><i class="ti ti-device-floppy"></i>Saved Drafts</span><strong id="pricing-doc-k-saved">0</strong></button>
+        <button class="pricing-overview-row converted" data-pricing-filter="Converted" data-overview-key="Converted" type="button" onclick="filterPricingDocuments('Converted',document.getElementById('pricing-doc-f-converted'))"><span><i class="ti ti-file-check"></i>Converted</span><strong id="pricing-doc-k-converted">0</strong></button>
+      </div>
+    </aside>
+    <button class="module-monitor-rail" type="button" onclick="toggleModuleMonitor('pricing')" aria-label="Expand Pricing Overview" title="Expand Pricing Overview"><i class="ti ti-layout-sidebar-left-expand"></i><span>Pricing</span></button>
+    <div class="pricing-register-area module-register-area">
+      <div class="card pricing-register-card">
+        <div class="pricing-register-table-wrap"><table class="pricing-register-table"><colgroup><col class="col-pricing-no"><col class="col-customer"><col class="col-version"><col class="col-updated"><col class="col-money"><col class="col-money"><col class="col-money"><col class="col-margin"><col class="col-status"><col class="col-quotation"></colgroup><thead><tr><th>Pricing No.</th><th>Customer</th><th class="center">Version</th><th>Updated</th><th class="right">Cost</th><th class="right">Selling</th><th class="right">Profit</th><th class="right">Margin %</th><th class="center">Status</th><th>Quotation</th></tr></thead><tbody id="pricing-doc-tbody"></tbody></table></div>
+        <div class="rows-per-page-bar" style="padding:8px 12px"><label class="rows-per-page-label">Rows per page
+          <select class="rows-per-page-select" onchange="setRowsPerPage(this.value)">
+            <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
+          </select></label><div class="pagination" id="pricing-doc-pagination"></div></div>
+      </div>
+    </div>
   </div>
 </div>
 <!-- SALES ORDERS PAGE -->
 <div class="page" id="page-salesorders">
-<!-- Sales Order KPIs -->
-<div class="so-kpi-grid">
-<div aria-pressed="false" class="so-kpi" data-kpi-filter="all" onclick="filterSOKPI('all',this)" onkeydown="handleSOKPIKey(event,'all',this)" role="button" style="--kpi-col:var(--blue)" tabindex="0" title="Show all sales orders">
-<div class="so-kpi-icon"><i class="ti ti-shopping-cart"></i></div>
-<div class="so-kpi-content"><div class="so-kpi-label">Total Orders</div><div class="so-kpi-value" id="so-k-total">0</div></div>
-</div>
-<div aria-pressed="false" class="so-kpi" data-kpi-filter="open" onclick="filterSOKPI('open',this)" onkeydown="handleSOKPIKey(event,'open',this)" role="button" style="--kpi-col:#d97706" tabindex="0" title="Show open sales orders">
-<div class="so-kpi-icon"><i class="ti ti-clock-hour-4"></i></div>
-<div class="so-kpi-content"><div class="so-kpi-label">Open Orders</div><div class="so-kpi-value" id="so-k-open">0</div></div>
-</div>
-<div aria-pressed="false" class="so-kpi" data-kpi-filter="ready" onclick="filterSOKPI('ready',this)" onkeydown="handleSOKPIKey(event,'ready',this)" role="button" style="--kpi-col:#7c3aed" tabindex="0" title="Show orders ready for delivery">
-<div class="so-kpi-icon"><i class="ti ti-package-export"></i></div>
-<div class="so-kpi-content"><div class="so-kpi-label">Ready for Delivery</div><div class="so-kpi-value" id="so-k-ready">0</div></div>
-</div>
-<div aria-pressed="false" class="so-kpi" data-kpi-filter="partial-delivery" onclick="filterSOKPI('partial-delivery',this)" onkeydown="handleSOKPIKey(event,'partial-delivery',this)" role="button" style="--kpi-col:#0891b2" tabindex="0" title="Show partially delivered orders">
-<div class="so-kpi-icon"><i class="ti ti-packages"></i></div>
-<div class="so-kpi-content"><div class="so-kpi-label">Partially Delivered</div><div class="so-kpi-value" id="so-k-partial-delivery">0</div></div>
-</div>
-<div aria-pressed="false" class="so-kpi" data-kpi-filter="pending-invoice" onclick="filterSOKPI('pending-invoice',this)" onkeydown="handleSOKPIKey(event,'pending-invoice',this)" role="button" style="--kpi-col:#b45309" tabindex="0" title="Show orders pending customer invoice">
-<div class="so-kpi-icon"><i class="ti ti-file-invoice"></i></div>
-<div class="so-kpi-content"><div class="so-kpi-label">Pending Invoice</div><div class="so-kpi-value" id="so-k-invoice">0</div></div>
-</div>
-<div aria-pressed="false" class="so-kpi" data-kpi-filter="all-value" onclick="filterSOKPI('all-value',this)" onkeydown="handleSOKPIKey(event,'all-value',this)" role="button" style="--kpi-col:var(--green)" tabindex="0" title="Show all orders included in total order value">
-<div class="so-kpi-icon"><i class="ti ti-report-money"></i></div>
-<div class="so-kpi-content"><div class="so-kpi-label">Total Order Value</div><div class="so-kpi-value amount" id="so-k-value">SAR 0.00</div></div>
-</div>
-<div aria-pressed="false" class="so-kpi" data-kpi-filter="receivables" onclick="filterSOKPI('receivables',this)" onkeydown="handleSOKPIKey(event,'receivables',this)" role="button" style="--kpi-col:#c2415d" tabindex="0" title="Show orders with outstanding receivables">
-<div class="so-kpi-icon"><i class="ti ti-cash-banknote"></i></div>
-<div class="so-kpi-content"><div class="so-kpi-label">Outstanding Receivables</div><div class="so-kpi-value amount" id="so-k-receivables">SAR 0.00</div></div>
-</div>
-</div>
-<div class="so-kpi-filter-summary" id="so-kpi-filter-summary">
-<div>
-<div class="so-kpi-filter-title" id="so-kpi-filter-title">All Sales Orders</div>
-<div class="so-kpi-filter-meta" id="so-kpi-filter-meta"></div>
-</div>
-<button class="so-kpi-clear" onclick="clearSOKPIFilter()" type="button"><i class="ti ti-x"></i> Clear KPI filter</button>
-</div>
-<!-- Filter bar -->
-<div aria-label="Sales order status filters" class="page-toolbar page-toolbar--filters so-status-toolbar page-control-bar" role="toolbar">
-<div style="display:flex;gap:7px;flex-wrap:wrap">
-<button class="so-filter-btn active" id="so-f-all" onclick="filterSO('all',this)"><i class="ti ti-list"></i>All <span class="cnt" id="so-cnt-all"></span></button>
-<button class="so-filter-btn pending-btn" id="so-f-pending" onclick="filterSO('pending',this)"><i class="ti ti-alert-circle"></i>Pending <span class="cnt" id="so-cnt-pending"></span></button>
-<button class="so-filter-btn" id="so-f-confirmed" onclick="filterSO('Confirmed',this)">Confirmed <span class="cnt" id="so-cnt-confirmed"></span></button>
-<button class="so-filter-btn" id="so-f-ofd" onclick="filterSO('Out for Delivery',this)">Out for Delivery <span class="cnt" id="so-cnt-ofd"></span></button>
-<button class="so-filter-btn" id="so-f-partdel" onclick="filterSO('Partially Delivered',this)">Partially Delivered <span class="cnt" id="so-cnt-partdel"></span></button>
-<button class="so-filter-btn" id="so-f-delivered" onclick="filterSO('Delivered',this)">Delivered <span class="cnt" id="so-cnt-delivered"></span></button>
-<button class="so-filter-btn" id="so-f-invoiced" onclick="filterSO('Invoiced',this)">Invoiced <span class="cnt" id="so-cnt-invoiced"></span></button>
-<button class="so-filter-btn" id="so-f-paid" onclick="filterSO('Paid',this)">Paid <span class="cnt" id="so-cnt-paid"></span></button>
-<button class="so-filter-btn" id="so-f-partial" onclick="filterSO('Partially Paid',this)">Partially Paid <span class="cnt" id="so-cnt-partial"></span></button>
-</div>
-<div style="display:flex;gap:8px;align-items:center">
-<input id="so-search" oninput="renderSOPage()" placeholder="Search SO No, customer, PO No…" style="height:34px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;outline:none;width:240px" type="text"/>
-</div>
-</div>
-<!-- Date filter row -->
-<div aria-label="Sales order date filters" class="page-toolbar page-toolbar--subtle so-date-toolbar page-control-bar" role="toolbar">
-<span style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.03em;margin-right:2px"><i class="ti ti-calendar" style="margin-right:4px"></i>Date</span>
-<button class="so-filter-btn active" id="so-d-all" onclick="filterSODate('all',this)" style="padding:5px 12px;font-size:11px">All time</button>
-<button class="so-filter-btn" id="so-d-today" onclick="filterSODate('today',this)" style="padding:5px 12px;font-size:11px">Today</button>
-<button class="so-filter-btn" id="so-d-week" onclick="filterSODate('week',this)" style="padding:5px 12px;font-size:11px">This week</button>
-<button class="so-filter-btn" id="so-d-month" onclick="filterSODate('month',this)" style="padding:5px 12px;font-size:11px">This month</button>
-<button class="so-filter-btn" id="so-d-year" onclick="filterSODate('year',this)" style="padding:5px 12px;font-size:11px">This year</button>
-<span style="width:1px;height:20px;background:var(--border);margin:0 2px"></span>
-<input id="so-d-from" onchange="filterSODate('custom')" style="height:30px;border:1px solid var(--border);border-radius:var(--radius);padding:0 8px;font-size:11px;outline:none" type="date"/>
-<span style="font-size:11px;color:var(--gray)">to</span>
-<input id="so-d-to" onchange="filterSODate('custom')" style="height:30px;border:1px solid var(--border);border-radius:var(--radius);padding:0 8px;font-size:11px;outline:none" type="date"/>
-<button class="btn btn-secondary btn-sm" onclick="clearSODateFilter()" style="padding:5px 10px;font-size:11px"><i class="ti ti-x"></i>Clear</button>
-<span id="so-date-summary" style="margin-left:auto;font-size:11px;color:var(--blue);font-weight:600"></span>
-</div>
-<div id="so-list"></div>
+  <div class="salesorders-page-header document-page-header" aria-label="Sales Orders page header">
+    <div class="salesorders-page-heading document-page-heading">
+      <h2>Sales Orders</h2>
+      <span>Confirmed customer orders, fulfilment and invoicing status</span>
+    </div>
+    <div class="document-page-actions">
+      <button class="btn btn-primary" onclick="showPage('quotations')" type="button" title="Sales Orders are created from approved quotations">
+        <i class="ti ti-file-arrow-right"></i><span>Create from Quotation</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="so-register-toolbar page-toolbar page-toolbar--sticky page-control-bar" role="toolbar" aria-label="Sales Order filters">
+    <div class="so-toolbar-left">
+      <select id="so-sort" onchange="soPage=1;renderSOPage()" aria-label="Sort Sales Orders">
+        <option value="date-desc">Newest first</option>
+        <option value="date-asc">Oldest first</option>
+        <option value="amount-desc">Highest amount</option>
+        <option value="amount-asc">Lowest amount</option>
+      </select>
+      <span id="so-register-count" class="so-toolbar-count"></span>
+    </div>
+    <div class="so-toolbar-right">
+      <select id="so-customer-filter" onchange="soPage=1;renderSOPage()" aria-label="Filter Sales Orders by customer">
+        <option value="">All customers</option>
+      </select>
+      <select id="so-date-preset" onchange="filterSODate(this.value)" aria-label="Filter Sales Orders by date">
+        <option value="all">All Dates</option>
+        <option value="today">Today</option>
+        <option value="week">This Week</option>
+        <option value="month">This Month</option>
+        <option value="lastmonth">Last Month</option>
+        <option value="30days">Last 30 Days</option>
+        <option value="last3months">Last 3 Months</option>
+        <option value="year">This Year</option>
+      </select>
+      <input id="so-search" oninput="soPage=1;renderSOPage()" placeholder="Search SO No, customer, PO No…" type="text" aria-label="Search Sales Orders"/>
+      <button class="btn btn-secondary btn-sm register-clear-filters" id="so-clear-filters-btn" onclick="clearAllSOFilters()" type="button" title="Clear all Sales Order filters">
+        <i class="ti ti-filter-off"></i><span>Clear Filters</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Hidden compatibility controls used by existing logic -->
+  <div style="display:none" aria-hidden="true">
+    <input id="so-d-from" type="date"/><input id="so-d-to" type="date"/>
+    <span id="so-date-summary"></span>
+    <button id="so-f-all"></button><button id="so-d-all"></button>
+    <span id="so-cnt-all"></span><span id="so-cnt-pending"></span><span id="so-cnt-confirmed"></span>
+    <span id="so-cnt-ofd"></span><span id="so-cnt-partdel"></span><span id="so-cnt-delivered"></span>
+    <span id="so-cnt-invoiced"></span><span id="so-cnt-paid"></span><span id="so-cnt-partial"></span>
+    <div id="so-kpi-filter-summary"><span id="so-kpi-filter-title"></span><span id="so-kpi-filter-meta"></span></div>
+  </div>
+
+  <div class="salesorders-main-workspace module-main-workspace" id="salesorders-main-workspace" data-module-monitor="salesorders">
+    <aside class="salesorders-main-monitor module-monitor so-overview-panel" aria-label="SO Overview">
+      <div class="so-overview-head">
+        <div><strong>SO Overview</strong><span>Today</span></div>
+        <button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('salesorders')" aria-label="Collapse SO Overview" title="Collapse SO Overview">
+          <i class="ti ti-chevron-left"></i>
+        </button>
+      </div>
+      <div class="so-overview-body">
+        <button class="so-overview-total so-kpi active" data-kpi-filter="all" data-overview-key="all" type="button" onclick="filterSOKPI('all',this)">
+          <span>Total Orders</span><strong id="so-k-total">0</strong>
+        </button>
+
+        <div class="so-overview-section-label">Status</div>
+
+        <button class="so-overview-row so-kpi" data-kpi-filter="status-confirmed" data-overview-key="status-confirmed" type="button" onclick="filterSOKPI('status-confirmed',this)">
+          <span><i class="so-dot so-dot-confirmed"></i>Confirmed</span><strong id="so-k-confirmed">0</strong>
+        </button>
+        <button class="so-overview-row so-kpi" data-kpi-filter="status-ofd" data-overview-key="status-ofd" type="button" onclick="filterSOKPI('status-ofd',this)">
+          <span><i class="so-dot so-dot-ofd"></i>Out for Delivery</span><strong id="so-k-ofd">0</strong>
+        </button>
+        <button class="so-overview-row so-kpi" data-kpi-filter="status-partdel" data-overview-key="status-partdel" type="button" onclick="filterSOKPI('status-partdel',this)">
+          <span><i class="so-dot so-dot-partial"></i>Partially Delivered</span><strong id="so-k-partial-delivery">0</strong>
+        </button>
+        <button class="so-overview-row so-kpi" data-kpi-filter="status-delivered" data-overview-key="status-delivered" type="button" onclick="filterSOKPI('status-delivered',this)">
+          <span><i class="so-dot so-dot-delivered"></i>Delivered</span><strong id="so-k-delivered">0</strong>
+        </button>
+        <button class="so-overview-row so-kpi" data-kpi-filter="status-invoiced" data-overview-key="status-invoiced" type="button" onclick="filterSOKPI('status-invoiced',this)">
+          <span><i class="so-dot so-dot-invoiced"></i>Invoiced</span><strong id="so-k-invoiced">0</strong>
+        </button>
+        <button class="so-overview-row so-kpi" data-kpi-filter="status-partpaid" data-overview-key="status-partpaid" type="button" onclick="filterSOKPI('status-partpaid',this)">
+          <span><i class="so-dot so-dot-partpaid"></i>Partially Paid</span><strong id="so-k-partpaid">0</strong>
+        </button>
+        <button class="so-overview-row so-kpi" data-kpi-filter="status-paid" data-overview-key="status-paid" type="button" onclick="filterSOKPI('status-paid',this)">
+          <span><i class="so-dot so-dot-paid"></i>Paid</span><strong id="so-k-paid">0</strong>
+        </button>
+
+        <div class="so-overview-section-label">Attention</div>
+        <button class="so-overview-row so-kpi" data-kpi-filter="open" data-overview-key="open" type="button" onclick="filterSOKPI('open',this)">
+          <span><i class="so-dot so-dot-open"></i>Open Orders</span><strong id="so-k-open">0</strong>
+        </button>
+        <button class="so-overview-row so-kpi" data-kpi-filter="pending-invoice" data-overview-key="pending-invoice" type="button" onclick="filterSOKPI('pending-invoice',this)">
+          <span><i class="so-dot so-dot-invoice"></i>Pending Invoice</span><strong id="so-k-invoice">0</strong>
+        </button>
+
+        <div class="so-overview-section-label">Performance</div>
+        <div class="so-overview-metric"><span>Total Order Value</span><strong id="so-k-value">0.00</strong></div>
+        <div class="so-overview-metric"><span>Outstanding Receivables</span><strong id="so-k-receivables">0.00</strong></div>
+      </div>
+    </aside>
+
+    <button class="module-monitor-rail" type="button" onclick="toggleModuleMonitor('salesorders')" aria-label="Expand SO Overview" title="Expand SO Overview">
+      <i class="ti ti-layout-sidebar-left-expand"></i><span>Sales Orders</span>
+    </button>
+
+    <div class="salesorders-register-area module-register-area">
+      <div class="card so-register-card">
+        <div class="so-table-scroll">
+          <table id="so-register-table">
+            <thead>
+              <tr>
+                <th>SO No</th>
+                <th>Date</th>
+                <th>Customer</th>
+                <th>Customer PO</th>
+                <th>Quotation</th>
+                <th class="center">Items</th>
+                <th class="right">Net Amount</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="so-register-tbody"></tbody>
+          </table>
+        </div>
+        <div id="so-list" style="display:none"></div>
+        <div class="rows-per-page-bar so-pagination-bar">
+          <label class="rows-per-page-label">Rows per page
+            <select class="rows-per-page-select" onchange="setRowsPerPage(this.value)">
+              <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
+            </select>
+          </label>
+          <div class="pagination" id="so-pagination"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 <!-- FUTURE / FOUNDATION MODULES -->
 <div class="page" id="page-deliverynotes"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-truck-delivery"></i></div><h2>Delivery Notes</h2><p>Create delivery documents from approved sales orders, track partial deliveries, and prepare invoice-ready records.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
@@ -413,12 +626,16 @@ document.addEventListener('error', function(e) {
 <input id="cust-search" oninput="renderCustomers()" placeholder="Search customers…" type="text"/>
 </div>
 </div>
-<div style="overflow-x:auto">
+<div class="list-table-scroll">
 <table>
 <thead><tr><th>Company</th><th>Default contact</th><th>Title</th><th>City</th><th>Phone</th><th class="center">Quotes</th><th class="right">Total value</th><th class="center">Actions</th></tr></thead>
 <tbody id="customers-tbody"></tbody>
 </table>
 </div>
+<div class="rows-per-page-bar" style="padding:8px 16px"><label class="rows-per-page-label">Rows per page
+  <select class="rows-per-page-select" onchange="setRowsPerPage(this.value)">
+    <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
+  </select></label><div class="pagination" id="customers-pagination"></div></div>
 </div>
 </div><div class="masters-tab-content" id="masters-tab-suppliers">
 <div class="card">
@@ -434,12 +651,16 @@ document.addEventListener('error', function(e) {
 <input id="sup-search" oninput="renderSuppliers()" placeholder="Search suppliers…" style="width:280px" type="text"/>
 </div>
 </div>
-<div style="overflow-x:auto">
+<div class="list-table-scroll">
 <table>
 <thead><tr><th>Company</th><th>Contact</th><th>Phone</th><th>Email</th><th>Category</th><th>City</th><th class="center">Quotes received</th><th class="center">Actions</th></tr></thead>
 <tbody id="suppliers-tbody"></tbody>
 </table>
 </div>
+<div class="rows-per-page-bar" style="padding:8px 16px"><label class="rows-per-page-label">Rows per page
+  <select class="rows-per-page-select" onchange="setRowsPerPage(this.value)">
+    <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
+  </select></label><div class="pagination" id="suppliers-pagination"></div></div>
 </div>
 </div><div class="masters-tab-content" id="masters-tab-products">
 <div class="card">
@@ -458,7 +679,7 @@ document.addEventListener('error', function(e) {
 </select>
 </div>
 </div>
-<div style="overflow-x:auto">
+<div class="list-table-scroll">
 <table>
 <thead><tr>
 <th style="width:52px">Image</th><th>Item code</th><th>Product name</th><th>Brand</th><th>Model no.</th>
@@ -467,7 +688,10 @@ document.addEventListener('error', function(e) {
 <tbody id="products-tbody"></tbody>
 </table>
 </div>
-<div style="padding:8px 16px"><div class="pagination" id="prod-pagination"></div></div>
+<div style="padding:8px 16px" class="rows-per-page-bar"><label class="rows-per-page-label">Rows per page
+    <select class="rows-per-page-select" onchange="setRowsPerPage(this.value)">
+      <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
+    </select></label><div class="pagination" id="prod-pagination"></div></div>
 </div>
 </div><div class="masters-tab-content" id="masters-tab-employees">
 <div class="card employee-master-card">
@@ -539,6 +763,10 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="employee-expiry-summary" id="employee-expiry-summary"></div>
 <div class="employee-table-wrap"><table class="employee-table"><thead><tr><th>Employee</th><th>Department / Designation</th><th>Roles</th><th>Contact</th><th>Iqama</th><th>Passport</th><th>Driving licence</th><th>Status</th><th class="center">Actions</th></tr></thead><tbody id="employees-tbody"></tbody></table></div>
+<div class="rows-per-page-bar" style="padding:8px 16px"><label class="rows-per-page-label">Rows per page
+  <select class="rows-per-page-select" onchange="setRowsPerPage(this.value)">
+    <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
+  </select></label><div class="pagination" id="employees-pagination"></div></div>
 </div>
 </div><div class="masters-tab-content" id="masters-tab-units">
 <div class="card uom-master-card">
@@ -1122,7 +1350,7 @@ document.addEventListener('error', function(e) {
 </div>
 </div>
 </div>
-<div class="rfq-header-actions"><button aria-label="Close" class="close-btn" onclick="confirmCloseModal('rfq-modal')">✕</button></div>
+<div class="rfq-header-actions"><button aria-label="Close" class="close-btn" onclick="confirmCancelRFQEntry()">✕</button></div>
 </div>
 <div class="modal-body rfq-form-body" onchange="markDirty('rfq-modal')" oninput="markDirty('rfq-modal')">
 <div class="rfq-form-card">
@@ -1131,7 +1359,7 @@ document.addEventListener('error', function(e) {
 <div class="form-group">
 <label>Customer <span class="rfq-required">*</span></label>
 <div class="cust-wrap">
-<input autocomplete="off" id="rfq-cust-search" onblur="setTimeout(closeRFQCustDD,200)" onfocus="openRFQCustDD()" oninput="filterRFQCustDD()" placeholder="Search and select customer"/>
+<input autocomplete="off" id="rfq-cust-search" aria-autocomplete="list" aria-controls="rfq-cust-dd" aria-expanded="false" onblur="setTimeout(closeRFQCustDD,200)" onclick="openRFQCustDD()" oninput="filterRFQCustDD()" onkeydown="handleRFQCustomerKeydown(event)" placeholder="Search and select customer"/>
 <div class="cust-dropdown" id="rfq-cust-dd"></div>
 </div>
 </div>
@@ -1148,8 +1376,8 @@ document.addEventListener('error', function(e) {
 </select>
 </div>
 <div class="form-group"><label>Assigned to</label><select id="rfq-assigned"><option value="">Select employee</option></select><span class="field-help rfq-assigned-help">Active employees with the Sales role</span></div>
-<div class="form-group"><label>Date received</label><input id="rfq-date" type="date"/></div>
-<div class="form-group"><label>Response due date</label><input id="rfq-due" type="date"/></div>
+<div class="form-group"><label>Date received</label><div class="rfq-date-entry"><input id="rfq-date" type="text" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="DD/MM/YYYY" oninput="formatRFQDateTyping(this)" onblur="normalizeRFQDateField(this)" onkeydown="handleRFQDateKeydown(event,this,'rfq-date-picker')"/><button class="rfq-date-picker-btn" type="button" tabindex="-1" onclick="openRFQDatePicker('rfq-date','rfq-date-picker')" aria-label="Open Date received calendar"><i class="ti ti-calendar"></i></button><input id="rfq-date-picker" class="rfq-native-date-picker" type="date" tabindex="-1" onchange="syncRFQDateFromPicker('rfq-date',this)"/></div></div>
+<div class="form-group"><label>Response due date</label><div class="rfq-date-entry"><input id="rfq-due" type="text" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="DD/MM/YYYY" oninput="formatRFQDateTyping(this)" onblur="normalizeRFQDateField(this)" onkeydown="handleRFQDateKeydown(event,this,'rfq-due-picker')"/><button class="rfq-date-picker-btn" type="button" tabindex="-1" onclick="openRFQDatePicker('rfq-due','rfq-due-picker')" aria-label="Open Response due date calendar"><i class="ti ti-calendar"></i></button><input id="rfq-due-picker" class="rfq-native-date-picker" type="date" tabindex="-1" onchange="syncRFQDateFromPicker('rfq-due',this)"/></div></div>
 <div class="form-group form-full"><label>Description / requirements</label>
 <textarea id="rfq-desc" placeholder="Briefly describe what the customer is requesting" style="height:82px"></textarea>
 </div>
@@ -1157,7 +1385,7 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="rfq-form-card">
 <div class="rfq-card-title"><i class="ti ti-paperclip"></i>Attachment</div>
-<div class="rfq-attach-compact" onclick="document.getElementById('rfq-attach-input').click()">
+<div class="rfq-attach-compact" role="button" tabindex="0" onclick="document.getElementById('rfq-attach-input').click()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('rfq-attach-input').click()}">
 <i class="ti ti-cloud-upload"></i>
 <div><strong>Attach supporting file</strong><small>Email screenshot, WhatsApp image or PDF</small></div>
 </div>
@@ -1168,8 +1396,8 @@ document.addEventListener('error', function(e) {
 <div class="modal-footer rfq-form-footer">
 <div class="rfq-footer-hint"><span>Quick save</span><kbd>Ctrl</kbd><span>+</span><kbd>S</kbd></div>
 <div class="rfq-footer-actions">
-<button class="btn btn-secondary" onclick="confirmCloseModal('rfq-modal')">Cancel</button>
-<button class="btn btn-primary" id="rfq-save-btn" onclick="saveRFQ()"><i class="ti ti-device-floppy"></i><span id="rfq-save-label">Save RFQ</span></button>
+<button class="btn btn-secondary" onclick="confirmCancelRFQEntry()">Cancel</button>
+<button class="btn btn-primary" id="rfq-save-btn" onclick="confirmSaveRFQEntry()"><i class="ti ti-device-floppy"></i><span id="rfq-save-label">Save RFQ</span></button>
 </div>
 </div>
 </div>
@@ -1883,7 +2111,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js';
+    s.src = 'js/app.js?v=73';
     document.body.appendChild(s);
   }
 });
