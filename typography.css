@@ -1,21 +1,19 @@
-/* BizCore Design System v1.0 — shared application typography and components */
-:root{
-  --bc-font:Inter,"Segoe UI",Roboto,Arial,sans-serif;
-  --bc-primary:#2563eb;--bc-primary-soft:#eff6ff;--bc-text:#1e293b;--bc-text-2:#334155;
-  --bc-muted:#64748b;--bc-faint:#94a3b8;--bc-border:#e2e8f0;--bc-bg:#f8fafc;--bc-card:#fff;
-  --bc-success:#166534;--bc-success-bg:#dcfce7;--bc-warning:#92400e;--bc-warning-bg:#fef3c7;
-  --bc-danger:#991b1b;--bc-danger-bg:#fee2e2;--bc-info:#1d4ed8;--bc-info-bg:#dbeafe;
-  --bc-radius:12px;--bc-control-radius:8px;--bc-shadow:0 1px 3px rgba(15,23,42,.08);
+/* BizCore typography standard: application UI only */
+label, .form-label, .field-label, .control-label, .form-group > label, .input-label {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: #374151;
 }
-html,body,button,input,select,textarea{font-family:var(--bc-font)}
-body{color:var(--bc-text)}
-.bc-section-title{font-size:17px;font-weight:600;color:var(--bc-text);line-height:1.35}
-.bc-card{background:var(--bc-card);border:1px solid var(--bc-border);border-radius:var(--bc-radius);box-shadow:var(--bc-shadow)}
-.bc-label{font-size:13.5px;font-weight:500;color:var(--bc-muted)}
-.bc-value{font-size:13.5px;font-weight:500;color:var(--bc-text-2)}
-.btn{font-size:13px;font-weight:600;border-radius:var(--bc-control-radius)}
-.btn-primary{font-size:14px}
-.badge{border-radius:999px;font-size:12px;font-weight:600}
-.form-group>label,label{font-size:13.5px!important;font-weight:500!important;color:var(--bc-muted)}
-input,select,textarea{font-size:14px}
-table th{font-size:13px;font-weight:600}table td{font-size:13px;font-weight:400}
+.small-label, .secondary-label, .helper-label {
+  font-size: 10px !important;
+}
+input, select, textarea {
+  font-size: 13px;
+}
+table th {
+  font-size: 11px;
+  font-weight: 600;
+}
+table td {
+  font-size: 12px;
+}

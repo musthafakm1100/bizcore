@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 88" width="300" height="88">
+  <defs>
+    <linearGradient id="barBlue1" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#0B439E"/>
+      <stop offset="100%" stop-color="#1A6FD4"/>
+    </linearGradient>
+    <linearGradient id="barBlue2" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#0B439E"/>
+      <stop offset="100%" stop-color="#2A7FE0"/>
+    </linearGradient>
+    <linearGradient id="barOrange" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#D95F10"/>
+      <stop offset="100%" stop-color="#F47C2A"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Icon: three ascending bars, centre bar (tallest) in orange -->
+  <g transform="translate(14,10)">
+    <rect x="0" y="58" width="56" height="2.5" rx="1.25" fill="#0B439E" opacity="0.15"/>
+    <rect x="2" y="38" width="13" height="20" rx="2.5" fill="url(#barBlue1)"/>
+    <rect x="21.5" y="14" width="13" height="44" rx="2.5" fill="url(#barOrange)"/>
+    <rect x="41" y="26" width="13" height="32" rx="2.5" fill="url(#barBlue2)"/>
+  </g>
+
+  <!-- Wordmark -->
+  <g transform="translate(90,4)">
+    <text x="0" y="54" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="300" fill="#0B439E">Biz</text>
+    <text x="62" y="54" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" fill="#0B439E">Core</text>
+    <text x="1" y="70" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="400" letter-spacing="3" fill="#5A7BB5">BUSINESS OPERATIONS</text>
+  </g>
+</svg>
