@@ -7,7 +7,7 @@
   "display": "standalone",
   "orientation": "any",
   "background_color": "#ffffff",
-  "theme_color": "#1e73e8",
+  "theme_color": "#ffffff",
   "icons": [
     { "src": "icons/bizcore-icon-16.png", "sizes": "16x16", "type": "image/png" },
     { "src": "icons/bizcore-icon-32.png", "sizes": "32x32", "type": "image/png" },
