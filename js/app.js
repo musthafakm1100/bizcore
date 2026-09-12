@@ -87,10 +87,49 @@ function isPricingVersionLocked(r) {
 }
 function nextQuotationRevisionNo(r) {
   const linked=(r.quotationIds||[]).map(id=>quotations.find(q=>q.id===id)).filter(Boolean);
-  const base=linked[0]?.qno || (r.quotationId ? quotations.find(q=>q.id===r.quotationId)?.qno : '') || nextQNo();
-  const clean=base.replace(/-R\d+$/i,'');
+  const base=linked[0]?.qno || (r.quotationId ? quotations.find(q=>q.id===r.quotationId)?.qno : '') || '';
+  const clean=String(base||'').replace(/-R\d+$/i,'');
   const rev=Math.max(0,...linked.map(q=>Number(q.revisionNo)||0))+1;
-  return {qno:clean+'-R'+rev, revisionNo:rev, revisionOf:linked[0]?.id || r.quotationId || null};
+  return {baseQno:clean, revisionNo:rev, revisionOf:linked[0]?.id || r.quotationId || null};
+}
+
+function resolvePendingQuotationRevision(){
+  const pending=document._pendingQuotationRevision;
+  if(!pending) return null;
+
+  let baseQno=String(pending.baseQno||'').replace(/-R\d+$/i,'');
+  let revisionOf=pending.revisionOf||pending.sourceQuotationId||null;
+
+  if(pending.sourceQuotationId){
+    const source=quotations.find(q=>q.id===pending.sourceQuotationId);
+    if(source){
+      baseQno=String(source.qno||baseQno).replace(/-R\d+$/i,'');
+      revisionOf=source.revisionOf||source.id;
+    }
+  }
+
+  if(!baseQno && pending.rfqId){
+    const r=rfqs.find(x=>x.id===pending.rfqId);
+    if(r){
+      const info=nextQuotationRevisionNo(r);
+      baseQno=info.baseQno;
+      revisionOf=info.revisionOf;
+    }
+  }
+
+  if(!baseQno) return null;
+
+  const family=quotations.filter(q=>{
+    const qBase=String(q.qno||'').replace(/-R\d+$/i,'');
+    return qBase===baseQno;
+  });
+  const revisionNo=Math.max(0,...family.map(q=>Number(q.revisionNo)||0))+1;
+  return {
+    qno:baseQno+'-R'+revisionNo,
+    baseQno,
+    revisionNo,
+    revisionOf:revisionOf || family[0]?.id || null
+  };
 }
 let editingId = null;
 let editingCustId = null;
@@ -333,6 +372,13 @@ async function loadData() {
             renderTable();
             renderDashboard();
           }, 'Quotations');
+
+          // Pricing register contains live quotation links, so quotation
+          // synchronization must refresh Pricing too when that module is open.
+          if (getActivePage()==='costing') {
+            const modalOpen=document.querySelector('.modal-overlay.open, .modal-overlay[style*="flex"]');
+            if(!modalOpen && typeof renderPricingDocuments==='function') renderPricingDocuments();
+          }
         });
 
         window.FB.fbListen('customers', function(data) {
@@ -367,6 +413,12 @@ async function loadData() {
             if (typeof renderRFQPage === 'function') renderRFQPage();
             renderDashboard();
           }, 'RFQs');
+
+          // Pricing documents are stored inside RFQ pricing versions.
+          if (getActivePage()==='costing') {
+            const modalOpen=document.querySelector('.modal-overlay.open, .modal-overlay[style*="flex"]');
+            if(!modalOpen && typeof renderPricingDocuments==='function') renderPricingDocuments();
+          }
         });
 
         window.FB.fbListen('salesOrders', function(data) {
@@ -460,6 +512,7 @@ async function loadData() {
   try { localStorage.setItem('dtq_rfqs', JSON.stringify(rfqs)); } catch(e) {}
   try { localStorage.setItem('dtq_employees', JSON.stringify(employees)); } catch(e) {}
   try { localStorage.setItem('dtq_salesorders', JSON.stringify(salesOrders)); } catch(e) {}
+  repairIncompleteQuotationDates();
   applySettings();
   loadAccessSetup();
   refreshProductUomSelect();
@@ -750,6 +803,23 @@ function migrateQuotationVatSnapshots(){
   });
   return changed;
 }
+
+function repairIncompleteQuotationDates(){
+  let changed=false;
+  quotations.forEach(q=>{
+    if(!q || quoteDateISOFromDisplay(q.date||'')) return;
+    const created=String(q.created||'').slice(0,10);
+    if(/^\d{4}-\d{2}-\d{2}$/.test(created) && quoteDateISOFromDisplay(created)){
+      q.date=created;
+      changed=true;
+    }
+  });
+  if(changed){
+    try{localStorage.setItem('dtq_quotations',JSON.stringify(quotations));}catch(e){}
+  }
+  return changed;
+}
+
 function taxUsageCount(t){return (quotations||[]).filter(q=>String(q.taxCode||'').toUpperCase()===t.code.toUpperCase()).length}
 function renderTaxSettings(){renderTaxMaster()}
 function renderTaxMaster(){
@@ -810,8 +880,20 @@ function getStatusClass(s) {
   return {Draft:'badge-draft',Sent:'badge-sent',Won:'badge-won',Lost:'badge-lost',Expired:'badge-expired',Revised:'badge-revised',Cancelled:'badge-cancelled'}[s]||'badge-draft';
 }
 
+function normalizedQuotationDate(q){
+  const stored=quoteDateISOFromDisplay(q?.date||'');
+  if(stored) return stored;
+
+  // Repair older/incomplete records from their creation timestamp when possible.
+  const created=String(q?.created||'').slice(0,10);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(created) && quoteDateISOFromDisplay(created)) return created;
+
+  return new Date().toISOString().slice(0,10);
+}
 function validUntil(q) {
-  const d=new Date(q.date); d.setDate(d.getDate()+(parseInt(q.validity)||7));
+  const iso=normalizedQuotationDate(q);
+  const d=new Date(iso+'T00:00:00');
+  d.setDate(d.getDate()+(parseInt(q?.validity)||7));
   return d.toISOString().split('T')[0];
 }
 
@@ -826,7 +908,7 @@ function nextQNo() {
   // is being fetched, or if the device is offline.
   const t=new Date();
   const prefix='Q-'+String(t.getFullYear()).slice(2)+String(t.getMonth()+1).padStart(2,'0')+'-';
-  const nums=quotations.filter(q=>q.qno.startsWith(prefix)).map(q=>parseInt(q.qno.split('-').pop())||0);
+  const nums=quotations.filter(q=>String(q?.qno||'').startsWith(prefix)).map(q=>parseInt(String(q.qno).split('-').pop())||0);
   return prefix+((nums.length?Math.max(...nums):3960)+1);
 }
 
@@ -868,7 +950,7 @@ async function nextQNoSafe() {
   // Offline or Firebase unavailable — generate a provisional number
   // tagged with a short device ID so it can NEVER collide with another
   // offline user's provisional number. Format: Q-2608-OFF-x7f2-1
-  const localNums = quotations.filter(q=>q.qno.startsWith(prefix)).map(q=>parseInt(q.qno.split('-').pop())||0);
+  const localNums = quotations.filter(q=>String(q?.qno||'').startsWith(prefix)).map(q=>parseInt(String(q.qno).split('-').pop())||0);
   const localNext = (localNums.length ? Math.max(...localNums) : 3960) + 1;
   const deviceTag = getDeviceTag();
   return { qno: prefix + 'OFF-' + deviceTag + '-' + localNext, isProvisional: true };
@@ -1528,6 +1610,64 @@ function renderAll() { renderDashboard(); renderTable(); renderCustomers(); rend
 /* ══════════════════════════════════════════════════
    READ-ONLY PRICING VIEWER
 ══════════════════════════════════════════════════ */
+
+
+let pricingEntryCloseConfirmOpen=false;
+function requestClosePricingEntry(source='close'){
+  const modal=document.getElementById('pricing-modal');
+  if(!modal || !modal.classList.contains('open') || pricingEntryCloseConfirmOpen) return;
+  pricingEntryCloseConfirmOpen=true;
+
+  const isCancel=source==='cancel';
+  showConfirm({
+    icon:'⚠️',
+    title:isCancel?'Cancel Pricing?':'Close Pricing?',
+    message:isCancel
+      ? 'Are you sure you want to cancel and leave this Pricing screen?'
+      : 'Are you sure you want to close this Pricing screen?',
+    details:{'Unsaved changes':'Any changes not saved will be discarded.'},
+    confirmText:isCancel?'Yes, cancel':'Close',
+    cancelText:'Continue editing',
+    confirmClass:'btn-primary',
+    onConfirm:()=>{
+      pricingEntryCloseConfirmOpen=false;
+      if(typeof window.bizcorePerformClose==='function'){
+        window.bizcorePerformClose('pricing-modal',true);
+      }else{
+        closeModal('pricing-modal');
+      }
+    },
+    onCancel:()=>{
+      pricingEntryCloseConfirmOpen=false;
+      setTimeout(()=>document.querySelector('#pricing-modal .pricing-close-btn, #pricing-modal .pricing-cancel-btn')?.focus(),30);
+    }
+  });
+}
+
+window.requestClosePricingEntry=requestClosePricingEntry;
+
+let pricingDetailCloseConfirmOpen=false;
+function requestClosePricingDetail(){
+  const modal=document.getElementById('pricing-ro-modal');
+  if(!modal || !modal.classList.contains('open') || pricingDetailCloseConfirmOpen) return;
+  pricingDetailCloseConfirmOpen=true;
+  showConfirm({
+    icon:'⚠️',
+    title:'Close Pricing?',
+    message:'Are you sure you want to close this Pricing detail screen?',
+    confirmText:'Close',
+    cancelText:'Continue viewing',
+    confirmClass:'btn-primary',
+    onConfirm:()=>{
+      pricingDetailCloseConfirmOpen=false;
+      closeModal('pricing-ro-modal');
+    },
+    onCancel:()=>{
+      pricingDetailCloseConfirmOpen=false;
+      setTimeout(()=>document.querySelector('#pricing-ro-modal .close-btn')?.focus(),30);
+    }
+  });
+}
 function openPricingViewRFQ(rfqId){ if(rfqId){ closeModal('pricing-ro-modal'); viewRFQ(rfqId); } }
 function openPricingViewQuotation(quotationId){ if(quotationId){ closeModal('pricing-ro-modal'); viewQuotation(quotationId); } }
 function pricingViewAttachmentHtml(file, index){
@@ -1650,9 +1790,23 @@ function viewPricingReadOnly(rfqId) {
   if(linkedQuotation) roFBtns.push('<button class="btn btn-secondary" onclick="openPricingViewQuotation(\''+linkedQuotation.id+'\')"><i class="ti ti-file-invoice"></i>View quotation</button>');
   if(isPricingVersionLocked(r)) roFBtns.push('<button class="btn btn-primary" data-rid="'+rfqId+'" onclick="revisePricingFromRO(this)"><i class="ti ti-git-branch"></i>Revise pricing</button>');
   else roFBtns.push('<button class="btn btn-primary" data-rid="'+rfqId+'" onclick="editPricingFromRO(this)"><i class="ti ti-edit"></i>Edit pricing</button>');
+  roFBtns.push('<button class="btn btn-secondary pricing-ro-close-action" type="button" onclick="requestClosePricingDetail()"><i class="ti ti-x"></i>Close</button>');
   document.getElementById('pricing-ro-footer').innerHTML=roFBtns.join('');
   openModalWithSize('pricing-ro-modal');
 }
+
+
+// Pricing detail: Esc follows the same guarded Close behavior.
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Escape') return;
+  const modal=document.getElementById('pricing-ro-modal');
+  if(!modal || !modal.classList.contains('open')) return;
+  // If BizCore confirmation is already open, let its own Escape handler cancel it.
+  if(document.getElementById('app-confirm-overlay')) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  requestClosePricingDetail();
+},true);
 
 /* ══════════════════════════════════════════════════
    CUSTOM CONFIRM DIALOG
@@ -2529,6 +2683,25 @@ function updateQuotationMonitor() {
   }
   updateQuotationFilterHighlights();
 }
+
+function resetQuotationRegisterFiltersForNewRecord(){
+  const search=document.getElementById('search-input');
+  const status=document.getElementById('filter-status');
+  const customer=document.getElementById('filter-customer');
+  const from=document.getElementById('filter-date-from');
+  const to=document.getElementById('filter-date-to');
+  if(search)search.value='';
+  if(status)status.value='';
+  if(customer)customer.value='';
+  if(from)from.value='';
+  if(to)to.value='';
+  currentPage=1;
+  if(typeof quotationMonitorFilter!=='undefined') quotationMonitorFilter='all';
+  document.querySelectorAll('#page-quotations .quotation-monitor-item, #page-quotations [data-overview-key]')
+    .forEach(el=>el.classList.remove('active'));
+  document.querySelector('#page-quotations [data-overview-key="all"]')?.classList.add('active');
+}
+
 function renderTable() {
   document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PER_PAGE)) el.value = String(PER_PAGE); });
   const search=document.getElementById('search-input').value.toLowerCase();
@@ -2605,7 +2778,7 @@ function renderTable() {
     const qCellStyle = 'font-size:14px!important;font-weight:400!important;color:#111827!important;line-height:1.35!important';
     return `<tr class="quotation-clickable-row" tabindex="0" role="button" aria-label="Open quotation ${q.qno}" onclick="viewQuotation('${q.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewQuotation('${q.id}');}">
       <td class="rfq-cell-no quotation-cell-regular" style="${qCellStyle}">${q.qno}</td>
-      <td class="mob-hide rfq-cell-muted" style="${qCellStyle}">${fmtDate(q.date)}</td>
+      <td class="mob-hide rfq-cell-muted" style="${qCellStyle}">${fmtDate(normalizedQuotationDate(q))}</td>
       <td class="rfq-cell-customer quotation-cell-regular" style="${qCellStyle}">${q.company}${itemMatchBadge}</td>
       <td class="mob-hide" style="${qCellStyle}">${q.ref||'—'}</td>
       <td class="mob-hide center" style="${qCellStyle}">${(q.items||[]).length}</td>
@@ -2925,7 +3098,10 @@ function getPricingDocuments(){
       if(!Array.isArray(v.pricingItems)||!v.pricingItems.length)return;
       const version=Number(v.version)||index+1;
       const status=v.status==='Converted'?'Converted':(v.status==='Superseded'?'Converted':'Saved');
-      const quote=quotations.find(q=>q.id===v.quotationId) || (version===Number(r.currentPricingVersion)&&r.quotationId?quotations.find(q=>q.id===r.quotationId):null);
+      const quote=quotations.find(q=>q.id===v.quotationId || q.qno===v.quotationId)
+        || (version===Number(r.currentPricingVersion)&&r.quotationId
+          ? quotations.find(q=>q.id===r.quotationId || q.qno===r.quotationId)
+          : null);
       const items=v.pricingItems||[];
       const material=items.reduce((sum,it)=>sum+(Number(it.buy)||0)*(Number(it.qty)||0),0);
       const extras=(v.internalCosts||[]).reduce((sum,c)=>sum+(Number(c.amount)||0),0);
@@ -3096,7 +3272,27 @@ function openPricingDocument(rfqId,version){
   syncRFQFromPricingVersion(r,v);
   openPricingSheet(rfqId);
 }
-function openPricingLinkedQuotation(id){if(!id)return;viewQuotation(id);}
+function openPricingLinkedQuotation(id){
+  if(!id)return;
+  const q=quotations.find(x=>x.id===id || x.qno===id);
+  if(!q){
+    showConfirm({
+      icon:'⚠️',
+      title:'Quotation not available',
+      message:'The Pricing document contains a quotation link, but that quotation is not available in the current quotation data.',
+      details:{'Linked value':id},
+      confirmText:'Refresh registers',
+      cancelText:'Close',
+      confirmClass:'btn-primary',
+      onConfirm:()=>{
+        if(typeof renderTable==='function')renderTable();
+        if(typeof renderPricingDocuments==='function')renderPricingDocuments();
+      }
+    });
+    return;
+  }
+  viewQuotation(q.id);
+}
 function renderPricingDocuments(){
   const tbody=document.getElementById('pricing-doc-tbody');if(!tbody)return;
   const all=getPricingDocuments();
@@ -3340,6 +3536,16 @@ function quoteDateDisplayFromISO(iso){
 }
 function quoteDateISOFromDisplay(value){
   const v=String(value||'').trim();
+  if(!v) return '';
+
+  // Canonical stored format is already valid.
+  let iso=v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(iso){
+    const year=+iso[1], month=+iso[2], day=+iso[3];
+    const dt=new Date(year,month-1,day);
+    return (dt.getFullYear()===year&&dt.getMonth()===month-1&&dt.getDate()===day) ? v : '';
+  }
+
   let m=v.match(/^(\d{2})[\/\-.](\d{2})[\/\-.](\d{4})$/);
   if(!m) m=v.match(/^(\d{2})(\d{2})(\d{4})$/);
   if(!m) return '';
@@ -3521,8 +3727,9 @@ function openNewQuotation(templateType) {
   clearCustomerSelection();
   document.getElementById('f-ref').value='';
   document.getElementById('f-project').value='';
-  document.getElementById('f-qno').value=nextQNo(); // instant placeholder
-  reserveQNoForForm('f-qno'); // then swap in the real atomic number
+  document.getElementById('f-qno').value='Auto on Save';
+  document.getElementById('f-qno').dataset.reservedQno='';
+  document.getElementById('f-qno').dataset.isProvisional='0';
   document.getElementById('f-date').value=todayQuoteDateDisplay();
   document.getElementById('f-status').value='Draft';
   document.getElementById('f-validity').value=settings.validity||7;
@@ -3937,6 +4144,48 @@ async function saveQuotation(mode='save') {
     });
   });
   if (!confirmed) return;
+
+  // Resolve the FINAL quotation number only after the user confirms Save.
+  // Keep it in a local variable so later DOM/UI changes cannot corrupt
+  // the number used to create the quotation record.
+  let finalQno='';
+  let finalQnoIsProvisional=false;
+
+  let resolvedRevision=null;
+  if (capturedEditingId) {
+    const existingQuotation=quotations.find(x=>x.id===capturedEditingId);
+    finalQno=String(existingQuotation?.qno||document.getElementById('f-qno').value||'').trim();
+  } else if (document._pendingQuotationRevision) {
+    resolvedRevision=resolvePendingQuotationRevision();
+    finalQno=String(resolvedRevision?.qno||'').trim();
+  } else {
+    const numberResult=await nextQNoSafe();
+    finalQno=String(numberResult?.qno||'').trim();
+    finalQnoIsProvisional=!!numberResult?.isProvisional;
+  }
+
+  if(!finalQno || finalQno==='Auto on Save'){
+    showConfirm({
+      icon:'⚠️',
+      title:'Quotation number could not be created',
+      message:'BizCore could not allocate a quotation number. The quotation has not been saved.',
+      confirmText:'Try again',
+      cancelText:'Continue editing',
+      confirmClass:'btn-primary',
+      onConfirm:()=>saveQuotation(mode)
+    });
+    return;
+  }
+
+  const qnoField=document.getElementById('f-qno');
+  qnoField.value=finalQno;
+  qnoField.dataset.reservedQno=finalQno;
+  qnoField.dataset.isProvisional=finalQnoIsProvisional?'1':'0';
+
+  if(finalQnoIsProvisional){
+    showToast('Offline — quotation saved with a provisional number and will be renumbered when online','warning');
+  }
+
   const items=[];
   document.querySelectorAll('#items-tbody tr').forEach(tr=>{
     if(tr.dataset.lineType==='heading'||tr.dataset.lineType==='note'){
@@ -3966,11 +4215,11 @@ async function saveQuotation(mode='save') {
     const image = rowImage || (matchedProduct && matchedProduct.image ? matchedProduct.image : '');
     if(desc||qty||up) items.push({lineType:'item',code,brand,model,desc,specs,qty,uom:sel?.value||'Pcs',up,type:(textarea?'contracting':currentQuoteType),rowKind,prodId,image});
   });
-  const qno=document.getElementById('f-qno').value;
+  const qno=finalQno;
   const q={
-    id:editingId||qno, qno,
+    id:capturedEditingId||qno, qno,
     origin: capturedRFQId ? 'RFQ/Pricing' : (window._pendingQuotationOrigin || 'Direct'),
-    date:quoteDateISOFromDisplay(document.getElementById('f-date').value),
+    date:quoteDateISOFromDisplay(document.getElementById('f-date').value)||new Date().toISOString().slice(0,10),
     company, contact:document.getElementById('f-contact').value.trim(),
     city:document.getElementById('f-city').value.trim(),
     ref:document.getElementById('f-ref').value.trim(),
@@ -3991,14 +4240,51 @@ async function saveQuotation(mode='save') {
     items, custId:selectedCustId,
     rfqId: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.rfqId||null) : (capturedRFQId||null),
     pricingVersion: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.pricingVersion||1) : (document._pendingPricingVersion||1),
-    revisionNo: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.revisionNo||0) : (document._pendingQuotationRevision?.revisionNo||0),
-    revisionOf: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.revisionOf||null) : (document._pendingQuotationRevision?.revisionOf||null),
+    revisionNo: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.revisionNo||0) : (resolvedRevision?.revisionNo||0),
+    revisionOf: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.revisionOf||null) : (resolvedRevision?.revisionOf||null),
     created:capturedEditingId?(quotations.find(x=>x.id===capturedEditingId)?.created||new Date().toISOString()):new Date().toISOString(),
     updated:new Date().toISOString()
   };
-  if(capturedEditingId){ const idx=quotations.findIndex(x=>x.id===capturedEditingId); if(idx>-1) quotations[idx]=q; }
-  else quotations.unshift(q);
+  if(capturedEditingId){
+    const idx=quotations.findIndex(x=>x.id===capturedEditingId);
+    if(idx>-1) quotations[idx]=q;
+    else {
+      showToast('Quotation record could not be located for update','error');
+      return;
+    }
+  } else {
+    // Prevent accidental duplicate insertion if the save action is retried.
+    const duplicate=quotations.find(x=>x.id===q.id || x.qno===q.qno);
+    if(duplicate){
+      showToast('Quotation '+q.qno+' already exists. Save was not duplicated.','warning');
+      return;
+    }
+    quotations.unshift(q);
+  }
+
+  // Verify the record exists in memory before persistence.
+  if(!quotations.some(x=>x.id===q.id && x.qno===q.qno)){
+    showToast('Quotation could not be created. No data was saved.','error');
+    return;
+  }
+
   await saveQuotations();
+
+  // Revision becomes real only after successful quotation save.
+  if(!capturedEditingId && q.revisionNo>0 && q.revisionOf){
+    const familyBase=String(q.qno||'').replace(/-R\d+$/i,'');
+    quotations.forEach(old=>{
+      if(old.id===q.id)return;
+      const oldBase=String(old.qno||'').replace(/-R\d+$/i,'');
+      if(oldBase===familyBase){
+        old.revisionState='Superseded';
+        old.supersededBy=q.id;
+      }
+    });
+    q.revisionState='Current';
+    await saveQuotations();
+  }
+
   // Link back to RFQ if converted from pricing
   if (capturedRFQId && !capturedEditingId) {
     const rfq = rfqs.find(x=>x.id===capturedRFQId);
@@ -4021,9 +4307,13 @@ async function saveQuotation(mode='save') {
     document._pendingRFQId = null; document._pendingPricingVersion=null; document._pendingQuotationRevision=null;
   }
   clearDirty(); window._pendingQuotationOrigin=null; closeModal('quote-modal');
+  if(!capturedEditingId) resetQuotationRegisterFiltersForNewRecord();
   renderAll();
-  showToast(capturedEditingId?'Quotation updated':'Quotation created','success');
+  if(typeof renderTable==='function')renderTable();
+  if(typeof renderPricingDocuments==='function')renderPricingDocuments();
+  showToast(capturedEditingId?'Quotation updated':'Quotation '+q.qno+' created','success');
   if(mode==='preview') setTimeout(()=>viewQuotation(q.id),80);
+  return q;
 }
 
 /* ── VIEW QUOTATION ── */
@@ -4264,11 +4554,74 @@ function renderStatusBar(q, selectedStatus, pending) {
 function createQuotationRevision(id){
   const q=quotations.find(x=>x.id===id);if(!q)return;
   closeModal('view-modal');
-  const base=(q.qno||'QTN').replace(/-R\d+$/,'');
-  const rev=Math.max(0,...quotations.filter(x=>x.revisionOf===q.id||x.id===q.id||x.revisionOf===q.revisionOf).map(x=>Number(x.revisionNo)||0))+1;
-  const copy={...JSON.parse(JSON.stringify(q)),id:base+'-R'+rev,qno:base+'-R'+rev,status:'Draft',revisionNo:rev,revisionOf:q.revisionOf||q.id,revisionState:'Current',created:new Date().toISOString(),updated:new Date().toISOString()};
-  q.revisionState='Superseded';q.supersededBy=copy.id;
-  quotations.unshift(copy);saveQuotations().then(()=>{renderAll();showToast('Revision '+copy.qno+' created. Original remains locked.','success');editQuotation(copy.id)});
+
+  editingId=null;
+  currentQuoteVatRate=getQuoteVatPercent(q);
+  document._pendingRFQId=q.rfqId||null;
+  document._pendingPricingVersion=q.pricingVersion||1;
+  document._pendingQuotationRevision={
+    sourceQuotationId:q.id,
+    baseQno:String(q.qno||'').replace(/-R\d+$/i,''),
+    revisionOf:q.revisionOf||q.id
+  };
+
+  document.getElementById('modal-title').textContent='Revise quotation — '+q.qno;
+
+  const c=customers.find(x=>x.company===q.company);
+  if(c){
+    selectedCustId=c.id;
+    document.getElementById('f-cust-search').value=c.company;
+    document.getElementById('f-cust-search').classList.add('cust-locked');
+  }else{
+    selectedCustId=q.custId||'__legacy__';
+    document.getElementById('f-cust-search').value=q.company||'';
+    document.getElementById('f-cust-search').classList.add('cust-locked');
+  }
+
+  document.getElementById('f-company').value=q.company||'';
+  document.getElementById('f-contact').value=q.contact||'';
+  document.getElementById('f-contact').classList.remove('cust-locked');
+  document.getElementById('f-contact-hint').style.display='none';
+  document.getElementById('f-city').value=q.city||'';
+  document.getElementById('f-ref').value=q.ref||'';
+  document.getElementById('f-project').value=q.project||'';
+  document.getElementById('f-qno').value='Auto on Save';
+  document.getElementById('f-qno').dataset.reservedQno='';
+  document.getElementById('f-qno').dataset.isProvisional='0';
+  document.getElementById('f-date').value=todayQuoteDateDisplay();
+  document.getElementById('f-status').value='Draft';
+  document.getElementById('f-validity').value=q.validity||7;
+
+  populateTermsSelect('delivery');
+  populateTermsSelect('payment');
+  ['delivery','payment'].forEach(type=>{
+    const savedVal=type==='delivery'?(q.delivery||''):(q.payment||'');
+    const selId=type==='delivery'?'f-delivery':'f-payment';
+    const list=type==='delivery'?deliveryTerms:paymentTerms;
+    if(savedVal&&!list.some(t=>t.text===savedVal)){
+      const sel=document.getElementById(selId);
+      const opt=document.createElement('option');
+      opt.value=savedVal;opt.textContent=savedVal;sel.insertBefore(opt,sel.firstChild);
+    }
+    if(savedVal)document.getElementById(selId).value=savedVal;
+  });
+
+  document.getElementById('f-notes').value=q.notes||'';
+  document.getElementById('f-internal-notes').value=q.internalNotes||'';
+  document.getElementById('f-discount').value=q.discount||0;
+
+  const savedType=q.quoteType||(q.items||[])[0]?.type||'product';
+  currentQuoteType=savedType==='contracting'?'contracting':'product';
+  setQuoteType(currentQuoteType,{locked:true});
+  document.getElementById('items-tbody').innerHTML='';
+  (q.items||[]).forEach(it=>addItemRow(JSON.parse(JSON.stringify(it))));
+  if(!q.items||!q.items.length)addItemRow();
+  calcTotals();
+  updateValidUntil();
+  updateQuoteHeaderSummary();
+  setQuoteFormState('saved');
+  openModalWithSize('quote-modal');
+  showToast('Revision prepared — number will be assigned only when saved','info');
 }
 
 async function duplicateQuotation(id) {
@@ -7190,9 +7543,10 @@ async function convertToQuotation() {
   const activePricingVersion=getCurrentPricingVersion(r);
   const isRevision=Number(activePricingVersion?.version||1)>1 || !!r.quotationId;
   const revisionInfo=isRevision ? nextQuotationRevisionNo(r) : null;
-  document.getElementById('f-qno').value = revisionInfo ? revisionInfo.qno : nextQNo(); // instant placeholder
-  if (!revisionInfo) reserveQNoForForm('f-qno'); // then swap in the real atomic number
-  document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('f-qno').value = 'Auto on Save';
+  document.getElementById('f-qno').dataset.reservedQno = '';
+  document.getElementById('f-qno').dataset.isProvisional = '0';
+  document.getElementById('f-date').value = todayQuoteDateDisplay();
   document.getElementById('f-status').value = 'Draft';
   document.getElementById('f-validity').value = Math.max(1,Number(activePricingSettings().validity)||7);
   document.getElementById('f-notes').value = r.desc||'';
@@ -7209,7 +7563,11 @@ async function convertToQuotation() {
   // Link RFQ
   document._pendingRFQId = pricingRFQId;
   document._pendingPricingVersion = Number(activePricingVersion?.version||r.currentPricingVersion||1);
-  document._pendingQuotationRevision = revisionInfo;
+  document._pendingQuotationRevision = revisionInfo ? {
+    ...revisionInfo,
+    rfqId:pricingRFQId,
+    sourceQuotationId:r.quotationId||revisionInfo.revisionOf||null
+  } : null;
   openModalWithSize('quote-modal');
   showToast('Pricing saved and transferred — review and save the quotation','success');
   } finally {
@@ -9706,8 +10064,13 @@ document.addEventListener('DOMContentLoaded',initialiseWorkspaceControls);
     const text=(btn.textContent||'').trim().toLowerCase();
     if(btn.classList.contains('close-btn') || text==='cancel' || text==='close'){
       e.preventDefault();e.stopImmediatePropagation();
-      if(root.id==='rfq-modal' && typeof window.confirmCancelRFQEntry==='function') window.confirmCancelRFQEntry();
-      else requestClose(root.id);
+      if(root.id==='rfq-modal' && typeof window.confirmCancelRFQEntry==='function'){
+        window.confirmCancelRFQEntry();
+      }else if(root.id==='pricing-modal' && typeof window.requestClosePricingEntry==='function'){
+        window.requestClosePricingEntry(text==='cancel'?'cancel':'close');
+      }else{
+        requestClose(root.id);
+      }
     }
   },true);
   document.addEventListener('keydown',e=>{
@@ -9725,8 +10088,13 @@ document.addEventListener('DOMContentLoaded',initialiseWorkspaceControls);
     const root=[...document.querySelectorAll('.modal-overlay')].reverse().find(x=>ENTRY_MODAL_IDS.has(x.id)&&isOpen(x));
     if(root){
       e.preventDefault();e.stopImmediatePropagation();
-      if(root.id==='rfq-modal' && typeof window.confirmCancelRFQEntry==='function') window.confirmCancelRFQEntry();
-      else requestClose(root.id);
+      if(root.id==='rfq-modal' && typeof window.confirmCancelRFQEntry==='function'){
+        window.confirmCancelRFQEntry();
+      }else if(root.id==='pricing-modal' && typeof window.requestClosePricingEntry==='function'){
+        window.requestClosePricingEntry('close');
+      }else{
+        requestClose(root.id);
+      }
     }
   },true);
   window.addEventListener('beforeunload',e=>{
@@ -10809,9 +11177,10 @@ if (_origEditRFQ) {
 /* Release lock when save modals close */
 const _origSaveQuotation = typeof saveQuotation === 'function' ? saveQuotation : null;
 if (_origSaveQuotation) {
-  saveQuotation = async function() {
-    await _origSaveQuotation();
+  saveQuotation = async function(...args) {
+    const result = await _origSaveQuotation(...args);
     await releaseLock();
+    return result;
   };
 }
 
@@ -10830,6 +11199,11 @@ if (_origSaveRFQ) {
     window.closeModal = async function(id) {
       if (id === 'quote-modal' || id === 'rfq-modal') {
         await releaseLock();
+      }
+      if(id==='quote-modal'){
+        document._pendingQuotationRevision=null;
+        document._pendingRFQId=null;
+        document._pendingPricingVersion=null;
       }
       orig(id);
     };

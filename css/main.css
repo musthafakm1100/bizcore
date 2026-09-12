@@ -7252,3 +7252,28 @@ button,
 #rfq-modal .field-invalid{border-color:#dc2626!important;box-shadow:0 0 0 2px rgba(220,38,38,.08)!important}
 #rfq-modal #rfq-cust-dd .cust-option.keyboard-active{background:#eef6ff!important;color:#173a5e!important;box-shadow:inset 3px 0 0 #2e75b6!important}
 #rfq-modal input:focus,#rfq-modal select:focus,#rfq-modal textarea:focus,#rfq-modal .rfq-attach-compact:focus{outline:none!important;border-color:#6ea5d8!important;box-shadow:0 0 0 3px rgba(46,117,182,.12)!important}
+
+
+/* BizCore v74 — Pricing detail action/close standard */
+#pricing-ro-modal #pricing-ro-footer{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  gap:8px!important;
+  flex-wrap:wrap!important;
+}
+#pricing-ro-modal #pricing-ro-footer .pricing-ro-close-action{
+  margin-left:6px!important;
+}
+
+
+/* BizCore v75 — Pricing editable/detail footer close standard */
+#pricing-modal .pricing-footer-actions{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  gap:8px!important;
+}
+#pricing-modal .pricing-close-btn{
+  margin-left:6px!important;
+}
