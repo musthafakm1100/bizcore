@@ -4268,8 +4268,6 @@ async function saveQuotation(mode='save') {
     return;
   }
 
-  await saveQuotations();
-
   // Revision becomes real only after successful quotation save.
   if(!capturedEditingId && q.revisionNo>0 && q.revisionOf){
     const familyBase=String(q.qno||'').replace(/-R\d+$/i,'');
@@ -4282,10 +4280,10 @@ async function saveQuotation(mode='save') {
       }
     });
     q.revisionState='Current';
-    await saveQuotations();
   }
 
   // Link back to RFQ if converted from pricing
+  let _rfqNeedsSave=false;
   if (capturedRFQId && !capturedEditingId) {
     const rfq = rfqs.find(x=>x.id===capturedRFQId);
     if (rfq) {
@@ -4299,13 +4297,22 @@ async function saveQuotation(mode='save') {
         const prior=(rfq.quotationIds||[]).map(id=>quotations.find(x=>x.id===id)).filter(Boolean);
         prior.forEach(old=>{old.supersededBy=q.id;old.revisionState='Superseded';});
         q.revisionState='Current';
-        await saveQuotations();
       }
       rfq.quotationIds=Array.from(new Set([...(rfq.quotationIds||[]),q.id]));
-      rfq.quotationId=q.id; rfq.quotedDate=q.date; rfq.status='Quoted'; await saveRFQs(); renderRFQPage();
+      rfq.quotationId=q.id; rfq.quotedDate=q.date; rfq.status='Quoted'; _rfqNeedsSave=true;
     }
     document._pendingRFQId = null; document._pendingPricingVersion=null; document._pendingQuotationRevision=null;
   }
+
+  // Every mutation above is in-memory only up to this point — persist
+  // the final state in one round trip per collection (run together,
+  // not one after another) instead of saving after each intermediate step.
+  await Promise.all([
+    saveQuotations(),
+    _rfqNeedsSave ? saveRFQs() : Promise.resolve()
+  ]);
+  if (_rfqNeedsSave) renderRFQPage();
+
   clearDirty(); window._pendingQuotationOrigin=null; closeModal('quote-modal');
   if(!capturedEditingId) resetQuotationRegisterFiltersForNewRecord();
   renderAll();
@@ -4707,7 +4714,6 @@ async function deleteQuotation(id) {
     linkedRFQ.quotationId = null;
     linkedRFQ.quotedDate  = null;
     linkedRFQ.status      = 'Pricing';
-    await saveRFQs();
   }
 
   // Move to recycle bin instead of deleting outright
@@ -4718,13 +4724,19 @@ async function deleteQuotation(id) {
     originalCollection: 'quotations'
   };
   recycleBin.push(binEntry);
-  await saveRecycleBin();
 
   // Remove from active quotations — but the number is NEVER reused,
   // since nextQNoSafe() always pulls from the atomic Firestore counter,
   // not from the local quotations array.
   quotations = quotations.filter(x => x.id !== id);
-  await saveQuotations();
+
+  // All three collections above are independent of each other — save
+  // them together in one round trip each instead of one after another.
+  await Promise.all([
+    linkedRFQ ? saveRFQs() : Promise.resolve(),
+    saveRecycleBin(),
+    saveQuotations()
+  ]);
 
   renderAll();
   renderRFQPage();
@@ -4885,8 +4897,7 @@ async function restoreFromBin(id) {
   quotations.push(restored);
   recycleBin.splice(idx, 1);
 
-  await saveQuotations();
-  await saveRecycleBin();
+  await Promise.all([saveQuotations(), saveRecycleBin()]);
   renderAll();
   renderRecycleBin();
   showToast(item.qno + ' restored', 'success');
@@ -8368,12 +8379,16 @@ async function saveSalesOrder() {
   } else {
     salesOrders.unshift(so);
   }
-  await saveSalesOrders();
   const linkedQuote = quotations.find(q=>q.id===so.quotationId);
+  let linkedRFQ = null;
   if (linkedQuote?.rfqId) {
-    const linkedRFQ = rfqs.find(r=>r.id===linkedQuote.rfqId);
-    if (linkedRFQ) { linkedRFQ.status='Sales Order'; await saveRFQs(); }
+    linkedRFQ = rfqs.find(r=>r.id===linkedQuote.rfqId);
+    if (linkedRFQ) linkedRFQ.status='Sales Order';
   }
+  await Promise.all([
+    saveSalesOrders(),
+    linkedRFQ ? saveRFQs() : Promise.resolve()
+  ]);
   closeModal('so-create-modal');
   renderSOPage();
   showToast(editingId ? `Sales Order ${so.soNo} has been updated successfully.` : `Sales Order ${so.soNo} has been created successfully.`, 'success', editingId?'Sales Order Updated':'Sales Order Created');
