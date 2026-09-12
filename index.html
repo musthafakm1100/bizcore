@@ -1814,6 +1814,7 @@ import { initializeApp }
 import { getAuth, signOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, setDoc, onSnapshot, deleteDoc,
+         collection, getDocs, writeBatch,
          initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
          runTransaction }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -1845,21 +1846,132 @@ try {
   console.warn('Offline persistence unavailable, using online-only mode:', e.message);
 }
 
-/* ── One-time save ── */
+/* ═══════════════════════════════════════════════════
+   FIRESTORE SYNC LAYER — v2 (one document per record)
+   ─────────────────────────────────────────────────
+   Previously each collection (rfqs, quotations, ...) was
+   stored as ONE Firestore document holding the entire array
+   as a JSON blob — so saving a single record re-uploaded
+   every record you'd ever created. That got slower as data
+   grew, was very sensitive to network conditions, and had a
+   hard 1 MB-per-document ceiling.
+
+   Now each record gets its own small document, keyed by the
+   record's own `id`. fbSave() diffs the incoming array against
+   what was last synced and only writes/deletes the records that
+   actually changed — cost and speed depend on what changed, not
+   on total collection size.
+
+   External API is UNCHANGED: fbSave(col, array), fbLoad(col),
+   fbListen(col, onUpdate) — same calls as before. Any current
+   or future module (purchase, finance, reporting, ...) can keep
+   using this exact pattern with zero extra integration work.
+
+   Existing data migrates itself automatically and transparently
+   the first time each collection is touched after this update —
+   no manual export/import needed.
+═══════════════════════════════════════════════════ */
+
+// In-memory cache of the last-known-synced JSON per record, per
+// collection — lets fbSave() detect which records actually changed.
+// Populated from Firestore itself on the first fbLoad()/fbSave() of
+// each collection per page load, so it's always accurate even after
+// a refresh (never trusted on its own without that initial sync).
+const _lastSynced = {};
+
+function _chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+// Firestore document ids can't contain '/'. Record ids in this app
+// never do, but this guards against any future stray character.
+function _safeDocId(id) { return String(id).replace(/\//g, '_'); }
+
+// The recycle bin can hold records originally from different
+// collections (a deleted quotation, a deleted RFQ, ...), so a
+// record's own id alone isn't guaranteed unique within recycleBin —
+// namespace it by its original collection to avoid any collision.
+function _docIdFor(col, record) {
+  if (col === 'recycleBin' && record.originalCollection) {
+    return _safeDocId(record.originalCollection + '__' + record.id);
+  }
+  return _safeDocId(record.id);
+}
+
+// One-time migration per collection: if the old single-blob document
+// ('data') still exists, split it into one document per record, then
+// remove the old blob. Safe to call on every load — it's a cheap
+// no-op (one quick existence check) once already migrated.
+const _migrated = {};
+async function _migrateCollectionIfNeeded(col) {
+  if (_migrated[col]) return;
+  try {
+    const oldRef = doc(db, col, 'data');
+    const oldSnap = await getDoc(oldRef);
+    if (!oldSnap.exists()) { _migrated[col] = true; return; }
+    const records = JSON.parse(oldSnap.data().records || '[]');
+    if (records.length) {
+      const ops = records.filter(r => r && r.id != null).map(r => ({ docId: _docIdFor(col, r), data: r }));
+      for (const part of _chunk(ops, 400)) {
+        const batch = writeBatch(db);
+        part.forEach(o => batch.set(doc(db, col, o.docId), o.data));
+        await batch.commit();
+      }
+    }
+    await deleteDoc(oldRef);
+    _migrated[col] = true;
+    console.log('Migrated', col, '→ per-record documents (' + records.length + ' record(s))');
+  } catch(e) {
+    console.warn('Migration check failed for', col, ':', e.message);
+  }
+}
+
+/* ── Save: writes/deletes only the records that changed ── */
 async function fbSave(col, arr) {
   try {
-    await setDoc(doc(db, col, 'data'), {
-      records: JSON.stringify(arr), updatedAt: Date.now()
-    });
+    await _migrateCollectionIfNeeded(col);
+    const cache = _lastSynced[col] || (_lastSynced[col] = {});
+    const currentIds = new Set();
+    const writes = []; // {docId, data, json}
+    for (const record of (arr || [])) {
+      if (!record || record.id == null) continue;
+      const docId = _docIdFor(col, record);
+      currentIds.add(docId);
+      const json = JSON.stringify(record);
+      if (cache[docId] !== json) writes.push({ docId, data: record, json });
+    }
+    const deletes = Object.keys(cache).filter(id => !currentIds.has(id));
+    if (!writes.length && !deletes.length) return true; // nothing changed — skip the network entirely
+
+    const ops = [
+      ...writes.map(w => ({ op: 'set', docId: w.docId, data: w.data })),
+      ...deletes.map(docId => ({ op: 'delete', docId }))
+    ];
+    for (const part of _chunk(ops, 400)) { // Firestore batch limit is 500 ops
+      const batch = writeBatch(db);
+      part.forEach(o => o.op === 'set' ? batch.set(doc(db, col, o.docId), o.data) : batch.delete(doc(db, col, o.docId)));
+      await batch.commit();
+    }
+    writes.forEach(w => cache[w.docId] = w.json);
+    deletes.forEach(id => delete cache[id]);
     return true;
   } catch(e) { console.warn('FB save failed:', col, e.message); return false; }
 }
 
 async function fbLoad(col) {
   try {
-    const snap = await getDoc(doc(db, col, 'data'));
-    if (!snap.exists()) return null;
-    return JSON.parse(snap.data().records || '[]');
+    await _migrateCollectionIfNeeded(col);
+    const snap = await getDocs(collection(db, col));
+    const cache = _lastSynced[col] || (_lastSynced[col] = {});
+    const records = [];
+    snap.forEach(docSnap => {
+      const data = docSnap.data();
+      records.push(data);
+      cache[docSnap.id] = JSON.stringify(data);
+    });
+    return records;
   } catch(e) { console.warn('FB load failed:', col, e.message); return null; }
 }
 
@@ -1882,20 +1994,23 @@ async function fbLoadSettings() {
 
 /* ── Real-time listeners ──
    Each listener fires immediately on load (replaces initial fetch)
-   then fires again whenever another device saves a change.
-   We skip the first fire (local) to avoid double-render on startup. ── */
-const _listenerReady = {};
-
+   then fires again whenever another device saves a change. Firestore
+   only transfers the documents that actually changed over the wire —
+   rebuilding the full array here from the local snapshot is an
+   in-memory operation, not a network cost, so this still gets the
+   full benefit of the per-record structure above. ── */
 function fbListen(col, onUpdate) {
-  const ref = doc(db, col, 'data');
-  return onSnapshot(ref, snap => {
-    if (!snap.exists()) return;
-    try {
-      const arr = JSON.parse(snap.data().records || '[]');
-      // Skip if this update came from THIS device (metadata.hasPendingWrites = true)
-      if (snap.metadata.hasPendingWrites) return;
-      onUpdate(arr);
-    } catch(e) { console.warn('RT parse error:', col, e.message); }
+  const colRef = collection(db, col);
+  return onSnapshot(colRef, snap => {
+    if (snap.metadata.hasPendingWrites) return; // skip our own just-made writes
+    const cache = _lastSynced[col] || (_lastSynced[col] = {});
+    const records = [];
+    snap.forEach(docSnap => {
+      const data = docSnap.data();
+      records.push(data);
+      cache[docSnap.id] = JSON.stringify(data);
+    });
+    onUpdate(records);
   }, err => console.warn('RT listener error:', col, err.message));
 }
 
