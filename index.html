@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icons/bizcore-icon-180.png"/>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=70f" rel="stylesheet"/>
+<link href="css/main.css?v=79" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=35" rel="stylesheet"/>
 <link href="css/typography.css?v=35" rel="stylesheet"/>
 <link href="css/masters.css" rel="stylesheet"/>
@@ -1414,7 +1414,7 @@ document.addEventListener('error', function(e) {
 <h2 id="pricing-modal-title">Pricing sheet</h2>
 <div style="display:flex;align-items:center;gap:8px">
 
-<button class="close-btn" onclick="closeModal('pricing-modal')">✕</button>
+<button class="close-btn" onclick="requestClosePricingEntry()" aria-label="Close pricing">✕</button>
 </div>
 </div>
 <div class="modal-body">
@@ -1553,9 +1553,10 @@ document.addEventListener('error', function(e) {
 <span id="pricing-back-btn"></span>
 <span class="pricing-save-note" id="pricing-save-note">Save pricing before conversion.</span>
 <div class="pricing-footer-actions">
-<button class="btn pricing-footer-btn pricing-cancel-btn btn-sm" onclick="closeModal('pricing-modal')"><i class="ti ti-x"></i>Cancel</button>
+<button class="btn pricing-footer-btn pricing-cancel-btn btn-sm" onclick="requestClosePricingEntry('cancel')"><i class="ti ti-arrow-back-up"></i>Cancel</button>
 <button class="btn btn-primary pricing-footer-btn btn-sm" id="pricing-save-btn" onclick="requestSavePricing()"><i class="ti ti-device-floppy"></i>Save</button>
 <button class="btn btn-success btn-sm" disabled="" id="pricing-convert-btn" onclick="convertToQuotation()"><i class="ti ti-file-arrow-right"></i>Convert</button>
+<button class="btn btn-secondary pricing-footer-btn pricing-close-btn btn-sm" onclick="requestClosePricingEntry('close')"><i class="ti ti-x"></i>Close</button>
 </div>
 </div>
 </div>
@@ -1582,7 +1583,7 @@ document.addEventListener('error', function(e) {
 <div style="display:flex;align-items:center;gap:8px">
 <span style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:4px;padding:3px 10px;font-size:11px;color:rgba(255,255,255,0.9)"><i class="ti ti-lock"></i> Read only</span>
 
-<button class="close-btn" onclick="closeModal('pricing-ro-modal')">✕</button>
+<button class="close-btn" onclick="requestClosePricingDetail()" aria-label="Close pricing detail">✕</button>
 </div>
 </div>
 <div class="modal-body" id="pricing-ro-body"></div>
@@ -2116,7 +2117,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=73';
+    s.src = 'js/app.js?v=79';
     document.body.appendChild(s);
   }
 });
