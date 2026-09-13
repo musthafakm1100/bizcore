@@ -1878,8 +1878,9 @@ const storage = getStorage(fbApp);
 async function fbUploadDataUrl(path, dataUrl) {
   try {
     const r = storageRef(storage, path);
-    await uploadString(r, dataUrl, 'data_url');
-    return await getDownloadURL(r);
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timed out after 20s')), 20000));
+    await Promise.race([uploadString(r, dataUrl, 'data_url'), timeout]);
+    return await Promise.race([getDownloadURL(r), timeout]);
   } catch(e) { console.warn('Storage upload failed:', path, e.message); return null; }
 }
 

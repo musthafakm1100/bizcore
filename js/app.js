@@ -686,7 +686,7 @@ function handleBrandAssetUpload(type,e){
   reader.readAsDataURL(file);
 }
 function handleLogoUpload(e){handleBrandAssetUpload('logo',e);}
-function removeBrandAsset(type){settings[type]='';setBrandAssetPreview(type,'');updateBrandPreview();showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} removed — save to apply`);}
+function removeBrandAsset(type){settings[type]='';delete _brandAssetUploadPromises[type];setBrandAssetPreview(type,'');updateBrandPreview();showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} removed — save to apply`);}
 
 async function saveSetup() {
   const pendingBrandUploads = Object.values(_brandAssetUploadPromises).filter(Boolean);
@@ -1250,7 +1250,9 @@ function clearProductImage() {
   document.getElementById('pm-img-preview').style.display = 'none';
   document.getElementById('pm-img-placeholder').style.display = 'block';
   document.getElementById('pm-img-actions').style.display = 'none';
-  document.getElementById('pm-img-area')._imageData = null;
+  const area = document.getElementById('pm-img-area');
+  area._imageData = null;
+  area._imageUploadPromise = null; // discard any stale/stuck upload from a previous attempt
 }
 
 function handleProductImageUpload(e) {
@@ -1283,12 +1285,14 @@ function handleProductImageUpload(e) {
 }
 
 function setProductImageInForm(imageData) {
+  const area = document.getElementById('pm-img-area');
+  area._imageUploadPromise = null; // discard any stale/stuck upload from a previous product session
   if (imageData) {
     document.getElementById('pm-img-thumb').src = imageData;
     document.getElementById('pm-img-preview').style.display = 'block';
     document.getElementById('pm-img-placeholder').style.display = 'none';
     document.getElementById('pm-img-actions').style.display = 'flex';
-    document.getElementById('pm-img-area')._imageData = imageData;
+    area._imageData = imageData;
   } else {
     clearProductImage();
   }
@@ -6009,7 +6013,7 @@ function handleEmployeePhoto(event) {
   };
   reader.readAsDataURL(file);
 }
-function removeEmployeePhoto(){employeePhotoDraft='';const input=document.getElementById('emp-photo-input');if(input)input.value='';updateEmployeePhotoPreview();}
+function removeEmployeePhoto(){employeePhotoDraft='';employeePhotoUploadPromise=null;const input=document.getElementById('emp-photo-input');if(input)input.value='';updateEmployeePhotoPreview();}
 function formatEmployeeDate(dateValue) {
   if(!dateValue) return 'Not recorded';
   const d=new Date(dateValue+'T00:00:00');
@@ -6041,6 +6045,7 @@ function openEmployeeForm(id=null) {
   const e=id?employees.find(x=>x.id===id):null;
   document.getElementById('employee-form-title').textContent=e?'Edit employee':'New employee';
   document.getElementById('emp-code').value=e?.code||getNextEmployeeCode();
+  employeePhotoUploadPromise=null; // discard any stale/stuck upload from a previous attempt
   employeePhotoDraft=e?.photo||''; updateEmployeePhotoPreview();
   const photoInput=document.getElementById('emp-photo-input'); if(photoInput)photoInput.value='';
   document.getElementById('emp-name').value=e?.name||'';
