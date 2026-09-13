@@ -7902,7 +7902,7 @@ function hideToast(){
    Close, other buttons) so a slow save can never look "frozen" or be
    interrupted mid-save. Always paired with try/finally at the call
    site so it's removed even if the save throws. */
-function showBusyOverlay(containerId, message='Saving…') {
+function showBusyOverlay(containerId, message='Saving') {
   const container = document.getElementById(containerId);
   if (!container) return;
   hideBusyOverlay(containerId);
@@ -7913,7 +7913,8 @@ function showBusyOverlay(containerId, message='Saving…') {
   const overlay = document.createElement('div');
   overlay.className = 'busy-overlay';
   overlay.id = containerId + '-busy-overlay';
-  overlay.innerHTML = `<div class="busy-overlay-spinner"></div><div class="busy-overlay-text">${esc(message)}</div>`;
+  const cleanMessage = String(message).replace(/[.…\s]+$/, ''); // animated dots supply the trailing "..."
+  overlay.innerHTML = `<div class="busy-overlay-ring-wrap"><div class="busy-overlay-ring"></div><div class="busy-overlay-bars"><div class="busy-overlay-bar b1"></div><div class="busy-overlay-bar o"></div><div class="busy-overlay-bar b2"></div></div></div><div class="busy-overlay-text">${esc(cleanMessage)}</div>`;
   container.appendChild(overlay);
 }
 function hideBusyOverlay(containerId) {
