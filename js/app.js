@@ -664,17 +664,33 @@ function updateBrandPreview(){
   const f=document.getElementById('bp-footer');if(f)f.innerHTML=parts.join(' &nbsp; | &nbsp; ');
 }
 
+let _brandAssetUploadPromises = {};
 function handleBrandAssetUpload(type,e){
   const file=e.target.files[0];if(!file)return;
   if(file.size>2.5*1024*1024){showToast('Please select an image smaller than 2.5 MB','error');e.target.value='';return;}
   const reader=new FileReader();
-  reader.onload=ev=>{settings[type]=ev.target.result;setBrandAssetPreview(type,settings[type]);updateBrandPreview();showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} ready — save branding to apply`,'success');};
+  reader.onload=ev=>{
+    const localPreview=ev.target.result;
+    settings[type]=localPreview;setBrandAssetPreview(type,localPreview);updateBrandPreview();
+    if (window.FB) {
+      showToast(`Uploading ${type}…`,'success');
+      _brandAssetUploadPromises[type] = window.FB.uploadDataUrl('branding/'+type, localPreview).then(url=>{
+        if (url) { settings[type]=url; setBrandAssetPreview(type,url); updateBrandPreview(); showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} ready — save branding to apply`,'success'); }
+        else showToast(`${type} upload failed — will retry when you save`,'warning');
+        return url;
+      });
+    } else {
+      showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} ready — save branding to apply`,'success');
+    }
+  };
   reader.readAsDataURL(file);
 }
 function handleLogoUpload(e){handleBrandAssetUpload('logo',e);}
 function removeBrandAsset(type){settings[type]='';setBrandAssetPreview(type,'');updateBrandPreview();showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} removed — save to apply`);}
 
 async function saveSetup() {
+  const pendingBrandUploads = Object.values(_brandAssetUploadPromises).filter(Boolean);
+  if (pendingBrandUploads.length) { showToast('Finishing upload…','success'); await Promise.all(pendingBrandUploads); _brandAssetUploadPromises = {}; }
   const read=(id,current='')=>{const e=document.getElementById(id);return e?e.value.trim():current;};
   settings.coname=read('s-coname',settings.coname)||'Downtown Trading Est.';
   settings.conameAr=read('s-coname-ar',settings.conameAr);
@@ -1239,15 +1255,28 @@ function clearProductImage() {
 
 function handleProductImageUpload(e) {
   const file = e.target.files[0]; if (!file) return;
-  if (file.size > 2*1024*1024) { showToast('Image must be under 2MB','error'); return; }
+  if (file.size > 8*1024*1024) { showToast('Image must be under 8MB','error'); return; }
+  const area = document.getElementById('pm-img-area');
   const reader = new FileReader();
   reader.onload = function(ev) {
-    const data = ev.target.result;
-    document.getElementById('pm-img-thumb').src = data;
+    const localPreview = ev.target.result;
+    // Show the picked image immediately for instant feedback...
+    document.getElementById('pm-img-thumb').src = localPreview;
     document.getElementById('pm-img-preview').style.display = 'block';
     document.getElementById('pm-img-placeholder').style.display = 'none';
     document.getElementById('pm-img-actions').style.display = 'flex';
-    document.getElementById('pm-img-area')._imageData = data;
+    area._imageData = localPreview; // fallback if upload fails / offline
+
+    // ...then upload to Cloud Storage in the background and switch to the
+    // hosted URL once ready, so the saved record never embeds the raw image.
+    if (window.FB) {
+      const path = 'products/' + (editingProdId || ('new-'+Date.now().toString(36))) + '/' + Date.now() + '_' + file.name;
+      area._imageUploadPromise = window.FB.uploadDataUrl(path, localPreview).then(url => {
+        if (url) { area._imageData = url; document.getElementById('pm-img-thumb').src = url; }
+        else showToast('Image upload failed — will retry when you save','warning');
+        return url;
+      });
+    }
   };
   reader.readAsDataURL(file);
   e.target.value = '';
@@ -1671,11 +1700,12 @@ function requestClosePricingDetail(){
 function openPricingViewRFQ(rfqId){ if(rfqId){ closeModal('pricing-ro-modal'); viewRFQ(rfqId); } }
 function openPricingViewQuotation(quotationId){ if(quotationId){ closeModal('pricing-ro-modal'); viewQuotation(quotationId); } }
 function pricingViewAttachmentHtml(file, index){
-  if(!file || !file.data) return '';
+  if(!file || !(file.url || file.data)) return '';
+  const src=file.url || file.data;
   const name=escapeHtml(file.name||('Attachment '+(index+1)));
   const supplier=escapeHtml(file.supplier||'');
   const ref=escapeHtml(file.ref||'');
-  return '<a class="pricing-view-attachment" href="'+file.data+'" download="'+name+'" onclick="event.stopPropagation()">'
+  return '<a class="pricing-view-attachment" href="'+src+'" download="'+name+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">'
     +'<span class="pricing-view-file-icon"><i class="ti ti-paperclip"></i></span>'
     +'<span class="pricing-view-file-text"><strong>'+name+'</strong>'
     +(supplier||ref?'<small>'+[supplier,ref].filter(Boolean).join(' · ')+'</small>':'')
@@ -2349,7 +2379,9 @@ async function saveProduct() {
   });
   const catVal = document.getElementById('pm-cat').value;
   const category = (catVal === '__addcat__' || !catVal) ? '' : catVal;
-  const imageData = document.getElementById('pm-img-area')._imageData || null;
+  const imgArea = document.getElementById('pm-img-area');
+  if (imgArea._imageUploadPromise) { showToast('Finishing image upload…','success'); await imgArea._imageUploadPromise; }
+  const imageData = imgArea._imageData || null;
   const p = {
     id: editingProdId || ('p'+Date.now().toString(36)),
     name, code: document.getElementById('pm-code').value.trim(),
@@ -5957,11 +5989,25 @@ function updateEmployeePhotoPreview() {
   if(employeePhotoDraft){box.innerHTML=`<img src="${employeePhotoDraft}" alt="Employee photo"/>`; if(remove)remove.style.display='inline-flex';}
   else{box.innerHTML='<i class="ti ti-user"></i>'; if(remove)remove.style.display='none';}
 }
+let employeePhotoUploadPromise = null;
 function handleEmployeePhoto(event) {
   const file=event.target.files?.[0]; if(!file)return;
   if(!file.type.startsWith('image/')){showToast('Please choose an image file','error');event.target.value='';return;}
-  if(file.size>2*1024*1024){showToast('Photo must be smaller than 2 MB','error');event.target.value='';return;}
-  const reader=new FileReader(); reader.onload=e=>{employeePhotoDraft=e.target.result;updateEmployeePhotoPreview();}; reader.readAsDataURL(file);
+  if(file.size>8*1024*1024){showToast('Photo must be smaller than 8 MB','error');event.target.value='';return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const localPreview=e.target.result;
+    employeePhotoDraft=localPreview; updateEmployeePhotoPreview();
+    if (window.FB) {
+      const path='employees/'+(editingEmployeeId||('new-'+Date.now().toString(36)))+'/'+Date.now()+'_'+file.name;
+      employeePhotoUploadPromise = window.FB.uploadDataUrl(path, localPreview).then(url=>{
+        if (url) { employeePhotoDraft=url; updateEmployeePhotoPreview(); }
+        else showToast('Photo upload failed — will retry when you save','warning');
+        return url;
+      });
+    }
+  };
+  reader.readAsDataURL(file);
 }
 function removeEmployeePhoto(){employeePhotoDraft='';const input=document.getElementById('emp-photo-input');if(input)input.value='';updateEmployeePhotoPreview();}
 function formatEmployeeDate(dateValue) {
@@ -6019,6 +6065,7 @@ async function saveEmployee() {
   if(!code){showValidationDialog('Employee code required','Enter a unique employee code.',document.getElementById('emp-code'));return;}
   if(!name){showValidationDialog('Employee name required','Enter the employee name.',document.getElementById('emp-name'));return;}
   if(employees.some(e=>e.code.toLowerCase()===code.toLowerCase()&&e.id!==editingEmployeeId)){showValidationDialog('Duplicate employee code','This employee code is already in use.',document.getElementById('emp-code'));return;}
+  if (employeePhotoUploadPromise) { showToast('Finishing photo upload…','success'); await employeePhotoUploadPromise; employeePhotoUploadPromise=null; }
   const record={id:editingEmployeeId||('emp-'+Date.now().toString(36)),code,name,photo:employeePhotoDraft,department:document.getElementById('emp-department').value.trim(),designation:document.getElementById('emp-designation').value.trim(),email:document.getElementById('emp-email').value.trim(),mobile:document.getElementById('emp-mobile').value.trim(),roles:[...document.querySelectorAll('#employee-role-grid input:checked')].map(x=>x.value),iqamaNo:document.getElementById('emp-iqama').value.trim(),iqamaExpiry:document.getElementById('emp-iqama-expiry').value,passportNo:document.getElementById('emp-passport').value.trim(),passportExpiry:document.getElementById('emp-passport-expiry').value,licenseNo:document.getElementById('emp-license').value.trim(),licenseExpiry:document.getElementById('emp-license-expiry').value,active:document.getElementById('emp-active').value==='true',updated:new Date().toISOString()};
   const existing=editingEmployeeId?employees.find(e=>e.id===editingEmployeeId):null;
   const persist=async()=>{if(editingEmployeeId){const i=employees.findIndex(e=>e.id===editingEmployeeId);if(i>-1)employees[i]=record;}else employees.unshift(record);await saveEmployees();closeEmployeeForm();renderEmployees();populateRFQAssignees();showToast(existing?'Employee updated':'Employee added','success');editingEmployeeId=null;};
@@ -6054,11 +6101,23 @@ function goEmployeePage(p){employeePage=p;renderEmployees();}
 
 function handleRFQAttach(e) {
   const file = e.target.files[0]; if (!file) return;
+  if (file.size > 10*1024*1024) { showToast('Attachment must be under 10MB','error'); e.target.value=''; return; }
   const reader = new FileReader();
   reader.onload = ev => {
-    rfqAttachment = {name:file.name, type:file.type, data:ev.target.result};
+    const localPreview = ev.target.result;
+    rfqAttachment = {name:file.name, type:file.type, data:localPreview}; // local fallback until upload finishes
     document.getElementById('rfq-attach-list').innerHTML =
       `<div class="attach-item"><i class="ti ti-${file.type.includes('pdf')?'pdf':'photo'}"></i>${file.name}<button onclick="rfqAttachment=null;this.closest('.attach-item').remove()" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--red)"><i class="ti ti-x"></i></button></div>`;
+
+    if (window.FB) {
+      const thisAttachment = rfqAttachment;
+      const path = 'rfqs/' + (editingRFQId || ('new-'+Date.now().toString(36))) + '/' + Date.now() + '_' + file.name;
+      thisAttachment._uploadPromise = window.FB.uploadDataUrl(path, localPreview).then(url => {
+        if (url) { delete thisAttachment.data; thisAttachment.url = url; thisAttachment.path = path; }
+        else showToast('Attachment upload failed — will retry when you save','warning');
+        return url;
+      });
+    }
   };
   reader.readAsDataURL(file);
   e.target.value='';
@@ -6154,6 +6213,7 @@ async function saveRFQ() {
   const dueISO=rfqDisplayToISO(document.getElementById('rfq-due').value);
   if(!receivedISO){showValidationDialog('Invalid received date','Enter the date as DD/MM/YYYY.',document.getElementById('rfq-date'));return;}
   if(!dueISO){showValidationDialog('Invalid due date','Enter the date as DD/MM/YYYY.',document.getElementById('rfq-due'));return;}
+  if (rfqAttachment && rfqAttachment._uploadPromise) { showToast('Finishing attachment upload…','success'); await rfqAttachment._uploadPromise; delete rfqAttachment._uploadPromise; }
   const r = {
     id: editingRFQId || ('r'+Date.now().toString(36)),
     rfqNo: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.rfqNo : nextRFQNo(),
@@ -6215,8 +6275,9 @@ function viewRFQ(id) {
   document.getElementById('rfq-view-footer').className = 'modal-footer rfq-view-footer';
 
   const isImg = r.attachment && !r.attachment.type?.includes('pdf');
+  const attachSrc = r.attachment ? (r.attachment.url || r.attachment.data) : null;
   const attachHtml = r.attachment
-    ? `<div class="attach-item"><i class="ti ti-${r.attachment.type?.includes('pdf')?'pdf':'photo'}"></i><span style="flex:1;color:#475569">${r.attachment.name}</span>${isImg?`<button class="abtn abtn-view" onclick="document.getElementById('rfq-img-prev').style.display=document.getElementById('rfq-img-prev').style.display==='none'?'block':'none'"><i class="ti ti-eye"></i>View</button>`:''}<a href="${r.attachment.data}" download="${r.attachment.name}" class="abtn abtn-edit" style="text-decoration:none"><i class="ti ti-download"></i>Download</a></div>${isImg?`<div id="rfq-img-prev" style="display:none;margin-top:8px;text-align:center;background:#f8fafc;border:1px solid var(--border);border-radius:7px;padding:10px"><img src="${r.attachment.data}" style="max-width:100%;max-height:420px;object-fit:contain;border-radius:4px"></div>`:''}` : '<div style="font-size:12px;color:#94a3b8">No attachment added.</div>';
+    ? `<div class="attach-item"><i class="ti ti-${r.attachment.type?.includes('pdf')?'pdf':'photo'}"></i><span style="flex:1;color:#475569">${r.attachment.name}</span>${isImg?`<button class="abtn abtn-view" onclick="document.getElementById('rfq-img-prev').style.display=document.getElementById('rfq-img-prev').style.display==='none'?'block':'none'"><i class="ti ti-eye"></i>View</button>`:''}<a href="${attachSrc}" download="${r.attachment.name}" target="_blank" rel="noopener" class="abtn abtn-edit" style="text-decoration:none"><i class="ti ti-download"></i>Download</a></div>${isImg?`<div id="rfq-img-prev" style="display:none;margin-top:8px;text-align:center;background:#f8fafc;border:1px solid var(--border);border-radius:7px;padding:10px"><img src="${attachSrc}" style="max-width:100%;max-height:420px;object-fit:contain;border-radius:4px"></div>`:''}` : '<div style="font-size:12px;color:#94a3b8">No attachment added.</div>';
 
   const reqItems = (r.pricingItems && r.pricingItems.length) ? r.pricingItems : [];
   const pricedCount = reqItems.filter(i => parseFloat(i.buy)>0 || parseFloat(i.sell)>0 || i.supplier || i.quoteRef).length;
@@ -6389,7 +6450,7 @@ function renderPricingVendorQuotes() {
       <i class="ti ti-${q.type?.includes('pdf')?'file-type-pdf':'photo'}" style="color:var(--blue)"></i>
       <div style="min-width:0;flex:1">
         <div style="font-size:12px;font-weight:600;color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${q.supplier||'Unspecified supplier'} <span style="font-weight:400;color:var(--gray)">${q.ref?'· '+q.ref:''}</span></div>
-        <a href="${q.data}" download="${q.name}" style="font-size:11px;color:var(--gray);text-decoration:none">${q.name}</a>
+        <a href="${q.url||q.data}" download="${q.name}" target="_blank" rel="noopener" style="font-size:11px;color:var(--gray);text-decoration:none">${q.name}</a>
       </div>
       <button type="button" class="abtn abtn-del" onclick="removePricingVendorQuote(${i})" title="Remove attachment"><i class="ti ti-trash"></i></button>
     </div>`).join('');
@@ -6397,14 +6458,26 @@ function renderPricingVendorQuotes() {
 
 function handlePricingAttach(e) {
   const file = e.target.files[0]; if (!file) return;
+  if (file.size > 10*1024*1024) { showToast('Attachment must be under 10MB','error'); e.target.value=''; return; }
   const supplier = document.getElementById('pricing-sup-search').value.trim() || pricingSupplierName;
   const ref = document.getElementById('pricing-sup-ref').value.trim();
   const date = getPricingSupplierDateISO();
   const reader = new FileReader();
   reader.onload = ev => {
-    pricingVendorQuotes.push({id:'vq'+Date.now(), supplier, ref, date, name:file.name, type:file.type, data:ev.target.result});
+    const localPreview = ev.target.result;
+    const entry = {id:'vq'+Date.now(), supplier, ref, date, name:file.name, type:file.type, data:localPreview};
+    pricingVendorQuotes.push(entry);
     renderPricingVendorQuotes();
     markPricingDirty();
+
+    if (window.FB) {
+      const path = 'pricing/' + (pricingRFQId || ('new-'+Date.now().toString(36))) + '/' + entry.id + '_' + file.name;
+      entry._uploadPromise = window.FB.uploadDataUrl(path, localPreview).then(url => {
+        if (url) { delete entry.data; entry.url = url; entry.path = path; }
+        else showToast('Attachment upload failed — will retry when you save','warning');
+        return url;
+      });
+    }
   };
   reader.readAsDataURL(file);
   e.target.value='';
@@ -7456,6 +7529,8 @@ async function savePricing() {
   const r = rfqs.find(x=>x.id===pricingRFQId); if (!r) return false;
   if (!validatePricingHeaderFields()) return false;
   if (!validatePricingPrices()) return false;
+  const pendingUploads = pricingVendorQuotes.filter(q=>q._uploadPromise);
+  if (pendingUploads.length) { showToast('Finishing attachment upload…','success'); await Promise.all(pendingUploads.map(q=>q._uploadPromise)); pendingUploads.forEach(q=>delete q._uploadPromise); }
   const items=readPricingItemsFromDOM();
   r.pricingItems = items; r.pricingSettingsSnapshot={...activePricingSettings()}; const _ruleSnapshot=checkPricingBusinessRules(false); r.pricingApprovalRequired=!!_ruleSnapshot.needsApproval; r.pricingApproved=!_ruleSnapshot.needsApproval||pricingManagerApprovedForCurrentSave; pricingManagerApprovedForCurrentSave=false;
   r.supplierName = document.getElementById('pricing-sup-search').value.trim()||pricingSupplierName;

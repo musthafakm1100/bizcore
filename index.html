@@ -1818,6 +1818,8 @@ import { getFirestore, doc, getDoc, setDoc, onSnapshot, deleteDoc,
          initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
          runTransaction }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 const cfg = {
   apiKey:            'AIzaSyCsgVVIU_AZpWgTrZo_jrlCQVgZusCI_zY',
@@ -1844,6 +1846,46 @@ try {
 } catch(e) {
   db = getFirestore(fbApp);
   console.warn('Offline persistence unavailable, using online-only mode:', e.message);
+}
+
+const storage = getStorage(fbApp);
+
+/* ═══════════════════════════════════════════════════
+   FILE STORAGE — images & attachments go to Cloud Storage,
+   NOT into Firestore documents.
+   ─────────────────────────────────────────────────
+   Product photos, RFQ attachments, pricing vendor-quote
+   files, employee photos, and the company logo/letterhead
+   used to be embedded as base64 text directly inside their
+   Firestore record. That inflates the file size by ~33% and
+   counts against Firestore's 1 MB-per-document limit — a
+   single 2 MB photo could already exceed it on its own.
+
+   Now the actual file is uploaded here to Cloud Storage
+   (which has no meaningful size concern for this kind of
+   use), and only a short download URL string is stored in
+   the Firestore record — so attaching files, regardless of
+   size, never affects a record's Firestore size again.
+
+   fbUploadDataUrl(path, dataUrl) uploads and returns a
+   public download URL (or null on failure — callers should
+   check for that and warn the user rather than silently
+   saving a broken reference). fbDeleteFile(path) best-effort
+   removes a file (e.g. when a photo is replaced or removed);
+   failures are swallowed since a missing/already-gone file
+   isn't an error worth surfacing.
+═══════════════════════════════════════════════════ */
+async function fbUploadDataUrl(path, dataUrl) {
+  try {
+    const r = storageRef(storage, path);
+    await uploadString(r, dataUrl, 'data_url');
+    return await getDownloadURL(r);
+  } catch(e) { console.warn('Storage upload failed:', path, e.message); return null; }
+}
+
+async function fbDeleteFile(path) {
+  if (!path) return;
+  try { await deleteObject(storageRef(storage, path)); } catch(e) { /* already gone or never existed — fine */ }
 }
 
 /* ═══════════════════════════════════════════════════
@@ -2052,7 +2094,7 @@ async function getNextDocNumber(counterKey, prefix) {
 
 /* Expose to app.js */
 window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings, fbListen, fbListenSettings,
-  getNextDocNumber,
+  getNextDocNumber, uploadDataUrl: fbUploadDataUrl, deleteFile: fbDeleteFile,
 
   /* ═══════════════════════════════════════════════════
      PRESENCE LOCKING SYSTEM
