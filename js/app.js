@@ -665,32 +665,36 @@ function updateBrandPreview(){
 }
 
 let _brandAssetUploadPromises = {};
+let _brandAssetUploadFailed = {};
 function handleBrandAssetUpload(type,e){
   const file=e.target.files[0];if(!file)return;
   if(file.size>2.5*1024*1024){showToast('Please select an image smaller than 2.5 MB','error');e.target.value='';return;}
-  const reader=new FileReader();
-  reader.onload=ev=>{
-    const localPreview=ev.target.result;
-    settings[type]=localPreview;setBrandAssetPreview(type,localPreview);updateBrandPreview();
-    if (window.FB) {
-      showToast(`Uploading ${type}…`,'success');
-      _brandAssetUploadPromises[type] = window.FB.uploadDataUrl('branding/'+type, localPreview).then(url=>{
-        if (url) { settings[type]=url; setBrandAssetPreview(type,url); updateBrandPreview(); showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} ready — save branding to apply`,'success'); }
-        else showToast(`${type} upload failed — will retry when you save`,'warning');
-        return url;
-      });
-    } else {
-      showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} ready — save branding to apply`,'success');
-    }
-  };
-  reader.readAsDataURL(file);
+  const localPreview = URL.createObjectURL(file); // instant preview, no base64 needed
+  settings[type]=localPreview;_brandAssetUploadFailed[type]=false;setBrandAssetPreview(type,localPreview);updateBrandPreview();
+  if (window.FB) {
+    showToast(`Uploading ${type}…`,'success');
+    _brandAssetUploadPromises[type] = window.FB.uploadFile('branding/'+type, file).then(url=>{
+      if (url) {
+        URL.revokeObjectURL(localPreview);
+        settings[type]=url; _brandAssetUploadFailed[type]=false; setBrandAssetPreview(type,url); updateBrandPreview();
+        showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} ready — save branding to apply`,'success');
+      } else {
+        _brandAssetUploadFailed[type]=true;
+        showToast(`${type} upload failed — please try again before saving`,'error');
+      }
+      return url;
+    });
+  } else {
+    showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} ready — save branding to apply`,'success');
+  }
 }
 function handleLogoUpload(e){handleBrandAssetUpload('logo',e);}
-function removeBrandAsset(type){settings[type]='';delete _brandAssetUploadPromises[type];setBrandAssetPreview(type,'');updateBrandPreview();showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} removed — save to apply`);}
+function removeBrandAsset(type){settings[type]='';delete _brandAssetUploadPromises[type];_brandAssetUploadFailed[type]=false;if(window.FB)window.FB.deleteFile('branding/'+type);setBrandAssetPreview(type,'');updateBrandPreview();showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} removed — save to apply`);}
 
 async function saveSetup() {
   const pendingBrandUploads = Object.values(_brandAssetUploadPromises).filter(Boolean);
   if (pendingBrandUploads.length) { showToast('Finishing upload…','success'); await Promise.all(pendingBrandUploads); _brandAssetUploadPromises = {}; }
+  if (Object.values(_brandAssetUploadFailed).some(Boolean)) { showValidationDialog('Upload failed','A branding image could not be uploaded. Check your connection and try selecting it again, or remove it and save without one.',document.getElementById('s-coname')); return; }
   const read=(id,current='')=>{const e=document.getElementById(id);return e?e.value.trim():current;};
   settings.coname=read('s-coname',settings.coname)||'Downtown Trading Est.';
   settings.conameAr=read('s-coname-ar',settings.conameAr);
@@ -1246,47 +1250,55 @@ function renderProducts() {
 function goProdPage(p){ prodPage=p; renderProducts(); }
 
 function clearProductImage() {
+  const area = document.getElementById('pm-img-area');
+  if (area._imagePath && window.FB) window.FB.deleteFile(area._imagePath);
   document.getElementById('pm-img-thumb').src = '';
   document.getElementById('pm-img-preview').style.display = 'none';
   document.getElementById('pm-img-placeholder').style.display = 'block';
   document.getElementById('pm-img-actions').style.display = 'none';
-  const area = document.getElementById('pm-img-area');
   area._imageData = null;
+  area._imagePath = null;
   area._imageUploadPromise = null; // discard any stale/stuck upload from a previous attempt
+  area._imageUploadFailed = false;
 }
 
 function handleProductImageUpload(e) {
   const file = e.target.files[0]; if (!file) return;
   if (file.size > 8*1024*1024) { showToast('Image must be under 8MB','error'); return; }
   const area = document.getElementById('pm-img-area');
-  const reader = new FileReader();
-  reader.onload = function(ev) {
-    const localPreview = ev.target.result;
-    // Show the picked image immediately for instant feedback...
-    document.getElementById('pm-img-thumb').src = localPreview;
-    document.getElementById('pm-img-preview').style.display = 'block';
-    document.getElementById('pm-img-placeholder').style.display = 'none';
-    document.getElementById('pm-img-actions').style.display = 'flex';
-    area._imageData = localPreview; // fallback if upload fails / offline
+  const localPreview = URL.createObjectURL(file); // instant preview, no base64 needed
+  const oldPath = area._imagePath; // the file this one is replacing, if any
 
-    // ...then upload to Cloud Storage in the background and switch to the
-    // hosted URL once ready, so the saved record never embeds the raw image.
-    if (window.FB) {
-      const path = 'products/' + (editingProdId || ('new-'+Date.now().toString(36))) + '/' + Date.now() + '_' + file.name;
-      area._imageUploadPromise = window.FB.uploadDataUrl(path, localPreview).then(url => {
-        if (url) { area._imageData = url; document.getElementById('pm-img-thumb').src = url; }
-        else showToast('Image upload failed — will retry when you save','warning');
-        return url;
-      });
-    }
-  };
-  reader.readAsDataURL(file);
+  document.getElementById('pm-img-thumb').src = localPreview;
+  document.getElementById('pm-img-preview').style.display = 'block';
+  document.getElementById('pm-img-placeholder').style.display = 'none';
+  document.getElementById('pm-img-actions').style.display = 'flex';
+  area._imageData = localPreview;
+  area._imageUploadFailed = false;
+
+  if (window.FB) {
+    const path = 'products/' + (editingProdId || ('new-'+Date.now().toString(36))) + '/' + Date.now() + '_' + file.name;
+    area._imageUploadPromise = window.FB.uploadFile(path, file).then(url => {
+      if (url) {
+        URL.revokeObjectURL(localPreview);
+        area._imageData = url; area._imagePath = path; area._imageUploadFailed = false;
+        document.getElementById('pm-img-thumb').src = url;
+        if (oldPath) window.FB.deleteFile(oldPath); // best-effort, don't wait on it
+      } else {
+        area._imageUploadFailed = true;
+        showToast('Image upload failed — please try again before saving','error');
+      }
+      return url;
+    });
+  }
   e.target.value = '';
 }
 
-function setProductImageInForm(imageData) {
+function setProductImageInForm(imageData, imagePath) {
   const area = document.getElementById('pm-img-area');
   area._imageUploadPromise = null; // discard any stale/stuck upload from a previous product session
+  area._imageUploadFailed = false;
+  area._imagePath = imagePath || null;
   if (imageData) {
     document.getElementById('pm-img-thumb').src = imageData;
     document.getElementById('pm-img-preview').style.display = 'block';
@@ -1434,7 +1446,7 @@ function openEditProduct(id) {
   document.getElementById('specs-list').innerHTML = '';
   (p.specs||[]).forEach(s => addSpecRow(s.k, s.v));
   if (!(p.specs||[]).length) addSpecRow();
-  setProductImageInForm(p.image||null);
+  setProductImageInForm(p.image||null, p.imagePath||null);
   loadCustomCategoriesIntoForm();
   // Set category after loading custom ones
   document.getElementById('pm-cat').value = p.category||'';
@@ -2385,6 +2397,7 @@ async function saveProduct() {
   const category = (catVal === '__addcat__' || !catVal) ? '' : catVal;
   const imgArea = document.getElementById('pm-img-area');
   if (imgArea._imageUploadPromise) { showToast('Finishing image upload…','success'); await imgArea._imageUploadPromise; }
+  if (imgArea._imageUploadFailed) { showValidationDialog('Image upload failed','The product image could not be uploaded. Check your connection and try selecting the image again, or remove it and save without one.',document.getElementById('pm-img-area')); return; }
   const imageData = imgArea._imageData || null;
   const p = {
     id: editingProdId || ('p'+Date.now().toString(36)),
@@ -2396,7 +2409,8 @@ async function saveProduct() {
     price: parseFloat(document.getElementById('pm-price').value)||0,
     notes: document.getElementById('pm-notes').value.trim(),
     specs,
-    image: imageData
+    image: imageData,
+    imagePath: imgArea._imagePath || null
   };
   const isNew = !editingProdId;
   if (editingProdId) { const i=products.findIndex(x=>x.id===editingProdId); if(i>-1) products[i]=p; }
@@ -5994,26 +6008,38 @@ function updateEmployeePhotoPreview() {
   else{box.innerHTML='<i class="ti ti-user"></i>'; if(remove)remove.style.display='none';}
 }
 let employeePhotoUploadPromise = null;
+let employeePhotoUploadFailed = false;
+let employeePhotoPath = null; // Storage path of the currently-saved photo, for cleanup on replace/remove
 function handleEmployeePhoto(event) {
   const file=event.target.files?.[0]; if(!file)return;
   if(!file.type.startsWith('image/')){showToast('Please choose an image file','error');event.target.value='';return;}
   if(file.size>8*1024*1024){showToast('Photo must be smaller than 8 MB','error');event.target.value='';return;}
-  const reader=new FileReader();
-  reader.onload=e=>{
-    const localPreview=e.target.result;
-    employeePhotoDraft=localPreview; updateEmployeePhotoPreview();
-    if (window.FB) {
-      const path='employees/'+(editingEmployeeId||('new-'+Date.now().toString(36)))+'/'+Date.now()+'_'+file.name;
-      employeePhotoUploadPromise = window.FB.uploadDataUrl(path, localPreview).then(url=>{
-        if (url) { employeePhotoDraft=url; updateEmployeePhotoPreview(); }
-        else showToast('Photo upload failed — will retry when you save','warning');
-        return url;
-      });
-    }
-  };
-  reader.readAsDataURL(file);
+
+  const localPreview = URL.createObjectURL(file); // instant preview, no base64 needed
+  const oldPath = employeePhotoPath; // the file this one is replacing, if any
+  employeePhotoDraft = localPreview; employeePhotoUploadFailed = false; updateEmployeePhotoPreview();
+
+  if (window.FB) {
+    const path='employees/'+(editingEmployeeId||('new-'+Date.now().toString(36)))+'/'+Date.now()+'_'+file.name;
+    employeePhotoUploadPromise = window.FB.uploadFile(path, file).then(url=>{
+      if (url) {
+        URL.revokeObjectURL(localPreview);
+        employeePhotoDraft=url; employeePhotoPath=path; employeePhotoUploadFailed=false;
+        updateEmployeePhotoPreview();
+        if (oldPath) window.FB.deleteFile(oldPath); // best-effort, don't wait on it
+      } else {
+        employeePhotoUploadFailed = true;
+        showToast('Photo upload failed — please try again before saving','error');
+      }
+      return url;
+    });
+  }
 }
-function removeEmployeePhoto(){employeePhotoDraft='';employeePhotoUploadPromise=null;const input=document.getElementById('emp-photo-input');if(input)input.value='';updateEmployeePhotoPreview();}
+function removeEmployeePhoto(){
+  if (employeePhotoPath && window.FB) window.FB.deleteFile(employeePhotoPath);
+  employeePhotoDraft='';employeePhotoUploadPromise=null;employeePhotoUploadFailed=false;employeePhotoPath=null;
+  const input=document.getElementById('emp-photo-input');if(input)input.value='';updateEmployeePhotoPreview();
+}
 function formatEmployeeDate(dateValue) {
   if(!dateValue) return 'Not recorded';
   const d=new Date(dateValue+'T00:00:00');
@@ -6045,7 +6071,8 @@ function openEmployeeForm(id=null) {
   const e=id?employees.find(x=>x.id===id):null;
   document.getElementById('employee-form-title').textContent=e?'Edit employee':'New employee';
   document.getElementById('emp-code').value=e?.code||getNextEmployeeCode();
-  employeePhotoUploadPromise=null; // discard any stale/stuck upload from a previous attempt
+  employeePhotoUploadPromise=null; employeePhotoUploadFailed=false; // discard any stale/stuck upload from a previous attempt
+  employeePhotoPath=e?.photoPath||null;
   employeePhotoDraft=e?.photo||''; updateEmployeePhotoPreview();
   const photoInput=document.getElementById('emp-photo-input'); if(photoInput)photoInput.value='';
   document.getElementById('emp-name').value=e?.name||'';
@@ -6071,7 +6098,8 @@ async function saveEmployee() {
   if(!name){showValidationDialog('Employee name required','Enter the employee name.',document.getElementById('emp-name'));return;}
   if(employees.some(e=>e.code.toLowerCase()===code.toLowerCase()&&e.id!==editingEmployeeId)){showValidationDialog('Duplicate employee code','This employee code is already in use.',document.getElementById('emp-code'));return;}
   if (employeePhotoUploadPromise) { showToast('Finishing photo upload…','success'); await employeePhotoUploadPromise; employeePhotoUploadPromise=null; }
-  const record={id:editingEmployeeId||('emp-'+Date.now().toString(36)),code,name,photo:employeePhotoDraft,department:document.getElementById('emp-department').value.trim(),designation:document.getElementById('emp-designation').value.trim(),email:document.getElementById('emp-email').value.trim(),mobile:document.getElementById('emp-mobile').value.trim(),roles:[...document.querySelectorAll('#employee-role-grid input:checked')].map(x=>x.value),iqamaNo:document.getElementById('emp-iqama').value.trim(),iqamaExpiry:document.getElementById('emp-iqama-expiry').value,passportNo:document.getElementById('emp-passport').value.trim(),passportExpiry:document.getElementById('emp-passport-expiry').value,licenseNo:document.getElementById('emp-license').value.trim(),licenseExpiry:document.getElementById('emp-license-expiry').value,active:document.getElementById('emp-active').value==='true',updated:new Date().toISOString()};
+  if (employeePhotoUploadFailed) { showValidationDialog('Photo upload failed','The employee photo could not be uploaded. Check your connection and try selecting the photo again, or remove it and save without one.',document.getElementById('emp-photo-input')); return; }
+  const record={id:editingEmployeeId||('emp-'+Date.now().toString(36)),code,name,photo:employeePhotoDraft,photoPath:employeePhotoPath,department:document.getElementById('emp-department').value.trim(),designation:document.getElementById('emp-designation').value.trim(),email:document.getElementById('emp-email').value.trim(),mobile:document.getElementById('emp-mobile').value.trim(),roles:[...document.querySelectorAll('#employee-role-grid input:checked')].map(x=>x.value),iqamaNo:document.getElementById('emp-iqama').value.trim(),iqamaExpiry:document.getElementById('emp-iqama-expiry').value,passportNo:document.getElementById('emp-passport').value.trim(),passportExpiry:document.getElementById('emp-passport-expiry').value,licenseNo:document.getElementById('emp-license').value.trim(),licenseExpiry:document.getElementById('emp-license-expiry').value,active:document.getElementById('emp-active').value==='true',updated:new Date().toISOString()};
   const existing=editingEmployeeId?employees.find(e=>e.id===editingEmployeeId):null;
   const persist=async()=>{if(editingEmployeeId){const i=employees.findIndex(e=>e.id===editingEmployeeId);if(i>-1)employees[i]=record;}else employees.unshift(record);await saveEmployees();closeEmployeeForm();renderEmployees();populateRFQAssignees();showToast(existing?'Employee updated':'Employee added','success');editingEmployeeId=null;};
   if(existing){
@@ -6107,24 +6135,28 @@ function goEmployeePage(p){employeePage=p;renderEmployees();}
 function handleRFQAttach(e) {
   const file = e.target.files[0]; if (!file) return;
   if (file.size > 10*1024*1024) { showToast('Attachment must be under 10MB','error'); e.target.value=''; return; }
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const localPreview = ev.target.result;
-    rfqAttachment = {name:file.name, type:file.type, data:localPreview}; // local fallback until upload finishes
-    document.getElementById('rfq-attach-list').innerHTML =
-      `<div class="attach-item"><i class="ti ti-${file.type.includes('pdf')?'pdf':'photo'}"></i>${file.name}<button onclick="rfqAttachment=null;this.closest('.attach-item').remove()" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--red)"><i class="ti ti-x"></i></button></div>`;
+  const localPreview = URL.createObjectURL(file); // instant preview, no base64 needed
+  const oldPath = rfqAttachment?.path; // the file this one is replacing, if any
 
-    if (window.FB) {
-      const thisAttachment = rfqAttachment;
-      const path = 'rfqs/' + (editingRFQId || ('new-'+Date.now().toString(36))) + '/' + Date.now() + '_' + file.name;
-      thisAttachment._uploadPromise = window.FB.uploadDataUrl(path, localPreview).then(url => {
-        if (url) { delete thisAttachment.data; thisAttachment.url = url; thisAttachment.path = path; }
-        else showToast('Attachment upload failed — will retry when you save','warning');
-        return url;
-      });
-    }
-  };
-  reader.readAsDataURL(file);
+  rfqAttachment = {name:file.name, type:file.type, data:localPreview}; // local-only until upload finishes; never persisted as-is
+  document.getElementById('rfq-attach-list').innerHTML =
+    `<div class="attach-item"><i class="ti ti-${file.type.includes('pdf')?'pdf':'photo'}"></i>${file.name}<button onclick="if(rfqAttachment&&rfqAttachment.path&&window.FB)window.FB.deleteFile(rfqAttachment.path);rfqAttachment=null;this.closest('.attach-item').remove()" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--red)"><i class="ti ti-x"></i></button></div>`;
+
+  if (window.FB) {
+    const thisAttachment = rfqAttachment;
+    const path = 'rfqs/' + (editingRFQId || ('new-'+Date.now().toString(36))) + '/' + Date.now() + '_' + file.name;
+    thisAttachment._uploadPromise = window.FB.uploadFile(path, file).then(url => {
+      if (url) {
+        URL.revokeObjectURL(localPreview);
+        delete thisAttachment.data; thisAttachment.url = url; thisAttachment.path = path; thisAttachment._uploadFailed = false;
+        if (oldPath) window.FB.deleteFile(oldPath); // best-effort, don't wait on it
+      } else {
+        thisAttachment._uploadFailed = true;
+        showToast('Attachment upload failed — please try again before saving','error');
+      }
+      return url;
+    });
+  }
   e.target.value='';
 }
 
@@ -6219,6 +6251,7 @@ async function saveRFQ() {
   if(!receivedISO){showValidationDialog('Invalid received date','Enter the date as DD/MM/YYYY.',document.getElementById('rfq-date'));return;}
   if(!dueISO){showValidationDialog('Invalid due date','Enter the date as DD/MM/YYYY.',document.getElementById('rfq-due'));return;}
   if (rfqAttachment && rfqAttachment._uploadPromise) { showToast('Finishing attachment upload…','success'); await rfqAttachment._uploadPromise; delete rfqAttachment._uploadPromise; }
+  if (rfqAttachment && rfqAttachment._uploadFailed) { showValidationDialog('Attachment upload failed','The RFQ attachment could not be uploaded. Check your connection and try attaching it again, or remove it and save without one.',document.getElementById('rfq-attach-list')); return; }
   const r = {
     id: editingRFQId || ('r'+Date.now().toString(36)),
     rfqNo: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.rfqNo : nextRFQNo(),
@@ -6467,28 +6500,32 @@ function handlePricingAttach(e) {
   const supplier = document.getElementById('pricing-sup-search').value.trim() || pricingSupplierName;
   const ref = document.getElementById('pricing-sup-ref').value.trim();
   const date = getPricingSupplierDateISO();
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const localPreview = ev.target.result;
-    const entry = {id:'vq'+Date.now(), supplier, ref, date, name:file.name, type:file.type, data:localPreview};
-    pricingVendorQuotes.push(entry);
-    renderPricingVendorQuotes();
-    markPricingDirty();
+  const localPreview = URL.createObjectURL(file); // instant preview, no base64 needed
+  const entry = {id:'vq'+Date.now(), supplier, ref, date, name:file.name, type:file.type, data:localPreview};
+  pricingVendorQuotes.push(entry);
+  renderPricingVendorQuotes();
+  markPricingDirty();
 
-    if (window.FB) {
-      const path = 'pricing/' + (pricingRFQId || ('new-'+Date.now().toString(36))) + '/' + entry.id + '_' + file.name;
-      entry._uploadPromise = window.FB.uploadDataUrl(path, localPreview).then(url => {
-        if (url) { delete entry.data; entry.url = url; entry.path = path; }
-        else showToast('Attachment upload failed — will retry when you save','warning');
-        return url;
-      });
-    }
-  };
-  reader.readAsDataURL(file);
+  if (window.FB) {
+    const path = 'pricing/' + (pricingRFQId || ('new-'+Date.now().toString(36))) + '/' + entry.id + '_' + file.name;
+    entry._uploadPromise = window.FB.uploadFile(path, file).then(url => {
+      if (url) {
+        URL.revokeObjectURL(localPreview);
+        delete entry.data; entry.url = url; entry.path = path; entry._uploadFailed = false;
+      } else {
+        entry._uploadFailed = true;
+        showToast('Attachment upload failed — please try again before saving','error');
+      }
+      renderPricingVendorQuotes();
+      return url;
+    });
+  }
   e.target.value='';
 }
 
 function removePricingVendorQuote(index) {
+  const entry = pricingVendorQuotes[index];
+  if (entry?.path && window.FB) window.FB.deleteFile(entry.path);
   pricingVendorQuotes.splice(index,1);
   renderPricingVendorQuotes();
   markPricingDirty();
@@ -7536,6 +7573,7 @@ async function savePricing() {
   if (!validatePricingPrices()) return false;
   const pendingUploads = pricingVendorQuotes.filter(q=>q._uploadPromise);
   if (pendingUploads.length) { showToast('Finishing attachment upload…','success'); await Promise.all(pendingUploads.map(q=>q._uploadPromise)); pendingUploads.forEach(q=>delete q._uploadPromise); }
+  if (pricingVendorQuotes.some(q=>q._uploadFailed)) { showValidationDialog('Attachment upload failed','One or more vendor quote attachments could not be uploaded. Check your connection and try attaching them again, or remove the failed one(s) and save without them.',document.getElementById('pricing-attach-list')); return false; }
   const items=readPricingItemsFromDOM();
   r.pricingItems = items; r.pricingSettingsSnapshot={...activePricingSettings()}; const _ruleSnapshot=checkPricingBusinessRules(false); r.pricingApprovalRequired=!!_ruleSnapshot.needsApproval; r.pricingApproved=!_ruleSnapshot.needsApproval||pricingManagerApprovedForCurrentSave; pricingManagerApprovedForCurrentSave=false;
   r.supplierName = document.getElementById('pricing-sup-search').value.trim()||pricingSupplierName;
