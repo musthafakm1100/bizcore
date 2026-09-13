@@ -7277,3 +7277,7 @@ button,
 #pricing-modal .pricing-close-btn{
   margin-left:6px!important;
 }
+.busy-overlay{position:absolute;inset:0;background:rgba(255,255,255,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;z-index:900;border-radius:inherit}
+.busy-overlay-spinner{width:34px;height:34px;border:3px solid #dbeafe;border-top-color:var(--blue,#1F4E79);border-radius:50%;animation:busy-overlay-spin .8s linear infinite}
+.busy-overlay-text{font-size:13px;font-weight:600;color:var(--blue,#1F4E79)}
+@keyframes busy-overlay-spin{to{transform:rotate(360deg)}}

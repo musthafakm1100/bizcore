@@ -2398,6 +2398,8 @@ async function saveProduct() {
   const imgArea = document.getElementById('pm-img-area');
   if (imgArea._imageUploadPromise) { showToast('Finishing image upload…','success'); await imgArea._imageUploadPromise; }
   if (imgArea._imageUploadFailed) { showValidationDialog('Image upload failed','The product image could not be uploaded. Check your connection and try selecting the image again, or remove it and save without one.',document.getElementById('pm-img-area')); return; }
+  showBusyOverlay('prod-modal', 'Saving product…');
+  try {
   const imageData = imgArea._imageData || null;
   const p = {
     id: editingProdId || ('p'+Date.now().toString(36)),
@@ -2438,6 +2440,7 @@ async function saveProduct() {
   } else {
     quickAddContext = null;
   }
+  } finally { hideBusyOverlay('prod-modal'); }
 }
 
 /* ── DASHBOARD ── */
@@ -4194,6 +4197,8 @@ async function saveQuotation(mode='save') {
     });
   });
   if (!confirmed) return;
+  showBusyOverlay('quote-modal', 'Saving quotation…');
+  try {
 
   // Resolve the FINAL quotation number only after the user confirms Save.
   // Keep it in a local variable so later DOM/UI changes cannot corrupt
@@ -4371,6 +4376,7 @@ async function saveQuotation(mode='save') {
   showToast(capturedEditingId?'Quotation updated':'Quotation '+q.qno+' created','success');
   if(mode==='preview') setTimeout(()=>viewQuotation(q.id),80);
   return q;
+  } finally { hideBusyOverlay('quote-modal'); }
 }
 
 /* ── VIEW QUOTATION ── */
@@ -4895,31 +4901,76 @@ async function loadRecycleBin() {
   } catch(e) {}
 }
 
+const RECYCLE_BIN_TYPES = {
+  quotations: {
+    label: 'Quotations',
+    icon: 'ti-file-invoice',
+    titleOf: item => item.qno || 'Quotation',
+    subtitleOf: item => item.company || '',
+    restoreArray: () => quotations,
+    restoreSave: saveQuotations,
+  },
+  employees: {
+    label: 'Employees',
+    icon: 'ti-users',
+    titleOf: item => item.name || 'Employee',
+    subtitleOf: item => item.code || '',
+    restoreArray: () => employees,
+    restoreSave: saveEmployees,
+  }
+};
+let recycleBinFilter = 'all';
+
 function openRecycleBin() {
+  recycleBinFilter = 'all';
   renderRecycleBin();
   openModalWithSize('recycle-bin-modal');
+}
+
+function switchRecycleBinFilter(type) {
+  recycleBinFilter = type;
+  renderRecycleBin();
 }
 
 function renderRecycleBin() {
   const list = document.getElementById('recycle-bin-list');
   if (!list) return;
 
-  const quotationItems = recycleBin.filter(x => x.originalCollection === 'quotations');
+  const tabs = document.getElementById('recycle-bin-tabs');
+  if (tabs) {
+    const counts = { all: recycleBin.length };
+    Object.keys(RECYCLE_BIN_TYPES).forEach(k => { counts[k] = recycleBin.filter(x=>x.originalCollection===k).length; });
+    tabs.innerHTML = ['all', ...Object.keys(RECYCLE_BIN_TYPES)].map(k => {
+      const label = k === 'all' ? 'All' : RECYCLE_BIN_TYPES[k].label;
+      return `<button type="button" class="btn btn-sm ${recycleBinFilter===k?'btn-primary':'btn-secondary'}" onclick="switchRecycleBinFilter('${k}')">${label} (${counts[k]||0})</button>`;
+    }).join('');
+  }
 
-  if (!quotationItems.length) {
+  const items = recycleBin
+    .filter(x => recycleBinFilter === 'all' || x.originalCollection === recycleBinFilter)
+    .sort((a,b) => new Date(b.deletedAt) - new Date(a.deletedAt));
+
+  if (!items.length) {
     list.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--gray)">'
       + '<i class="ti ti-trash" style="font-size:36px;opacity:.3;display:block;margin-bottom:10px"></i>'
       + 'Recycle Bin is empty</div>';
     return;
   }
 
-  list.innerHTML = quotationItems.map(function(item) {
+  list.innerHTML = items.map(function(item) {
+    const cfg = RECYCLE_BIN_TYPES[item.originalCollection];
     const daysAgo = Math.floor((Date.now() - new Date(item.deletedAt).getTime()) / 86400000);
+    const title = cfg ? cfg.titleOf(item) : (item.qno || item.name || 'Item');
+    const subtitle = cfg ? cfg.subtitleOf(item) : '';
+    const typeLabel = cfg ? cfg.label.replace(/s$/,'') : (item.originalCollection || 'Item');
+    const icon = cfg ? cfg.icon : 'ti-file';
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #EEF1F4">'
+      + '<div style="display:flex;align-items:center;gap:10px">'
+      + '<i class="ti ' + icon + '" style="color:var(--gray);font-size:18px"></i>'
       + '<div>'
-      + '<div style="font-weight:700;font-size:13px;color:var(--blue)">' + item.qno + '</div>'
-      + '<div style="font-size:11px;color:var(--gray);margin-top:2px">' + (item.company||'') + ' &middot; Deleted ' + (daysAgo===0?'today':daysAgo+' day(s) ago') + ' by ' + (item.deletedBy||'unknown') + '</div>'
-      + '</div>'
+      + '<div style="font-weight:700;font-size:13px;color:var(--blue)">' + esc(title) + ' <span style="font-weight:400;color:var(--gray);font-size:10px">· ' + esc(typeLabel) + '</span></div>'
+      + '<div style="font-size:11px;color:var(--gray);margin-top:2px">' + esc(subtitle) + (subtitle?' &middot; ':'') + 'Deleted ' + (daysAgo===0?'today':daysAgo+' day(s) ago') + ' by ' + esc(item.deletedBy||'unknown') + '</div>'
+      + '</div></div>'
       + '<div style="display:flex;gap:6px">'
       + '<button class="btn btn-secondary btn-sm" onclick="restoreFromBin(\'' + item.id + '\')"><i class="ti ti-restore"></i> Restore</button>'
       + '<button class="btn btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA" onclick="purgeFromBin(\'' + item.id + '\')"><i class="ti ti-trash-x"></i> Purge</button>'
@@ -4931,11 +4982,13 @@ async function restoreFromBin(id) {
   const idx = recycleBin.findIndex(x => x.id === id);
   if (idx === -1) return;
   const item = recycleBin[idx];
+  const cfg = RECYCLE_BIN_TYPES[item.originalCollection];
+  if (!cfg) { showToast('This item type can no longer be restored automatically.', 'error'); return; }
 
   const confirmed = await showConfirmAsync({
     icon: '♻️',
-    title: 'Restore ' + item.qno + '?',
-    message: 'This will bring the quotation back to your active list with the same number.',
+    title: 'Restore ' + cfg.titleOf(item) + '?',
+    message: 'This will bring it back to the active ' + cfg.label.toLowerCase() + ' list.',
     confirmText: 'Restore',
   });
   if (!confirmed) return;
@@ -4944,24 +4997,26 @@ async function restoreFromBin(id) {
   delete restored.deletedAt;
   delete restored.deletedBy;
   delete restored.originalCollection;
-  quotations.push(restored);
+  cfg.restoreArray().push(restored);
   recycleBin.splice(idx, 1);
 
-  await Promise.all([saveQuotations(), saveRecycleBin()]);
+  await Promise.all([cfg.restoreSave(), saveRecycleBin()]);
   renderAll();
   renderRecycleBin();
-  showToast(item.qno + ' restored', 'success');
+  showToast(cfg.titleOf(item) + ' restored', 'success');
 }
 
 async function purgeFromBin(id) {
   const idx = recycleBin.findIndex(x => x.id === id);
   if (idx === -1) return;
   const item = recycleBin[idx];
+  const cfg = RECYCLE_BIN_TYPES[item.originalCollection];
+  const title = cfg ? cfg.titleOf(item) : (item.qno || item.name || 'this item');
 
   const confirmed = await showConfirmAsync({
     icon: '⚠️',
-    title: 'Permanently delete ' + item.qno + '?',
-    message: 'This cannot be undone. The document content will be permanently removed. The quotation number ' + item.qno + ' will never be reused.',
+    title: 'Permanently delete ' + title + '?',
+    message: 'This cannot be undone. The record will be permanently removed and cannot be recovered.',
     confirmText: 'Permanently Delete',
   });
   if (!confirmed) return;
@@ -4969,7 +5024,7 @@ async function purgeFromBin(id) {
   recycleBin.splice(idx, 1);
   await saveRecycleBin();
   renderRecycleBin();
-  showToast(item.qno + ' permanently deleted', 'success');
+  showToast(title + ' permanently deleted', 'success');
 }
 
 /* ── PRINT ── */
@@ -6055,7 +6110,7 @@ function openEmployeeView(id) {
     <div class="employee-view-hero">
       <div class="employee-view-avatar">${photo}</div>
       <div class="employee-view-identity"><div class="employee-view-code">${esc(e.code||'')}</div><h2 id="employee-view-name">${esc(e.name||'Employee')}</h2><p>${esc(e.designation||'No designation')}${e.department?' · '+esc(e.department):''}</p><div class="employee-view-role-pills">${(e.roles||[]).map(r=>`<span>${esc(r)}</span>`).join('')||'<em>No operational role assigned</em>'}</div></div>
-      <div class="employee-view-status-wrap"><span class="employee-status ${e.active!==false?'active':'inactive'}">${e.active!==false?'Active':'Inactive'}</span><button class="btn btn-primary" type="button" onclick="editEmployeeFromView('${e.id}')"><i class="ti ti-edit"></i>Edit employee</button></div>
+      <div class="employee-view-status-wrap"><span class="employee-status ${e.active!==false?'active':'inactive'}">${e.active!==false?'Active':'Inactive'}</span><button class="btn btn-primary" type="button" onclick="editEmployeeFromView('${e.id}')"><i class="ti ti-edit"></i>Edit employee</button><button class="btn btn-danger" type="button" onclick="deleteEmployee('${e.id}')"><i class="ti ti-trash"></i>Delete</button></div>
     </div>
     <div class="employee-view-grid">
       <section class="employee-view-section"><h3><i class="ti ti-address-book"></i>Contact & work details</h3><div class="employee-view-facts"><div><span>Department</span><strong>${esc(e.department||'Not recorded')}</strong></div><div><span>Designation</span><strong>${esc(e.designation||'Not recorded')}</strong></div><div><span>Email</span><strong>${esc(e.email||'Not recorded')}</strong></div><div><span>Mobile</span><strong>${esc(e.mobile||'Not recorded')}</strong></div></div></section>
@@ -6066,6 +6121,34 @@ function openEmployeeView(id) {
 }
 function closeEmployeeView(){const overlay=document.getElementById('employee-view-overlay');if(overlay)overlay.style.display='none';document.body.classList.remove('employee-view-open');}
 function editEmployeeFromView(id){closeEmployeeView();openEmployeeForm(id);}
+async function deleteEmployee(id) {
+  const e = employees.find(x => x.id === id);
+  if (!e) return;
+
+  const confirmed = await showConfirmAsync({
+    icon: '🗑️',
+    title: 'Move to Recycle Bin?',
+    message: (e.name||'This employee') + ' will be moved to the Recycle Bin. You can restore them later, or they will remain there until permanently removed.',
+    confirmText: 'Move to Recycle Bin',
+    confirmClass: 'btn-danger'
+  });
+  if (!confirmed) return;
+
+  const binEntry = {
+    ...JSON.parse(JSON.stringify(e)),
+    deletedAt: new Date().toISOString(),
+    deletedBy: (window.currentUser && window.currentUser.email) || 'unknown',
+    originalCollection: 'employees'
+  };
+  recycleBin.push(binEntry);
+  employees = employees.filter(x => x.id !== id);
+
+  await Promise.all([saveEmployees(), saveRecycleBin()]);
+  closeEmployeeView();
+  renderEmployees();
+  populateRFQAssignees();
+  showToast((e.name||'Employee') + ' moved to Recycle Bin', 'success');
+}
 function openEmployeeForm(id=null) {
   editingEmployeeId=id;
   const e=id?employees.find(x=>x.id===id):null;
@@ -6101,7 +6184,14 @@ async function saveEmployee() {
   if (employeePhotoUploadFailed) { showValidationDialog('Photo upload failed','The employee photo could not be uploaded. Check your connection and try selecting the photo again, or remove it and save without one.',document.getElementById('emp-photo-input')); return; }
   const record={id:editingEmployeeId||('emp-'+Date.now().toString(36)),code,name,photo:employeePhotoDraft,photoPath:employeePhotoPath,department:document.getElementById('emp-department').value.trim(),designation:document.getElementById('emp-designation').value.trim(),email:document.getElementById('emp-email').value.trim(),mobile:document.getElementById('emp-mobile').value.trim(),roles:[...document.querySelectorAll('#employee-role-grid input:checked')].map(x=>x.value),iqamaNo:document.getElementById('emp-iqama').value.trim(),iqamaExpiry:document.getElementById('emp-iqama-expiry').value,passportNo:document.getElementById('emp-passport').value.trim(),passportExpiry:document.getElementById('emp-passport-expiry').value,licenseNo:document.getElementById('emp-license').value.trim(),licenseExpiry:document.getElementById('emp-license-expiry').value,active:document.getElementById('emp-active').value==='true',updated:new Date().toISOString()};
   const existing=editingEmployeeId?employees.find(e=>e.id===editingEmployeeId):null;
-  const persist=async()=>{if(editingEmployeeId){const i=employees.findIndex(e=>e.id===editingEmployeeId);if(i>-1)employees[i]=record;}else employees.unshift(record);await saveEmployees();closeEmployeeForm();renderEmployees();populateRFQAssignees();showToast(existing?'Employee updated':'Employee added','success');editingEmployeeId=null;};
+  const persist=async()=>{
+    showBusyOverlay('employee-form-panel', 'Saving employee…');
+    try {
+      if(editingEmployeeId){const i=employees.findIndex(e=>e.id===editingEmployeeId);if(i>-1)employees[i]=record;}else employees.unshift(record);
+      await saveEmployees();
+      closeEmployeeForm();renderEmployees();populateRFQAssignees();showToast(existing?'Employee updated':'Employee added','success');editingEmployeeId=null;
+    } finally { hideBusyOverlay('employee-form-panel'); }
+  };
   if(existing){
     const comparable=x=>JSON.stringify({code:x.code||'',name:x.name||'',photo:x.photo||'',department:x.department||'',designation:x.designation||'',email:x.email||'',mobile:x.mobile||'',roles:[...(x.roles||[])].sort(),iqamaNo:x.iqamaNo||'',iqamaExpiry:x.iqamaExpiry||'',passportNo:x.passportNo||'',passportExpiry:x.passportExpiry||'',licenseNo:x.licenseNo||'',licenseExpiry:x.licenseExpiry||'',active:x.active!==false});
     if(comparable(existing)===comparable(record)){showToast('No changes to save','info');return;}
@@ -6126,7 +6216,7 @@ function renderEmployees() {
   tbody.innerHTML=employeeSlice.length?employeeSlice.map(e=>{
     const iq=employeeExpiryMeta(e.iqamaExpiry,'Iqama'), pp=employeeExpiryMeta(e.passportExpiry,'Passport'), dl=employeeExpiryMeta(e.licenseExpiry,'Driving licence');
     const doc=(no,date,meta)=>`<div class="employee-doc-cell"><strong>${esc(no||'—')}</strong><span class="expiry-pill ${meta.cls}">${esc(meta.text)}</span></div>`;
-    return `<tr class="employee-clickable-row" tabindex="0" role="button" aria-label="View ${esc(e.name)}" onclick="openEmployeeView('${e.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openEmployeeView('${e.id}')}"><td><div class="employee-name-cell"><span class="employee-avatar">${e.photo?`<img src="${e.photo}" alt=""/>`:esc((e.name||'?').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase())}</span><div><strong>${esc(e.name)}</strong><small>${esc(e.code)}</small></div></div></td><td><strong>${esc(e.department||'—')}</strong><small class="employee-muted">${esc(e.designation||'')}</small></td><td><div class="employee-role-pills">${(e.roles||[]).map(r=>`<span>${esc(r)}</span>`).join('')||'<em>No role</em>'}</div></td><td>${esc(e.mobile||'—')}<small class="employee-muted">${esc(e.email||'')}</small></td><td>${doc(e.iqamaNo,e.iqamaExpiry,iq)}</td><td>${doc(e.passportNo,e.passportExpiry,pp)}</td><td>${doc(e.licenseNo,e.licenseExpiry,dl)}</td><td><span class="employee-status ${e.active!==false?'active':'inactive'}">${e.active!==false?'Active':'Inactive'}</span></td><td class="center"><button class="btn-icon employee-view-btn" title="View employee" onclick="event.stopPropagation();openEmployeeView('${e.id}')"><i class="ti ti-eye"></i></button></td></tr>`;
+    return `<tr class="employee-clickable-row" tabindex="0" role="button" aria-label="View ${esc(e.name)}" onclick="openEmployeeView('${e.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openEmployeeView('${e.id}')}"><td><div class="employee-name-cell"><span class="employee-avatar">${e.photo?`<img src="${e.photo}" alt=""/>`:esc((e.name||'?').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase())}</span><div><strong>${esc(e.name)}</strong><small>${esc(e.code)}</small></div></div></td><td><strong>${esc(e.department||'—')}</strong><small class="employee-muted">${esc(e.designation||'')}</small></td><td><div class="employee-role-pills">${(e.roles||[]).map(r=>`<span>${esc(r)}</span>`).join('')||'<em>No role</em>'}</div></td><td>${esc(e.mobile||'—')}<small class="employee-muted">${esc(e.email||'')}</small></td><td>${doc(e.iqamaNo,e.iqamaExpiry,iq)}</td><td>${doc(e.passportNo,e.passportExpiry,pp)}</td><td>${doc(e.licenseNo,e.licenseExpiry,dl)}</td><td><span class="employee-status ${e.active!==false?'active':'inactive'}">${e.active!==false?'Active':'Inactive'}</span></td><td class="center"><button class="btn-icon employee-view-btn" title="View employee" onclick="event.stopPropagation();openEmployeeView('${e.id}')"><i class="ti ti-eye"></i></button><button class="btn-icon employee-view-btn" title="Delete employee" onclick="event.stopPropagation();deleteEmployee('${e.id}')"><i class="ti ti-trash" style="color:var(--red)"></i></button></td></tr>`;
   }).join(''):`<tr><td colspan="9"><div class="empty-state compact"><i class="ti ti-users-off"></i><p>No employees found.</p></div></td></tr>`;
   const ep=document.getElementById('employees-pagination'); if(ep) ep.innerHTML=buildPaginationHTML(employeePage,employeePages,'goEmployeePage');
 }
@@ -6252,6 +6342,8 @@ async function saveRFQ() {
   if(!dueISO){showValidationDialog('Invalid due date','Enter the date as DD/MM/YYYY.',document.getElementById('rfq-due'));return;}
   if (rfqAttachment && rfqAttachment._uploadPromise) { showToast('Finishing attachment upload…','success'); await rfqAttachment._uploadPromise; delete rfqAttachment._uploadPromise; }
   if (rfqAttachment && rfqAttachment._uploadFailed) { showValidationDialog('Attachment upload failed','The RFQ attachment could not be uploaded. Check your connection and try attaching it again, or remove it and save without one.',document.getElementById('rfq-attach-list')); return; }
+  showBusyOverlay('rfq-modal', 'Saving RFQ…');
+  try {
   const r = {
     id: editingRFQId || ('r'+Date.now().toString(36)),
     rfqNo: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.rfqNo : nextRFQNo(),
@@ -6288,6 +6380,7 @@ async function saveRFQ() {
   renderRFQPage();
   showToast(editingRFQId?'RFQ updated':'RFQ logged — '+r.rfqNo,'success');
   editingRFQId=null; rfqAttachment=null;
+  } finally { hideBusyOverlay('rfq-modal'); }
 }
 
 function toggleRFQDetailSection(titleEl) {
@@ -7574,6 +7667,8 @@ async function savePricing() {
   const pendingUploads = pricingVendorQuotes.filter(q=>q._uploadPromise);
   if (pendingUploads.length) { showToast('Finishing attachment upload…','success'); await Promise.all(pendingUploads.map(q=>q._uploadPromise)); pendingUploads.forEach(q=>delete q._uploadPromise); }
   if (pricingVendorQuotes.some(q=>q._uploadFailed)) { showValidationDialog('Attachment upload failed','One or more vendor quote attachments could not be uploaded. Check your connection and try attaching them again, or remove the failed one(s) and save without them.',document.getElementById('pricing-attach-list')); return false; }
+  showBusyOverlay('pricing-modal', 'Saving pricing…');
+  try {
   const items=readPricingItemsFromDOM();
   r.pricingItems = items; r.pricingSettingsSnapshot={...activePricingSettings()}; const _ruleSnapshot=checkPricingBusinessRules(false); r.pricingApprovalRequired=!!_ruleSnapshot.needsApproval; r.pricingApproved=!_ruleSnapshot.needsApproval||pricingManagerApprovedForCurrentSave; pricingManagerApprovedForCurrentSave=false;
   r.supplierName = document.getElementById('pricing-sup-search').value.trim()||pricingSupplierName;
@@ -7607,6 +7702,7 @@ async function savePricing() {
   // Show above the full-screen Pricing modal after persistence and confirmation cleanup.
   setTimeout(()=>showToast('Pricing saved successfully.','success','Saved'),80);
   return true;
+  } finally { hideBusyOverlay('pricing-modal'); }
 }
 
 async function convertToQuotation() {
@@ -7800,6 +7896,34 @@ function hideToast(){
   const t=document.getElementById('toast');
   if(t) t.classList.remove('show');
 }
+/* ── Busy overlay ──
+   Covers a modal/panel with a spinner + message while a save is in
+   flight, and — critically — blocks all clicks underneath it (Cancel,
+   Close, other buttons) so a slow save can never look "frozen" or be
+   interrupted mid-save. Always paired with try/finally at the call
+   site so it's removed even if the save throws. */
+function showBusyOverlay(containerId, message='Saving…') {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  hideBusyOverlay(containerId);
+  if (getComputedStyle(container).position === 'static') {
+    container.dataset._busyPrevStatic = '1';
+    container.style.position = 'relative';
+  }
+  const overlay = document.createElement('div');
+  overlay.className = 'busy-overlay';
+  overlay.id = containerId + '-busy-overlay';
+  overlay.innerHTML = `<div class="busy-overlay-spinner"></div><div class="busy-overlay-text">${esc(message)}</div>`;
+  container.appendChild(overlay);
+}
+function hideBusyOverlay(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const overlay = document.getElementById(containerId + '-busy-overlay');
+  if (overlay) overlay.remove();
+  if (container.dataset._busyPrevStatic) { container.style.position = ''; delete container.dataset._busyPrevStatic; }
+}
+
 function showToast(msg,type='',title='') {
   const t=document.getElementById('toast'); if(!t) return;
   clearTimeout(toastTimer);
