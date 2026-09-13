@@ -631,11 +631,10 @@ function setBrandAssetPreview(type, value) {
 
 function applySettings() {
   document.getElementById('sb-co-name').textContent = settings.coname || 'Downtown Trading Est.';
-  const el = document.getElementById('sb-logo-img');
-  if (settings.logo) {
-    el.innerHTML = `<img src="${settings.logo}" style="width:44px;height:44px;object-fit:contain;border-radius:6px;background:#fff;padding:3px">`;
-    el.className = ''; el.style.cssText = '';
-  }
+  // Sidebar keeps the BizCore mark (set once in the HTML) rather than the
+  // company logo — a small square slot isn't the right shape for a wide
+  // wordmark logo. The company logo is still used correctly elsewhere
+  // (quotation headers, PDFs) via settings.logo directly.
   const map={coname:'coname',conameAr:'coname-ar',tagline:'tagline',cr:'cr',building:'building',street:'street',secondary:'secondary',district:'district',postal:'postal',city:'city',country:'country',pobox:'pobox',phone:'phone',mobile:'mobile',email:'email',vat:'vat',website:'website',closingMessage:'closing-message'};
   Object.entries(map).forEach(([key,id])=>{const node=document.getElementById('s-'+id);if(node)node.value=settings[key]||'';});
   const vh=document.getElementById('s-rfqhours');if(vh)vh.value=settings.rfqDefaultHours||48;

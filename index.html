@@ -60,7 +60,21 @@ document.addEventListener('error', function(e) {
 <div class="app">
 <div class="sidebar" id="app-sidebar">
 <div class="sidebar-logo" id="sidebar-logo">
-<div class="logo-placeholder" id="sb-logo-img">DT</div>
+<div class="logo-placeholder" id="sb-logo-img" style="background:transparent">
+  <svg viewBox="0 0 512 512" width="34" height="34" xmlns="http://www.w3.org/2000/svg">
+    <rect x="60" y="300" width="110" height="150" rx="28" fill="url(#sbLogoBlue)"/>
+    <rect x="201" y="90" width="110" height="360" rx="28" fill="url(#sbLogoOrange)"/>
+    <rect x="342" y="210" width="110" height="240" rx="28" fill="url(#sbLogoBlue)"/>
+    <defs>
+      <linearGradient id="sbLogoBlue" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#4C9AEB"/><stop offset="1" stop-color="#1A6CD0"/>
+      </linearGradient>
+      <linearGradient id="sbLogoOrange" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#FDBA74"/><stop offset="1" stop-color="#F27A28"/>
+      </linearGradient>
+    </defs>
+  </svg>
+</div>
 <div><div class="co" id="sb-co-name">Downtown Trading Est.</div><div class="sub">BizCore v1.0</div></div>
 <button aria-expanded="true" aria-label="Collapse sidebar" class="sidebar-collapse-btn" id="sidebar-collapse-btn" onclick="toggleSidebarCollapse()" title="Collapse sidebar" type="button"><i class="ti ti-layout-sidebar-left-collapse"></i></button></div>
 <div class="nav-section">
@@ -2326,7 +2340,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=82';
+    s.src = 'js/app.js?v=83';
     document.body.appendChild(s);
   }
 });
