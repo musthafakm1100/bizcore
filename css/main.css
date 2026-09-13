@@ -7291,3 +7291,15 @@ button,
 .busy-overlay-bar.b2{background:linear-gradient(180deg,#1A6CD0,#0B45A1);height:20px;animation-delay:.3s}
 @keyframes busy-overlay-spin{to{transform:rotate(360deg)}}
 @keyframes busy-overlay-bounce{0%,100%{transform:scaleY(.45)}50%{transform:scaleY(1)}}
+
+/* Auth-loading splash — same animation, adapted for the dark blue backdrop */
+.auth-loading-ring-wrap{position:relative;width:64px;height:64px;display:flex;align-items:center;justify-content:center}
+.auth-loading-ring{position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,#1A6CD0,#7C3AED,#EC4899,#F27A28,#1A6CD0);animation:busy-overlay-spin 1.8s linear infinite}
+.auth-loading-ring::after{content:'';position:absolute;inset:5px;background:#0B539D;border-radius:50%}
+.auth-loading-bars{position:relative;z-index:1;display:flex;align-items:flex-end;justify-content:center;gap:5px;height:28px}
+.auth-loading-bar{width:8px;border-radius:3px;transform-origin:bottom;animation:busy-overlay-bounce 1.1s ease-in-out infinite}
+.auth-loading-bar.b1{background:linear-gradient(180deg,#4C9AEB,#1A6CD0);height:16px;animation-delay:0s}
+.auth-loading-bar.o{background:linear-gradient(180deg,#FDBA74,#F27A28);height:26px;animation-delay:.15s}
+.auth-loading-bar.b2{background:linear-gradient(180deg,#4C9AEB,#1A6CD0);height:20px;animation-delay:.3s}
+.auth-loading-text{font-size:12.5px;font-weight:600;color:rgba(255,255,255,.85);letter-spacing:.2px;margin-top:16px}
+.auth-loading-text::after{content:'';display:inline-block;width:1.1em;text-align:left;animation:busy-overlay-dots 1.2s steps(4,end) infinite}
