@@ -2491,6 +2491,29 @@ function changeAdminPin() {
   showToast('Admin PIN updated successfully','success');
 }
 
+function setPartyField(id, value='') { const el=document.getElementById(id); if(el) el.value=value ?? ''; }
+function getPartyField(id) { return document.getElementById(id)?.value?.trim() || ''; }
+function resetCustomerPartyFields(company='') {
+  const values={
+    'cm-company':company,'cm-company-ar':'','cm-vat':'','cm-mobile':'','cm-email':'',
+    'cm-short-address':'','cm-building-no':'','cm-street':'','cm-street-ar':'','cm-secondary-no':'',
+    'cm-postal-code':'','cm-district':'','cm-district-ar':'','cm-city':'','cm-city-ar':'','cm-country':'Saudi Arabia'
+  };
+  Object.entries(values).forEach(([id,v])=>setPartyField(id,v));
+}
+function resetSupplierPartyFields(company='') {
+  const ids=['sm-company-ar','sm-contact','sm-contact-ar','sm-mobile','sm-phone','sm-email','sm-whatsapp','sm-cat','sm-vat','sm-short-address','sm-building-no','sm-street','sm-street-ar','sm-secondary-no','sm-postal-code','sm-district','sm-district-ar','sm-city','sm-city-ar','sm-notes'];
+  ids.forEach(id=>setPartyField(id,'')); setPartyField('sm-company',company); setPartyField('sm-country','Saudi Arabia');
+}
+function validOptionalEmail(value){ return !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value); }
+function partyAddressSummary(r){
+  const line1=[r.buildingNo,r.street].filter(Boolean).join(' ');
+  const line2=[r.district,r.city,r.postalCode].filter(Boolean).join(', ');
+  const ar1=[r.buildingNo,r.streetAr].filter(Boolean).join(' ');
+  const ar2=[r.districtAr,r.cityAr,r.postalCode].filter(Boolean).join('، ');
+  return {line1,line2,ar1,ar2,country:r.country||'Saudi Arabia'};
+}
+
 /* ══════════════════════════════════════════════════
    QUICK-ADD CUSTOMER FROM QUOTATION (return to position)
 ══════════════════════════════════════════════════ */
@@ -2504,9 +2527,7 @@ function quickAddCustomerFromQuote() {
   // Open customer modal on top — it will stack via z-index
   editingCustId = null;
   document.getElementById('cust-modal-title').textContent = 'Add new customer';
-  document.getElementById('cm-company').value = '';
-  document.getElementById('cm-city').value = '';
-  document.getElementById('cm-vat').value = '';
+  resetCustomerPartyFields('');
   document.getElementById('cm-contacts-list').innerHTML = '';
   addContactRow();
   // Raise z-index so it appears above the quote modal
@@ -2544,15 +2565,19 @@ async function saveCustomer() {
     if (name) contacts.push({name, title, phone, isDefault: row.classList.contains('default-contact')});
   });
   const defaultContact = contacts.find(x=>x.isDefault) || contacts[0];
+  const email=getPartyField('cm-email');
+  if(!validOptionalEmail(email)){ showToast('Enter a valid customer email address','error'); return; }
   const c = {
+    ...(editingCustId ? (customers.find(x=>x.id===editingCustId)||{}) : {}),
     id: editingCustId || (Date.now().toString(36)),
     company,
-    city: document.getElementById('cm-city').value.trim(),
-    vat:  document.getElementById('cm-vat').value.trim(),
+    companyAr:getPartyField('cm-company-ar'), vat:getPartyField('cm-vat'), mobile:getPartyField('cm-mobile'), email,
+    shortAddress:getPartyField('cm-short-address'), buildingNo:getPartyField('cm-building-no'), street:getPartyField('cm-street'), streetAr:getPartyField('cm-street-ar'),
+    secondaryNo:getPartyField('cm-secondary-no'), postalCode:getPartyField('cm-postal-code'), district:getPartyField('cm-district'), districtAr:getPartyField('cm-district-ar'),
+    city:getPartyField('cm-city'), cityAr:getPartyField('cm-city-ar'), country:getPartyField('cm-country')||'Saudi Arabia',
     contacts,
     contact: defaultContact?.name || '',
-    phone:   defaultContact?.phone || '',
-    email:   ''
+    phone: defaultContact?.phone || getPartyField('cm-mobile')
   };
   if (editingCustId) { const idx = customers.findIndex(x=>x.id===editingCustId); if(idx>-1) customers[idx]=c; }
   else customers.push(c);
@@ -4666,50 +4691,64 @@ function viewQuotation(id, skipVatCheck=false) {
     return '<tr class="qv-item"><td class="center">'+String(itemNo).padStart(3,'0')+'</td><td><div class="qv-desc-title">'+title+'</div>'+(sub?'<div class="qv-desc-sub">'+sub+'</div>':'')+'</td><td class="center">'+escapeHtml(String(it.qty??''))+'</td><td class="center">'+escapeHtml(it.uom||'')+'</td><td class="num">'+qvLineUnitMoney(it.up)+'</td><td class="num"><strong>'+qvLineAmountMoney(total)+'</strong></td></tr>';
   }).join('')||'<tr><td colspan="6" style="padding:20px;text-align:center;color:#64748b">No line items</td></tr>';
 
-  let margin='—';
-  if(hPricing){const cost=lRFQ.pricingItems.reduce((s,i)=>s+(parseFloat(i.buy)||0)*(parseFloat(i.qty)||0),0),sell=lRFQ.pricingItems.reduce((s,i)=>s+(parseFloat(i.sell)||0)*(parseFloat(i.qty)||0),0);margin=cost?(((sell-cost)/cost)*100).toFixed(1)+'%':'0.0%';}
-  const flow=buildDocumentFlowHtml(q,linkedSO).replace('<div class="section-title">Document flow</div>','').replace(/style="border:1px solid var\(--border\);border-radius:8px;padding:12px;background:#fbfcfe;margin-bottom:14px"/,'class="qv-flow"').replace(/style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"/,'class="qv-flow"');
+  let margin='—', pricingCost=0, pricingSell=0;
+  if(hPricing){pricingCost=lRFQ.pricingItems.reduce((s,i)=>s+(parseFloat(i.buy)||0)*(parseFloat(i.qty)||0),0);pricingSell=lRFQ.pricingItems.reduce((s,i)=>s+(parseFloat(i.sell)||0)*(parseFloat(i.qty)||0),0);margin=pricingCost?(((pricingSell-pricingCost)/pricingCost)*100).toFixed(1)+'%':'0.0%';}
+  const grossProfit=hPricing?(totals.sub-pricingCost):null;
   const notes=q.notes?escapeHtml(q.notes):'No customer notes recorded.';
   const internal=escapeHtml(q.internalNotes||q.internalnotes||'No internal notes recorded.');
-  const timeline=[['Created',q.created||q.date],['Last updated',q.updated],['Status',status]].map(x=>'<div class="qv-mini-row"><span>'+x[0]+'</span><strong>'+(x[0]==='Status'?escapeHtml(x[1]):(x[1]?fmtDate(x[1]):'—'))+'</strong></div>').join('');
+  const cust=customers.find(c=>String(c.id)===String(q.custId||''))||customers.find(c=>normalizeMasterValue(c.company)===normalizeMasterValue(q.company));
+  const custAddr1=cust?[cust.buildingNo,cust.street].filter(Boolean).join(' '):'';
+  const custAddr2=cust?[cust.district,cust.city,cust.postalCode].filter(Boolean).join(', '):(q.city||'');
+  const custCountry=cust?.country||'';
+  const co=settings.coname||'Downtown Trading Est.';
+  const coAddr=[buildAddressLine1(settings),buildAddressLine2(settings)].filter(Boolean).join(' · ');
+  const logoHtml=settings.logo?'<img class="qdoc-logo" src="'+settings.logo+'" alt="'+escapeHtml(co)+'">':'<div class="qdoc-logo-fallback">DT</div>';
+  const qRevision=Number(q.revision||q.rev||0);
+  const flowNodes=[
+    lRFQ?'<button class="qv-doc-node" data-rfqid="'+escapeHtml(q.rfqId||'')+'" onclick="viewRFQFromQuote(this)"><small>RFQ</small><strong>'+escapeHtml(lRFQ.rfqNo||'RFQ')+'</strong></button>':'<div class="qv-doc-node muted"><small>RFQ</small><strong>Not linked</strong></div>',
+    hPricing?'<button class="qv-doc-node" data-rfqid="'+escapeHtml(q.rfqId||'')+'" onclick="viewPricingFromQuote(this)"><small>PRICING</small><strong>'+escapeHtml(lRFQ.pricingNo||lRFQ.rfqNo||'Pricing')+'</strong></button>':'<div class="qv-doc-node muted"><small>PRICING</small><strong>Not linked</strong></div>',
+    '<div class="qv-doc-node current"><small>QUOTATION</small><strong>'+escapeHtml(q.qno)+'</strong></div>',
+    linkedSO?'<button class="qv-doc-node" data-soid="'+linkedSO.id+'" onclick="openSalesOrderDocument(this.dataset.soid)"><small>SALES ORDER</small><strong>'+escapeHtml(linkedSO.soNo)+'</strong></button>':'<div class="qv-doc-node muted"><small>SALES ORDER</small><strong>Not created</strong></div>'
+  ];
+  const flowHtml=flowNodes.map((n,i)=>n+(i<flowNodes.length-1?'<span class="qv-doc-arrow"><i class="ti ti-chevron-down"></i></span>':'')).join('');
+  const activityRows=[
+    ['Created',q.created||q.date,'ti-file-plus'],
+    qRevision>0?['Revision '+qRevision,q.updated||q.date,'ti-git-branch']:null,
+    ['Current status: '+status,q.updated||q.date,'ti-tag'],
+    linkedSO?['Converted to '+linkedSO.soNo,linkedSO.created||linkedSO.date,'ti-shopping-cart']:null
+  ].filter(Boolean).map(a=>'<div class="qv-activity-row"><span class="qv-activity-icon"><i class="ti '+a[2]+'"></i></span><div><strong>'+escapeHtml(a[0])+'</strong><span>'+(a[1]?fmtDate(a[1]):'—')+'</span></div></div>').join('');
 
   document.getElementById('view-body').innerHTML=`
-    <div class="qv-shell">
-      <main class="qv-main">
-        <div class="qv-overview">
-          <section class="qv-card"><div class="qv-card-head"><span><i class="ti ti-building"></i>Customer</span></div><div class="qv-card-body"><div class="qv-info-grid">
-            <div class="qv-field"><span class="qv-label">Company</span><span class="qv-value">${escapeHtml(q.company||'—')}</span></div>
-            <div class="qv-field"><span class="qv-label">Contact</span><span class="qv-value muted">${escapeHtml(q.contact||'—')}</span></div>
-            <div class="qv-field"><span class="qv-label">City</span><span class="qv-value muted">${escapeHtml(q.city||'—')}</span></div>
-            <div class="qv-field"><span class="qv-label">Reference</span><span class="qv-value muted">${escapeHtml(q.ref||'—')}</span></div>
-          </div></div></section>
-          <section class="qv-card"><div class="qv-card-head"><span><i class="ti ti-file-description"></i>Quotation details</span></div><div class="qv-card-body"><div class="qv-info-grid">
-            <div class="qv-field"><span class="qv-label">Date</span><span class="qv-value">${fmtDate(q.date)}</span></div>
-            <div class="qv-field"><span class="qv-label">Valid until</span><span class="qv-value">${fmtDate(vu)}</span></div>
-            <div class="qv-field"><span class="qv-label">Delivery</span><span class="qv-value muted">${escapeHtml(q.delivery||'—')}</span></div>
-            <div class="qv-field"><span class="qv-label">Payment</span><span class="qv-value muted">${escapeHtml(q.payment||'—')}</span></div>
-            <div class="qv-field"><span class="qv-label">Tax</span><span class="qv-value muted">${escapeHtml(q.taxCode||'VAT')} · ${savedVat}%</span></div>
-            <div class="qv-field"><span class="qv-label">Sales order</span><span class="qv-value muted">${linkedSO?'<button class="btn btn-secondary btn-sm" data-soid="'+linkedSO.id+'" onclick="openSalesOrderDocument(this.dataset.soid)">'+escapeHtml(linkedSO.soNo)+'</button>':'Not created'}</span></div>
-          </div></div></section>
-        </div>
-        <section class="qv-card qv-items-card"><div class="qv-card-head"><span><i class="ti ti-list-details"></i>Quotation items</span><span style="font-size:11px;color:#64748b;font-weight:500">${itemNo} priced line${itemNo===1?'':'s'}</span></div><div class="qv-table-wrap"><table class="qv-table"><thead><tr><th style="width:44px;text-align:center">SL</th><th>Description</th><th style="width:72px;text-align:center">Qty</th><th style="width:72px;text-align:center">UOM</th><th style="width:110px;text-align:right">Unit price</th><th style="width:120px;text-align:right">Amount</th></tr></thead><tbody>${items}</tbody></table></div></section>
-        <section class="qv-card"><button class="qv-collapse-btn" onclick="toggleQuotationViewSection(this)"><span><i class="ti ti-message-circle" style="margin-right:7px;color:var(--blue)"></i>Customer notes</span><i class="ti ti-chevron-down qv-chevron"></i></button><div class="qv-collapse-content" style="display:none">${notes}</div></section>
-        <section class="qv-card"><button class="qv-collapse-btn" onclick="toggleQuotationViewSection(this)"><span><i class="ti ti-lock" style="margin-right:7px;color:var(--blue)"></i>Internal notes</span><i class="ti ti-chevron-down qv-chevron"></i></button><div class="qv-collapse-content" style="display:none">${internal}</div></section>
-        <section class="qv-card"><div class="qv-card-head"><span><i class="ti ti-route"></i>Document flow</span></div><div class="qv-card-body">${flow}</div></section>
+    <div class="qv-document-workspace">
+      <main class="qv-document-column">
+        <article class="qdoc-sheet" aria-label="Official quotation document preview">
+          <header class="qdoc-header">
+            <div class="qdoc-brand">${logoHtml}<div><h3>${escapeHtml(co)}</h3><p>${escapeHtml(coAddr||settings.tagline||'')}</p></div></div>
+            <div class="qdoc-title"><span>QUOTATION</span><strong>${escapeHtml(q.qno)}</strong><small>${qRevision?`Revision R${qRevision}`:'Official quotation'}</small></div>
+          </header>
+          <section class="qdoc-meta">
+            <div class="qdoc-party"><span class="qdoc-eyebrow">QUOTATION TO</span><h4>${escapeHtml(q.company||'—')}</h4>${custAddr1?`<p>${escapeHtml(custAddr1)}</p>`:''}${custAddr2?`<p>${escapeHtml(custAddr2)}</p>`:''}${custCountry?`<p>${escapeHtml(custCountry)}</p>`:''}${cust?.vat?`<p class="qdoc-muted">VAT No. ${escapeHtml(cust.vat)}</p>`:''}${q.contact?`<p class="qdoc-muted">Attn: ${escapeHtml(q.contact)}</p>`:''}</div>
+            <div class="qdoc-details"><div><span>Quotation date</span><strong>${fmtDate(q.date)}</strong></div><div><span>Valid until</span><strong>${fmtDate(vu)}</strong></div><div><span>Customer ref.</span><strong>${escapeHtml(q.ref||'—')}</strong></div><div><span>Payment</span><strong>${escapeHtml(q.payment||'—')}</strong></div><div><span>Delivery</span><strong>${escapeHtml(q.delivery||'—')}</strong></div><div><span>VAT</span><strong>${savedVat}%</strong></div></div>
+          </section>
+          <section class="qdoc-items"><table><thead><tr><th class="center">SL</th><th>Description</th><th class="center">Qty</th><th class="center">UOM</th><th class="num">Unit Price</th><th class="num">Amount</th></tr></thead><tbody>${items}</tbody></table></section>
+          <section class="qdoc-bottom">
+            <div class="qdoc-terms"><span class="qdoc-eyebrow">NOTES / TERMS</span><div>${notes}</div></div>
+            <div class="qdoc-totals"><div><span>Subtotal</span><strong>${qvSummaryMoney(totals.sub)}</strong></div>${totals.disc>0?`<div><span>Discount</span><strong>- ${qvSummaryMoney(totals.disc)}</strong></div>`:''}<div><span>VAT (${savedVat}%)</span><strong>${qvSummaryMoney(totals.vat)}</strong></div><div class="grand"><span>Grand Total</span><strong>${qvGrandTotalMoney(totals.net)}</strong></div></div>
+          </section>
+          <footer class="qdoc-footer"><div><strong>${escapeHtml(settings.closingMessage||'Thank you for the opportunity to serve you.')}</strong><span>${escapeHtml(buildPrintFooterAddress(settings)||'')}</span></div><div class="qdoc-sign">Authorized Signature</div></footer>
+        </article>
       </main>
-      <aside class="qv-sidebar">
-        <section class="qv-card qv-summary"><div class="qv-summary-top"><div class="qv-summary-caption">Grand total</div><div class="qv-summary-total">${qvGrandTotalMoney(totals.net)}</div></div><div class="qv-summary-lines">
-          <div class="qv-summary-row"><span>Subtotal</span><strong>${qvSummaryMoney(totals.sub)}</strong></div>
-          ${totals.disc>0?'<div class="qv-summary-row"><span>Discount</span><strong style="color:var(--red)">- '+qvSummaryMoney(totals.disc)+'</strong></div>':''}
-          <div class="qv-summary-row"><span>VAT (${savedVat}%)</span><strong>${qvSummaryMoney(totals.vat)}</strong></div>
+      <aside class="qv-erp-panel">
+        <section class="qv-side-card qv-internal-card"><div class="qv-side-head"><span><i class="ti ti-lock"></i>Internal information</span><span class="qv-screen-only">Staff only</span></div><div class="qv-side-body">
+          <div class="qv-side-row"><span>Pricing reference</span><strong>${hPricing?escapeHtml(lRFQ.pricingNo||lRFQ.rfqNo||'Linked'):'—'}</strong></div>
+          <div class="qv-side-row"><span>Estimated cost</span><strong>${hPricing?qvSummaryMoney(pricingCost):'—'}</strong></div>
+          <div class="qv-side-row"><span>Gross profit</span><strong>${grossProfit!==null?qvSummaryMoney(grossProfit):'—'}</strong></div>
+          <div class="qv-side-row"><span>Margin</span><strong>${margin}</strong></div>
+          <div class="qv-side-row"><span>Revision</span><strong>${qRevision||'Original'}</strong></div>
+          <div class="qv-internal-note"><span>Internal note</span><p>${internal}</p></div>
         </div></section>
-        <section class="qv-card"><div class="qv-card-head"><span><i class="ti ti-info-circle"></i>At a glance</span></div><div class="qv-card-body qv-mini-meta">
-          <div class="qv-mini-row"><span>Status</span><span class="badge ${getStatusClass(status)}">${escapeHtml(status)}</span></div>
-          <div class="qv-mini-row"><span>RFQ</span><strong>${lRFQ?escapeHtml(lRFQ.rfqNo):'—'}</strong></div>
-          <div class="qv-mini-row"><span>Margin</span><strong>${margin}</strong></div>
-          <div class="qv-mini-row"><span>Revision</span><strong>${escapeHtml(String(q.revision||q.rev||0))}</strong></div>
-        </div></section>
-        <section class="qv-card"><button class="qv-collapse-btn" onclick="toggleQuotationViewSection(this)"><span><i class="ti ti-history" style="margin-right:7px;color:var(--blue)"></i>Timeline</span><i class="ti ti-chevron-down qv-chevron"></i></button><div class="qv-collapse-content" style="display:none"><div class="qv-mini-meta">${timeline}</div></div></section>
+        <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ti-route"></i>Document flow</span></div><div class="qv-side-body qv-doc-flow">${flowHtml}</div></section>
+        <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ti-history"></i>Document activity</span></div><div class="qv-side-body qv-activity">${activityRows}</div></section>
       </aside>
     </div>`;
 
@@ -5465,56 +5504,57 @@ function openAddCustomer() {
   editingCustId = null;
   const delBtn=document.getElementById('cust-edit-delete-btn'); if(delBtn){delBtn.style.display='none';delBtn.removeAttribute('data-cid');}
   document.getElementById('cust-modal-title').textContent = 'Add customer';
-  document.getElementById('cm-company').value = '';
-  document.getElementById('cm-city').value = '';
-  document.getElementById('cm-vat').value = '';
+  resetCustomerPartyFields('');
   document.getElementById('cm-contacts-list').innerHTML = '';
   addContactRow();
   openModalWithSize('cust-modal');
 }
 
+function profileTxnDate(v){
+  if(!v) return '';
+  const d=new Date(v);
+  return isNaN(d)?String(v):d.toISOString();
+}
+function toggleProfileTransactions(btn){
+  const section=btn.closest('.profile-recent'); if(!section)return;
+  section.classList.toggle('open');
+  btn.setAttribute('aria-expanded', section.classList.contains('open')?'true':'false');
+}
+function filterProfileTransactions(sel){
+  const section=sel.closest('.profile-recent'); if(!section)return;
+  const type=sel.value;
+  section.querySelectorAll('tbody tr[data-txn-type]').forEach(tr=>tr.style.display=(!type||tr.dataset.txnType===type)?'':'none');
+}
 function viewCustomer(id) {
   const c = customers.find(x=>x.id===id); if (!c) return;
+  const cname=normalizeMasterValue(c.company);
   const contacts = c.contacts || (c.contact ? [{name:c.contact,title:'',phone:c.phone||'',isDefault:true}] : []);
-  // Quotation stats for this customer
-  const cQuotes = quotations.filter(q=>q.company===c.company);
-  const totalVal = cQuotes.reduce((s,q)=>s+calcQuote(q).net,0);
-  const wonVal   = cQuotes.filter(q=>q.status==='Won').reduce((s,q)=>s+calcQuote(q).net,0);
-  const contactsHtml = contacts.map(ct=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-      <div style="flex:1">
-        <span style="font-weight:600">${ct.name||'—'}</span>
-        ${ct.isDefault?'<span style="font-size:10px;background:var(--blue-pale);color:var(--blue);border-radius:10px;padding:1px 7px;margin-left:6px">Default</span>':''}
-        ${ct.title?`<span style="font-size:11px;color:var(--gray);margin-left:6px">${ct.title}</span>`:''}
-      </div>
-      <div style="font-size:12px;color:var(--gray)">${ct.phone||''}</div>
-    </div>`).join('');
-  const recentHtml = cQuotes.slice(-5).reverse().map(q=>{
-    const {net}=calcQuote(q);
-    return `<tr><td><a href="#" onclick="closeModal('cust-view-modal');viewQuotation('${q.id}');return false" style="color:var(--blue);font-weight:500">${q.qno}</a></td><td>${fmtDate(q.date)}</td><td class="right">${fmtShort(net)}</td><td><span class="badge ${getStatusClass(q.status)}">${q.status}</span></td></tr>`;
-  }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--gray);padding:12px">No quotations yet</td></tr>';
-  document.getElementById('cust-view-body').innerHTML =
-    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-      <div>
-        <div class="section-title" style="margin-top:0">Company info</div>
-        <div class="detail-row"><span class="dk">Company</span><strong>${c.company}</strong></div>
-        <div class="detail-row"><span class="dk">City</span><span>${c.city||'—'}</span></div>
-        <div class="detail-row"><span class="dk">VAT No.</span><span>${c.vat||'—'}</span></div>
-      </div>
-      <div>
-        <div class="section-title" style="margin-top:0">Quotation summary</div>
-        <div class="detail-row"><span class="dk">Total quotations</span><strong>${cQuotes.length}</strong></div>
-        <div class="detail-row"><span class="dk">Total pipeline</span><strong>${fmtShort(totalVal)}</strong></div>
-        <div class="detail-row"><span class="dk">Won value</span><strong style="color:var(--green)">${fmtShort(wonVal)}</strong></div>
-      </div>
+  const cQuotes = quotations.filter(q=>normalizeMasterValue(q.company)===cname);
+  const cRFQs = rfqs.filter(r=>normalizeMasterValue(r.company)===cname);
+  const cSOs = salesOrders.filter(o=>normalizeMasterValue(o.customer)===cname);
+  const totalVal = cQuotes.reduce((sum,q)=>sum+calcQuote(q).net,0);
+  const wonVal = cQuotes.filter(q=>q.status==='Won').reduce((sum,q)=>sum+calcQuote(q).net,0);
+  const totalRefs=cQuotes.length+cRFQs.length+cSOs.length;
+  const addr=partyAddressSummary(c);
+  const contactsHtml=contacts.length?contacts.map(ct=>`<div class="profile-contact-row"><div><strong>${ct.name||'—'}</strong>${ct.isDefault?'<span class="profile-default-chip">Default</span>':''}<span>${ct.title||''}</span></div><small>${ct.phone||''}</small></div>`).join(''):'<div class="product-profile-empty">No contacts have been added.</div>';
+  const txns=[];
+  cRFQs.forEach(r=>txns.push({type:'RFQ',date:r.date||r.created||'',no:r.rfqNo||'RFQ',status:r.status||'—',amount:null,open:`closeModal('cust-view-modal');viewRFQ('${r.id}')`}));
+  cQuotes.forEach(q=>txns.push({type:'Quotation',date:q.date||q.created||'',no:q.qno||'Quotation',status:q.status||'—',amount:calcQuote(q).net,open:`closeModal('cust-view-modal');viewQuotation('${q.id}')`}));
+  cSOs.forEach(o=>txns.push({type:'Sales Order',date:o.date||o.created||'',no:o.soNo||'Sales Order',status:o.status||o._status||'—',amount:Number(o.total)||0,open:`closeModal('cust-view-modal');viewSO('${o.id}')`}));
+  txns.sort((a,b)=>profileTxnDate(b.date).localeCompare(profileTxnDate(a.date)));
+  const txnRows=txns.slice(0,10).map(t=>`<tr data-txn-type="${t.type}"><td>${fmtDate(t.date)||'—'}</td><td><button class="profile-doc-link" onclick="${t.open}">${t.no}</button></td><td>${t.type}</td><td><span class="badge ${t.type==='Sales Order'?getSOBadgeClass(t.status):getStatusClass(t.status)}">${t.status}</span></td><td class="right">${t.amount==null?'—':fmtShort(t.amount)}</td></tr>`).join('')||'<tr><td colspan="5" class="profile-no-txns">No transactions found for this customer.</td></tr>';
+  document.getElementById('cust-view-body').innerHTML=`<div class="product-profile business-profile">
+    <div class="product-profile-hero"><div class="product-profile-identity"><div class="product-profile-icon"><i class="ti ti-building"></i></div><div><div class="product-profile-eyebrow">CUSTOMER PROFILE</div><h3>${c.company}</h3>${c.companyAr?`<div class="profile-arabic-name" dir="rtl">${esc(c.companyAr)}</div>`:''}<div class="product-profile-meta">${c.city?`<span>${c.city}</span>`:''}${c.vat?`<span>VAT ${c.vat}</span>`:''}</div></div></div><span class="product-profile-status"><i class="ti ti-circle-check-filled"></i> Active</span></div>
+    <div class="product-profile-grid product-profile-lower-grid">
+      <section class="product-profile-card"><div class="product-profile-section-title"><i class="ti ti-building"></i><span>Customer information</span></div><div class="product-profile-fields"><div><label>Company</label><strong>${c.company}</strong></div><div><label>VAT number</label><span>${c.vat||'—'}</span></div><div><label>Mobile</label><span>${c.mobile||'—'}</span></div><div><label>Email</label><span>${c.email||'—'}</span></div><div><label>Total references</label><strong>${totalRefs}</strong></div></div></section>
+      <section class="product-profile-card"><div class="product-profile-section-title"><i class="ti ti-address-book"></i><span>Contacts</span></div><div class="profile-contacts">${contactsHtml}</div></section>
     </div>
-    <div class="section-title">Contacts</div>
-    <div style="margin-bottom:16px">${contactsHtml||'<p style="color:var(--gray);font-size:12px">No contacts added.</p>'}</div>
-    <div class="section-title">Recent quotations</div>
-    <table><thead><tr><th>Q No</th><th>Date</th><th class="right">Amount</th><th>Status</th></tr></thead><tbody>${recentHtml}</tbody></table>`;
-  document.getElementById('cust-view-title').textContent = c.company;
-  document.getElementById('cust-view-edit-btn').setAttribute('data-cid', id);
-  document.getElementById('cust-view-delete-btn')?.setAttribute('data-cid', id);
+    <section class="product-profile-card party-address-card"><div class="product-profile-section-title"><i class="ti ti-map-pin"></i><span>National address</span></div><div class="party-address-layout"><div class="party-address-readable"><strong>${c.shortAddress||'National address'}</strong><span>${addr.line1||'—'}</span><span>${addr.line2||''}</span><span>${addr.country}</span>${(addr.ar1||addr.ar2||c.companyAr)?`<div class="party-address-ar" dir="rtl"><span>${addr.ar1||''}</span><span>${addr.ar2||''}</span><span>${addr.country==='Saudi Arabia'?'المملكة العربية السعودية':''}</span></div>`:''}</div><div class="party-address-facts"><div><label>Building No.</label><strong>${c.buildingNo||'—'}</strong></div><div><label>Secondary No.</label><strong>${c.secondaryNo||'—'}</strong></div><div><label>Postal Code</label><strong>${c.postalCode||'—'}</strong></div><div><label>City</label><strong>${c.city||'—'}</strong></div></div></div></section>
+    <section class="product-profile-card product-profile-usage-card"><div class="product-profile-section-title"><i class="ti ti-chart-dots-3"></i><span>Activity & usage</span></div><div class="product-profile-usage"><div><span>RFQs</span><strong>${cRFQs.length}</strong></div><div><span>Quotations</span><strong>${cQuotes.length}</strong></div><div><span>Sales orders</span><strong>${cSOs.length}</strong></div><div class="product-profile-usage-total"><span>Quotation value</span><strong>${fmtShort(totalVal)}</strong></div></div><div class="product-profile-usage-note"><i class="ti ti-trophy"></i>Won quotation value: <strong>${fmtShort(wonVal)}</strong></div></section>
+    <section class="product-profile-card profile-recent"><button class="profile-recent-head" onclick="toggleProfileTransactions(this)" aria-expanded="false"><span><i class="ti ti-history"></i> Recent transactions</span><span class="profile-recent-hint">Latest ${Math.min(txns.length,10)} <i class="ti ti-chevron-down"></i></span></button><div class="profile-recent-body"><div class="profile-recent-tools"><span>Showing latest transactions</span><select onchange="filterProfileTransactions(this)"><option value="">All types</option><option>RFQ</option><option>Quotation</option><option>Sales Order</option></select></div><div class="table-wrap"><table class="profile-txn-table"><thead><tr><th>Date</th><th>Document</th><th>Type</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>${txnRows}</tbody></table></div></div></section>
+  </div>`;
+  document.getElementById('cust-view-title').textContent='Customer details';
+  document.getElementById('cust-view-edit-btn').setAttribute('data-cid',id); document.getElementById('cust-view-delete-btn')?.setAttribute('data-cid',id);
   openModalWithSize('cust-view-modal');
 }
 
@@ -5523,9 +5563,10 @@ function openEditCustomer(id) {
   editingCustId = id;
   const delBtn=document.getElementById('cust-edit-delete-btn'); if(delBtn){delBtn.style.display='inline-flex';delBtn.setAttribute('data-cid',id);}
   document.getElementById('cust-modal-title').textContent = 'Edit — ' + c.company;
-  document.getElementById('cm-company').value = c.company||'';
-  document.getElementById('cm-city').value = c.city||'';
-  document.getElementById('cm-vat').value = c.vat||'';
+  setPartyField('cm-company',c.company||''); setPartyField('cm-company-ar',c.companyAr||''); setPartyField('cm-vat',c.vat||'');
+  setPartyField('cm-mobile',c.mobile||''); setPartyField('cm-email',c.email||''); setPartyField('cm-short-address',c.shortAddress||''); setPartyField('cm-building-no',c.buildingNo||'');
+  setPartyField('cm-street',c.street||''); setPartyField('cm-street-ar',c.streetAr||''); setPartyField('cm-secondary-no',c.secondaryNo||''); setPartyField('cm-postal-code',c.postalCode||'');
+  setPartyField('cm-district',c.district||''); setPartyField('cm-district-ar',c.districtAr||''); setPartyField('cm-city',c.city||''); setPartyField('cm-city-ar',c.cityAr||''); setPartyField('cm-country',c.country||'Saudi Arabia');
   document.getElementById('cm-contacts-list').innerHTML = '';
   const contacts = c.contacts || (c.contact ? [{name:c.contact,title:'',phone:c.phone||'',isDefault:true}] : []);
   if (contacts.length) contacts.forEach(ct => addContactRow(ct));
@@ -5725,7 +5766,7 @@ function renderSuppliers() {
   tbody.innerHTML = supplierSlice.length ? supplierSlice.map(s => {
     const selected = masterSelection.suppliers.has(s.id);
     const quoteCount = rfqs.filter(r => r.supplierId === s.id || normalizeMasterValue(r.supplierName) === normalizeMasterValue(s.company)).length;
-    return `<tr class="master-clickable-row${selected?' master-row-selected':''}" data-master-type="suppliers" data-master-id="${s.id}" tabindex="0" role="button" aria-label="Open supplier ${s.company}" onclick="openEditSupplier('${s.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openEditSupplier('${s.id}');}">
+    return `<tr class="master-clickable-row${selected?' master-row-selected':''}" data-master-type="suppliers" data-master-id="${s.id}" tabindex="0" role="button" aria-label="Open supplier ${s.company}" onclick="viewSupplier('${s.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewSupplier('${s.id}');}">
       <td class="master-select-col" onclick="event.stopPropagation()"><input class="master-row-check" type="checkbox" ${selected?'checked':''} onkeydown="event.stopPropagation()" aria-label="Select ${s.company}" onchange="toggleMasterSelection('suppliers','${s.id}',this.checked)"></td>
       <td><strong>${s.company}</strong></td>
       <td>${s.contact||'—'}</td>
@@ -5745,39 +5786,62 @@ function openAddSupplier() {
   editingSupId = null;
   const delBtn=document.getElementById('sup-delete-btn'); if(delBtn){delBtn.style.display='none';delBtn.removeAttribute('data-sid');}
   document.getElementById('sup-modal-title').textContent = 'Add supplier';
-  ['sm-company','sm-contact','sm-phone','sm-email','sm-whatsapp','sm-city','sm-cat','sm-vat','sm-notes'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  resetSupplierPartyFields('');
   openModalWithSize('sup-modal');
 }
+function viewSupplier(id) {
+  const sp=suppliers.find(x=>x.id===id); if(!sp)return;
+  const sname=normalizeMasterValue(sp.company);
+  const related=rfqs.filter(r=>{
+    if(r.supplierId===sp.id || normalizeMasterValue(r.supplierName)===sname)return true;
+    return (r.pricingItems||[]).some(it=>normalizeMasterValue(it.supplierName||it.supplier)===sname) || (r.vendorQuotes||[]).some(v=>normalizeMasterValue(v.supplierName||v.supplier)===sname) || (r.pricingVersions||[]).some(v=>normalizeMasterValue(v.supplierName)===sname || (v.pricingItems||[]).some(it=>normalizeMasterValue(it.supplierName||it.supplier)===sname));
+  });
+  const pricingDocs=[];
+  related.forEach(r=>{
+    const versions=(r.pricingVersions&&r.pricingVersions.length)?r.pricingVersions:[{version:r.currentPricingVersion||1,status:r.status,updated:r.updated,date:r.date,supplierName:r.supplierName}];
+    versions.forEach(v=>{
+      const used=normalizeMasterValue(v.supplierName)===sname || normalizeMasterValue(r.supplierName)===sname || (v.pricingItems||r.pricingItems||[]).some(it=>normalizeMasterValue(it.supplierName||it.supplier)===sname);
+      if(used) pricingDocs.push({r,v});
+    });
+  });
+  const txns=pricingDocs.map(({r,v})=>({type:'Pricing',date:v.updated||v.created||r.date||'',no:'PRC-'+String(r.rfqNo||r.id).replace(/[^A-Za-z0-9-]/g,'')+'-V'+(v.version||1),status:v.status||r.status||'—',open:`closeModal('sup-view-modal');viewPricingReadOnly('${r.id}')`}));
+  txns.sort((a,b)=>profileTxnDate(b.date).localeCompare(profileTxnDate(a.date)));
+  const addr=partyAddressSummary(sp);
+  const txnRows=txns.slice(0,10).map(t=>`<tr data-txn-type="Pricing"><td>${fmtDate(t.date)||'—'}</td><td><button class="profile-doc-link" onclick="${t.open}">${t.no}</button></td><td>Pricing</td><td><span class="badge ${getStatusClass(t.status)}">${t.status}</span></td><td class="right">—</td></tr>`).join('')||'<tr><td colspan="5" class="profile-no-txns">No pricing transactions found for this supplier.</td></tr>';
+  document.getElementById('sup-view-body').innerHTML=`<div class="product-profile business-profile">
+    <div class="product-profile-hero"><div class="product-profile-identity"><div class="product-profile-icon"><i class="ti ti-building-store"></i></div><div><div class="product-profile-eyebrow">SUPPLIER PROFILE</div><h3>${sp.company}</h3>${sp.companyAr?`<div class="profile-arabic-name" dir="rtl">${esc(sp.companyAr)}</div>`:''}<div class="product-profile-meta">${sp.cat?`<span>${sp.cat}</span>`:''}${sp.city?`<span>${sp.city}</span>`:''}</div></div></div><span class="product-profile-status"><i class="ti ti-circle-check-filled"></i> Active</span></div>
+    <div class="product-profile-grid product-profile-lower-grid"><section class="product-profile-card"><div class="product-profile-section-title"><i class="ti ti-building-store"></i><span>Supplier information</span></div><div class="product-profile-fields"><div><label>Company</label><strong>${sp.company}</strong></div><div><label>Category / specialty</label><span>${sp.cat||'—'}</span></div><div><label>VAT number</label><span>${sp.vat||'—'}</span></div><div><label>City</label><span>${sp.city||'—'}</span></div></div></section><section class="product-profile-card"><div class="product-profile-section-title"><i class="ti ti-address-book"></i><span>Contact information</span></div><div class="product-profile-fields"><div><label>Contact person</label><strong>${sp.contact||'—'}</strong>${sp.contactAr?`<small class="profile-inline-ar" dir="rtl">${esc(sp.contactAr)}</small>`:''}</div><div><label>Mobile</label><span>${sp.mobile||'—'}</span></div><div><label>Telephone</label><span>${sp.phone||'—'}</span></div><div><label>Email</label><span>${sp.email||'—'}</span></div><div><label>WhatsApp</label><span>${sp.whatsapp||'—'}</span></div></div></section></div>
+    <section class="product-profile-card party-address-card"><div class="product-profile-section-title"><i class="ti ti-map-pin"></i><span>National address</span></div><div class="party-address-layout"><div class="party-address-readable"><strong>${sp.shortAddress||'National address'}</strong><span>${addr.line1||'—'}</span><span>${addr.line2||''}</span><span>${addr.country}</span>${(addr.ar1||addr.ar2||sp.companyAr)?`<div class="party-address-ar" dir="rtl"><span>${addr.ar1||''}</span><span>${addr.ar2||''}</span><span>${addr.country==='Saudi Arabia'?'المملكة العربية السعودية':''}</span></div>`:''}</div><div class="party-address-facts"><div><label>Building No.</label><strong>${sp.buildingNo||'—'}</strong></div><div><label>Secondary No.</label><strong>${sp.secondaryNo||'—'}</strong></div><div><label>Postal Code</label><strong>${sp.postalCode||'—'}</strong></div><div><label>City</label><strong>${sp.city||'—'}</strong></div></div></div></section>
+    <div class="product-profile-grid product-profile-lower-grid"><section class="product-profile-card"><div class="product-profile-section-title"><i class="ti ti-chart-dots-3"></i><span>Activity & usage</span></div><div class="profile-compact-stats"><div><span>RFQ / Pricing references</span><strong>${related.length}</strong></div><div><span>Pricing documents</span><strong>${pricingDocs.length}</strong></div></div><div class="product-profile-usage-note"><i class="ti ti-shield-lock"></i>${related.length?'This supplier is connected to business records and is protected from deletion.':'No business-document references found.'}</div></section><section class="product-profile-card"><div class="product-profile-section-title"><i class="ti ti-note"></i><span>Notes</span></div><div class="product-profile-notes">${sp.notes||'<span>No notes have been added for this supplier.</span>'}</div></section></div>
+    <section class="product-profile-card profile-recent"><button class="profile-recent-head" onclick="toggleProfileTransactions(this)" aria-expanded="false"><span><i class="ti ti-history"></i> Recent transactions</span><span class="profile-recent-hint">Latest ${Math.min(txns.length,10)} <i class="ti ti-chevron-down"></i></span></button><div class="profile-recent-body"><div class="profile-recent-tools"><span>Showing latest supplier transactions</span><select onchange="filterProfileTransactions(this)"><option value="">All types</option><option>Pricing</option></select></div><div class="table-wrap"><table class="profile-txn-table"><thead><tr><th>Date</th><th>Document</th><th>Type</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>${txnRows}</tbody></table></div></div></section>
+  </div>`;
+  document.getElementById('sup-view-title').textContent='Supplier details'; document.getElementById('sup-view-edit-btn').setAttribute('data-sid',id); document.getElementById('sup-view-delete-btn').setAttribute('data-sid',id); openModalWithSize('sup-view-modal');
+}
+
 function openEditSupplier(id) {
   const s = suppliers.find(x=>x.id===id); if (!s) return;
   editingSupId = id;
   const delBtn=document.getElementById('sup-delete-btn'); if(delBtn){delBtn.style.display='inline-flex';delBtn.setAttribute('data-sid',id);}
   document.getElementById('sup-modal-title').textContent = 'Edit — '+s.company;
-  document.getElementById('sm-company').value   = s.company||'';
-  document.getElementById('sm-contact').value   = s.contact||'';
-  document.getElementById('sm-phone').value     = s.phone||'';
-  document.getElementById('sm-email').value     = s.email||'';
-  document.getElementById('sm-whatsapp').value  = s.whatsapp||'';
-  document.getElementById('sm-city').value      = s.city||'';
-  document.getElementById('sm-cat').value       = s.cat||'';
-  document.getElementById('sm-vat').value       = s.vat||'';
-  document.getElementById('sm-notes').value     = s.notes||'';
+  setPartyField('sm-company',s.company||''); setPartyField('sm-company-ar',s.companyAr||''); setPartyField('sm-contact',s.contact||''); setPartyField('sm-contact-ar',s.contactAr||'');
+  setPartyField('sm-mobile',s.mobile||''); setPartyField('sm-phone',s.phone||''); setPartyField('sm-email',s.email||''); setPartyField('sm-whatsapp',s.whatsapp||''); setPartyField('sm-cat',s.cat||''); setPartyField('sm-vat',s.vat||'');
+  setPartyField('sm-short-address',s.shortAddress||''); setPartyField('sm-building-no',s.buildingNo||''); setPartyField('sm-street',s.street||''); setPartyField('sm-street-ar',s.streetAr||''); setPartyField('sm-secondary-no',s.secondaryNo||'');
+  setPartyField('sm-postal-code',s.postalCode||''); setPartyField('sm-district',s.district||''); setPartyField('sm-district-ar',s.districtAr||''); setPartyField('sm-city',s.city||''); setPartyField('sm-city-ar',s.cityAr||''); setPartyField('sm-country',s.country||'Saudi Arabia'); setPartyField('sm-notes',s.notes||'');
   openModalWithSize('sup-modal');
 }
 async function saveSupplier() {
   const isNew = !editingSupId;
   const company = document.getElementById('sm-company').value.trim();
   if (!company) { showToast('Company name is required','error'); return; }
+  const email=getPartyField('sm-email');
+  if(!validOptionalEmail(email)){ showToast('Enter a valid supplier email address','error'); return; }
   const s = {
+    ...(editingSupId ? (suppliers.find(x=>x.id===editingSupId)||{}) : {}),
     id: editingSupId || ('s'+Date.now().toString(36)),
-    company, contact: document.getElementById('sm-contact').value.trim(),
-    phone: document.getElementById('sm-phone').value.trim(),
-    email: document.getElementById('sm-email').value.trim(),
-    whatsapp: document.getElementById('sm-whatsapp').value.trim(),
-    city: document.getElementById('sm-city').value.trim(),
-    cat: document.getElementById('sm-cat').value.trim(),
-    vat: document.getElementById('sm-vat').value.trim(),
-    notes: document.getElementById('sm-notes').value.trim()
+    company, companyAr:getPartyField('sm-company-ar'), contact:getPartyField('sm-contact'), contactAr:getPartyField('sm-contact-ar'),
+    mobile:getPartyField('sm-mobile'), phone:getPartyField('sm-phone'), email, whatsapp:getPartyField('sm-whatsapp'), cat:getPartyField('sm-cat'), vat:getPartyField('sm-vat'),
+    shortAddress:getPartyField('sm-short-address'), buildingNo:getPartyField('sm-building-no'), street:getPartyField('sm-street'), streetAr:getPartyField('sm-street-ar'), secondaryNo:getPartyField('sm-secondary-no'),
+    postalCode:getPartyField('sm-postal-code'), district:getPartyField('sm-district'), districtAr:getPartyField('sm-district-ar'), city:getPartyField('sm-city'), cityAr:getPartyField('sm-city-ar'), country:getPartyField('sm-country')||'Saudi Arabia', notes:getPartyField('sm-notes')
   };
   if (editingSupId) { const i=suppliers.findIndex(x=>x.id===editingSupId); if(i>-1) suppliers[i]=s; }
   else suppliers.push(s);
@@ -6190,6 +6254,15 @@ if (!window.__bizcoreRFQDateMenuBound) {
 let rfqCustActiveIndex = -1;
 function openRFQCustDD() { rfqCustActiveIndex=-1; filterRFQCustDD(); const input=document.getElementById('rfq-cust-search'); if(input) input.setAttribute('aria-expanded','true'); }
 function closeRFQCustDD() { const dd=document.getElementById('rfq-cust-dd'); if(dd) dd.classList.remove('open'); const input=document.getElementById('rfq-cust-search'); if(input) input.setAttribute('aria-expanded','false'); rfqCustActiveIndex=-1; }
+function handleRFQCustomerInput() {
+  const input=document.getElementById('rfq-cust-search');
+  if(!input) return;
+  // Any manual change invalidates the previous master-data selection.
+  // The RFQ can only be saved after a customer is selected from Customer Master.
+  input.dataset.custId='';
+  populateRFQContacts(null);
+  filterRFQCustDD();
+}
 function filterRFQCustDD() {
   const searchEl = document.getElementById('rfq-cust-search');
   const q = searchEl.value.toLowerCase();
@@ -6240,9 +6313,7 @@ function quickAddCustomerFromRFQ(event) {
   if (body) body._savedScroll = body.scrollTop;
   editingCustId = null;
   document.getElementById('cust-modal-title').textContent = 'Add new customer';
-  document.getElementById('cm-company').value = suggestedName;
-  document.getElementById('cm-city').value = '';
-  document.getElementById('cm-vat').value = '';
+  resetCustomerPartyFields(suggestedName);
   document.getElementById('cm-contacts-list').innerHTML = '';
   addContactRow();
   document.getElementById('cust-modal').style.zIndex = '1200';
@@ -6404,9 +6475,13 @@ async function saveEmployee() {
   if(!code){showValidationDialog('Employee code required','Enter a unique employee code.',document.getElementById('emp-code'));return;}
   if(!name){showValidationDialog('Employee name required','Enter the employee name.',document.getElementById('emp-name'));return;}
   if(employees.some(e=>e.code.toLowerCase()===code.toLowerCase()&&e.id!==editingEmployeeId)){showValidationDialog('Duplicate employee code','This employee code is already in use.',document.getElementById('emp-code'));return;}
+  const iqamaInput=document.getElementById('emp-iqama'), licenseInput=document.getElementById('emp-license');
+  const iqamaNo=iqamaInput.value.trim(), licenseNo=licenseInput.value.trim();
+  if(iqamaNo && !/^\d{10}$/.test(iqamaNo)){showValidationDialog('Invalid Iqama number','Iqama number must contain exactly 10 digits — not less or more.',iqamaInput);return;}
+  if(licenseNo && !/^\d+$/.test(licenseNo)){showValidationDialog('Invalid driving licence number','Driving licence number can contain numbers only.',licenseInput);return;}
   if (employeePhotoUploadPromise) { showToast('Finishing photo upload…','success'); await employeePhotoUploadPromise; employeePhotoUploadPromise=null; }
   if (employeePhotoUploadFailed) { showValidationDialog('Photo upload failed','The employee photo could not be uploaded. Check your connection and try selecting the photo again, or remove it and save without one.',document.getElementById('emp-photo-input')); return; }
-  const record={id:editingEmployeeId||('emp-'+Date.now().toString(36)),code,name,photo:employeePhotoDraft,photoPath:employeePhotoPath,department:document.getElementById('emp-department').value.trim(),designation:document.getElementById('emp-designation').value.trim(),email:document.getElementById('emp-email').value.trim(),mobile:document.getElementById('emp-mobile').value.trim(),roles:[...document.querySelectorAll('#employee-role-grid input:checked')].map(x=>x.value),iqamaNo:document.getElementById('emp-iqama').value.trim(),iqamaExpiry:document.getElementById('emp-iqama-expiry').value,passportNo:document.getElementById('emp-passport').value.trim(),passportExpiry:document.getElementById('emp-passport-expiry').value,licenseNo:document.getElementById('emp-license').value.trim(),licenseExpiry:document.getElementById('emp-license-expiry').value,active:document.getElementById('emp-active').value==='true',updated:new Date().toISOString()};
+  const record={id:editingEmployeeId||('emp-'+Date.now().toString(36)),code,name,photo:employeePhotoDraft,photoPath:employeePhotoPath,department:document.getElementById('emp-department').value.trim(),designation:document.getElementById('emp-designation').value.trim(),email:document.getElementById('emp-email').value.trim(),mobile:document.getElementById('emp-mobile').value.trim(),roles:[...document.querySelectorAll('#employee-role-grid input:checked')].map(x=>x.value),iqamaNo:iqamaNo,iqamaExpiry:document.getElementById('emp-iqama-expiry').value,passportNo:document.getElementById('emp-passport').value.trim(),passportExpiry:document.getElementById('emp-passport-expiry').value,licenseNo:licenseNo,licenseExpiry:document.getElementById('emp-license-expiry').value,active:document.getElementById('emp-active').value==='true',updated:new Date().toISOString()};
   const existing=editingEmployeeId?employees.find(e=>e.id===editingEmployeeId):null;
   const persist=async()=>{
     showBusyOverlay('employee-form-panel', 'Saving employee…');
@@ -6531,7 +6606,31 @@ function confirmCancelRFQEntry(){
   }
 }
 
-function confirmSaveRFQEntry(){
+function getSelectedRFQCustomerForSave(){
+  const input=document.getElementById('rfq-cust-search');
+  const custId=String(input?.dataset?.custId||'').trim();
+  const customer=customers.find(c=>String(c.id)===custId);
+  const typed=String(input?.value||'').trim();
+  if(!customer || typed!==String(customer.company||'').trim()) return null;
+  return customer;
+}
+function normalizeRFQReference(value){
+  return String(value||'').trim().replace(/\s+/g,' ').toLowerCase();
+}
+function getRFQReferenceDuplicates(customer, reference){
+  if(!customer || !reference) return [];
+  const wanted=normalizeRFQReference(reference);
+  if(!wanted) return [];
+  const customerName=String(customer.company||'').trim().toLowerCase();
+  return rfqs.filter(r=>{
+    if(editingRFQId && r.id===editingRFQId) return false;
+    const sameCustomer = r.custId
+      ? String(r.custId)===String(customer.id)
+      : String(r.company||'').trim().toLowerCase()===customerName;
+    return sameCustomer && normalizeRFQReference(r.ref)===wanted;
+  }).sort((a,b)=>String(b.created||b.date||'').localeCompare(String(a.created||a.date||'')));
+}
+function showRFQFinalSaveConfirmation(){
   const isEdit=!!editingRFQId;
   const title=isEdit?'Update RFQ?':'Save new RFQ?';
   const message=isEdit
@@ -6553,13 +6652,71 @@ function confirmSaveRFQEntry(){
     });
   }
 }
+function confirmSaveRFQEntry(){
+  const custInput=document.getElementById('rfq-cust-search');
+  const company=String(custInput?.value||'').trim();
+  if(!company){
+    showValidationDialog('Customer required','Select a customer from Customer Master before saving the RFQ.',custInput);
+    return;
+  }
+  const customer=getSelectedRFQCustomerForSave();
+  if(!customer){
+    showValidationDialog(
+      'Select a valid customer',
+      'The customer must be selected from Customer Master. If this is a new customer, add it to Customer Master first and then select it here.',
+      custInput
+    );
+    return;
+  }
+
+  const reference=String(document.getElementById('rfq-ref')?.value||'').trim();
+  const continueAfterBlank=()=>{
+    const duplicates=getRFQReferenceDuplicates(customer,reference);
+    if(duplicates.length && typeof window.bizcoreShowSafeDialog==='function'){
+      const first=duplicates[0];
+      const more=duplicates.length>1?` and ${duplicates.length-1} more RFQ${duplicates.length>2?'s':''}`:'';
+      window.bizcoreShowSafeDialog({
+        icon:'ti-alert-triangle',
+        title:'Possible duplicate reference / subject',
+        message:`${esc(reference)} is already used for ${esc(customer.company)}.`,
+        secondary:`Existing RFQ: ${esc(first.rfqNo||'RFQ')}${more}. You can still save if this duplicate is intentional.`,
+        buttons:[
+          {text:'Go Back',cls:'secondary',action:()=>document.getElementById('rfq-ref')?.focus()},
+          {text:'Save Anyway',cls:'primary',action:()=>showRFQFinalSaveConfirmation()}
+        ]
+      });
+      return;
+    }
+    showRFQFinalSaveConfirmation();
+  };
+
+  if(!reference && typeof window.bizcoreShowSafeDialog==='function'){
+    window.bizcoreShowSafeDialog({
+      icon:'ti-alert-triangle',
+      title:'Customer Reference / Subject is blank',
+      message:'No customer reference or subject has been entered for this RFQ.',
+      secondary:'This field is optional. You can continue without it, or go back and enter the reference / subject.',
+      buttons:[
+        {text:'Go Back',cls:'secondary',action:()=>document.getElementById('rfq-ref')?.focus()},
+        {text:'Continue',cls:'primary',action:continueAfterBlank}
+      ]
+    });
+    return;
+  }
+  continueAfterBlank();
+}
 window.confirmCancelRFQEntry=confirmCancelRFQEntry;
 window.confirmSaveRFQEntry=confirmSaveRFQEntry;
 
 async function saveRFQ() {
   const custSearch = document.getElementById('rfq-cust-search');
   const company = custSearch.value.trim();
-  if (!company) { showValidationDialog('Customer required','Select a customer before saving the RFQ.',custSearch); return; }
+  if (!company) { showValidationDialog('Customer required','Select a customer from Customer Master before saving the RFQ.',custSearch); return; }
+  const selectedCustomer=getSelectedRFQCustomerForSave();
+  if(!selectedCustomer){
+    showValidationDialog('Select a valid customer','The customer must be selected from Customer Master. If this is a new customer, add it to Customer Master first and then select it here.',custSearch);
+    return;
+  }
   const receivedISO=rfqDisplayToISO(document.getElementById('rfq-date').value);
   const dueISO=rfqDisplayToISO(document.getElementById('rfq-due').value);
   if(!receivedISO){showValidationDialog('Invalid received date','Enter the date as DD/MM/YYYY.',document.getElementById('rfq-date'));return;}
@@ -6571,7 +6728,7 @@ async function saveRFQ() {
   const r = {
     id: editingRFQId || ('r'+Date.now().toString(36)),
     rfqNo: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.rfqNo : nextRFQNo(),
-    company, custId: custSearch.dataset.custId||'',
+    company:selectedCustomer.company, custId:selectedCustomer.id,
     contact: document.getElementById('rfq-contact').value.trim(),
     channel: document.getElementById('rfq-channel').value,
     date: receivedISO,
@@ -6783,10 +6940,7 @@ function quickAddSupplierFromPricing() {
   if (body) body._savedScroll = body.scrollTop;
   editingSupId = null;
   document.getElementById('sup-modal-title').textContent = 'Add new supplier';
-  ['sm-company','sm-contact','sm-phone','sm-email','sm-whatsapp','sm-city','sm-cat','sm-vat','sm-notes'].forEach(id => {
-    const el=document.getElementById(id); if(el) el.value='';
-  });
-  document.getElementById('sm-company').value = typedName;
+  resetSupplierPartyFields(typedName);
   document.getElementById('sup-modal').style.zIndex = '220';
   closePricingSupDD();
   openModalWithSize('sup-modal');
