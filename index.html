@@ -13,10 +13,10 @@
 <link rel="apple-touch-icon" href="icons/bizcore-icon-180.png"/>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=79" rel="stylesheet"/>
+<link href="css/main.css?v=94" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=35" rel="stylesheet"/>
 <link href="css/typography.css?v=35" rel="stylesheet"/>
-<link href="css/masters.css" rel="stylesheet"/>
+<link href="css/masters.css?v=94" rel="stylesheet"/>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
 .quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
@@ -75,8 +75,8 @@ document.addEventListener('error', function(e) {
     </defs>
   </svg>
 </div>
-<div><div class="co" id="sb-co-name">Downtown Trading Est.</div><div class="sub">BizCore v1.0</div></div>
-<button aria-expanded="true" aria-label="Collapse sidebar" class="sidebar-collapse-btn" id="sidebar-collapse-btn" onclick="toggleSidebarCollapse()" title="Collapse sidebar" type="button"><i class="ti ti-layout-sidebar-left-collapse"></i></button></div>
+<div><div class="co" id="sb-co-name">Downtown Trading Est.</div><div class="sub">BizCore v1.0</div></div></div>
+<button aria-expanded="true" aria-label="Collapse sidebar" class="sidebar-collapse-btn" id="sidebar-collapse-btn" onclick="toggleSidebarCollapse()" title="Collapse sidebar" type="button"><i class="ti ti-chevron-left"></i></button>
 <div class="nav-section">
 <div aria-label="Dashboard" class="nav-item nav-root active" data-nav-page="dashboard" onclick="showPage('dashboard',this)" role="button" tabindex="0" title="Dashboard"><i class="ti ti-layout-dashboard"></i><span class="nav-text">Dashboard</span></div>
 <div class="nav-group open" data-group="sales">
@@ -211,7 +211,41 @@ document.addEventListener('error', function(e) {
     </div>
   </div>
 
-  <div class="quotation-register-toolbar page-toolbar page-toolbar--sticky page-control-bar" aria-label="Quotation filters" role="toolbar">
+  
+
+  <div class="quotation-main-workspace module-main-workspace" id="quotation-main-workspace" data-module-monitor="quotations">
+    <aside aria-label="Quotation Overview" class="quotation-main-monitor module-monitor">
+      <div class="module-monitor-head quotation-overview-head">
+        <div><strong>Quotation Overview</strong><span>Sales quotation status</span></div>
+        <button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('quotations')" aria-label="Collapse Quotation Overview" title="Collapse SO Overview"><i class="ti ti-chevron-left"></i></button>
+      </div>
+      <div class="quotation-overview-body module-monitor-body">
+        <div class="quotation-overview-total">
+          <button class="quotation-overview-total-btn active" data-overview-key="all" type="button" onclick="setQuotationMonitorFilter('',this)">
+            <span>Total Quotations</span><strong id="quote-kpi-all">0</strong>
+          </button>
+        </div>
+        <div class="quotation-overview-status">
+          <div class="quotation-overview-section-label">Status</div>
+          <button class="quotation-monitor-item quotation-overview-row draft" data-overview-key="Draft" type="button" onclick="setQuotationMonitorFilter('Draft',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-draft"></i>Draft</span><strong id="quote-kpi-draft">0</strong></button>
+          <button class="quotation-monitor-item quotation-overview-row sent" data-overview-key="Sent" type="button" onclick="setQuotationMonitorFilter('Sent',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-sent"></i>Sent</span><strong id="quote-kpi-sent">0</strong></button>
+          <button class="quotation-monitor-item quotation-overview-row won" data-overview-key="Won" type="button" onclick="setQuotationMonitorFilter('Won',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-won"></i>Won</span><strong id="quote-kpi-won">0</strong></button>
+          <button class="quotation-monitor-item quotation-overview-row lost" data-overview-key="Lost" type="button" onclick="setQuotationMonitorFilter('Lost',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-lost"></i>Lost</span><strong id="quote-kpi-lost">0</strong></button>
+          <button class="quotation-monitor-item quotation-overview-row expired" data-overview-key="Expired" type="button" onclick="setQuotationMonitorFilter('Expired',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-expired"></i>Expired</span><strong id="quote-kpi-expired">0</strong></button>
+          <button class="quotation-monitor-item quotation-overview-row revised" data-overview-key="Revised" type="button" onclick="setQuotationMonitorFilter('Revised',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-revised"></i>Revised</span><strong id="quote-kpi-revised">0</strong></button>
+          <button class="quotation-monitor-item quotation-overview-row cancelled" data-overview-key="Cancelled" type="button" onclick="setQuotationMonitorFilter('Cancelled',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-cancelled"></i>Cancelled</span><strong id="quote-kpi-cancelled">0</strong></button>
+        </div>
+        <div class="quotation-overview-performance">
+          <div class="quotation-overview-section-label">Performance</div>
+          <div class="quotation-overview-metric"><span>Win Rate</span><strong id="quote-kpi-winrate">—</strong></div>
+          <div class="quotation-overview-metric"><span>Avg Quotation Value</span><strong id="quote-kpi-avgvalue">—</strong></div>
+        </div>
+      </div>
+    </aside>
+    <button class="module-monitor-rail" type="button" onclick="toggleModuleMonitor('quotations')" aria-label="Expand Quotation Overview" title="Expand Quotation Overview"><i class="ti ti-layout-sidebar-left-expand"></i><span>Quotation</span></button>
+
+    <div class="quotation-register-area module-register-area">
+    <div class="quotation-register-toolbar page-toolbar page-toolbar--sticky page-control-bar" aria-label="Quotation filters" role="toolbar">
     <div class="quotation-toolbar-left">
       <select id="filter-sort" onchange="renderTable()" aria-label="Sort quotations">
         <option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option>
@@ -254,38 +288,6 @@ document.addEventListener('error', function(e) {
     </div>
   </div>
 
-  <div class="quotation-main-workspace module-main-workspace" id="quotation-main-workspace" data-module-monitor="quotations">
-    <aside aria-label="Quotation Overview" class="quotation-main-monitor module-monitor">
-      <div class="module-monitor-head quotation-overview-head">
-        <div><strong>Quotation Overview</strong><span>Sales quotation status</span></div>
-        <button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('quotations')" aria-label="Collapse Quotation Overview" title="Collapse SO Overview"><i class="ti ti-chevron-left"></i></button>
-      </div>
-      <div class="quotation-overview-body module-monitor-body">
-        <div class="quotation-overview-total">
-          <button class="quotation-overview-total-btn active" data-overview-key="all" type="button" onclick="setQuotationMonitorFilter('',this)">
-            <span>Total Quotations</span><strong id="quote-kpi-all">0</strong>
-          </button>
-        </div>
-        <div class="quotation-overview-status">
-          <div class="quotation-overview-section-label">Status</div>
-          <button class="quotation-monitor-item quotation-overview-row draft" data-overview-key="Draft" type="button" onclick="setQuotationMonitorFilter('Draft',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-draft"></i>Draft</span><strong id="quote-kpi-draft">0</strong></button>
-          <button class="quotation-monitor-item quotation-overview-row sent" data-overview-key="Sent" type="button" onclick="setQuotationMonitorFilter('Sent',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-sent"></i>Sent</span><strong id="quote-kpi-sent">0</strong></button>
-          <button class="quotation-monitor-item quotation-overview-row won" data-overview-key="Won" type="button" onclick="setQuotationMonitorFilter('Won',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-won"></i>Won</span><strong id="quote-kpi-won">0</strong></button>
-          <button class="quotation-monitor-item quotation-overview-row lost" data-overview-key="Lost" type="button" onclick="setQuotationMonitorFilter('Lost',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-lost"></i>Lost</span><strong id="quote-kpi-lost">0</strong></button>
-          <button class="quotation-monitor-item quotation-overview-row expired" data-overview-key="Expired" type="button" onclick="setQuotationMonitorFilter('Expired',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-expired"></i>Expired</span><strong id="quote-kpi-expired">0</strong></button>
-          <button class="quotation-monitor-item quotation-overview-row revised" data-overview-key="Revised" type="button" onclick="setQuotationMonitorFilter('Revised',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-revised"></i>Revised</span><strong id="quote-kpi-revised">0</strong></button>
-          <button class="quotation-monitor-item quotation-overview-row cancelled" data-overview-key="Cancelled" type="button" onclick="setQuotationMonitorFilter('Cancelled',this)"><span class="quotation-overview-label"><i class="quotation-overview-dot dot-cancelled"></i>Cancelled</span><strong id="quote-kpi-cancelled">0</strong></button>
-        </div>
-        <div class="quotation-overview-performance">
-          <div class="quotation-overview-section-label">Performance</div>
-          <div class="quotation-overview-metric"><span>Win Rate</span><strong id="quote-kpi-winrate">—</strong></div>
-          <div class="quotation-overview-metric"><span>Avg Quotation Value</span><strong id="quote-kpi-avgvalue">—</strong></div>
-        </div>
-      </div>
-    </aside>
-    <button class="module-monitor-rail" type="button" onclick="toggleModuleMonitor('quotations')" aria-label="Expand Quotation Overview" title="Expand Quotation Overview"><i class="ti ti-layout-sidebar-left-expand"></i><span>Quotation</span></button>
-
-    <div class="quotation-register-area module-register-area">
       <div class="card quotation-register-card">
         <div class="list-table-scroll quotation-table-scroll">
           <table id="quotes-table">
@@ -331,7 +333,41 @@ document.addEventListener('error', function(e) {
   </div>
   <button class="btn btn-primary rfq-page-new-btn" onclick="openNewRFQ()" type="button"><i class="ti ti-plus"></i><span>New RFQ</span></button>
 </div>
-<div aria-label="RFQ filters" class="rfq-main-toolbar page-toolbar page-toolbar--sticky page-control-bar" role="toolbar">
+
+<div class="rfq-main-workspace module-main-workspace" id="rfq-main-workspace" data-module-monitor="rfq">
+<aside aria-label="RFQ Overview" class="rfq-main-monitor module-monitor" id="rfq-main-monitor">
+<div class="rfq-overview-sticky">
+<div class="rfq-main-monitor-head">
+<div><strong>RFQ Overview</strong><span>Current RFQ status</span></div>
+<button aria-label="Collapse RFQ Monitor" class="rfq-monitor-collapse" onclick="toggleRFQMainMonitor()" title="Collapse SO Overview" type="button"><i class="ti ti-chevron-left"></i></button>
+</div>
+<div class="rfq-monitor-pro-summary">
+<div class="rfq-monitor-section-label">Summary</div>
+<div class="rfq-monitor-summary-cards">
+<button class="rfq-monitor-summary-card total" data-rfq-monitor-filter="all" onclick="applyRFQMonitorFilter('all',this)" type="button" aria-label="Show all RFQs">
+<span class="rfq-monitor-summary-title">Total RFQs</span><strong id="rfq-k-total">0</strong>
+</button>
+<button class="rfq-monitor-summary-card open" data-rfq-monitor-filter="Open" onclick="applyRFQMonitorFilter('Open',this)" type="button" aria-label="Show open RFQs">
+<span class="rfq-monitor-summary-title">Open RFQs</span><strong id="rfq-k-open">0</strong>
+</button>
+</div>
+<div class="rfq-monitor-pro-list">
+<div class="rfq-monitor-section-label rfq-monitor-status-label">Status</div>
+<button class="rfq-main-monitor-item pricing rfq-monitor-pro-row" data-rfq-monitor-filter="Pricing" onclick="applyRFQMonitorFilter('Pricing',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-pricing"></i>Waiting Pricing</span><strong id="rfq-k-pricing">0</strong></button>
+<button class="rfq-main-monitor-item quoted rfq-monitor-pro-row" data-rfq-monitor-filter="Quoted" onclick="applyRFQMonitorFilter('Quoted',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-quoted"></i>Quoted / Sales Order</span><strong id="rfq-k-quoted">0</strong></button>
+<button class="rfq-main-monitor-item nobid rfq-monitor-pro-row" data-rfq-monitor-filter="No Bid" onclick="applyRFQMonitorFilter('No Bid',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-nobid"></i>No Bid</span><strong id="rfq-k-nobid">0</strong></button>
+<button class="rfq-main-monitor-item overdue rfq-monitor-pro-row" data-rfq-monitor-filter="Overdue" onclick="applyRFQMonitorFilter('Overdue',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-overdue"></i>Overdue</span><strong id="rfq-k-overdue">0</strong></button>
+</div>
+<div class="rfq-monitor-section-label rfq-monitor-performance-label">Performance</div>
+<div class="rfq-monitor-pro-footer">
+<button class="rfq-main-monitor-item age rfq-monitor-age" onclick="applyRFQMonitorFilter('Open',this)" type="button"><span><small>Average Open Age</small><strong id="rfq-k-avg">—</strong></span><i class="ti ti-chevron-right"></i></button>
+</div>
+</div>
+</div>
+</aside>
+<button aria-label="Open RFQ Monitor" class="rfq-monitor-expand module-monitor-rail" id="rfq-monitor-expand" onclick="toggleRFQMainMonitor()" title="Open RFQ Monitor" type="button"><i class="ti ti-layout-sidebar-left-expand"></i><span>RFQ Overview</span></button>
+<div class="rfq-register-area">
+    <div aria-label="RFQ filters" class="rfq-main-toolbar page-toolbar page-toolbar--sticky page-control-bar" role="toolbar">
 <div class="rfq-filter-group">
 <button class="dash-period-btn active" id="rfq-f-all" onclick="filterRFQ('all',this)">All <span id="rfq-cnt-all"></span></button>
 <button class="dash-period-btn" id="rfq-f-new" onclick="filterRFQ('New',this)">New <span id="rfq-cnt-new"></span></button>
@@ -369,49 +405,7 @@ document.addEventListener('error', function(e) {
 <button class="btn btn-secondary btn-sm register-clear-filters" id="rfq-clear-filters-btn" onclick="clearAllRFQFilters()" type="button" title="Clear all RFQ filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
 </div>
 </div>
-<div class="rfq-main-workspace module-main-workspace" id="rfq-main-workspace" data-module-monitor="rfq">
-<aside aria-label="RFQ Overview" class="rfq-main-monitor module-monitor" id="rfq-main-monitor">
-<div class="rfq-overview-sticky">
-<div class="rfq-main-monitor-head">
-<div><strong>RFQ Overview</strong><span>Current RFQ status</span></div>
-<button aria-label="Collapse RFQ Monitor" class="rfq-monitor-collapse" onclick="toggleRFQMainMonitor()" title="Collapse SO Overview" type="button"><i class="ti ti-chevron-left"></i></button>
-</div>
-<div class="rfq-monitor-pro-summary">
-<div class="rfq-monitor-section-label">Summary</div>
-<div class="rfq-monitor-summary-cards">
-<button class="rfq-monitor-summary-card total" data-rfq-monitor-filter="all" onclick="applyRFQMonitorFilter('all',this)" type="button" aria-label="Show all RFQs">
-<span class="rfq-monitor-summary-title">Total RFQs</span><strong id="rfq-k-total">0</strong>
-</button>
-<button class="rfq-monitor-summary-card open" data-rfq-monitor-filter="Open" onclick="applyRFQMonitorFilter('Open',this)" type="button" aria-label="Show open RFQs">
-<span class="rfq-monitor-summary-title">Open RFQs</span><strong id="rfq-k-open">0</strong>
-</button>
-</div>
-<div class="rfq-monitor-pro-list">
-<div class="rfq-monitor-section-label rfq-monitor-status-label">Status</div>
-<button class="rfq-main-monitor-item pricing rfq-monitor-pro-row" data-rfq-monitor-filter="Pricing" onclick="applyRFQMonitorFilter('Pricing',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-pricing"></i>Waiting Pricing</span><strong id="rfq-k-pricing">0</strong></button>
-<button class="rfq-main-monitor-item quoted rfq-monitor-pro-row" data-rfq-monitor-filter="Quoted" onclick="applyRFQMonitorFilter('Quoted',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-quoted"></i>Quoted / Sales Order</span><strong id="rfq-k-quoted">0</strong></button>
-<button class="rfq-main-monitor-item nobid rfq-monitor-pro-row" data-rfq-monitor-filter="No Bid" onclick="applyRFQMonitorFilter('No Bid',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-nobid"></i>No Bid</span><strong id="rfq-k-nobid">0</strong></button>
-<button class="rfq-main-monitor-item overdue rfq-monitor-pro-row" data-rfq-monitor-filter="Overdue" onclick="applyRFQMonitorFilter('Overdue',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-overdue"></i>Overdue</span><strong id="rfq-k-overdue">0</strong></button>
-</div>
-<div class="rfq-monitor-section-label rfq-monitor-performance-label">Performance</div>
-<div class="rfq-monitor-pro-footer">
-<button class="rfq-main-monitor-item age rfq-monitor-age" onclick="applyRFQMonitorFilter('Open',this)" type="button"><span><small>Average Open Age</small><strong id="rfq-k-avg">—</strong></span><i class="ti ti-chevron-right"></i></button>
-</div>
-</div>
-</div>
-<div aria-label="RFQ workflow" class="rfq-workflow-card">
-<div class="rfq-workflow-head"><span>Workflow</span><small>RFQ response process</small></div>
-<div class="rfq-workflow-track">
-<button class="rfq-workflow-step received" onclick="applyRFQMonitorFilter('Open',this)" type="button"><span class="rfq-workflow-dot"><i class="ti ti-inbox"></i></span><span><strong>RFQ Received</strong><small>New requests awaiting action</small></span></button>
-<button class="rfq-workflow-step assigned" onclick="applyRFQMonitorFilter('Open',this)" type="button"><span class="rfq-workflow-dot"><i class="ti ti-user-check"></i></span><span><strong>Assigned</strong><small>Owned by the sales team</small></span></button>
-<button class="rfq-workflow-step pricing" onclick="applyRFQMonitorFilter('Pricing',this)" type="button"><span class="rfq-workflow-dot"><i class="ti ti-calculator"></i></span><span><strong>Waiting Pricing</strong><small>Sourcing or costing in progress</small></span></button>
-<button class="rfq-workflow-step quotation" onclick="applyRFQMonitorFilter('Quoted',this)" type="button"><span class="rfq-workflow-dot"><i class="ti ti-file-check"></i></span><span><strong>Quotation Sent</strong><small>Customer request attended</small></span></button>
-<button class="rfq-workflow-step closed" onclick="applyRFQMonitorFilter('No Bid',this)" type="button"><span class="rfq-workflow-dot"><i class="ti ti-circle-check"></i></span><span><strong>Closed</strong><small>Quoted or closed as no bid</small></span></button>
-</div>
-</div>
-</aside>
-<button aria-label="Open RFQ Monitor" class="rfq-monitor-expand module-monitor-rail" id="rfq-monitor-expand" onclick="toggleRFQMainMonitor()" title="Open RFQ Monitor" type="button"><i class="ti ti-layout-sidebar-left-expand"></i><span>RFQ Overview</span></button>
-<div class="rfq-register-area"><div id="rfq-list"></div>
+<div id="rfq-list"></div>
   <div class="rows-per-page-bar" style="padding:8px 12px"><label class="rows-per-page-label">Rows per page
     <select class="rows-per-page-select" onchange="setRowsPerPage(this.value)">
       <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
@@ -428,7 +422,19 @@ document.addEventListener('error', function(e) {
     </div>
     <button class="btn btn-primary pricing-page-new-btn" onclick="openPricingSourceRFQs()" type="button" title="Select an RFQ to start pricing"><i class="ti ti-plus"></i><span>Start Pricing</span></button>
   </div>
-  <div class="pricing-register-toolbar page-toolbar page-toolbar--sticky page-control-bar" aria-label="Pricing filters" role="toolbar">
+  
+  <div class="pricing-main-workspace module-main-workspace" id="pricing-main-workspace" data-module-monitor="pricing">
+    <aside class="pricing-main-monitor module-monitor" aria-label="Pricing Overview">
+      <div class="module-monitor-head"><div><strong>Pricing Overview</strong><span>Current pricing status</span></div><button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('pricing')" aria-label="Collapse Pricing Overview" title="Collapse SO Overview"><i class="ti ti-chevron-left"></i></button></div>
+      <div class="pricing-register-kpis module-monitor-body">
+        <button class="pricing-overview-row total" data-pricing-filter="all" data-overview-key="all" type="button" onclick="filterPricingDocuments('all',document.getElementById('pricing-doc-f-all'))"><span><i class="ti ti-calculator"></i>Pricing Documents</span><strong id="pricing-doc-k-total">0</strong></button>
+        <button class="pricing-overview-row saved" data-pricing-filter="Saved" data-overview-key="Saved" type="button" onclick="filterPricingDocuments('Saved',document.getElementById('pricing-doc-f-saved'))"><span><i class="ti ti-device-floppy"></i>Saved Drafts</span><strong id="pricing-doc-k-saved">0</strong></button>
+        <button class="pricing-overview-row converted" data-pricing-filter="Converted" data-overview-key="Converted" type="button" onclick="filterPricingDocuments('Converted',document.getElementById('pricing-doc-f-converted'))"><span><i class="ti ti-file-check"></i>Converted</span><strong id="pricing-doc-k-converted">0</strong></button>
+      </div>
+    </aside>
+    <button class="module-monitor-rail" type="button" onclick="toggleModuleMonitor('pricing')" aria-label="Expand Pricing Overview" title="Expand Pricing Overview"><i class="ti ti-layout-sidebar-left-expand"></i><span>Pricing</span></button>
+    <div class="pricing-register-area module-register-area">
+    <div class="pricing-register-toolbar page-toolbar page-toolbar--sticky page-control-bar" aria-label="Pricing filters" role="toolbar">
     <div class="pricing-register-filters">
       <button class="dash-period-btn active" id="pricing-doc-f-all" onclick="filterPricingDocuments('all',this)">All <span id="pricing-doc-c-all"></span></button>
       <button class="dash-period-btn" id="pricing-doc-f-saved" onclick="filterPricingDocuments('Saved',this)">Saved <span id="pricing-doc-c-saved"></span></button>
@@ -463,17 +469,7 @@ document.addEventListener('error', function(e) {
       <button class="btn btn-secondary btn-sm register-clear-filters" id="pricing-clear-filters-btn" onclick="clearAllPricingFilters()" type="button" title="Clear all Pricing filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
     </div>
   </div>
-  <div class="pricing-main-workspace module-main-workspace" id="pricing-main-workspace" data-module-monitor="pricing">
-    <aside class="pricing-main-monitor module-monitor" aria-label="Pricing Overview">
-      <div class="module-monitor-head"><div><strong>Pricing Overview</strong><span>Current pricing status</span></div><button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('pricing')" aria-label="Collapse Pricing Overview" title="Collapse SO Overview"><i class="ti ti-chevron-left"></i></button></div>
-      <div class="pricing-register-kpis module-monitor-body">
-        <button class="pricing-overview-row total" data-pricing-filter="all" data-overview-key="all" type="button" onclick="filterPricingDocuments('all',document.getElementById('pricing-doc-f-all'))"><span><i class="ti ti-calculator"></i>Pricing Documents</span><strong id="pricing-doc-k-total">0</strong></button>
-        <button class="pricing-overview-row saved" data-pricing-filter="Saved" data-overview-key="Saved" type="button" onclick="filterPricingDocuments('Saved',document.getElementById('pricing-doc-f-saved'))"><span><i class="ti ti-device-floppy"></i>Saved Drafts</span><strong id="pricing-doc-k-saved">0</strong></button>
-        <button class="pricing-overview-row converted" data-pricing-filter="Converted" data-overview-key="Converted" type="button" onclick="filterPricingDocuments('Converted',document.getElementById('pricing-doc-f-converted'))"><span><i class="ti ti-file-check"></i>Converted</span><strong id="pricing-doc-k-converted">0</strong></button>
-      </div>
-    </aside>
-    <button class="module-monitor-rail" type="button" onclick="toggleModuleMonitor('pricing')" aria-label="Expand Pricing Overview" title="Expand Pricing Overview"><i class="ti ti-layout-sidebar-left-expand"></i><span>Pricing</span></button>
-    <div class="pricing-register-area module-register-area">
+
       <div class="card pricing-register-card">
         <div class="pricing-register-table-wrap"><table class="pricing-register-table"><colgroup><col class="col-pricing-no"><col class="col-customer"><col class="col-version"><col class="col-updated"><col class="col-money"><col class="col-money"><col class="col-money"><col class="col-margin"><col class="col-status"><col class="col-quotation"></colgroup><thead><tr><th>Pricing No.</th><th>Customer</th><th class="center">Version</th><th>Updated</th><th class="right">Cost</th><th class="right">Selling</th><th class="right">Profit</th><th class="right">Margin %</th><th class="center">Status</th><th>Quotation</th></tr></thead><tbody id="pricing-doc-tbody"></tbody></table></div>
         <div class="rows-per-page-bar" style="padding:8px 12px"><label class="rows-per-page-label">Rows per page
@@ -498,36 +494,7 @@ document.addEventListener('error', function(e) {
     </div>
   </div>
 
-  <div class="so-register-toolbar page-toolbar page-toolbar--sticky page-control-bar" role="toolbar" aria-label="Sales Order filters">
-    <div class="so-toolbar-left">
-      <select id="so-sort" onchange="soPage=1;renderSOPage()" aria-label="Sort Sales Orders">
-        <option value="date-desc">Newest first</option>
-        <option value="date-asc">Oldest first</option>
-        <option value="amount-desc">Highest amount</option>
-        <option value="amount-asc">Lowest amount</option>
-      </select>
-      <span id="so-register-count" class="so-toolbar-count"></span>
-    </div>
-    <div class="so-toolbar-right">
-      <select id="so-customer-filter" onchange="soPage=1;renderSOPage()" aria-label="Filter Sales Orders by customer">
-        <option value="">All customers</option>
-      </select>
-      <select id="so-date-preset" onchange="filterSODate(this.value)" aria-label="Filter Sales Orders by date">
-        <option value="all">All Dates</option>
-        <option value="today">Today</option>
-        <option value="week">This Week</option>
-        <option value="month">This Month</option>
-        <option value="lastmonth">Last Month</option>
-        <option value="30days">Last 30 Days</option>
-        <option value="last3months">Last 3 Months</option>
-        <option value="year">This Year</option>
-      </select>
-      <input id="so-search" oninput="soPage=1;renderSOPage()" placeholder="Search SO No, customer, PO No…" type="text" aria-label="Search Sales Orders"/>
-      <button class="btn btn-secondary btn-sm register-clear-filters" id="so-clear-filters-btn" onclick="clearAllSOFilters()" type="button" title="Clear all Sales Order filters">
-        <i class="ti ti-filter-off"></i><span>Clear Filters</span>
-      </button>
-    </div>
-  </div>
+  
 
   <!-- Hidden compatibility controls used by existing logic -->
   <div style="display:none" aria-hidden="true">
@@ -596,6 +563,37 @@ document.addEventListener('error', function(e) {
     </button>
 
     <div class="salesorders-register-area module-register-area">
+    <div class="so-register-toolbar page-toolbar page-toolbar--sticky page-control-bar" role="toolbar" aria-label="Sales Order filters">
+    <div class="so-toolbar-left">
+      <select id="so-sort" onchange="soPage=1;renderSOPage()" aria-label="Sort Sales Orders">
+        <option value="date-desc">Newest first</option>
+        <option value="date-asc">Oldest first</option>
+        <option value="amount-desc">Highest amount</option>
+        <option value="amount-asc">Lowest amount</option>
+      </select>
+      <span id="so-register-count" class="so-toolbar-count"></span>
+    </div>
+    <div class="so-toolbar-right">
+      <select id="so-customer-filter" onchange="soPage=1;renderSOPage()" aria-label="Filter Sales Orders by customer">
+        <option value="">All customers</option>
+      </select>
+      <select id="so-date-preset" onchange="filterSODate(this.value)" aria-label="Filter Sales Orders by date">
+        <option value="all">All Dates</option>
+        <option value="today">Today</option>
+        <option value="week">This Week</option>
+        <option value="month">This Month</option>
+        <option value="lastmonth">Last Month</option>
+        <option value="30days">Last 30 Days</option>
+        <option value="last3months">Last 3 Months</option>
+        <option value="year">This Year</option>
+      </select>
+      <input id="so-search" oninput="soPage=1;renderSOPage()" placeholder="Search SO No, customer, PO No…" type="text" aria-label="Search Sales Orders"/>
+      <button class="btn btn-secondary btn-sm register-clear-filters" id="so-clear-filters-btn" onclick="clearAllSOFilters()" type="button" title="Clear all Sales Order filters">
+        <i class="ti ti-filter-off"></i><span>Clear Filters</span>
+      </button>
+    </div>
+  </div>
+
       <div class="card so-register-card">
         <div class="so-table-scroll">
           <table id="so-register-table">
@@ -643,6 +641,7 @@ document.addEventListener('error', function(e) {
 <h3>Customer directory</h3>
 <div style="display:flex;gap:8px;align-items:center">
 <button class="btn btn-secondary btn-sm" onclick="openImportModal('customers')" title="Import customers from Excel"><i class="ti ti-table-import"></i>Import Excel</button>
+<button class="btn btn-danger btn-sm master-bulk-delete" id="customers-delete-selected" onclick="deleteSelectedMasterRecords('customers')" disabled><i class="ti ti-trash"></i>Delete selected <span id="customers-selected-count"></span></button>
 <button class="btn btn-primary btn-sm page-primary-command" onclick="openAddCustomer()"><i class="ti ti-plus"></i>Add customer</button>
 </div>
 </div>
@@ -653,7 +652,7 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="list-table-scroll">
 <table>
-<thead><tr><th>Company</th><th>Default contact</th><th>Title</th><th>City</th><th>Phone</th><th class="center">Quotes</th><th class="right">Total value</th><th class="center">Actions</th></tr></thead>
+<thead><tr><th class="master-select-col"><input id="customers-select-all" class="master-row-check" type="checkbox" onkeydown="event.stopPropagation()" aria-label="Select all customers on this page" onclick="event.stopPropagation();toggleMasterPageSelection('customers',this.checked)"></th><th>Company</th><th>Default contact</th><th>Title</th><th>City</th><th>Phone</th><th class="center">Quotes</th><th class="right">Total value</th></tr></thead>
 <tbody id="customers-tbody"></tbody>
 </table>
 </div>
@@ -668,6 +667,7 @@ document.addEventListener('error', function(e) {
 <h3><i class="ti ti-building-store" style="margin-right:6px"></i>Supplier directory</h3>
 <div style="display:flex;gap:8px;align-items:center">
 <button class="btn btn-secondary btn-sm" onclick="openImportModal('suppliers')" title="Import suppliers from Excel"><i class="ti ti-table-import"></i>Import Excel</button>
+<button class="btn btn-danger btn-sm master-bulk-delete" id="suppliers-delete-selected" onclick="deleteSelectedMasterRecords('suppliers')" disabled><i class="ti ti-trash"></i>Delete selected <span id="suppliers-selected-count"></span></button>
 <button class="btn btn-primary btn-sm page-primary-command" onclick="openAddSupplier()"><i class="ti ti-plus"></i>Add supplier</button>
 </div>
 </div>
@@ -678,7 +678,7 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="list-table-scroll">
 <table>
-<thead><tr><th>Company</th><th>Contact</th><th>Phone</th><th>Email</th><th>Category</th><th>City</th><th class="center">Quotes received</th><th class="center">Actions</th></tr></thead>
+<thead><tr><th class="master-select-col"><input id="suppliers-select-all" class="master-row-check" type="checkbox" onkeydown="event.stopPropagation()" aria-label="Select all suppliers on this page" onclick="event.stopPropagation();toggleMasterPageSelection('suppliers',this.checked)"></th><th>Company</th><th>Contact</th><th>Phone</th><th>Email</th><th>Category</th><th>City</th><th class="center">Quotes received</th></tr></thead>
 <tbody id="suppliers-tbody"></tbody>
 </table>
 </div>
@@ -693,6 +693,7 @@ document.addEventListener('error', function(e) {
 <h3><i class="ti ti-package" style="margin-right:6px"></i>Product database</h3>
 <div style="display:flex;gap:8px;align-items:center">
 <button class="btn btn-secondary btn-sm" onclick="openImportModal('products')" title="Import products from Excel"><i class="ti ti-table-import"></i>Import Excel</button>
+<button class="btn btn-danger btn-sm master-bulk-delete" id="products-delete-selected" onclick="deleteSelectedMasterRecords('products')" disabled><i class="ti ti-trash"></i>Delete selected <span id="products-selected-count"></span></button>
 <button class="btn btn-primary btn-sm page-primary-command" onclick="openAddProduct()"><i class="ti ti-plus"></i>Add product</button>
 </div>
 </div>
@@ -707,8 +708,8 @@ document.addEventListener('error', function(e) {
 <div class="list-table-scroll">
 <table>
 <thead><tr>
-<th style="width:52px">Image</th><th>Item code</th><th>Product name</th><th>Brand</th><th>Model no.</th>
-<th>Category</th><th>UOM</th><th class="right">Default price</th><th>Specs</th><th class="center" style="min-width:160px">Actions</th>
+<th class="master-select-col"><input id="products-select-all" class="master-row-check" type="checkbox" onkeydown="event.stopPropagation()" aria-label="Select all products on this page" onclick="event.stopPropagation();toggleMasterPageSelection('products',this.checked)"></th><th style="width:52px">Image</th><th>Item code</th><th>Product name</th><th>Brand</th><th>Model no.</th>
+<th>Category</th><th>UOM</th><th class="right">Default price</th><th>Specs</th>
 </tr></thead>
 <tbody id="products-tbody"></tbody>
 </table>
@@ -1237,6 +1238,7 @@ document.addEventListener('error', function(e) {
 <div id="cm-contacts-list" style="display:flex;flex-direction:column;gap:8px"></div>
 </div>
 <div class="modal-footer">
+<button class="btn btn-danger" id="cust-edit-delete-btn" style="display:none;margin-right:auto" onclick="deleteCustomer(this.getAttribute('data-cid'),'cust-modal')"><i class="ti ti-trash"></i>Delete</button>
 <button class="btn btn-secondary" onclick="confirmCloseModal('cust-modal')">Cancel</button>
 <button class="btn btn-primary" onclick="saveCustomer()"><i class="ti ti-device-floppy"></i>Save customer</button>
 </div>
@@ -1251,6 +1253,7 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="modal-body" id="prod-view-body"></div>
 <div class="modal-footer">
+<button class="btn btn-danger" id="prod-view-delete-btn" style="margin-right:auto" onclick="deleteProduct(this.getAttribute('data-pid'),'prod-view-modal')"><i class="ti ti-trash"></i>Delete</button>
 <button class="btn btn-secondary" onclick="closeModal('prod-view-modal')">Close</button>
 <button class="btn btn-primary" id="prod-view-edit-btn" onclick="closeModal('prod-view-modal');openEditProduct(this.getAttribute('data-pid'))"><i class="ti ti-edit"></i>Edit product</button>
 </div>
@@ -1327,6 +1330,7 @@ document.addEventListener('error', function(e) {
 </div>
 </div>
 <div class="modal-footer">
+<button class="btn btn-danger" id="prod-edit-delete-btn" style="display:none;margin-right:auto" onclick="deleteProduct(this.getAttribute('data-pid'),'prod-modal')"><i class="ti ti-trash"></i>Delete</button>
 <button class="btn btn-secondary" onclick="confirmCloseModal('prod-modal')">Cancel</button>
 <button class="btn btn-primary" onclick="saveProduct()"><i class="ti ti-device-floppy"></i>Save product</button>
 </div>
@@ -1356,6 +1360,7 @@ document.addEventListener('error', function(e) {
 </div>
 </div>
 <div class="modal-footer">
+<button class="btn btn-danger" id="sup-delete-btn" style="display:none;margin-right:auto" onclick="deleteSupplier(this.getAttribute('data-sid'),'sup-modal')"><i class="ti ti-trash"></i>Delete</button>
 <button class="btn btn-secondary" onclick="confirmCloseModal('sup-modal')">Cancel</button>
 <button class="btn btn-primary" onclick="saveSupplier()"><i class="ti ti-device-floppy"></i>Save supplier</button>
 </div>
@@ -1619,6 +1624,7 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="modal-body" id="cust-view-body"></div>
 <div class="modal-footer">
+<button class="btn btn-danger" id="cust-view-delete-btn" style="margin-right:auto" onclick="deleteCustomer(this.getAttribute('data-cid'),'cust-view-modal')"><i class="ti ti-trash"></i>Delete</button>
 <button class="btn btn-secondary" onclick="closeModal('cust-view-modal')" style="padding:9px 20px;font-size:13px">Close</button>
 <button class="btn btn-primary" id="cust-view-edit-btn" onclick="closeModal('cust-view-modal');openEditCustomer(this.getAttribute('data-cid'))" style="padding:9px 20px;font-size:13px"><i class="ti ti-edit"></i>Edit customer</button>
 </div>
@@ -2340,7 +2346,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=83';
+    s.src = 'js/app.js?v=95';
     document.body.appendChild(s);
   }
 });

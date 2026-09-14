@@ -1205,6 +1205,166 @@ function getDefaultProducts() {
   ];
 }
 
+/* ── MASTER DATA SELECTION / SAFE DELETE ── */
+const masterSelection = {
+  customers: new Set(),
+  suppliers: new Set(),
+  products: new Set(),
+};
+const masterVisiblePageIds = { customers: [], suppliers: [], products: [] };
+
+function masterCollection(type) {
+  if (type === 'customers') return customers;
+  if (type === 'suppliers') return suppliers;
+  if (type === 'products') return products;
+  return [];
+}
+function masterRecordLabel(type, rec) {
+  if (!rec) return 'Record';
+  if (type === 'customers' || type === 'suppliers') return rec.company || 'Record';
+  return rec.name || rec.code || 'Product';
+}
+function normalizeMasterValue(v) { return String(v || '').trim().toLowerCase(); }
+
+function toggleMasterSelection(type, id, checked) {
+  const set = masterSelection[type]; if (!set) return;
+  if (checked) set.add(id); else set.delete(id);
+  updateMasterSelectionUI(type);
+  const row = document.querySelector(`tr[data-master-type="${type}"][data-master-id="${CSS.escape(id)}"]`);
+  if (row) row.classList.toggle('master-row-selected', checked);
+}
+function toggleMasterPageSelection(type, checked) {
+  const set = masterSelection[type]; if (!set) return;
+  (masterVisiblePageIds[type] || []).forEach(id => checked ? set.add(id) : set.delete(id));
+  if (type === 'customers') renderCustomers();
+  else if (type === 'suppliers') renderSuppliers();
+  else if (type === 'products') renderProducts();
+}
+function updateMasterSelectionUI(type) {
+  const set = masterSelection[type]; if (!set) return;
+  // Remove stale IDs if records were restored/deleted elsewhere.
+  const validIds = new Set(masterCollection(type).map(x => x.id));
+  [...set].forEach(id => { if (!validIds.has(id)) set.delete(id); });
+  const count = set.size;
+  const btn = document.getElementById(type + '-delete-selected');
+  const countEl = document.getElementById(type + '-selected-count');
+  if (btn) btn.disabled = count === 0;
+  if (countEl) countEl.textContent = count ? `(${count})` : '';
+  const all = document.getElementById(type + '-select-all');
+  const visible = masterVisiblePageIds[type] || [];
+  if (all) {
+    const selectedVisible = visible.filter(id => set.has(id)).length;
+    all.checked = visible.length > 0 && selectedVisible === visible.length;
+    all.indeterminate = selectedVisible > 0 && selectedVisible < visible.length;
+  }
+}
+
+function getMasterDependencies(type, rec) {
+  if (!rec) return [];
+  const deps = [];
+  const id = rec.id;
+  if (type === 'customers') {
+    const name = normalizeMasterValue(rec.company);
+    const qCount = quotations.filter(q => q.custId === id || (name && normalizeMasterValue(q.company) === name)).length;
+    const rCount = rfqs.filter(r => r.custId === id || (name && normalizeMasterValue(r.company) === name)).length;
+    const soCount = salesOrders.filter(so => name && normalizeMasterValue(so.customer) === name).length;
+    if (qCount) deps.push(`${qCount} quotation${qCount===1?'':'s'}`);
+    if (rCount) deps.push(`${rCount} RFQ${rCount===1?'':'s'}`);
+    if (soCount) deps.push(`${soCount} sales order${soCount===1?'':'s'}`);
+  } else if (type === 'suppliers') {
+    const name = normalizeMasterValue(rec.company);
+    let rfqCount = 0;
+    rfqs.forEach(r => {
+      let used = r.supplierId === id || (name && normalizeMasterValue(r.supplierName) === name);
+      if (!used) used = (r.pricingItems || []).some(it => normalizeMasterValue(it.supplierName || it.supplier) === name);
+      if (!used) used = (r.vendorQuotes || []).some(v => normalizeMasterValue(v.supplierName || v.supplier) === name);
+      if (!used) used = (r.pricingVersions || []).some(v =>
+        normalizeMasterValue(v.supplierName) === name ||
+        (v.pricingItems || []).some(it => normalizeMasterValue(it.supplierName || it.supplier) === name) ||
+        (v.vendorQuotes || []).some(q => normalizeMasterValue(q.supplierName || q.supplier) === name)
+      );
+      if (used) rfqCount++;
+    });
+    if (rfqCount) deps.push(`${rfqCount} RFQ/pricing document${rfqCount===1?'':'s'}`);
+  } else if (type === 'products') {
+    const code = normalizeMasterValue(rec.code);
+    const name = normalizeMasterValue(rec.name);
+    const itemUsesProduct = it => !!it && (
+      it.prodId === id || it.productId === id || it.itemId === id ||
+      (code && normalizeMasterValue(it.code) === code) ||
+      (!code && name && normalizeMasterValue(it.desc || it.name) === name)
+    );
+    const qCount = quotations.filter(q => (q.items || []).some(itemUsesProduct)).length;
+    const rCount = rfqs.filter(r =>
+      (r.items || []).some(itemUsesProduct) ||
+      (r.pricingItems || []).some(itemUsesProduct) ||
+      (r.pricingVersions || []).some(v => (v.pricingItems || []).some(itemUsesProduct))
+    ).length;
+    const soCount = salesOrders.filter(so => (so.items || []).some(itemUsesProduct)).length;
+    if (qCount) deps.push(`${qCount} quotation${qCount===1?'':'s'}`);
+    if (rCount) deps.push(`${rCount} RFQ/pricing document${rCount===1?'':'s'}`);
+    if (soCount) deps.push(`${soCount} sales order${soCount===1?'':'s'}`);
+  }
+  return deps;
+}
+
+function showMasterDeleteBlocked(type, blocked) {
+  const typeName = type === 'customers' ? 'customer' : type === 'suppliers' ? 'supplier' : 'product';
+  const lines = blocked.slice(0,6).map(x => `• ${masterRecordLabel(type,x.record)} — ${x.dependencies.join(', ')}`);
+  if (blocked.length > 6) lines.push(`• and ${blocked.length-6} more`);
+  showValidationDialog(
+    'Delete Not Allowed',
+    `The selected ${typeName}${blocked.length>1?' records are':' is'} connected to existing data and cannot be deleted.\n\n${lines.join('\n')}\n\nThis master record must remain while those business documents exist.`,
+    '', ''
+  );
+}
+
+async function requestMasterDelete(type, ids, sourceModalId='') {
+  const records = [...new Set((ids || []).filter(Boolean))].map(id => masterCollection(type).find(x => x.id === id)).filter(Boolean);
+  if (!records.length) return false;
+  const blocked = records.map(record => ({record, dependencies:getMasterDependencies(type, record)})).filter(x => x.dependencies.length);
+  if (blocked.length) { showMasterDeleteBlocked(type, blocked); return false; }
+
+  const singular = type === 'customers' ? 'customer' : type === 'suppliers' ? 'supplier' : 'product';
+  const label = records.length === 1 ? masterRecordLabel(type, records[0]) : `${records.length} ${singular}s`;
+  const first = await showConfirmAsync({
+    icon:'🗑️',
+    title:`Move ${label} to Recycle Bin?`,
+    message:`${records.length===1?'This record':'These records'} will be removed from active Master Data and moved to the Recycle Bin. ${records.length===1?'It can':'They can'} be restored later.`,
+    confirmText:'Continue'
+  });
+  if (!first) return false;
+  const second = await showConfirmAsync({
+    icon:'⚠️',
+    title:'Final confirmation',
+    message:`This is the second confirmation. Move ${label} to the Recycle Bin now?`,
+    confirmText:'Move to Recycle Bin'
+  });
+  if (!second) return false;
+
+  const now = new Date().toISOString();
+  const deletedBy = (window.currentUser && (window.currentUser.email || window.currentUser.name)) || 'unknown';
+  records.forEach(record => recycleBin.push({...record, deletedAt:now, deletedBy, originalCollection:type}));
+  const idsSet = new Set(records.map(r=>r.id));
+  if (type === 'customers') customers = customers.filter(r=>!idsSet.has(r.id));
+  else if (type === 'suppliers') suppliers = suppliers.filter(r=>!idsSet.has(r.id));
+  else if (type === 'products') products = products.filter(r=>!idsSet.has(r.id));
+  records.forEach(r => masterSelection[type].delete(r.id));
+
+  const saveFn = type === 'customers' ? saveCustomers : type === 'suppliers' ? saveSuppliers : saveProducts;
+  await Promise.all([saveFn(), saveRecycleBin()]);
+  if (sourceModalId) { clearDirty(); closeModal(sourceModalId); }
+  if (type === 'customers') { renderCustomers(); renderSetupCustTable(); }
+  else if (type === 'suppliers') renderSuppliers();
+  else if (type === 'products') renderProducts();
+  showToast(`${label} moved to Recycle Bin`, 'success');
+  return true;
+}
+
+function deleteSelectedMasterRecords(type) {
+  return requestMasterDelete(type, [...(masterSelection[type] || [])]);
+}
+
 /* ── PRODUCT CRUD ── */
 function renderProducts() {
   document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PROD_PER_PAGE)) el.value = String(PROD_PER_PAGE); });
@@ -1218,14 +1378,17 @@ function renderProducts() {
   const pages = Math.ceil(list.length / PROD_PER_PAGE) || 1;
   if (prodPage > pages) prodPage = 1;
   const slice = list.slice((prodPage-1)*PROD_PER_PAGE, prodPage*PROD_PER_PAGE);
+  masterVisiblePageIds.products = slice.map(p=>p.id);
   const tbody = document.getElementById('products-tbody');
   if (!tbody) return;
   tbody.innerHTML = slice.length ? slice.map(p => {
+    const selected = masterSelection.products.has(p.id);
     const specStr = (p.specs||[]).map(s=>`${s.k}: ${s.v}`).join(' · ');
     const imgHtml = p.image
       ? `<img src="${p.image}" style="width:40px;height:40px;object-fit:contain;border-radius:4px;border:1px solid var(--border)">`
       : `<div style="width:40px;height:40px;background:var(--blue-pale);border-radius:4px;display:flex;align-items:center;justify-content:center"><i class="ti ti-package" style="font-size:18px;color:var(--blue-light)"></i></div>`;
-    return `<tr>
+    return `<tr class="master-clickable-row${selected?' master-row-selected':''}" data-master-type="products" data-master-id="${p.id}" tabindex="0" role="button" aria-label="Open product ${p.name}" onclick="viewProduct('${p.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewProduct('${p.id}');}">
+      <td class="master-select-col" onclick="event.stopPropagation()"><input class="master-row-check" type="checkbox" ${selected?'checked':''} onkeydown="event.stopPropagation()" aria-label="Select ${p.name}" onchange="toggleMasterSelection('products','${p.id}',this.checked)"></td>
       <td>${imgHtml}</td>
       <td style="font-weight:500;color:var(--gray)">${p.code||'—'}</td>
       <td><strong>${p.name}</strong></td>
@@ -1235,16 +1398,12 @@ function renderProducts() {
       <td>${p.uom}</td>
       <td class="right" style="font-weight:600">${p.price>0?fmt(p.price):'—'}</td>
       <td style="font-size:11px;color:var(--gray);max-width:180px">${specStr||'—'}</td>
-      <td><div class="action-btns">
-        <button class="abtn abtn-view" onclick="viewProduct('${p.id}')"><i class="ti ti-eye"></i>View</button>
-        <button class="abtn abtn-edit" onclick="openEditProduct('${p.id}')"><i class="ti ti-edit"></i>Edit</button>
-        <button class="abtn abtn-del"  onclick="deleteProduct('${p.id}')"><i class="ti ti-trash"></i>Delete</button>
-      </div></td>
     </tr>`;
-  }).join('') : `<tr><td colspan="9"><div class="empty-state"><i class="ti ti-package-off"></i><strong>No products found</strong><p>Add products to the database to use them in quotations.</p></div></td></tr>`;
+  }).join('') : `<tr><td colspan="10"><div class="empty-state"><i class="ti ti-package-off"></i><strong>No products found</strong><p>Add products to the database to use them in quotations.</p></div></td></tr>`;
 
   const pp = document.getElementById('prod-pagination');
   if (pp) pp.innerHTML = buildPaginationHTML(prodPage, pages, 'goProdPage');
+  updateMasterSelectionUI('products');
 }
 function goProdPage(p){ prodPage=p; renderProducts(); }
 
@@ -1384,6 +1543,7 @@ function loadCustomCategoriesIntoForm() {
 
 function openAddProduct() {
   editingProdId = null;
+  const delBtn=document.getElementById('prod-edit-delete-btn'); if(delBtn){delBtn.style.display='none';delBtn.removeAttribute('data-pid');}
   document.getElementById('prod-modal-title').textContent = 'Add product';
   ['pm-name','pm-code','pm-brand','pm-model','pm-notes'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('pm-cat').value = '';
@@ -1399,40 +1559,87 @@ function openAddProduct() {
 
 function viewProduct(id) {
   const p = products.find(x=>x.id===id); if (!p) return;
-  // Quotation usage stats
-  const usedIn = quotations.filter(q=>(q.items||[]).some(it=>it.code===p.code && p.code));
-  const imgHtml = p.image
-    ? `<div style="text-align:center;margin-bottom:16px"><img src="${p.image}" style="max-height:180px;max-width:100%;object-fit:contain;border-radius:var(--radius);border:1px solid var(--border);background:#fafafa;padding:8px"></div>`
-    : '';
-  const specRows = (p.specs||[]).filter(s=>s.k||s.v).map(s=>
-    `<div class="detail-row"><span class="dk">${s.k||'—'}</span><span>${s.v||'—'}</span></div>`).join('');
+  const matchesProduct = it => !!it && ((p.id && (it.productId===p.id || it.productID===p.id)) || (p.code && it.code===p.code));
+  const quoteUsage = quotations.filter(q=>(q.items||[]).some(matchesProduct));
+  const pricingUsage = rfqs.filter(r=>(r.items||r.lines||[]).some(matchesProduct));
+  const soUsage = salesOrders.filter(o=>(o.items||o.lines||[]).some(matchesProduct));
+  const totalUsage = quoteUsage.length + pricingUsage.length + soUsage.length;
+  const specs = (p.specs||[]).filter(s=>s.k||s.v);
+  const image = p.image
+    ? `<img class="product-profile-image" src="${p.image}" alt="${p.name||'Product'}">`
+    : `<div class="product-profile-image-placeholder"><i class="ti ti-package"></i><span>No product image</span></div>`;
+  const specRows = specs.length ? specs.map(s=>`
+      <div class="product-profile-spec"><span>${s.k||'—'}</span><strong>${s.v||'—'}</strong></div>`).join('')
+    : `<div class="product-profile-empty">No specifications have been added.</div>`;
+
   document.getElementById('prod-view-body').innerHTML = `
-    ${imgHtml}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px">
-      <div>
-        <div class="section-title" style="margin-top:0">Product info</div>
-        <div class="detail-row"><span class="dk">Item code</span><strong>${p.code||'—'}</strong></div>
-        <div class="detail-row"><span class="dk">Category</span><span>${p.category||'—'}</span></div>
-        <div class="detail-row"><span class="dk">Brand</span><span>${p.brand||'—'}</span></div>
-        <div class="detail-row"><span class="dk">Model</span><span>${p.model||'—'}</span></div>
-        <div class="detail-row"><span class="dk">UOM</span><span>${p.uom||'—'}</span></div>
-        <div class="detail-row"><span class="dk">Default price</span><strong style="color:var(--blue)">${p.price>0?fmt(p.price):'—'}</strong></div>
+    <div class="product-profile">
+      <div class="product-profile-hero">
+        <div class="product-profile-identity">
+          <div class="product-profile-icon"><i class="ti ti-package"></i></div>
+          <div>
+            <div class="product-profile-eyebrow">PRODUCT PROFILE</div>
+            <h3>${p.name||'Unnamed product'}</h3>
+            <div class="product-profile-meta">
+              <span class="product-code-chip">${p.code||'No item code'}</span>
+              ${p.brand?`<span>${p.brand}</span>`:''}
+              ${p.model?`<span>${p.model}</span>`:''}
+            </div>
+          </div>
+        </div>
+        <span class="product-profile-status"><i class="ti ti-circle-check-filled"></i> Active</span>
       </div>
-      <div>
-        ${specRows ? `<div class="section-title" style="margin-top:0">Specifications</div>${specRows}` : ''}
-        ${p.notes ? `<div class="section-title" style="margin-top:${specRows?'12px':'0'}">Notes</div><p style="font-size:12px;color:var(--gray);white-space:pre-wrap">${p.notes}</p>` : ''}
-        ${!specRows && !p.notes ? '<div style="color:var(--gray);font-size:12px;padding-top:8px">No specifications added.</div>' : ''}
+
+      <div class="product-profile-grid">
+        <section class="product-profile-card product-profile-info">
+          <div class="product-profile-section-title"><i class="ti ti-info-circle"></i><span>Product information</span></div>
+          <div class="product-profile-fields">
+            <div><label>Item code / SKU</label><strong>${p.code||'—'}</strong></div>
+            <div><label>Category</label><span>${p.category||'—'}</span></div>
+            <div><label>Brand</label><span>${p.brand||'—'}</span></div>
+            <div><label>Model number</label><span>${p.model||'—'}</span></div>
+            <div><label>Unit of measure</label><span>${p.uom||'—'}</span></div>
+            <div><label>Default price</label><strong class="product-profile-price">${p.price>0?fmt(p.price):'—'}</strong></div>
+          </div>
+        </section>
+        <section class="product-profile-card product-profile-image-card">
+          <div class="product-profile-section-title"><i class="ti ti-photo"></i><span>Product image</span></div>
+          <div class="product-profile-image-wrap">${image}</div>
+        </section>
       </div>
-    </div>
-    ${usedIn.length ? `<div class="section-title">Used in quotations</div><p style="font-size:12px;color:var(--gray)">${usedIn.length} quotation(s) contain this product code.</p>` : ''}`;
-  document.getElementById('prod-view-title').textContent = p.name;
+
+      <div class="product-profile-grid product-profile-lower-grid">
+        <section class="product-profile-card">
+          <div class="product-profile-section-title"><i class="ti ti-adjustments-horizontal"></i><span>Specifications</span></div>
+          <div class="product-profile-specs">${specRows}</div>
+        </section>
+        <section class="product-profile-card">
+          <div class="product-profile-section-title"><i class="ti ti-note"></i><span>Description & notes</span></div>
+          <div class="product-profile-notes">${p.notes ? p.notes : '<span>No additional notes for this product.</span>'}</div>
+        </section>
+      </div>
+
+      <section class="product-profile-card product-profile-usage-card">
+        <div class="product-profile-section-title"><i class="ti ti-chart-dots-3"></i><span>Activity & usage</span></div>
+        <div class="product-profile-usage">
+          <div><span>Quotations</span><strong>${quoteUsage.length}</strong></div>
+          <div><span>Pricing / RFQ</span><strong>${pricingUsage.length}</strong></div>
+          <div><span>Sales orders</span><strong>${soUsage.length}</strong></div>
+          <div class="product-profile-usage-total"><span>Total references</span><strong>${totalUsage}</strong></div>
+        </div>
+        <div class="product-profile-usage-note"><i class="ti ti-shield-lock"></i>${totalUsage ? 'This product is connected to business records and is protected from deletion.' : 'No business-document references found. Standard delete protection still applies.'}</div>
+      </section>
+    </div>`;
+  document.getElementById('prod-view-title').textContent = 'Product details';
   document.getElementById('prod-view-edit-btn').setAttribute('data-pid', id);
+  document.getElementById('prod-view-delete-btn')?.setAttribute('data-pid', id);
   openModalWithSize('prod-view-modal');
 }
 
 function openEditProduct(id) {
   const p = products.find(x=>x.id===id); if (!p) return;
   editingProdId = id;
+  const delBtn=document.getElementById('prod-edit-delete-btn'); if(delBtn){delBtn.style.display='inline-flex';delBtn.setAttribute('data-pid',id);}
   document.getElementById('prod-modal-title').textContent = 'Edit product';
   document.getElementById('pm-name').value  = p.name||'';
   document.getElementById('pm-code').value  = p.code||'';
@@ -1464,11 +1671,8 @@ function addSpecRow(k='', v='') {
 
 /* saveProduct defined above with quick-add support */
 
-async function deleteProduct(id) {
-  if (!confirm('Delete this product from the database?')) return;
-  products = products.filter(x=>x.id!==id);
-  await saveProducts(); renderProducts();
-  showToast('Product deleted');
+async function deleteProduct(id, sourceModalId='') {
+  return requestMasterDelete('products', [id], sourceModalId);
 }
 
 /* ── PRODUCT SEARCH IN QUOTE MODAL ── */
@@ -2852,7 +3056,6 @@ function goPage(p){currentPage=p;renderTable();}
 /* ── CUSTOMERS LIST ── */
 function renderCustomers() {
   const search=document.getElementById('cust-search').value.toLowerCase();
-  // stats from quotations
   const stats={};
   quotations.forEach(q=>{
     if(!stats[q.company]) stats[q.company]={count:0,total:0,won:0};
@@ -2865,13 +3068,16 @@ function renderCustomers() {
   const customerPages=Math.ceil(list.length/PER_PAGE)||1;
   if(customerPage>customerPages) customerPage=1;
   const customerSlice=list.slice((customerPage-1)*PER_PAGE,customerPage*PER_PAGE);
+  masterVisiblePageIds.customers = customerSlice.map(c=>c.id);
   document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PER_PAGE)) el.value=String(PER_PAGE); });
   document.getElementById('customers-tbody').innerHTML=customerSlice.length?customerSlice.map(c=>{
+    const selected = masterSelection.customers.has(c.id);
     const s=stats[c.company]||{count:0,total:0,won:0};
     const contacts = c.contacts || (c.contact ? [{name:c.contact,title:'',phone:c.phone||''}] : []);
     const defaultCt = contacts.find(x=>x.isDefault) || contacts[0];
     const extraCount = contacts.length > 1 ? `<span style="font-size:10px;background:var(--blue-pale);color:var(--blue);border-radius:10px;padding:1px 6px;margin-left:4px">+${contacts.length-1} more</span>` : '';
-    return `<tr>
+    return `<tr class="master-clickable-row${selected?' master-row-selected':''}" data-master-type="customers" data-master-id="${c.id}" tabindex="0" role="button" aria-label="Open customer ${c.company}" onclick="viewCustomer('${c.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewCustomer('${c.id}');}">
+      <td class="master-select-col" onclick="event.stopPropagation()"><input class="master-row-check" type="checkbox" ${selected?'checked':''} onkeydown="event.stopPropagation()" aria-label="Select ${c.company}" onchange="toggleMasterSelection('customers','${c.id}',this.checked)"></td>
       <td><strong>${c.company}</strong></td>
       <td>${defaultCt?.name||'—'}${extraCount}</td>
       <td>${defaultCt?.title||'—'}</td>
@@ -2879,16 +3085,10 @@ function renderCustomers() {
       <td>${defaultCt?.phone||'—'}</td>
       <td class="center">${s.count}</td>
       <td class="right" style="font-weight:600">${s.total>0?fmtShort(s.total):'—'}</td>
-      <td>
-        <div class="action-btns">
-          <button class="abtn abtn-view" onclick="viewCustomer('${c.id}')"><i class="ti ti-eye"></i>View</button>
-          <button class="abtn abtn-edit" onclick="openEditCustomer('${c.id}')"><i class="ti ti-edit"></i>Edit</button>
-          <button class="abtn abtn-del"  onclick="deleteCustomer('${c.id}')"><i class="ti ti-trash"></i>Delete</button>
-        </div>
-      </td>
     </tr>`;
   }).join(''):`<tr><td colspan="8"><div class="empty-state"><i class="ti ti-users-off"></i><p>No customers found.</p></div></td></tr>`;
   const cp=document.getElementById('customers-pagination'); if(cp) cp.innerHTML=buildPaginationHTML(customerPage,customerPages,'goCustomerPage');
+  updateMasterSelectionUI('customers');
 }
 function goCustomerPage(p){customerPage=p;renderCustomers();}
 
@@ -2986,7 +3186,7 @@ function toggleSidebarCollapse(force){
     btn.setAttribute('aria-expanded',collapsed?'false':'true');
     btn.setAttribute('aria-label',collapsed?'Expand sidebar':'Collapse sidebar');
     btn.title=collapsed?'Expand sidebar':'Collapse sidebar';
-    btn.innerHTML=collapsed?'<i class="ti ti-layout-sidebar-left-expand"></i>':'<i class="ti ti-layout-sidebar-left-collapse"></i>';
+    btn.innerHTML=collapsed?'<i class="ti ti-chevron-right"></i>':'<i class="ti ti-chevron-left"></i>';
   }
   try{localStorage.setItem('bc_sidebar_collapsed',collapsed?'1':'0');}catch(e){}
 }
@@ -4916,6 +5116,30 @@ const RECYCLE_BIN_TYPES = {
     subtitleOf: item => item.code || '',
     restoreArray: () => employees,
     restoreSave: saveEmployees,
+  },
+  customers: {
+    label: 'Customers',
+    icon: 'ti-users',
+    titleOf: item => item.company || 'Customer',
+    subtitleOf: item => item.city || '',
+    restoreArray: () => customers,
+    restoreSave: saveCustomers,
+  },
+  suppliers: {
+    label: 'Suppliers',
+    icon: 'ti-building-store',
+    titleOf: item => item.company || 'Supplier',
+    subtitleOf: item => item.city || '',
+    restoreArray: () => suppliers,
+    restoreSave: saveSuppliers,
+  },
+  products: {
+    label: 'Products',
+    icon: 'ti-package',
+    titleOf: item => item.name || item.code || 'Product',
+    subtitleOf: item => item.code || '',
+    restoreArray: () => products,
+    restoreSave: saveProducts,
   }
 };
 let recycleBinFilter = 'all';
@@ -4992,6 +5216,7 @@ async function restoreFromBin(id) {
   });
   if (!confirmed) return;
 
+  const restoredType = item.originalCollection;
   const restored = { ...item };
   delete restored.deletedAt;
   delete restored.deletedBy;
@@ -5001,6 +5226,7 @@ async function restoreFromBin(id) {
 
   await Promise.all([cfg.restoreSave(), saveRecycleBin()]);
   renderAll();
+  if(restoredType==='suppliers') renderSuppliers();
   renderRecycleBin();
   showToast(cfg.titleOf(item) + ' restored', 'success');
 }
@@ -5237,6 +5463,7 @@ function setDefaultContact(btn) {
 
 function openAddCustomer() {
   editingCustId = null;
+  const delBtn=document.getElementById('cust-edit-delete-btn'); if(delBtn){delBtn.style.display='none';delBtn.removeAttribute('data-cid');}
   document.getElementById('cust-modal-title').textContent = 'Add customer';
   document.getElementById('cm-company').value = '';
   document.getElementById('cm-city').value = '';
@@ -5287,12 +5514,14 @@ function viewCustomer(id) {
     <table><thead><tr><th>Q No</th><th>Date</th><th class="right">Amount</th><th>Status</th></tr></thead><tbody>${recentHtml}</tbody></table>`;
   document.getElementById('cust-view-title').textContent = c.company;
   document.getElementById('cust-view-edit-btn').setAttribute('data-cid', id);
+  document.getElementById('cust-view-delete-btn')?.setAttribute('data-cid', id);
   openModalWithSize('cust-view-modal');
 }
 
 function openEditCustomer(id) {
   const c = customers.find(x=>x.id===id); if (!c) return;
   editingCustId = id;
+  const delBtn=document.getElementById('cust-edit-delete-btn'); if(delBtn){delBtn.style.display='inline-flex';delBtn.setAttribute('data-cid',id);}
   document.getElementById('cust-modal-title').textContent = 'Edit — ' + c.company;
   document.getElementById('cm-company').value = c.company||'';
   document.getElementById('cm-city').value = c.city||'';
@@ -5306,11 +5535,8 @@ function openEditCustomer(id) {
 
 /* saveCustomer defined below with quick-add support */
 
-async function deleteCustomer(id) {
-  if (!confirm('Remove this customer from the master list?')) return;
-  customers = customers.filter(x=>x.id!==id);
-  await saveCustomers(); renderCustomers(); renderSetupCustTable();
-  showToast('Customer removed');
+async function deleteCustomer(id, sourceModalId='') {
+  return requestMasterDelete('customers', [id], sourceModalId);
 }
 
 function closeModal(id) {
@@ -5494,10 +5720,13 @@ function renderSuppliers() {
   const supplierPages=Math.ceil(list.length/PER_PAGE)||1;
   if(supplierPage>supplierPages) supplierPage=1;
   const supplierSlice=list.slice((supplierPage-1)*PER_PAGE,supplierPage*PER_PAGE);
+  masterVisiblePageIds.suppliers = supplierSlice.map(s=>s.id);
   document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PER_PAGE)) el.value=String(PER_PAGE); });
   tbody.innerHTML = supplierSlice.length ? supplierSlice.map(s => {
-    const quoteCount = rfqs.filter(r => r.supplierId === s.id).length;
-    return `<tr>
+    const selected = masterSelection.suppliers.has(s.id);
+    const quoteCount = rfqs.filter(r => r.supplierId === s.id || normalizeMasterValue(r.supplierName) === normalizeMasterValue(s.company)).length;
+    return `<tr class="master-clickable-row${selected?' master-row-selected':''}" data-master-type="suppliers" data-master-id="${s.id}" tabindex="0" role="button" aria-label="Open supplier ${s.company}" onclick="openEditSupplier('${s.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openEditSupplier('${s.id}');}">
+      <td class="master-select-col" onclick="event.stopPropagation()"><input class="master-row-check" type="checkbox" ${selected?'checked':''} onkeydown="event.stopPropagation()" aria-label="Select ${s.company}" onchange="toggleMasterSelection('suppliers','${s.id}',this.checked)"></td>
       <td><strong>${s.company}</strong></td>
       <td>${s.contact||'—'}</td>
       <td>${s.phone||'—'}</td>
@@ -5505,18 +5734,16 @@ function renderSuppliers() {
       <td>${s.cat||'—'}</td>
       <td>${s.city||'—'}</td>
       <td class="center">${quoteCount}</td>
-      <td><div class="action-btns">
-        <button class="abtn abtn-edit" onclick="openEditSupplier('${s.id}')"><i class="ti ti-edit"></i>Edit</button>
-        <button class="abtn abtn-del" onclick="deleteSupplier('${s.id}')"><i class="ti ti-trash"></i>Delete</button>
-      </div></td>
     </tr>`;
   }).join('') : `<tr><td colspan="8"><div class="empty-state"><i class="ti ti-building-store"></i><p>No suppliers yet. Add your first supplier.</p></div></td></tr>`;
   const sp=document.getElementById('suppliers-pagination'); if(sp) sp.innerHTML=buildPaginationHTML(supplierPage,supplierPages,'goSupplierPage');
+  updateMasterSelectionUI('suppliers');
 }
 function goSupplierPage(p){supplierPage=p;renderSuppliers();}
 
 function openAddSupplier() {
   editingSupId = null;
+  const delBtn=document.getElementById('sup-delete-btn'); if(delBtn){delBtn.style.display='none';delBtn.removeAttribute('data-sid');}
   document.getElementById('sup-modal-title').textContent = 'Add supplier';
   ['sm-company','sm-contact','sm-phone','sm-email','sm-whatsapp','sm-city','sm-cat','sm-vat','sm-notes'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   openModalWithSize('sup-modal');
@@ -5524,6 +5751,7 @@ function openAddSupplier() {
 function openEditSupplier(id) {
   const s = suppliers.find(x=>x.id===id); if (!s) return;
   editingSupId = id;
+  const delBtn=document.getElementById('sup-delete-btn'); if(delBtn){delBtn.style.display='inline-flex';delBtn.setAttribute('data-sid',id);}
   document.getElementById('sup-modal-title').textContent = 'Edit — '+s.company;
   document.getElementById('sm-company').value   = s.company||'';
   document.getElementById('sm-contact').value   = s.contact||'';
@@ -5572,11 +5800,8 @@ async function saveSupplier() {
   }
   editingSupId = null;
 }
-async function deleteSupplier(id) {
-  if (!confirm('Delete this supplier?')) return;
-  suppliers = suppliers.filter(x=>x.id!==id);
-  await saveSuppliers(); renderSuppliers();
-  showToast('Supplier deleted');
+async function deleteSupplier(id, sourceModalId='') {
+  return requestMasterDelete('suppliers', [id], sourceModalId);
 }
 
 /* ══════════════════════════════════════════════════

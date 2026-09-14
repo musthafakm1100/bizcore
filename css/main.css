@@ -339,7 +339,7 @@ td.center,th.center{text-align:center}
   .topbar-actions label.btn{padding:8px;min-width:36px}
 
   /* ── Page padding ── */
-  .page-content,.content{padding:0 10px 10px 0!important}
+  .page-content,.content{padding:0 10px 10px 8px!important}
 
   /* ── KPI / Stats grids: 2 columns on tablets, stacked tighter ── */
   .stats-grid{grid-template-columns:repeat(2,1fr)!important;gap:8px}
@@ -1092,7 +1092,7 @@ button:focus-visible,[role="button"]:focus-visible,.nav-item:focus-visible,.setu
 ::selection{background:#cfe3f5;color:#102a43}
 
 @media(max-width:900px){
-  .content{padding:0 12px 12px 0}
+  .content{padding:0 12px 12px 8px}
   .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .form-grid,.form-grid.three{grid-template-columns:1fr}
 }
@@ -1177,9 +1177,9 @@ button:focus-visible,[role="button"]:focus-visible,.nav-item:focus-visible,.setu
 .sidebar{width:var(--sidebar-expanded-width)!important;position:relative;overflow:visible;transition:width .22s cubic-bezier(.4,0,.2,1),background .3s;will-change:width}
 .sidebar-logo{min-height:68px!important;padding:12px 38px 12px 14px!important;position:relative;overflow:hidden}
 .sidebar-logo>div:not(.logo-placeholder){min-width:0;transition:opacity .14s ease,transform .2s ease}
-.sidebar-collapse-btn{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:0;border-radius:6px;background:rgba(255,255,255,.08);color:#dce6f0;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s,transform .2s;z-index:3}
-.sidebar-collapse-btn:hover{background:rgba(255,255,255,.16);color:#fff}
-.sidebar-collapse-btn i{font-size:17px}
+.sidebar-collapse-btn{position:absolute;right:-13px;top:27px;width:26px;height:26px;border:1px solid #dbe3ea;border-radius:50%;background:#fff;color:#1F4E79;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s;z-index:20;box-shadow:0 2px 6px rgba(15,23,42,.2)}
+.sidebar-collapse-btn:hover{background:#f5f8fb}
+.sidebar-collapse-btn i{font-size:14px}
 .nav-section{padding:8px 0;overflow-x:hidden;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
 .nav-group{margin:2px 8px 7px!important;overflow:visible!important}
 .nav-group-toggle,.nav-item{position:relative;outline:none}
@@ -1203,7 +1203,9 @@ button:focus-visible,[role="button"]:focus-visible,.nav-item:focus-visible,.setu
 .sidebar.collapsed .sidebar-logo{padding:12px!important;justify-content:center}
 .sidebar.collapsed .sidebar-logo>div:not(.logo-placeholder),.sidebar.collapsed .sidebar-logo .co,.sidebar.collapsed .sidebar-logo .sub{opacity:0;transform:translateX(-8px);pointer-events:none;width:0;overflow:hidden}
 .sidebar.collapsed .sidebar-logo img,.sidebar.collapsed .sidebar-logo .logo-placeholder{width:38px;height:38px}
-.sidebar.collapsed .sidebar-collapse-btn{right:-14px;background:var(--sidebar-bg);box-shadow:0 2px 8px rgba(15,23,42,.24)}
+/* Collapse toggle position/appearance no longer changes between states —
+   it always sits on the sidebar's own edge (see base .sidebar-collapse-btn
+   rule), which is what actually fixed the overlap with the logo. */
 .sidebar.collapsed .nav-group,.sidebar.collapsed .nav-item.nav-root{margin-left:8px!important;margin-right:8px!important}
 .sidebar.collapsed .nav-item.nav-root,.sidebar.collapsed .nav-group-toggle{justify-content:center;padding:0!important}
 .sidebar.collapsed .nav-text,.sidebar.collapsed .nav-badge,.sidebar.collapsed .nav-chevron{display:none!important}
@@ -1453,24 +1455,20 @@ button:focus-visible,[role="button"]:focus-visible,.nav-item:focus-visible,.setu
    PHASE 1 · STEP 3 — SHARED MAIN CONTENT SHELL & PAGE TOOLBARS
    ================================================================ */
 .content{
-  padding:0 16px 20px 0;
+  padding:0 16px 20px 8px;
   scroll-padding-top:0;
   overflow-x:hidden;
 }
 .page{
   width:100%;
-  max-width:1600px;
   min-height:calc(100vh - 112px);
   margin:0;
 }
-/* Hybrid wide-screen behavior: stay left-aligned (flush with sidebar,
-   zero gap) on normal screens and mobile — but on genuinely wide
-   monitors, where 1600px content would otherwise leave a large empty
-   strip only on the right, re-center so the leftover space is
-   balanced on both sides instead. */
-@media(min-width:1900px){
-  .page{margin:0 auto}
-}
+/* Fully fluid: content always fills the available width on any screen
+   or device, instead of capping at a fixed width and leaving empty
+   space (previously handled by capping at 1600px and re-centering
+   above 1900px — replaced since that still left a growing gap on
+   wide screens). */
 .page.active{
   display:block;
   animation:bcPageEnter .16s ease-out;
@@ -1551,13 +1549,13 @@ button:focus-visible,[role="button"]:focus-visible,.nav-item:focus-visible,.setu
 .page table{width:100%}
 
 @media(max-width:1100px){
-  .content{padding:0 18px 24px 0}
+  .content{padding:0 18px 24px 8px}
   .page-toolbar--sticky{top:0}
   .dashboard-period-toolbar #dash-period-label,
   .so-date-toolbar #so-date-summary{width:100%;margin-left:0!important}
 }
 @media(max-width:760px){
-  .content{padding:0 10px 20px 0}
+  .content{padding:0 10px 20px 8px}
   .page{min-height:calc(100vh - 88px)}
   .page-toolbar{align-items:stretch;padding:9px;gap:8px}
   .page-toolbar--sticky{position:static}
@@ -6250,22 +6248,13 @@ button,
 
 
 /* ==========================================================================
-   BizCore v63 — Main sidebar collapsed restore-button visibility
-   Keep the expand/restore button fully inside the collapsed sidebar.
+   BizCore v63 — superseded: the collapse button used to get clipped by
+   .sidebar-logo's overflow:hidden, so this patch pulled it back inside —
+   which is what caused it to overlap the logo. Fixed properly by moving
+   the button outside .sidebar-logo in the HTML (now a direct child of
+   .sidebar, which has overflow:visible), so no per-state override is
+   needed here any more.
    ========================================================================== */
-.sidebar.collapsed .sidebar-collapse-btn{
-  right:6px!important;
-  left:auto!important;
-  width:28px!important;
-  height:28px!important;
-  transform:translateY(-50%)!important;
-  z-index:20!important;
-  background:rgba(255,255,255,.10)!important;
-  box-shadow:none!important;
-}
-.sidebar.collapsed .sidebar-collapse-btn:hover{
-  background:rgba(255,255,255,.18)!important;
-}
 
 
 /* ==========================================================================
@@ -7303,3 +7292,554 @@ button,
 .auth-loading-bar.b2{background:linear-gradient(180deg,#4C9AEB,#1A6CD0);height:20px;animation-delay:.3s}
 .auth-loading-text{font-size:12.5px;font-weight:600;color:rgba(255,255,255,.85);letter-spacing:.2px;margin-top:16px}
 .auth-loading-text::after{content:'';display:inline-block;width:1.1em;text-align:left;animation:busy-overlay-dots 1.2s steps(4,end) infinite}
+
+
+/* ==========================================================================
+   BizCore v85 — Full-height Overview Column + Sticky Overview Card standard
+   RFQ · Pricing · Quotation · Sales Orders
+
+   Design rule:
+   - The pale overview COLUMN continues to the full height of the register.
+   - The actual Overview CARD stays content-height and sticks below the toolbar.
+   - The register/list remains the scrolling content.
+   - Collapsing the overview removes the pale column and leaves only the rail.
+   ========================================================================== */
+@media(min-width:1101px){
+  #page-rfq .rfq-main-workspace,
+  #page-costing .pricing-main-workspace,
+  #page-quotations .quotation-main-workspace,
+  #page-salesorders .salesorders-main-workspace{
+    position:relative!important;
+    column-gap:8px!important;
+    gap:8px!important;
+    align-items:start!important;
+    isolation:isolate;
+  }
+
+  /* Full-height visual column behind the content-height sticky card. */
+  #page-rfq .rfq-main-workspace::before,
+  #page-costing .pricing-main-workspace::before,
+  #page-quotations .quotation-main-workspace::before,
+  #page-salesorders .salesorders-main-workspace::before{
+    content:"";
+    position:absolute;
+    z-index:0;
+    left:0;
+    top:0;
+    bottom:0;
+    width:250px;
+    background:#f4f7fa;
+    border-right:1px solid #dfe6ee;
+    pointer-events:none;
+  }
+
+  #page-rfq .rfq-main-workspace.monitor-collapsed::before,
+  #page-costing .pricing-main-workspace.monitor-collapsed::before,
+  #page-quotations .quotation-main-workspace.monitor-collapsed::before,
+  #page-salesorders .salesorders-main-workspace.monitor-collapsed::before{
+    display:none;
+  }
+
+  /* Keep all overview cards stationary while their register data scrolls. */
+  #page-rfq .rfq-main-monitor,
+  #page-costing .pricing-main-monitor,
+  #page-quotations .quotation-main-monitor,
+  #page-salesorders .salesorders-main-monitor{
+    align-self:start!important;
+    position:sticky!important;
+    top:96px!important;
+    z-index:39!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow:visible!important;
+    background:transparent!important;
+  }
+
+  /* RFQ already has an inner wrapper; let the outer column do the sticking. */
+  #page-rfq .rfq-overview-sticky{
+    position:static!important;
+    top:auto!important;
+  }
+
+  #page-rfq .rfq-main-monitor,
+  #page-costing .pricing-main-monitor,
+  #page-quotations .quotation-main-monitor,
+  #page-salesorders .salesorders-main-monitor,
+  #page-rfq .rfq-register-area,
+  #page-costing .pricing-register-area,
+  #page-quotations .quotation-register-area,
+  #page-salesorders .salesorders-register-area,
+  #page-rfq .module-monitor-rail,
+  #page-costing .module-monitor-rail,
+  #page-quotations .module-monitor-rail,
+  #page-salesorders .module-monitor-rail{
+    position:relative;
+    z-index:1;
+  }
+
+  /* Sticky collapsed rail, aligned to the same toolbar offset. */
+  #page-rfq .module-monitor-rail,
+  #page-costing .module-monitor-rail,
+  #page-quotations .module-monitor-rail,
+  #page-salesorders .module-monitor-rail{
+    position:sticky!important;
+    top:96px!important;
+    align-self:start!important;
+  }
+}
+
+/* On tablet/mobile the existing responsive single-column/collapsed behavior wins. */
+@media(max-width:1100px){
+  #page-rfq .rfq-main-workspace::before,
+  #page-costing .pricing-main-workspace::before,
+  #page-quotations .quotation-main-workspace::before,
+  #page-salesorders .salesorders-main-workspace::before{
+    display:none!important;
+  }
+}
+
+/* ========================================================================== 
+   BizCore v86 — Register Toolbar aligned to Register/Table Area
+   Desktop register standard: Overview occupies its own column from directly
+   below the page header; toolbar belongs to, and exactly matches, table area.
+   ========================================================================== */
+@media(min-width:1101px){
+  #page-rfq .rfq-register-area,
+  #page-costing .pricing-register-area,
+  #page-quotations .quotation-register-area,
+  #page-salesorders .salesorders-register-area{
+    min-width:0!important;
+    width:100%!important;
+  }
+
+  #page-rfq .rfq-main-toolbar,
+  #page-costing .pricing-register-toolbar,
+  #page-quotations .quotation-register-toolbar,
+  #page-salesorders .so-register-toolbar{
+    box-sizing:border-box!important;
+    width:100%!important;
+    max-width:none!important;
+    margin-left:0!important;
+    margin-right:0!important;
+  }
+
+  /* Overview card and register toolbar now share the same workspace top edge. */
+  #page-rfq .rfq-main-monitor,
+  #page-costing .pricing-main-monitor,
+  #page-quotations .quotation-main-monitor,
+  #page-salesorders .salesorders-main-monitor{
+    margin-top:0!important;
+  }
+}
+
+/* Preserve the familiar phone order: toolbar first, then overview, then data. */
+@media(max-width:760px){
+  #page-rfq .rfq-main-workspace,
+  #page-costing .pricing-main-workspace,
+  #page-quotations .quotation-main-workspace,
+  #page-salesorders .salesorders-main-workspace{
+    display:flex!important;
+    flex-direction:column!important;
+  }
+  #page-rfq .rfq-register-area,
+  #page-costing .pricing-register-area,
+  #page-quotations .quotation-register-area,
+  #page-salesorders .salesorders-register-area{
+    display:contents!important;
+  }
+  #page-rfq .rfq-main-toolbar,
+  #page-costing .pricing-register-toolbar,
+  #page-quotations .quotation-register-toolbar,
+  #page-salesorders .so-register-toolbar{order:-3!important;}
+  #page-rfq .rfq-main-monitor,
+  #page-costing .pricing-main-monitor,
+  #page-quotations .quotation-main-monitor,
+  #page-salesorders .salesorders-main-monitor,
+  #page-rfq .module-monitor-rail,
+  #page-costing .module-monitor-rail,
+  #page-quotations .module-monitor-rail,
+  #page-salesorders .module-monitor-rail{order:-2!important;}
+}
+
+/* ========================================================================== 
+   BizCore v87 — Remove gap below register page header
+   The register workspace begins directly under the page header so the
+   Overview Column/Card and Register Toolbar share a continuous top edge.
+   ========================================================================== */
+@media(min-width:1101px){
+  #page-rfq .rfq-main-workspace,
+  #page-costing .pricing-main-workspace,
+  #page-quotations .quotation-main-workspace,
+  #page-salesorders .salesorders-main-workspace{
+    margin-top:-8px!important;
+  }
+}
+
+/* ========================================================================== 
+   BizCore v88 — Stable Overview sticky alignment after toolbar relocation
+   v86 moved each register toolbar into the right-hand Register/Table column.
+   The Overview card now runs parallel with that toolbar, so its sticky offset
+   must be page-header height only (48px), not the old header+toolbar 96px.
+   Keeping the old 96px offset caused the Overview card to jump down whenever
+   sticky mode engaged; short filtered lists could release sticky mode again.
+   ========================================================================== */
+@media(min-width:761px){
+  #page-rfq .rfq-main-monitor,
+  #page-costing .pricing-main-monitor,
+  #page-quotations .quotation-main-monitor,
+  #page-salesorders .salesorders-main-monitor,
+  #page-rfq .module-monitor-rail,
+  #page-costing .module-monitor-rail,
+  #page-quotations .module-monitor-rail,
+  #page-salesorders .module-monitor-rail{
+    top:48px!important;
+  }
+}
+
+/* ========================================================================== 
+   BizCore v89 — Unified Overview Card Design Standard
+   RFQ · Pricing · Quotation · Sales Orders
+   Standardizes card shell, header geometry, typography, status rows,
+   summary values, section labels, performance metrics and corner radii.
+   Content/logic remains module-specific.
+   ========================================================================== */
+
+/* --- Common card shell: 250px, 10px corners, same border/shadow --- */
+#page-rfq .rfq-overview-sticky,
+#page-costing .pricing-main-monitor,
+#page-quotations .quotation-main-monitor,
+#page-salesorders .salesorders-main-monitor{
+  width:250px!important;
+  box-sizing:border-box!important;
+  background:#fff!important;
+  border:1px solid #dfe6ee!important;
+  border-radius:10px!important;
+  box-shadow:0 2px 8px rgba(15,23,42,.045)!important;
+  overflow:hidden!important;
+}
+
+/* RFQ used split borders before v89; the wrapper now owns one standard shell. */
+#page-rfq .rfq-main-monitor{
+  width:250px!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  background:transparent!important;
+  overflow:visible!important;
+}
+#page-rfq .rfq-main-monitor-head,
+#page-rfq .rfq-monitor-pro-summary{
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+}
+
+/* --- Common header: 52px, same padding/title/subtitle --- */
+#page-rfq .rfq-main-monitor-head,
+#page-costing .pricing-main-monitor .module-monitor-head,
+#page-quotations .quotation-overview-head,
+#page-salesorders .so-overview-head{
+  min-height:52px!important;
+  height:52px!important;
+  box-sizing:border-box!important;
+  padding:9px 9px 9px 12px!important;
+  background:#173a5e!important;
+  border:0!important;
+  border-radius:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+}
+#page-rfq .rfq-main-monitor-head strong,
+#page-costing .pricing-main-monitor .module-monitor-head strong,
+#page-quotations .quotation-overview-head strong,
+#page-salesorders .so-overview-head strong{
+  font-size:15px!important;
+  font-weight:700!important;
+  line-height:1.2!important;
+  letter-spacing:0!important;
+}
+#page-rfq .rfq-main-monitor-head span,
+#page-costing .pricing-main-monitor .module-monitor-head span,
+#page-quotations .quotation-overview-head span,
+#page-salesorders .so-overview-head span{
+  font-size:10.5px!important;
+  font-weight:400!important;
+  line-height:1.25!important;
+  color:rgba(255,255,255,.72)!important;
+  opacity:1!important;
+}
+
+/* --- Common collapse control --- */
+#page-rfq .rfq-monitor-collapse,
+#page-costing .module-monitor-collapse,
+#page-quotations .module-monitor-collapse,
+#page-salesorders .module-monitor-collapse{
+  width:28px!important;
+  height:28px!important;
+  min-width:28px!important;
+  padding:0!important;
+  border-radius:6px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+}
+
+/* --- Common section headings --- */
+#page-rfq .rfq-monitor-section-label,
+#page-quotations .quotation-overview-section-label,
+#page-salesorders .so-overview-section-label{
+  font-size:10.5px!important;
+  font-weight:700!important;
+  line-height:1.2!important;
+  letter-spacing:.055em!important;
+  text-transform:uppercase!important;
+  color:#7a8795!important;
+}
+
+/* --- Standard status row geometry and typography --- */
+#page-rfq .rfq-main-monitor-item.rfq-monitor-pro-row,
+#page-quotations .quotation-monitor-item.quotation-overview-row,
+#page-salesorders .so-overview-row,
+#page-costing .pricing-overview-row:not(.total){
+  min-height:39px!important;
+  box-sizing:border-box!important;
+  border-radius:0!important;
+}
+#page-rfq .rfq-monitor-pro-label,
+#page-quotations .quotation-overview-label,
+#page-salesorders .so-overview-row>span,
+#page-costing .pricing-overview-row:not(.total)>span{
+  font-size:14px!important;
+  font-weight:560!important;
+  line-height:1.2!important;
+}
+#page-rfq .rfq-main-monitor-item.rfq-monitor-pro-row>strong,
+#page-quotations .quotation-monitor-item.quotation-overview-row>strong,
+#page-salesorders .so-overview-row>strong,
+#page-costing .pricing-overview-row:not(.total)>strong{
+  font-size:17px!important;
+  font-weight:700!important;
+  line-height:1!important;
+  font-variant-numeric:tabular-nums!important;
+}
+
+/* --- Standard summary/total typography and 8px inner corners --- */
+#page-rfq .rfq-monitor-summary-card,
+#page-quotations .quotation-overview-total-btn,
+#page-costing .pricing-overview-row.total{
+  border:1px solid #dfe6ee!important;
+  border-radius:8px!important;
+  background:#fff!important;
+  box-shadow:none!important;
+}
+#page-rfq .rfq-monitor-summary-title,
+#page-quotations .quotation-overview-total-btn span,
+#page-costing .pricing-overview-row.total>span,
+#page-salesorders .so-overview-total span{
+  font-size:12.5px!important;
+  font-weight:600!important;
+  line-height:1.2!important;
+}
+#page-rfq .rfq-monitor-summary-card strong,
+#page-quotations .quotation-overview-total-btn strong,
+#page-costing .pricing-overview-row.total>strong,
+#page-salesorders .so-overview-total strong{
+  font-size:21px!important;
+  font-weight:720!important;
+  line-height:1!important;
+  color:#173a5e!important;
+  font-variant-numeric:tabular-nums!important;
+}
+
+/* Pricing: make the total row visually match the other modules' total card. */
+#page-costing .pricing-register-kpis{
+  padding:9px 10px 7px!important;
+  background:#fff!important;
+}
+#page-costing .pricing-overview-row.total{
+  min-height:43px!important;
+  padding:9px 10px!important;
+  margin-bottom:3px!important;
+}
+#page-costing .pricing-overview-row:not(.total){
+  padding:7px 4px!important;
+  border:0!important;
+  border-bottom:1px solid #eef2f5!important;
+  background:transparent!important;
+}
+#page-costing .pricing-overview-row:last-child{border-bottom:0!important}
+#page-costing .pricing-overview-row:not(.total)>span{gap:10px!important}
+#page-costing .pricing-overview-row:not(.total)>strong{min-width:42px!important;text-align:right!important}
+
+/* Sales Order: give Total Orders the same 8px summary-card treatment. */
+#page-salesorders .so-overview-body{padding:9px 10px 8px!important;background:#fff!important}
+#page-salesorders .so-overview-total{
+  border:1px solid #dfe6ee!important;
+  border-radius:8px!important;
+  min-height:43px!important;
+  padding:9px 10px!important;
+  margin-bottom:3px!important;
+  background:#fff!important;
+}
+#page-salesorders .so-overview-section-label{padding:9px 2px 5px!important}
+#page-salesorders .so-overview-row{padding:7px 4px!important;grid-template-columns:minmax(0,1fr) 42px!important;gap:12px!important}
+#page-salesorders .so-overview-row>span{gap:10px!important}
+#page-salesorders .so-overview-row>strong{width:42px!important;min-width:42px!important}
+
+/* Quotation spacing aligned to the same status-row and section rhythm. */
+#page-quotations .quotation-overview-status{padding:0 10px 7px!important}
+#page-quotations .quotation-overview-section-label{padding:9px 2px 5px!important}
+
+/* RFQ summary card values were intentionally larger before; normalize them. */
+#page-rfq .rfq-monitor-summary-cards{gap:8px!important;padding:3px 10px 10px!important}
+#page-rfq .rfq-monitor-summary-card{padding:9px 9px!important}
+
+/* --- Common performance typography --- */
+#page-quotations .quotation-overview-metric span,
+#page-salesorders .so-overview-metric span,
+#page-rfq .rfq-main-monitor-item.rfq-monitor-age small{
+  font-size:12.5px!important;
+  font-weight:600!important;
+  line-height:1.2!important;
+}
+#page-quotations .quotation-overview-metric strong,
+#page-salesorders .so-overview-metric strong,
+#page-rfq .rfq-main-monitor-item.rfq-monitor-age strong{
+  font-size:15px!important;
+  font-weight:700!important;
+  line-height:1.2!important;
+  font-variant-numeric:tabular-nums!important;
+}
+#page-quotations .quotation-overview-metric,
+#page-salesorders .so-overview-metric{
+  min-height:31px!important;
+  padding:7px 2px!important;
+}
+#page-salesorders .so-overview-metric{padding-left:2px!important;padding-right:2px!important}
+
+/* Keep responsive behavior unchanged: widths become fluid where existing
+   mobile rules already stack the Overview above the register. */
+@media(max-width:760px){
+  #page-rfq .rfq-main-monitor,
+  #page-rfq .rfq-overview-sticky,
+  #page-costing .pricing-main-monitor,
+  #page-quotations .quotation-main-monitor,
+  #page-salesorders .salesorders-main-monitor{
+    width:100%!important;
+    max-width:none!important;
+  }
+}
+
+/* ========================================================================== 
+   BizCore v90 — Overview card filter-click position stability
+   Root cause: v87 used margin-top:-8px to visually close the header gap.
+   After v88 corrected the sticky offset to 48px, that negative margin left
+   two different resting positions for the Overview card: normal flow at -8px
+   and sticky flow at 48px. Filters that shortened the register could release
+   sticky positioning, making the card jump upward by about 8px.
+
+   The v88 sticky model already aligns the card directly below the 48px page
+   header, so the old compensation is no longer needed. Keep the workspace in
+   normal flow at 0px so normal and sticky positions are identical.
+   ========================================================================== */
+@media(min-width:1101px){
+  #page-rfq .rfq-main-workspace,
+  #page-costing .pricing-main-workspace,
+  #page-quotations .quotation-main-workspace,
+  #page-salesorders .salesorders-main-workspace{
+    margin-top:0!important;
+  }
+
+  #page-rfq .rfq-page-header,
+  #page-costing .pricing-page-header,
+  #page-quotations .quotation-page-header,
+  #page-salesorders .salesorders-page-header{
+    margin-bottom:0!important;
+  }
+}
+
+/* ========================================================================== 
+   BizCore v91 — True viewport-height Overview Column
+   v85 tied the pale Overview Column (::before) to the workspace's content
+   height. When a filter produced only a few register rows, the workspace
+   became short and the Overview Column stopped early. Keep the workspace at
+   least as tall as the visible area below the 64px app topbar + 48px page
+   header; longer registers can still grow naturally beyond the viewport.
+   ========================================================================== */
+@media(min-width:1101px){
+  #page-rfq .rfq-main-workspace,
+  #page-costing .pricing-main-workspace,
+  #page-quotations .quotation-main-workspace,
+  #page-salesorders .salesorders-main-workspace{
+    min-height:calc(100dvh - 112px)!important;
+  }
+}
+
+/* ========================================================================== 
+   BizCore v92 — Full-height Secondary Navigation (Master Data + Administration)
+   Match the v91 register standard: the left secondary-navigation column fills
+   the visible workspace even when the selected tab has only a small amount of
+   content. The navigation remains sticky; Administration can scroll inside
+   the column when its menu is taller than the available viewport.
+   ========================================================================== */
+@media(min-width:761px){
+  #page-masters .setup-shell,
+  #page-setup .setup-shell{
+    min-height:calc(100vh - 96px)!important;
+    min-height:calc(100dvh - 96px)!important;
+    align-items:start!important;
+  }
+
+  #page-masters .setup-shell > .setup-nav,
+  #page-setup .setup-shell > .setup-nav{
+    box-sizing:border-box!important;
+    height:calc(100vh - 96px)!important;
+    height:calc(100dvh - 96px)!important;
+    min-height:calc(100vh - 96px)!important;
+    min-height:calc(100dvh - 96px)!important;
+    max-height:calc(100vh - 96px)!important;
+    max-height:calc(100dvh - 96px)!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+  }
+
+  #page-masters .setup-shell > .setup-workspace,
+  #page-setup .setup-shell > .setup-workspace{
+    min-height:calc(100vh - 96px)!important;
+    min-height:calc(100dvh - 96px)!important;
+  }
+}
+
+@media(max-width:760px){
+  #page-masters .setup-shell > .setup-nav,
+  #page-setup .setup-shell > .setup-nav{
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow:visible!important;
+  }
+}
+
+/* v93 — Master Data clickable register rows */
+.master-clickable-row{cursor:pointer;transition:background-color .14s ease,box-shadow .14s ease}
+.master-clickable-row:hover{background:#f8fbff}
+.master-clickable-row:focus-visible{outline:2px solid #2e75b6;outline-offset:-2px;background:#f4f9fd}
+.master-clickable-row .action-btns,.master-clickable-row .abtn{position:relative;z-index:1}
+
+/* v95 — Product Profile */
+#prod-view-modal .modal{width:min(1040px,94vw)!important;max-width:1040px!important;height:min(86vh,820px)!important}
+#prod-view-modal .modal-body{padding:0;background:#f5f7fa}
+.product-profile{padding:18px 20px 22px;color:#1f2937}
+.product-profile-hero{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 18px;background:linear-gradient(135deg,#f7fbff 0%,#eef5fc 100%);border:1px solid #d9e6f3;border-radius:10px;margin-bottom:14px}
+.product-profile-identity{display:flex;align-items:center;gap:13px;min-width:0}.product-profile-icon{width:44px;height:44px;border-radius:9px;background:#fff;border:1px solid #d5e3f1;display:flex;align-items:center;justify-content:center;color:var(--blue);font-size:22px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.product-profile-eyebrow{font-size:9.5px;font-weight:800;letter-spacing:.11em;color:#5f7690;margin-bottom:3px}.product-profile-identity h3{font-size:19px;line-height:1.25;margin:0 0 5px;color:#172033;font-weight:700}.product-profile-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11.5px;color:#64748b}.product-profile-meta>span+span:before{content:'•';margin-right:8px;color:#a5b4c4}.product-code-chip{background:#fff;border:1px solid #cfdeec;border-radius:5px;padding:2px 7px;color:#35536f;font-weight:700}.product-profile-meta>.product-code-chip:before{display:none!important}
+.product-profile-status{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;border:1px solid #bfe4cc;background:#effaf3;color:#277347;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:700}.product-profile-status i{font-size:13px}
+.product-profile-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(220px,.75fr);gap:14px;margin-bottom:14px}.product-profile-lower-grid{grid-template-columns:1fr 1fr}
+.product-profile-card{background:#fff;border:1px solid #dfe5ec;border-radius:9px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.025)}.product-profile-section-title{height:39px;display:flex;align-items:center;gap:7px;padding:0 13px;border-bottom:1px solid #e7ebf0;background:#fafbfc;color:#34495e;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.035em}.product-profile-section-title i{font-size:14px;color:#52799e}
+.product-profile-fields{display:grid;grid-template-columns:1fr 1fr}.product-profile-fields>div{min-height:61px;padding:10px 13px;border-bottom:1px solid #edf0f3}.product-profile-fields>div:nth-child(odd){border-right:1px solid #edf0f3}.product-profile-fields>div:nth-last-child(-n+2){border-bottom:0}.product-profile-fields label{display:block;font-size:10px;font-weight:650;color:#7a8795;margin-bottom:4px}.product-profile-fields span,.product-profile-fields strong{font-size:13px;font-weight:550;color:#26384a}.product-profile-fields strong{font-weight:700}.product-profile-price{color:var(--blue)!important;font-size:14px!important}
+.product-profile-image-card{min-height:222px}.product-profile-image-wrap{height:183px;padding:13px;display:flex;align-items:center;justify-content:center;background:#fff}.product-profile-image{width:100%;height:100%;object-fit:contain}.product-profile-image-placeholder{width:100%;height:100%;border:1px dashed #cfd8e3;border-radius:7px;background:#fafbfd;display:flex;flex-direction:column;gap:7px;align-items:center;justify-content:center;color:#8a98a8;font-size:10.5px}.product-profile-image-placeholder i{font-size:31px;color:#9fb0c2}
+.product-profile-specs{padding:4px 13px}.product-profile-spec{min-height:38px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #edf0f3;font-size:11.5px}.product-profile-spec:last-child{border-bottom:0}.product-profile-spec span{color:#718096}.product-profile-spec strong{color:#2d3d4f;font-weight:650;text-align:right}.product-profile-empty{padding:18px 0;color:#8a98a8;font-size:11.5px}.product-profile-notes{padding:13px;min-height:84px;white-space:pre-wrap;font-size:11.5px;line-height:1.6;color:#536273}.product-profile-notes span{color:#8a98a8}
+.product-profile-usage-card{margin-bottom:0}.product-profile-usage{display:grid;grid-template-columns:repeat(4,1fr);padding:12px 13px;gap:8px}.product-profile-usage>div{border-right:1px solid #e8edf2;padding:2px 11px}.product-profile-usage>div:first-child{padding-left:2px}.product-profile-usage>div:last-child{border-right:0}.product-profile-usage span{display:block;font-size:10px;color:#788797;margin-bottom:4px}.product-profile-usage strong{font-size:18px;color:#27384a;font-weight:750}.product-profile-usage-total strong{color:var(--blue)}.product-profile-usage-note{border-top:1px solid #edf0f3;background:#fbfcfd;padding:8px 13px;display:flex;align-items:center;gap:7px;font-size:10.5px;color:#68798a}.product-profile-usage-note i{color:#6686a4;font-size:13px}
+@media(max-width:760px){#prod-view-modal .modal{width:96vw!important;height:92vh!important}.product-profile{padding:12px}.product-profile-hero{align-items:flex-start}.product-profile-status{margin-top:2px}.product-profile-grid,.product-profile-lower-grid{grid-template-columns:1fr}.product-profile-fields{grid-template-columns:1fr}.product-profile-fields>div{border-right:0!important}.product-profile-fields>div:nth-last-child(-n+2){border-bottom:1px solid #edf0f3}.product-profile-fields>div:last-child{border-bottom:0}.product-profile-usage{grid-template-columns:1fr 1fr;row-gap:12px}.product-profile-usage>div:nth-child(2){border-right:0}.product-profile-usage>div:nth-child(3){padding-left:2px}}
