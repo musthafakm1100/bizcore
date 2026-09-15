@@ -349,20 +349,27 @@ async function loadData() {
           badge._t = setTimeout(function() { badge.style.opacity = '0'; }, 2500);
         }
 
+        // First Firestore snapshot is initial synchronization, not a remote edit.
+        // Suppress the "updated by another user" badge until each listener has initialized.
+        const _rtListenerInitialized = new Set();
+
         // Helper: smart render — only re-render if user is on that page
         // and not currently editing anything (no open modal)
         function smartRender(page, renderFn, label) {
+          const isInitialSync = !_rtListenerInitialized.has(label);
+          if (isInitialSync) _rtListenerInitialized.add(label);
+
           // Don't interrupt if a modal is open
           const modalOpen = document.querySelector('.modal-overlay.open, .modal-overlay[style*="flex"]');
           if (modalOpen) {
-            showSyncBadge(label);
+            if (!isInitialSync) showSyncBadge(label);
             return;
           }
           const active = getActivePage();
           if (active === page || active === 'dashboard') {
             renderFn();
           }
-          showSyncBadge(label);
+          if (!isInitialSync) showSyncBadge(label);
         }
 
         window.FB.fbListen('quotations', function(data) {
@@ -428,6 +435,9 @@ async function loadData() {
             if (typeof renderSOPage === 'function') renderSOPage();
             renderDashboard();
           }, 'Sales Orders');
+          // A QR deep-link may arrive before Firebase Sales Orders finish loading.
+          // Retry routing immediately after the authoritative SO/DN data arrives.
+          if (typeof openDNFromDeepLink === 'function') setTimeout(openDNFromDeepLink, 0);
         });
 
         window.FB.fbListen('employees', function(data) {
@@ -10006,7 +10016,19 @@ async function saveDeliveryAcceptance(){
 async function confirmDelivery(soId,deliveryIdx){openDeliveryAcceptance(soId,deliveryIdx)}
 function getDNDeepLink(d){const base=location.href.split('?')[0].split('#')[0];return base+'?dn='+encodeURIComponent(d.id)}
 function renderDNQRCode(d){setTimeout(()=>{const el=document.getElementById('dn-qr-code');if(!el)return;el.innerHTML='';if(window.QRCode){new QRCode(el,{text:getDNDeepLink(d),width:112,height:112,correctLevel:QRCode.CorrectLevel.M})}else{el.innerHTML='<div style="font-size:10px;color:#777;width:112px">QR library unavailable. Use the delivery link from BizCore.</div>'}},0)}
-function openDNFromDeepLink(){const id=new URLSearchParams(location.search).get('dn');if(!id)return;const hit=allDeliveryNotes().find(x=>x.d.id===id);if(!hit)return;showPage('deliverynotes');if(hit.d.customerConfirmed)viewDeliveryNote(hit.so.id,hit.i);else openDeliveryAcceptance(hit.so.id,hit.i)}
+function openDNFromDeepLink(){
+ const id=new URLSearchParams(location.search).get('dn');
+ if(!id || window._dnDeepLinkOpened===id) return false;
+ // Authentication and Firebase data both need to be ready. If not, caller retries.
+ if(!window.currentUser || !Array.isArray(salesOrders)) return false;
+ const hit=allDeliveryNotes().find(x=>x.d.id===id);
+ if(!hit) return false;
+ window._dnDeepLinkOpened=id;
+ showPage('deliverynotes');
+ if(hit.d.customerConfirmed) viewDeliveryNote(hit.so.id,hit.i);
+ else openDeliveryAcceptance(hit.so.id,hit.i);
+ return true;
+}
 /* ── View / Print Delivery Note ── */
 function viewDeliveryNote(soId, deliveryIdx) {
   const so = salesOrders.find(x=>x.id===soId); if (!so) return;
@@ -12464,4 +12486,13 @@ console.log('Document locking system active ✅');
    END DOCUMENT PRESENCE LOCKING SYSTEM
 ═══════════════════════════════════════════════════════════════════ */
 
-window.addEventListener('load',()=>setTimeout(openDNFromDeepLink,1400));
+window.addEventListener('load',()=>{
+  if(!new URLSearchParams(location.search).get('dn')) return;
+  let attempts=0;
+  const routeDN=()=>{
+    attempts++;
+    if(openDNFromDeepLink() || attempts>=40) return;
+    setTimeout(routeDN,250);
+  };
+  setTimeout(routeDN,100);
+});
