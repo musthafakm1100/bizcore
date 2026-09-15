@@ -429,14 +429,40 @@ async function loadData() {
         });
 
         window.FB.fbListen('salesOrders', function(data) {
+          // Keep the previous in-memory state long enough to detect business events
+          // (for example a driver confirming a DN on another device).
+          const previousSalesOrders = Array.isArray(salesOrders) ? salesOrders : [];
+          const dnEvents = (typeof detectRemoteDNEvents === 'function')
+            ? detectRemoteDNEvents(previousSalesOrders, data || []) : [];
+
           salesOrders = data;
           try { localStorage.setItem('dtq_salesorders', JSON.stringify(salesOrders)); } catch(e) {}
+
           smartRender('salesorders', function() {
             if (typeof renderSOPage === 'function') renderSOPage();
             renderDashboard();
           }, 'Sales Orders');
+
+          // Delivery Notes live inside Sales Orders, so a Sales Order snapshot is
+          // also the authoritative real-time source for the DN Register.
+          // Re-render the DN register immediately without changing filters/search/page.
+          if (getActivePage()==='deliverynotes' && typeof renderDNPage==='function') {
+            renderDNPage();
+          }
+
+          // If the office currently has this exact DN View open, refresh it after a
+          // remote confirmation so the status/details change without browser refresh.
+          if (dnEvents.length && typeof refreshOpenDNViewFromRealtime==='function') {
+            refreshOpenDNViewFromRealtime(dnEvents);
+          }
+
+          // Business-event notifications: toast + persistent Notification Center.
+          // Initial Firebase synchronization produces no event because the states match.
+          if (dnEvents.length && typeof handleRemoteDNEvents==='function') {
+            handleRemoteDNEvents(dnEvents);
+          }
+
           // A QR deep-link may arrive before Firebase Sales Orders finish loading.
-          // Retry routing immediately after the authoritative SO/DN data arrives.
           if (typeof openDNFromDeepLink === 'function') setTimeout(openDNFromDeepLink, 0);
         });
 
@@ -10015,7 +10041,10 @@ function toggleDNRejectFields(i){const r=Number(document.getElementById('dn-rej-
 async function saveDeliveryAcceptance(){
  const m=document.getElementById('dn-confirm-modal'),so=salesOrders.find(x=>x.id===m._soId),d=so?.deliveries?.[m._deliveryIdx];if(!d)return;const receivedBy=document.getElementById('dn-received-by').value.trim();if(!receivedBy){showToast('Received By is required','error');return}
  for(let i=0;i<d.items.length;i++){const it=d.items[i],qty=Number(it.qty)||0,a=roundQtyForUom(document.getElementById('dn-acc-'+i).value,it.uom),r=roundQtyForUom(document.getElementById('dn-rej-'+i).value,it.uom);if(Math.abs((a+r)-qty)>0.001){showToast(`Line ${i+1}: Accepted + Rejected must equal delivery quantity`,'error');return}const reason=document.getElementById('dn-reason-'+i)?.value||'';if(r>0&&!reason){showToast(`Line ${i+1}: Select a rejection reason`,'error');return}it.acceptedQty=a;it.rejectedQty=r;it.rejectionReason=r>0?reason:'';it.rejectionDisposition=r>0?(document.getElementById('dn-disposition-'+i)?.value||''):'';it.acceptanceRemarks=document.getElementById('dn-line-remarks-'+i)?.value.trim()||''}
- d.customerConfirmed=true;d.customerConfirmedDate=new Date().toISOString().split('T')[0];d.confirmedAt=new Date().toISOString();d.confirmedBy=deliveryActor();d.receivedBy=receivedBy;d.customerRemarks=document.getElementById('dn-customer-remarks').value.trim();d.status=getDNStatus(d);await saveSalesOrders();closeModal('dn-confirm-modal');renderSOPage();renderDNPage();viewSO(so.id);showToast(`${d.dnNo} confirmed — ${d.status}`,'success');
+ d.customerConfirmed=true;d.customerConfirmedDate=new Date().toISOString().split('T')[0];d.confirmedAt=new Date().toISOString();d.confirmedBy=deliveryActor();d.receivedBy=receivedBy;d.customerRemarks=document.getElementById('dn-customer-remarks').value.trim();d.status=getDNStatus(d);
+ // Suppress a duplicate remote-event toast on the device that performed the confirmation.
+ window._dnLocalConfirmationIds=window._dnLocalConfirmationIds||new Set();window._dnLocalConfirmationIds.add(d.id);
+ await saveSalesOrders();closeModal('dn-confirm-modal');renderSOPage();renderDNPage();viewSO(so.id);showToast(`${d.dnNo} confirmed — ${d.status}`,'success');
 }
 async function confirmDelivery(soId,deliveryIdx){openDeliveryAcceptance(soId,deliveryIdx)}
 function getDNDeepLink(d){const base=location.href.split('?')[0].split('#')[0];return base+'?dn='+encodeURIComponent(d.id)}
@@ -11037,16 +11066,65 @@ function toggleTopbarMenu(id){
   const target=document.getElementById(id),wasOpen=target?.classList.contains('show');closeTopbarMenus();if(target&&!wasOpen)target.classList.add('show');
 }
 function closeTopbarMenus(){document.querySelectorAll('.topbar-dropdown.show').forEach(x=>x.classList.remove('show'));}
-function refreshTopbarNotifications(){
-  const entries=[];
-  const badge=(id)=>{const e=document.getElementById(id);return e&&e.style.display!=='none'?(e.textContent||'').trim():''};
-  if(badge('rfq-badge'))entries.push(['ti-inbox',badge('rfq-badge')+' new RFQ(s)','Review newly received customer requests']);
-  if(badge('pricing-badge'))entries.push(['ti-calculator',badge('pricing-badge')+' item(s) awaiting pricing','Continue supplier pricing and costing']);
-  if(badge('so-badge'))entries.push(['ti-shopping-cart',badge('so-badge')+' sales order update(s)','Review pending sales-order activity']);
-  const list=document.getElementById('topbar-notification-list'),dot=document.getElementById('topbar-alert-dot');if(!list)return;
-  list.innerHTML=entries.length?entries.map(x=>'<div class="topbar-notification"><i class="ti '+x[0]+'"></i><div><strong>'+escapeHtml(x[1])+'</strong><small>'+escapeHtml(x[2])+'</small></div></div>').join(''):'<div class="topbar-notification-empty"><i class="ti ti-circle-check" style="font-size:22px;display:block;margin-bottom:6px"></i>No pending notifications</div>';
-  dot?.classList.toggle('show',entries.length>0);
+const BC_NOTIFICATION_KEY='bizcore_notifications_v1';
+function loadBizCoreNotifications(){try{return JSON.parse(localStorage.getItem(BC_NOTIFICATION_KEY)||'[]')}catch(e){return []}}
+function saveBizCoreNotifications(list){try{localStorage.setItem(BC_NOTIFICATION_KEY,JSON.stringify((list||[]).slice(0,100)))}catch(e){}}
+function addBizCoreNotification(n){
+ const list=loadBizCoreNotifications();
+ if(list.some(x=>x.id===n.id))return;
+ list.unshift({...n,read:false,createdAt:n.createdAt||new Date().toISOString()});
+ saveBizCoreNotifications(list);refreshTopbarNotifications();
 }
+function markBizCoreNotificationsRead(){const list=loadBizCoreNotifications().map(x=>({...x,read:true}));saveBizCoreNotifications(list);refreshTopbarNotifications();}
+function openBizCoreNotification(id){
+ const list=loadBizCoreNotifications(),n=list.find(x=>x.id===id);if(!n)return;
+ n.read=true;saveBizCoreNotifications(list);refreshTopbarNotifications();closeTopbarMenus();
+ if(n.type==='delivery'&&n.soId){showPage('deliverynotes');setTimeout(()=>viewDeliveryNote(n.soId,n.deliveryIdx),80)}
+}
+function detectRemoteDNEvents(oldSOs,newSOs){
+ const oldMap=new Map();(oldSOs||[]).forEach(so=>(so.deliveries||[]).forEach(d=>oldMap.set(d.id,{so,d})));
+ const events=[];(newSOs||[]).forEach(so=>(so.deliveries||[]).forEach((d,i)=>{
+   const prev=oldMap.get(d.id)?.d;
+   if(prev && !prev.customerConfirmed && d.customerConfirmed){events.push({type:'delivery',soId:so.id,deliveryIdx:i,d,so,status:getDNStatus(d)})}
+ }));return events;
+}
+function handleRemoteDNEvents(events){
+ events.forEach(e=>{
+   if(window._dnLocalConfirmationIds?.has(e.d.id)){window._dnLocalConfirmationIds.delete(e.d.id);return;}
+   const rejected=(e.d.items||[]).reduce((n,it)=>n+(Number(it.rejectedQty)||0),0);
+   const status=e.status||getDNStatus(e.d);
+   const title=status==='Delivered'?'Delivery Confirmed':status==='Rejected'?'Delivery Rejected':'Delivery Partially Accepted';
+   const msg=`${e.d.dnNo} · ${e.so.customer}${rejected>0?` · Rejected qty: ${rejected}`:''}`;
+   addBizCoreNotification({id:`dn-confirmed:${e.d.id}:${e.d.confirmedAt||''}`,type:'delivery',title,message:msg,status,soId:e.soId,deliveryIdx:e.deliveryIdx,dnId:e.d.id,actor:e.d.confirmedBy||'',createdAt:e.d.confirmedAt||new Date().toISOString()});
+   showToast(title,msg,status==='Delivered'?'success':'warning');
+ });
+}
+function refreshOpenDNViewFromRealtime(events){
+ const modal=document.getElementById('dn-print-modal');if(!modal?.classList.contains('open'))return;
+ const hit=events.find(e=>e.soId===modal._soId && e.deliveryIdx===modal._deliveryIdx);
+ if(hit)setTimeout(()=>viewDeliveryNote(hit.soId,hit.deliveryIdx),0);
+}
+function refreshTopbarNotifications(){
+  const workflow=[];
+  const badge=(id)=>{const e=document.getElementById(id);return e&&e.style.display!=='none'?(e.textContent||'').trim():''};
+  if(badge('rfq-badge'))workflow.push(['ti-inbox',badge('rfq-badge')+' new RFQ(s)','Review newly received customer requests']);
+  if(badge('pricing-badge'))workflow.push(['ti-calculator',badge('pricing-badge')+' item(s) awaiting pricing','Continue supplier pricing and costing']);
+  if(badge('so-badge'))workflow.push(['ti-shopping-cart',badge('so-badge')+' sales order update(s)','Review pending sales-order activity']);
+  const ops=loadBizCoreNotifications(),unread=ops.filter(x=>!x.read).length;
+  const list=document.getElementById('topbar-notification-list'),dot=document.getElementById('topbar-alert-dot');if(!list)return;
+  let html='';
+  if(ops.length){
+    html+='<div class="bc-notification-tools"><strong>Delivery updates</strong><button type="button" onclick="markBizCoreNotificationsRead()">Mark all read</button></div>';
+    html+=ops.slice(0,12).map(n=>`<button type="button" class="topbar-notification bc-op-notification ${n.read?'':'unread'}" onclick="openBizCoreNotification('${escapeHtml(n.id)}')"><i class="ti ${n.status==='Delivered'?'ti-circle-check':'ti-alert-triangle'}"></i><div><strong>${escapeHtml(n.title||'Delivery update')}</strong><small>${escapeHtml(n.message||'')}</small><small>${escapeHtml(n.actor||'')}${n.createdAt?' · '+new Date(n.createdAt).toLocaleString():''}</small></div></button>`).join('');
+  }
+  if(workflow.length){
+    html+='<div class="bc-notification-tools"><strong>Workflow</strong></div>'+workflow.map(x=>'<div class="topbar-notification"><i class="ti '+x[0]+'"></i><div><strong>'+escapeHtml(x[1])+'</strong><small>'+escapeHtml(x[2])+'</small></div></div>').join('');
+  }
+  if(!html)html='<div class="topbar-notification-empty"><i class="ti ti-circle-check" style="font-size:22px;display:block;margin-bottom:6px"></i>No pending notifications</div>';
+  list.innerHTML=html;
+  if(dot){dot.classList.toggle('show',unread>0||workflow.length>0);dot.textContent=unread?String(Math.min(unread,99)):'';dot.classList.toggle('has-count',unread>0)}
+}
+
 function initPremiumTopbar(){
   const title=document.getElementById('page-title');if(title)new MutationObserver(updateTopbarContext).observe(title,{childList:true,characterData:true,subtree:true});
   document.addEventListener('click',e=>{if(!e.target.closest('.topbar-menu-wrap'))closeTopbarMenus();if(!e.target.closest('.global-search-wrap'))document.getElementById('global-search-results')?.classList.remove('show');});

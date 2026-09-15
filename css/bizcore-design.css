@@ -19,3 +19,10 @@ body{color:var(--bc-text)}
 .form-group>label,label{font-size:13.5px!important;font-weight:500!important;color:var(--bc-muted)}
 input,select,textarea{font-size:14px}
 table th{font-size:13px;font-weight:600}table td{font-size:13px;font-weight:400}
+/* v132 — operational notification center */
+.topbar-alert-dot.has-count{min-width:17px;height:17px;border-radius:9px;padding:0 4px;display:flex!important;align-items:center;justify-content:center;font-size:9px;font-weight:800;line-height:1;color:#fff;right:-5px;top:-5px}
+.bc-notification-tools{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border,#e5e7eb);font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.04em}
+.bc-notification-tools button{border:0;background:none;color:#1f4e79;font-size:11px;cursor:pointer;text-transform:none;letter-spacing:0}
+button.bc-op-notification{width:100%;border:0;background:transparent;text-align:left;cursor:pointer}
+button.bc-op-notification.unread{background:#f0f7ff}
+button.bc-op-notification.unread strong:after{content:'New';display:inline-block;margin-left:7px;padding:1px 5px;border-radius:8px;background:#1f4e79;color:#fff;font-size:8px;vertical-align:1px}
