@@ -484,6 +484,12 @@ async function loadData() {
   if (!rfqs.length) rfqs = [];
   if (!employees.length) employees = getDefaultEmployees();
   if (!salesOrders.length) salesOrders = [];
+  // v102: harden Customer/Supplier relationships. Existing test records are upgraded
+  // only when a single unambiguous master match exists; no name guess is made.
+  const relationshipIdsMigrated=migrateMasterRelationshipIds();
+  if(relationshipIdsMigrated.quotations) await saveQuotations();
+  if(relationshipIdsMigrated.rfqs) await saveRFQs();
+  if(relationshipIdsMigrated.salesOrders) await saveSalesOrders();
   // One-time VAT integrity migration: historical quotations without an explicit
   // snapshot are stamped with the legacy 15% rate before any master-rate changes
   // can affect their label, totals, preview, print, or register values.
@@ -608,7 +614,7 @@ function getDefaultEmployees() {
 }
 
 function getDefaultSettings() {
-  return {coname:'Downtown Trading Est.',conameAr:'',tagline:'Trading & Contracting',cr:'',building:'',street:'',secondary:'',district:'',postal:'',city:'Riyadh',country:'Saudi Arabia',pobox:'',phone:'+966 XX XXX XXXX',mobile:'',email:'info@downtowntrading.com',vat:'3XXXXXXXXXXXXXXXXX',website:'',closingMessage:'Thank you for the opportunity to serve you.',vatrate:15,validity:7,rfqDefaultHours:48,delivery:'2–4 weeks from confirmed PO',payment:'Net 2 weeks from invoice date',logo:'',signature:'',stamp:''};
+  return {coname:'Downtown Trading Est.',conameAr:'',tagline:'Trading & Contracting',cr:'',building:'',street:'',secondary:'',district:'',postal:'',city:'Riyadh',country:'Saudi Arabia',pobox:'',phone:'+966 XX XXX XXXX',mobile:'',email:'info@downtowntrading.com',vat:'3XXXXXXXXXXXXXXXXX',website:'',closingMessage:'Thank you for the opportunity to serve you.',vatrate:15,validity:7,rfqDefaultHours:48,delivery:'2–4 weeks from confirmed PO',payment:'Net 2 weeks from invoice date',logo:'',signature:'',stamp:'',documentNumbering:{rfq:{prefix:'RFQ',reset:'monthly'},pricing:{prefix:'PR',reset:'monthly'},quotation:{prefix:'Q',reset:'monthly'},salesOrder:{prefix:'SO',reset:'monthly'},deliveryNote:{prefix:'DN',reset:'monthly'},customerInvoice:{prefix:'INV',reset:'monthly'},purchaseOrder:{prefix:'PO',reset:'monthly'},purchaseInvoice:{prefix:'PI',reset:'monthly'}}};
 }
 
 /* ── SETTINGS ── */
@@ -644,6 +650,7 @@ function applySettings() {
   const vatLabel=document.getElementById('t-vat-label');if(vatLabel)vatLabel.textContent=`VAT (${getQuoteVatPercent()}%)`;
   ['logo','signature','stamp'].forEach(k=>setBrandAssetPreview(k,settings[k]||''));
   updateBrandPreview();
+  renderDocumentNumbering();
 }
 
 function updateBrandPreview(){
@@ -916,6 +923,39 @@ function validUntil(q) {
   return d.toISOString().split('T')[0];
 }
 
+/* ── v103 Central document numbering ── */
+const DOC_NUMBERING_DEFAULTS={
+  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'}
+};
+function ensureDocumentNumbering(){settings.documentNumbering=settings.documentNumbering||{};Object.entries(DOC_NUMBERING_DEFAULTS).forEach(([k,d])=>{settings.documentNumbering[k]={...d,...(settings.documentNumbering[k]||{})};});return settings.documentNumbering;}
+function docPeriod(reset='monthly',date=new Date()){const yy=String(date.getFullYear()).slice(2),mm=String(date.getMonth()+1).padStart(2,'0');return reset==='yearly'?yy:(reset==='never'?'':yy+mm);}
+function docNumberParts(type,date=new Date()){const cfg=ensureDocumentNumbering()[type]||DOC_NUMBERING_DEFAULTS[type];const period=docPeriod(cfg.reset,date);const prefix=String(cfg.prefix||DOC_NUMBERING_DEFAULTS[type]?.prefix||type.toUpperCase()).trim();const displayPrefix=prefix+(period?'-'+period:'')+'-';const counterKey='doc_'+type+'_'+(period||'all');return {cfg,period,prefix,displayPrefix,counterKey};}
+function formatDocSequence(displayPrefix,n){return displayPrefix+String(Number(n)||0).padStart(4,'0');}
+async function allocateDocumentNumber(type,date=new Date()){
+  const x=docNumberParts(type,date);
+  if(window.FB&&window.FB.getNextDocSequence&&navigator.onLine){const n=await window.FB.getNextDocSequence(x.counterKey);if(n)return formatDocSequence(x.displayPrefix,n);}
+  // Offline-safe provisional ID. Never silently reuses a permanent sequence.
+  return x.displayPrefix+'OFF-'+getDeviceTag()+'-'+String(Date.now()).slice(-5);
+}
+function existingDocumentNumbers(type){
+  if(type==='rfq')return rfqs.map(x=>x.rfqNo||''); if(type==='quotation')return quotations.map(x=>x.qno||''); if(type==='salesOrder')return salesOrders.map(x=>x.soNo||'');
+  if(type==='deliveryNote')return salesOrders.flatMap(s=>(s.deliveries||[]).map(x=>x.dnNo||'')); if(type==='customerInvoice')return salesOrders.flatMap(s=>(s.invoices||[]).map(x=>x.invNo||'')); return [];
+}
+function estimatedNextDocumentNumber(type){const x=docNumberParts(type);const vals=existingDocumentNumbers(type).filter(n=>String(n).startsWith(x.displayPrefix)&&!String(n).includes('-OFF-')).map(n=>parseInt(String(n).slice(x.displayPrefix.length),10)||0);return formatDocSequence(x.displayPrefix,(vals.length?Math.max(...vals):0)+1);}
+function renderDocumentNumbering(){
+  ensureDocumentNumbering();
+  const body=document.getElementById('document-numbering-tbody');if(!body)return;
+  body.innerHTML=Object.entries(DOC_NUMBERING_DEFAULTS).map(([k,d])=>{const c=settings.documentNumbering[k];const fmt=c.reset==='monthly'?`${c.prefix}-YYMM-####`:c.reset==='yearly'?`${c.prefix}-YY-####`:`${c.prefix}-####`;return `<tr><td><strong>${d.label}</strong></td><td><input class="docnum-prefix" data-type="${k}" value="${c.prefix}" maxlength="8" oninput="previewDocumentNumbering()"></td><td><select class="docnum-reset" data-type="${k}" onchange="previewDocumentNumbering()"><option value="monthly" ${c.reset==='monthly'?'selected':''}>Monthly</option><option value="yearly" ${c.reset==='yearly'?'selected':''}>Yearly</option><option value="never" ${c.reset==='never'?'selected':''}>Never</option></select></td><td><span class="docnum-format-preview" data-format-type="${k}">${fmt}</span></td><td><span class="docnum-next"><strong data-next-type="${k}">${estimatedNextDocumentNumber(k)}</strong><small>Allocated atomically on Save</small></span></td></tr>`}).join('');
+  populateSequenceDocumentTypes();
+}
+function previewDocumentNumbering(){document.querySelectorAll('.docnum-prefix').forEach(inp=>{const k=inp.dataset.type,reset=document.querySelector(`.docnum-reset[data-type="${k}"]`)?.value||'monthly',prefix=(inp.value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'')||DOC_NUMBERING_DEFAULTS[k].prefix),fmt=reset==='monthly'?`${prefix}-YYMM-####`:reset==='yearly'?`${prefix}-YY-####`:`${prefix}-####`;const f=document.querySelector(`[data-format-type="${k}"]`);if(f)f.textContent=fmt;});}
+async function saveDocumentNumbering(){ensureDocumentNumbering();document.querySelectorAll('.docnum-prefix').forEach(e=>{const v=e.value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(v)settings.documentNumbering[e.dataset.type].prefix=v;});document.querySelectorAll('.docnum-reset').forEach(e=>settings.documentNumbering[e.dataset.type].reset=e.value);await saveSettings();renderDocumentNumbering();showToast('Document numbering settings saved','success');}
+function switchNumberingSection(name){['numbering','defaults','sequences'].forEach(k=>{const s=document.getElementById('numbering-section-'+k),b=document.getElementById('numtab-'+k);if(s)s.style.display=k===name?'block':'none';if(b)b.classList.toggle('active',k===name);});if(name==='sequences')refreshSequenceManager();}
+function populateSequenceDocumentTypes(){const sel=document.getElementById('sequence-doc-type');if(!sel)return;const current=sel.value;sel.innerHTML=Object.entries(DOC_NUMBERING_DEFAULTS).map(([k,d])=>`<option value="${k}">${d.label}</option>`).join('');if(current&&DOC_NUMBERING_DEFAULTS[current])sel.value=current;refreshSequenceManager();}
+function maxExistingSequence(type){const x=docNumberParts(type);const vals=existingDocumentNumbers(type).filter(n=>String(n).startsWith(x.displayPrefix)&&!String(n).includes('-OFF-')).map(n=>parseInt(String(n).slice(x.displayPrefix.length),10)||0);return vals.length?Math.max(...vals):0;}
+async function refreshSequenceManager(){const sel=document.getElementById('sequence-doc-type');if(!sel)return;const type=sel.value||'rfq',x=docNumberParts(type),localMax=maxExistingSequence(type);let current=localMax;if(window.FB?.getDocSequence&&navigator.onLine){const cloud=await window.FB.getDocSequence(x.counterKey);if(Number.isFinite(Number(cloud)))current=Math.max(current,Number(cloud));}const period=document.getElementById('sequence-current-period'),counter=document.getElementById('sequence-current-counter'),next=document.getElementById('sequence-next-number'),input=document.getElementById('sequence-adjust-value');if(period)period.textContent=x.period||(x.cfg.reset==='never'?'Continuous':'—');if(counter)counter.textContent=String(current).padStart(4,'0');if(next)next.textContent=formatDocSequence(x.displayPrefix,current+1);if(input)input.value=current;}
+async function requestSequenceAdjustment(){const type=document.getElementById('sequence-doc-type')?.value||'rfq',value=Number(document.getElementById('sequence-adjust-value')?.value);if(!Number.isInteger(value)||value<0){showToast('Enter a valid whole-number counter','error');return;}const x=docNumberParts(type),min=maxExistingSequence(type),label=DOC_NUMBERING_DEFAULTS[type].label;if(value<min){showToast(`Counter cannot be below ${String(min).padStart(4,'0')} because that sequence already exists`,'error');return;}if(!navigator.onLine||!window.FB?.setDocSequence){showToast('Cloud connection is required to adjust a document sequence','error');return;}const first=await showConfirmAsync({icon:'⚠️',title:'Adjust document sequence?',message:`Change the current ${label} counter for this period?`,details:{Document:label,'Current period':x.period||'Continuous','New current counter':String(value).padStart(4,'0'),'Next document':formatDocSequence(x.displayPrefix,value+1)},confirmText:'Continue',cancelText:'Cancel',confirmClass:'btn-danger'});if(!first)return;const second=await showConfirmAsync({icon:'🔒',title:'Final confirmation',message:'This changes the live cloud counter used for future document numbers. Existing issued documents will not be renumbered.',details:{Document:label,'Counter will become':String(value).padStart(4,'0')},confirmText:'Yes, adjust sequence',cancelText:'Go back',confirmClass:'btn-danger'});if(!second)return;const result=await window.FB.setDocSequence(x.counterKey,value,min);if(result?.ok){showToast(`${label} sequence updated`,'success');await refreshSequenceManager();renderDocumentNumbering();}else showToast(result?.message||'Could not update document sequence','error');}
+
 /* ── Quotation numbering ──
    Online: uses Firestore atomic counter — guarantees no two users
            (even saving in the same second) ever get the same number.
@@ -957,22 +997,14 @@ async function reserveQNoForForm(fieldId) {
 
 /* ── Async, collision-safe version — use this when creating NEW documents ── */
 async function nextQNoSafe() {
-  const t = new Date();
-  const prefix = 'Q-'+String(t.getFullYear()).slice(2)+String(t.getMonth()+1).padStart(2,'0')+'-';
-  const counterKey = 'quotation_' + String(t.getFullYear()).slice(2) + String(t.getMonth()+1).padStart(2,'0');
-
-  if (window.FB && window.FB.getNextDocNumber && navigator.onLine) {
-    const atomicNo = await window.FB.getNextDocNumber(counterKey, prefix);
-    if (atomicNo) return { qno: atomicNo, isProvisional: false };
+  const t=new Date();
+  const x=docNumberParts('quotation',t);
+  if(window.FB&&window.FB.getNextDocSequence&&navigator.onLine){
+    const n=await window.FB.getNextDocSequence(x.counterKey);
+    if(n)return {qno:formatDocSequence(x.displayPrefix,n),isProvisional:false};
   }
-
-  // Offline or Firebase unavailable — generate a provisional number
-  // tagged with a short device ID so it can NEVER collide with another
-  // offline user's provisional number. Format: Q-2608-OFF-x7f2-1
-  const localNums = quotations.filter(q=>String(q?.qno||'').startsWith(prefix)).map(q=>parseInt(String(q.qno).split('-').pop())||0);
-  const localNext = (localNums.length ? Math.max(...localNums) : 3960) + 1;
-  const deviceTag = getDeviceTag();
-  return { qno: prefix + 'OFF-' + deviceTag + '-' + localNext, isProvisional: true };
+  const deviceTag=getDeviceTag();
+  return {qno:x.displayPrefix+'OFF-'+deviceTag+'-'+String(Date.now()).slice(-5),isProvisional:true};
 }
 
 /* ── Small stable per-device identifier (persisted in localStorage) ──
@@ -999,9 +1031,9 @@ async function renumberProvisionalQuotations() {
   console.log('Renumbering ' + provisional.length + ' offline-created quotation(s)...');
   for (const q of provisional) {
     const t = new Date(q.date || q.created || Date.now());
-    const prefix = 'Q-'+String(t.getFullYear()).slice(2)+String(t.getMonth()+1).padStart(2,'0')+'-';
-    const counterKey = 'quotation_' + String(t.getFullYear()).slice(2) + String(t.getMonth()+1).padStart(2,'0');
-    const realNo = await window.FB.getNextDocNumber(counterKey, prefix);
+    const x=docNumberParts('quotation',t);
+    const seq = await window.FB.getNextDocSequence(x.counterKey);
+    const realNo = seq ? formatDocSequence(x.displayPrefix,seq) : null;
     if (realNo) {
       const oldQno = q.qno;
       q.qno = realNo;
@@ -1226,6 +1258,50 @@ function masterRecordLabel(type, rec) {
 }
 function normalizeMasterValue(v) { return String(v || '').trim().toLowerCase(); }
 
+// v102 relationship standard: master IDs are the relationship keys; names are display snapshots only.
+function findUniqueMasterByName(list, name){
+  const n=normalizeMasterValue(name); if(!n) return null;
+  const matches=(list||[]).filter(x=>normalizeMasterValue(x.company)===n);
+  return matches.length===1 ? matches[0] : null;
+}
+function recordBelongsToCustomer(rec, customer, nameField='company'){
+  if(!rec||!customer)return false;
+  if(rec.custId) return String(rec.custId)===String(customer.id);
+  return normalizeMasterValue(rec[nameField])===normalizeMasterValue(customer.company);
+}
+function recordBelongsToSupplier(rec, supplier, nameField='supplierName'){
+  if(!rec||!supplier)return false;
+  if(rec.supplierId) return String(rec.supplierId)===String(supplier.id);
+  return normalizeMasterValue(rec[nameField])===normalizeMasterValue(supplier.company);
+}
+function supplierRefMatches(obj, supplier){
+  if(!obj||!supplier)return false;
+  if(obj.supplierId) return String(obj.supplierId)===String(supplier.id);
+  return normalizeMasterValue(obj.supplierName||obj.supplier)===normalizeMasterValue(supplier.company);
+}
+function migrateMasterRelationshipIds(){
+  const changed={quotations:false,rfqs:false,salesOrders:false};
+  quotations.forEach(q=>{
+    if(!q.custId){const c=findUniqueMasterByName(customers,q.company);if(c){q.custId=c.id;changed.quotations=true;}}
+  });
+  rfqs.forEach(r=>{
+    if(!r.custId){const c=findUniqueMasterByName(customers,r.company);if(c){r.custId=c.id;changed.rfqs=true;}}
+    if(!r.supplierId){const sp=findUniqueMasterByName(suppliers,r.supplierName);if(sp){r.supplierId=sp.id;changed.rfqs=true;}}
+    const stampSupplier=(obj)=>{if(!obj)return;if(!obj.supplierId){const sp=findUniqueMasterByName(suppliers,obj.supplierName||obj.supplier);if(sp){obj.supplierId=sp.id;changed.rfqs=true;}}};
+    (r.pricingItems||[]).forEach(stampSupplier);
+    (r.vendorQuotes||[]).forEach(stampSupplier);
+    (r.pricingVersions||[]).forEach(v=>{stampSupplier(v);(v.pricingItems||[]).forEach(stampSupplier);(v.vendorQuotes||[]).forEach(stampSupplier);});
+  });
+  salesOrders.forEach(so=>{
+    if(!so.custId){
+      const q=quotations.find(q=>q.id===so.quotationId);
+      const c=(q?.custId&&customers.find(x=>String(x.id)===String(q.custId)))||findUniqueMasterByName(customers,so.customer);
+      if(c){so.custId=c.id;changed.salesOrders=true;}
+    }
+  });
+  return changed;
+}
+
 function toggleMasterSelection(type, id, checked) {
   const set = masterSelection[type]; if (!set) return;
   if (checked) set.add(id); else set.delete(id);
@@ -1265,9 +1341,10 @@ function getMasterDependencies(type, rec) {
   const id = rec.id;
   if (type === 'customers') {
     const name = normalizeMasterValue(rec.company);
-    const qCount = quotations.filter(q => q.custId === id || (name && normalizeMasterValue(q.company) === name)).length;
-    const rCount = rfqs.filter(r => r.custId === id || (name && normalizeMasterValue(r.company) === name)).length;
-    const soCount = salesOrders.filter(so => name && normalizeMasterValue(so.customer) === name).length;
+    const customer=customers.find(c=>String(c.id)===String(id));
+    const qCount = quotations.filter(q => customer && recordBelongsToCustomer(q,customer,'company')).length;
+    const rCount = rfqs.filter(r => customer && recordBelongsToCustomer(r,customer,'company')).length;
+    const soCount = salesOrders.filter(so => customer && recordBelongsToCustomer(so,customer,'customer')).length;
     if (qCount) deps.push(`${qCount} quotation${qCount===1?'':'s'}`);
     if (rCount) deps.push(`${rCount} RFQ${rCount===1?'':'s'}`);
     if (soCount) deps.push(`${soCount} sales order${soCount===1?'':'s'}`);
@@ -1275,13 +1352,13 @@ function getMasterDependencies(type, rec) {
     const name = normalizeMasterValue(rec.company);
     let rfqCount = 0;
     rfqs.forEach(r => {
-      let used = r.supplierId === id || (name && normalizeMasterValue(r.supplierName) === name);
-      if (!used) used = (r.pricingItems || []).some(it => normalizeMasterValue(it.supplierName || it.supplier) === name);
-      if (!used) used = (r.vendorQuotes || []).some(v => normalizeMasterValue(v.supplierName || v.supplier) === name);
+      let used = recordBelongsToSupplier(r,rec);
+      if (!used) used = (r.pricingItems || []).some(it => supplierRefMatches(it,rec));
+      if (!used) used = (r.vendorQuotes || []).some(v => supplierRefMatches(v,rec));
       if (!used) used = (r.pricingVersions || []).some(v =>
-        normalizeMasterValue(v.supplierName) === name ||
-        (v.pricingItems || []).some(it => normalizeMasterValue(it.supplierName || it.supplier) === name) ||
-        (v.vendorQuotes || []).some(q => normalizeMasterValue(q.supplierName || q.supplier) === name)
+        supplierRefMatches(v,rec) ||
+        (v.pricingItems || []).some(it => supplierRefMatches(it,rec)) ||
+        (v.vendorQuotes || []).some(q => supplierRefMatches(q,rec))
       );
       if (used) rfqCount++;
     });
@@ -1365,6 +1442,41 @@ function deleteSelectedMasterRecords(type) {
   return requestMasterDelete(type, [...(masterSelection[type] || [])]);
 }
 
+/* ── GLOBAL REGISTER HEADER SORTING (v101) ── */
+const registerSortState = {};
+function naturalSortValue(v){
+  if(v===null||v===undefined)return '';
+  if(v instanceof Date)return v.getTime();
+  if(typeof v==='number')return Number.isFinite(v)?v:0;
+  const str=String(v).trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(str)){const t=Date.parse(str);if(!Number.isNaN(t))return t;}
+  return str;
+}
+function compareRegisterValues(a,b){
+  a=naturalSortValue(a); b=naturalSortValue(b);
+  if(typeof a==='number'&&typeof b==='number')return a-b;
+  return String(a).localeCompare(String(b),undefined,{numeric:true,sensitivity:'base'});
+}
+function sortRegisterRows(rows, screen, getters){
+  const st=registerSortState[screen]; if(!st||!getters[st.key])return rows;
+  return [...rows].sort((a,b)=>compareRegisterValues(getters[st.key](a),getters[st.key](b))*(st.dir==='asc'?1:-1));
+}
+function setRegisterSort(screen,key,renderFn){
+  const cur=registerSortState[screen];
+  registerSortState[screen]={key,dir:(cur&&cur.key===key&&cur.dir==='asc')?'desc':'asc'};
+  try{ if(screen==='quotation') currentPage=1; if(screen==='pricing') pricingDocPage=1; if(screen==='rfq') rfqPage=1; if(screen==='so') soPage=1; if(screen==='customers') customerPage=1; if(screen==='suppliers') supplierPage=1; if(screen==='products') prodPage=1; if(screen==='employees') employeePage=1; }catch(e){}
+  renderFn();
+  setTimeout(updateRegisterSortIndicators,0);
+}
+function updateRegisterSortIndicators(){
+  document.querySelectorAll('.sortable-register-th').forEach(th=>{const st=registerSortState[th.dataset.sortScreen];const active=st&&st.key===th.dataset.sortKey;th.classList.toggle('is-sorted',!!active);th.setAttribute('data-sort-dir',active?st.dir:'');th.setAttribute('aria-sort',active?(st.dir==='asc'?'ascending':'descending'):'none');});
+}
+function registerSortLabel(screen,key,label){
+  const st=registerSortState[screen];
+  const arrow=st&&st.key===key?(st.dir==='asc'?' ↑':' ↓'):'';
+  return `${label}<span class="register-sort-arrow">${arrow}</span>`;
+}
+
 /* ── PRODUCT CRUD ── */
 function renderProducts() {
   document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PROD_PER_PAGE)) el.value = String(PROD_PER_PAGE); });
@@ -1375,6 +1487,7 @@ function renderProducts() {
     if (search && !`${p.name} ${p.brand} ${p.model} ${p.code}`.toLowerCase().includes(search)) return false;
     return true;
   });
+  list=sortRegisterRows(list,'products',{code:p=>p.code,name:p=>p.name,brand:p=>p.brand,model:p=>p.model,category:p=>p.category,uom:p=>p.uom,price:p=>parseFloat(p.price)||0,specs:p=>(p.specs||[]).map(x=>`${x.k} ${x.v}`).join(' ')});
   const pages = Math.ceil(list.length / PROD_PER_PAGE) || 1;
   if (prodPage > pages) prodPage = 1;
   const slice = list.slice((prodPage-1)*PROD_PER_PAGE, prodPage*PROD_PER_PAGE);
@@ -2105,7 +2218,7 @@ function showConfirm({icon='📋', title='Confirm', message='', details=null, co
 /* ══════════════════════════════════════════════════
    BASIC USERS + ROLES (PROTOTYPE STORAGE)
 ══════════════════════════════════════════════════ */
-const ROLE_MODULES=['Dashboard','Customers','Suppliers','Products','Quotations','Sales Orders','Reports','Setup'];
+const ROLE_MODULES=['Dashboard','Customers','Suppliers','Products','Quotations','Sales Orders','Delivery Notes','Reports','Setup'];
 const ROLE_ACTIONS=['view','create','edit','delete','print','approve'];
 function defaultPermissions(all=false){const out={};ROLE_MODULES.forEach(m=>{out[m]={};ROLE_ACTIONS.forEach(a=>out[m][a]=all);});return out;}
 function loadAccessSetup(){
@@ -2945,6 +3058,208 @@ function clearAllQuotationFilters() {
   renderTable();
 }
 
+/* ── v119 Quotation Register Excel Export ───────────────────────────────
+   Pilot export standard: one quotation = one Excel row.
+   Exports the complete FILTERED register scope (not only the visible page).
+   This is intentionally kept separate from full-system backup/export. */
+function getQuotationRegisterExportRows(){
+  const search=(document.getElementById('search-input')?.value || '').trim().toLowerCase();
+  const fStatus=document.getElementById('filter-status')?.value || '';
+  const fCust=document.getElementById('filter-customer')?.value || '';
+  const fSort=document.getElementById('filter-sort')?.value || 'date-desc';
+  const fFrom=document.getElementById('filter-date-from')?.value || '';
+  const fTo=document.getElementById('filter-date-to')?.value || '';
+
+  let rows=quotations.filter(q=>{
+    if(fStatus && q.status!==fStatus) return false;
+    if(fCust && q.company!==fCust) return false;
+    const qDate=normalizedQuotationDate(q);
+    if(fFrom && qDate < fFrom) return false;
+    if(fTo && qDate > fTo) return false;
+    if(search){
+      const headerText=`${q.qno||''} ${q.company||''} ${q.contact||''} ${q.ref||''} ${q.notes||''}`.toLowerCase();
+      const itemsText=(q.items||[]).map(it=>`${it.desc||''} ${it.brand||''} ${it.model||''} ${it.code||''} ${it.specs||''} ${it.uom||''}`).join(' ').toLowerCase();
+      if(!headerText.includes(search) && !itemsText.includes(search)) return false;
+    }
+    return true;
+  });
+
+  if(fSort==='date-desc') rows.sort((a,b)=>normalizedQuotationDate(b).localeCompare(normalizedQuotationDate(a)));
+  else if(fSort==='date-asc') rows.sort((a,b)=>normalizedQuotationDate(a).localeCompare(normalizedQuotationDate(b)));
+  else if(fSort==='amount-desc') rows.sort((a,b)=>calcQuote(b).net-calcQuote(a).net);
+  else if(fSort==='amount-asc') rows.sort((a,b)=>calcQuote(a).net-calcQuote(b).net);
+
+  return sortRegisterRows(rows,'quotation',{
+    no:q=>q.qno,date:q=>normalizedQuotationDate(q),customer:q=>q.company,reference:q=>q.ref,
+    items:q=>(q.items||[]).length,amount:q=>calcQuote(q).net,status:q=>q.status,
+    salesorders:q=>salesOrders.filter(x=>x.quotationId===q.id).map(x=>x.soNo).join(' '),valid:q=>validUntil(q)
+  });
+}
+
+function quotationExportFilterSummary(){
+  const parts=[];
+  const status=document.getElementById('filter-status')?.value || '';
+  const customer=document.getElementById('filter-customer')?.value || '';
+  const search=(document.getElementById('search-input')?.value || '').trim();
+  const from=document.getElementById('filter-date-from')?.value || '';
+  const to=document.getElementById('filter-date-to')?.value || '';
+  if(status) parts.push(`Status: ${status}`);
+  if(customer) parts.push(`Customer: ${customer}`);
+  if(from || to) parts.push(`Date: ${from||'Beginning'} to ${to||'Latest'}`);
+  if(search) parts.push(`Search: ${search}`);
+  return parts.length ? parts.join(' | ') : 'All quotations';
+}
+
+function openQuotationExcelExportDialog(){
+  const rows=getQuotationRegisterExportRows();
+  if(!rows.length){
+    showToast('No quotations match the current filters. Nothing to export.','warning');
+    return;
+  }
+  document.getElementById('quotation-export-overlay')?.remove();
+  const overlay=document.createElement('div');
+  overlay.id='quotation-export-overlay';
+  overlay.className='confirm-overlay quotation-export-overlay';
+  overlay.innerHTML=`
+    <div class="confirm-box quotation-export-box" role="dialog" aria-modal="true" aria-labelledby="quotation-export-title">
+      <div class="confirm-icon"><i class="ti ti-file-spreadsheet"></i></div>
+      <div class="confirm-title" id="quotation-export-title">Export Quotation Register</div>
+      <div class="confirm-msg">Choose the level of detail to include in the Excel workbook.</div>
+      <div class="quotation-export-options">
+        <label class="quotation-export-option">
+          <input type="radio" name="quotation-export-scope" value="summary">
+          <span><strong>Quotation Summary Only</strong><small>One row per quotation in the Quotation Register sheet.</small></span>
+        </label>
+        <label class="quotation-export-option selected">
+          <input type="radio" name="quotation-export-scope" value="lines" checked>
+          <span><strong>Summary + Line Items</strong><small>Adds a separate Quotation Line Items worksheet linked by quotation number.</small></span>
+        </label>
+      </div>
+      <div class="quotation-export-count"><i class="ti ti-filter"></i><strong>${rows.length}</strong> quotation${rows.length===1?'':'s'} will be exported based on the current filters.</div>
+      <div class="confirm-btns">
+        <button class="btn btn-secondary" id="quotation-export-cancel">Cancel</button>
+        <button class="btn btn-primary" id="quotation-export-confirm"><i class="ti ti-file-spreadsheet"></i> Export Excel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const options=[...overlay.querySelectorAll('.quotation-export-option')];
+  options.forEach(label=>label.addEventListener('click',()=>{
+    options.forEach(x=>x.classList.remove('selected'));
+    label.classList.add('selected');
+  }));
+  const close=()=>overlay.remove();
+  overlay.querySelector('#quotation-export-cancel').onclick=close;
+  overlay.querySelector('#quotation-export-confirm').onclick=()=>{
+    const includeLines=overlay.querySelector('input[name="quotation-export-scope"]:checked')?.value==='lines';
+    close();
+    exportQuotationRegisterExcel(includeLines, rows);
+  };
+  overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+  const esc=e=>{if(e.key==='Escape'&&document.getElementById('quotation-export-overlay')){close();document.removeEventListener('keydown',esc);}};
+  document.addEventListener('keydown',esc);
+  setTimeout(()=>overlay.querySelector('#quotation-export-confirm')?.focus(),50);
+}
+
+function buildQuotationLineItemRows(rows){
+  const output=[];
+  rows.forEach(q=>{
+    let itemLine=0;
+    (q.items||[]).forEach((it,index)=>{
+      const rowType=it.lineType==='heading'?'Heading':it.lineType==='note'?'Note':'Item';
+      if(rowType==='Item') itemLine++;
+      const qty=rowType==='Item'?(Number(it.qty)||0):'';
+      const unitPrice=rowType==='Item'?(Number(it.up)||0):'';
+      const amount=rowType==='Item'?qty*unitPrice:'';
+      output.push([
+        q.qno||'', normalizedQuotationDate(q), q.company||'', q.ref||'', rowType,
+        rowType==='Item'?itemLine:'', index+1, it.code||'',
+        rowType==='Item'?(it.desc||''):(it.text||it.desc||''), it.brand||'', it.model||'', it.specs||'',
+        qty, it.uom||'', unitPrice, rowType==='Item'?vatRate(q):'', amount
+      ]);
+    });
+  });
+  return output;
+}
+
+function exportQuotationRegisterExcel(includeLines=false, prefetchedRows=null){
+  if(typeof XLSX==='undefined'){
+    showToast('Excel library is not available. Check your internet connection and try again.','error');
+    return;
+  }
+  const rows=prefetchedRows||getQuotationRegisterExportRows();
+  if(!rows.length){
+    showToast('No quotations match the current filters. Nothing to export.','warning');
+    return;
+  }
+  try{
+    const now=new Date();
+    const exportedAt=now.toLocaleString();
+    const companyName=settings?.coname || 'BizCore';
+    const headers=['Quotation No.','Date','Customer','Contact','Reference / RFQ','Project','Status','Revision','Validity (Days)','Valid Until','Items','Subtotal','Discount','VAT Rate %','VAT Amount','Net Amount','Sales Orders','Payment Terms','Delivery Terms'];
+    const data=rows.map(q=>{
+      const c=calcQuote(q);
+      const linkedSOs=salesOrders.filter(x=>x.quotationId===q.id).map(x=>x.soNo).filter(Boolean).join(', ');
+      return [
+        q.qno||'', normalizedQuotationDate(q), q.company||'', q.contact||'', q.ref||'', q.project||'', q.status||'',
+        Number(q.revisionNo)||0, Number(q.validity)||7, validUntil(q), (q.items||[]).filter(i=>!i.lineType||i.lineType==='item').length,
+        c.sub, c.disc, vatRate(q), c.vat, c.net, linkedSOs, q.payment||'', q.delivery||''
+      ];
+    });
+    const aoa=[
+      [`${companyName} — Quotation Register`],
+      [`Exported: ${exportedAt}`],
+      [`Filters: ${quotationExportFilterSummary()}`],
+      [`Records: ${rows.length}`],
+      [], headers, ...data
+    ];
+    const ws=XLSX.utils.aoa_to_sheet(aoa, {cellDates:false});
+    ws['!cols']=[
+      {wch:20},{wch:13},{wch:30},{wch:22},{wch:22},{wch:24},{wch:13},{wch:10},{wch:14},{wch:13},{wch:9},
+      {wch:16},{wch:14},{wch:12},{wch:14},{wch:16},{wch:24},{wch:24},{wch:28}
+    ];
+    ws['!autofilter']={ref:`A6:S${rows.length+6}`};
+    ws['!freeze']={xSplit:0,ySplit:6,topLeftCell:'A7',activePane:'bottomLeft',state:'frozen'};
+    for(let r=7;r<=rows.length+6;r++){
+      ['L','M','O','P'].forEach(col=>{ if(ws[`${col}${r}`]) ws[`${col}${r}`].z='#,##0.00'; });
+      if(ws[`N${r}`]) ws[`N${r}`].z='0.00';
+    }
+    const wb=XLSX.utils.book_new();
+    wb.Props={Title:'BizCore Quotation Register',Subject:includeLines?'Quotation register and line item export':'Quotation register export',Author:companyName,CreatedDate:now};
+    XLSX.utils.book_append_sheet(wb,ws,'Quotation Register');
+
+    let lineCount=0;
+    if(includeLines){
+      const lineHeaders=['Quotation No.','Quotation Date','Customer','Reference / RFQ','Row Type','Item Line','Sort Order','Item Code','Description / Text','Brand','Model','Specifications','Qty','UOM','Unit Price','VAT Rate %','Line Amount'];
+      const lineRows=buildQuotationLineItemRows(rows);
+      lineCount=lineRows.length;
+      const lineAoa=[
+        [`${companyName} — Quotation Line Items`],
+        [`Exported: ${exportedAt}`],
+        [`Filters: ${quotationExportFilterSummary()}`],
+        [`Quotations: ${rows.length} | Rows: ${lineRows.length}`],
+        [], lineHeaders, ...lineRows
+      ];
+      const lineWs=XLSX.utils.aoa_to_sheet(lineAoa,{cellDates:false});
+      lineWs['!cols']=[{wch:20},{wch:14},{wch:30},{wch:22},{wch:12},{wch:10},{wch:10},{wch:16},{wch:48},{wch:18},{wch:18},{wch:34},{wch:12},{wch:10},{wch:15},{wch:12},{wch:16}];
+      lineWs['!autofilter']={ref:`A6:Q${lineRows.length+6}`};
+      lineWs['!freeze']={xSplit:0,ySplit:6,topLeftCell:'A7',activePane:'bottomLeft',state:'frozen'};
+      for(let r=7;r<=lineRows.length+6;r++){
+        ['M','O','Q'].forEach(col=>{if(lineWs[`${col}${r}`]) lineWs[`${col}${r}`].z='#,##0.00';});
+        if(lineWs[`P${r}`]) lineWs[`P${r}`].z='0.00';
+      }
+      XLSX.utils.book_append_sheet(wb,lineWs,'Quotation Line Items');
+    }
+
+    const dateStamp=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    XLSX.writeFile(wb,`BizCore_Quotation_Register_${dateStamp}.xlsx`,{compression:true});
+    const suffix=includeLines?` with ${lineCount} line-item row${lineCount===1?'':'s'}`:'';
+    showToast(`${rows.length} quotation${rows.length===1?'':'s'} exported${suffix}.`,'success');
+  }catch(err){
+    console.error('Quotation Excel export failed:',err);
+    showToast('Could not create the quotation Excel export. Please try again.','error');
+  }
+}
+
 function updateQuotationMonitor() {
   const scoped = getQuotationOverviewScope();
   const counts = {all: scoped.length, Draft:0, Sent:0, Won:0, Lost:0, Expired:0, Revised:0, Cancelled:0};
@@ -3023,6 +3338,7 @@ function renderTable() {
   else if(fSort==='date-asc') filtered.sort((a,b)=>a.date.localeCompare(b.date));
   else if(fSort==='amount-desc') filtered.sort((a,b)=>calcQuote(b).net-calcQuote(a).net);
   else if(fSort==='amount-asc') filtered.sort((a,b)=>calcQuote(a).net-calcQuote(b).net);
+  filtered=sortRegisterRows(filtered,'quotation',{no:q=>q.qno,date:q=>normalizedQuotationDate(q),customer:q=>q.company,reference:q=>q.ref,items:q=>(q.items||[]).length,amount:q=>calcQuote(q).net,status:q=>q.status,salesorders:q=>salesOrders.filter(x=>x.quotationId===q.id).map(x=>x.soNo).join(' '),valid:q=>validUntil(q)});
 
   const fFrom2 = document.getElementById('filter-date-from').value;
   const fTo2   = document.getElementById('filter-date-to').value;
@@ -3082,22 +3398,26 @@ function goPage(p){currentPage=p;renderTable();}
 function renderCustomers() {
   const search=document.getElementById('cust-search').value.toLowerCase();
   const stats={};
+  customers.forEach(c=>stats[c.id]={count:0,total:0,won:0});
   quotations.forEach(q=>{
-    if(!stats[q.company]) stats[q.company]={count:0,total:0,won:0};
-    stats[q.company].count++;
-    stats[q.company].total+=calcQuote(q).net;
-    if(q.status==='Won') stats[q.company].won+=calcQuote(q).net;
+    const c=(q.custId&&customers.find(x=>String(x.id)===String(q.custId)))||(!q.custId?findUniqueMasterByName(customers,q.company):null);
+    if(!c)return;
+    const st=stats[c.id]||(stats[c.id]={count:0,total:0,won:0});
+    st.count++;
+    st.total+=calcQuote(q).net;
+    if(q.status==='Won') st.won+=calcQuote(q).net;
   });
   const list=customers.filter(c=>!search||c.company.toLowerCase().includes(search)||
     (c.contact||'').toLowerCase().includes(search));
-  const customerPages=Math.ceil(list.length/PER_PAGE)||1;
+  const sortedList=sortRegisterRows(list,'customers',{company:c=>c.company,contact:c=>{const a=c.contacts||(c.contact?[{name:c.contact}]:[]);return (a.find(x=>x.isDefault)||a[0]||{}).name||''},title:c=>{const a=c.contacts||[];return (a.find(x=>x.isDefault)||a[0]||{}).title||''},city:c=>c.city,phone:c=>{const a=c.contacts||[];return (a.find(x=>x.isDefault)||a[0]||{}).phone||c.phone||''},quotes:c=>(stats[c.id]||{}).count||0,total:c=>(stats[c.id]||{}).total||0});
+  const customerPages=Math.ceil(sortedList.length/PER_PAGE)||1;
   if(customerPage>customerPages) customerPage=1;
-  const customerSlice=list.slice((customerPage-1)*PER_PAGE,customerPage*PER_PAGE);
+  const customerSlice=sortedList.slice((customerPage-1)*PER_PAGE,customerPage*PER_PAGE);
   masterVisiblePageIds.customers = customerSlice.map(c=>c.id);
   document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PER_PAGE)) el.value=String(PER_PAGE); });
   document.getElementById('customers-tbody').innerHTML=customerSlice.length?customerSlice.map(c=>{
     const selected = masterSelection.customers.has(c.id);
-    const s=stats[c.company]||{count:0,total:0,won:0};
+    const s=stats[c.id]||{count:0,total:0,won:0};
     const contacts = c.contacts || (c.contact ? [{name:c.contact,title:'',phone:c.phone||''}] : []);
     const defaultCt = contacts.find(x=>x.isDefault) || contacts[0];
     const extraCount = contacts.length > 1 ? `<span style="font-size:10px;background:var(--blue-pale);color:var(--blue);border-radius:10px;padding:1px 6px;margin-left:4px">+${contacts.length-1} more</span>` : '';
@@ -3386,7 +3706,7 @@ function getPricingDocuments(){
       const cost=material+extras;
       const profit=selling-cost;
       const marginPct=selling>0?(profit/selling)*100:0;
-      docs.push({rfq:r,version,status,rawStatus:v.status||'Saved',updated:v.updated||v.created||r.date||'',cost,selling,profit,marginPct,quote,pricingNo:'PRC-'+String(r.rfqNo||r.id).replace(/[^A-Za-z0-9-]/g,'')+'-V'+version});
+      docs.push({rfq:r,version,status,rawStatus:v.status||'Saved',updated:v.updated||v.created||r.date||'',cost,selling,profit,marginPct,quote,versionData:v,pricingNo:'PRC-'+String(r.rfqNo||r.id).replace(/[^A-Za-z0-9-]/g,'')+'-V'+version});
     });
   });
   return docs.sort((a,b)=>String(b.updated).localeCompare(String(a.updated))||b.version-a.version);
@@ -3585,9 +3905,10 @@ function renderPricingDocuments(){
   set('pricing-doc-c-all',all.length?'('+all.length+')':'');set('pricing-doc-c-saved',saved.length?'('+saved.length+')':'');set('pricing-doc-c-converted',converted.length?'('+converted.length+')':'');
   const search=(document.getElementById('pricing-doc-search')?.value||'').trim().toLowerCase();
   const rows=all.filter(d=>(pricingDocumentFilter==='all'||d.status===pricingDocumentFilter)&&pricingMatchesDateFilter(d)&&(!search||[d.pricingNo,d.rfq.rfqNo,d.rfq.company,d.rfq.ref,d.quote?.qno].some(x=>String(x||'').toLowerCase().includes(search))));
-  const pricingDocPages = Math.ceil(rows.length / PRICING_DOC_PER_PAGE) || 1;
+  const sortedRows=sortRegisterRows(rows,'pricing',{no:d=>d.pricingNo,customer:d=>d.rfq.company,version:d=>d.version,updated:d=>d.updated,cost:d=>d.cost,selling:d=>d.selling,profit:d=>d.profit,margin:d=>d.marginPct,status:d=>d.status,quotation:d=>d.quote?.qno||''});
+  const pricingDocPages = Math.ceil(sortedRows.length / PRICING_DOC_PER_PAGE) || 1;
   if (pricingDocPage > pricingDocPages) pricingDocPage = 1;
-  const pageRows = rows.slice((pricingDocPage-1)*PRICING_DOC_PER_PAGE, pricingDocPage*PRICING_DOC_PER_PAGE);
+  const pageRows = sortedRows.slice((pricingDocPage-1)*PRICING_DOC_PER_PAGE, pricingDocPage*PRICING_DOC_PER_PAGE);
   tbody.innerHTML=pageRows.length?pageRows.map(d=>`<tr class="pricing-doc-row" onclick="openPricingDocument('${d.rfq.id}',${d.version})" title="Open ${esc(d.pricingNo)}" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPricingDocument('${d.rfq.id}',${d.version})}">
     <td class="pricing-doc-no">${esc(d.pricingNo)}</td>
     <td class="pricing-doc-customer" title="${esc(d.rfq.company||'—')}">${esc(d.rfq.company||'—')}</td><td class="pricing-doc-muted center">V${d.version}</td><td class="pricing-doc-muted">${fmtDate(String(d.updated).slice(0,10))}</td>
@@ -3600,6 +3921,101 @@ function renderPricingDocuments(){
   if (pdp) pdp.innerHTML = buildPaginationHTML(pricingDocPage, pricingDocPages, 'goPricingDocPage');
   const pb=document.getElementById('pricing-badge');if(pb){pb.textContent=saved.length;pb.style.display=saved.length?'inline-flex':'none';pb.title=saved.length+' saved pricing document'+(saved.length===1?'':'s');}
 }
+
+/* ── v121 Pricing Register Excel Export ────────────────────────────────
+   Uses the same pilot standard as Quotation: filtered summary plus an
+   optional, relational line-items worksheet. */
+function getPricingRegisterExportRows(){
+  const search=(document.getElementById('pricing-doc-search')?.value||'').trim().toLowerCase();
+  const rows=getPricingDocuments().filter(d=>(pricingDocumentFilter==='all'||d.status===pricingDocumentFilter)&&pricingMatchesDateFilter(d)&&(!search||[d.pricingNo,d.rfq.rfqNo,d.rfq.company,d.rfq.ref,d.quote?.qno].some(x=>String(x||'').toLowerCase().includes(search))));
+  return sortRegisterRows(rows,'pricing',{no:d=>d.pricingNo,customer:d=>d.rfq.company,version:d=>d.version,updated:d=>d.updated,cost:d=>d.cost,selling:d=>d.selling,profit:d=>d.profit,margin:d=>d.marginPct,status:d=>d.status,quotation:d=>d.quote?.qno||''});
+}
+function pricingExportFilterSummary(){
+  const parts=[];
+  if(pricingDocumentFilter && pricingDocumentFilter!=='all') parts.push(`Status: ${pricingDocumentFilter}`);
+  if(pricingDateFilter?.preset && pricingDateFilter.preset!=='all'){
+    const from=pricingDateFilter.from||'',to=pricingDateFilter.to||'';
+    parts.push(`Updated: ${from||'Beginning'} to ${to||'Latest'}`);
+  }
+  const search=(document.getElementById('pricing-doc-search')?.value||'').trim();
+  if(search) parts.push(`Search: ${search}`);
+  return parts.length?parts.join(' | '):'All pricing documents';
+}
+function openPricingExcelExportDialog(){
+  const rows=getPricingRegisterExportRows();
+  if(!rows.length){showToast('No pricing documents match the current filters. Nothing to export.','warning');return;}
+  document.getElementById('pricing-export-overlay')?.remove();
+  const overlay=document.createElement('div');
+  overlay.id='pricing-export-overlay';
+  overlay.className='confirm-overlay quotation-export-overlay';
+  overlay.innerHTML=`<div class="confirm-box quotation-export-box" role="dialog" aria-modal="true" aria-labelledby="pricing-export-title">
+    <div class="confirm-icon"><i class="ti ti-file-spreadsheet"></i></div>
+    <div class="confirm-title" id="pricing-export-title">Export Pricing Register</div>
+    <div class="confirm-msg">Choose the level of detail to include in the Excel workbook.</div>
+    <div class="quotation-export-options">
+      <label class="quotation-export-option"><input type="radio" name="pricing-export-scope" value="summary"><span><strong>Pricing Summary Only</strong><small>One row per pricing document in the Pricing Register sheet.</small></span></label>
+      <label class="quotation-export-option selected"><input type="radio" name="pricing-export-scope" value="lines" checked><span><strong>Summary + Line Items</strong><small>Adds a separate Pricing Line Items worksheet linked by pricing number.</small></span></label>
+    </div>
+    <div class="quotation-export-count"><i class="ti ti-filter"></i><strong>${rows.length}</strong> pricing document${rows.length===1?'':'s'} will be exported based on the current filters.</div>
+    <div class="confirm-btns"><button class="btn btn-secondary" id="pricing-export-cancel">Cancel</button><button class="btn btn-primary" id="pricing-export-confirm"><i class="ti ti-file-spreadsheet"></i> Export Excel</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const options=[...overlay.querySelectorAll('.quotation-export-option')];
+  options.forEach(label=>label.addEventListener('click',()=>{options.forEach(x=>x.classList.remove('selected'));label.classList.add('selected');}));
+  const close=()=>overlay.remove();
+  overlay.querySelector('#pricing-export-cancel').onclick=close;
+  overlay.querySelector('#pricing-export-confirm').onclick=()=>{const includeLines=overlay.querySelector('input[name="pricing-export-scope"]:checked')?.value==='lines';close();exportPricingRegisterExcel(includeLines,rows);};
+  overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+  const esc=e=>{if(e.key==='Escape'&&document.getElementById('pricing-export-overlay')){close();document.removeEventListener('keydown',esc);}};
+  document.addEventListener('keydown',esc);
+  setTimeout(()=>overlay.querySelector('#pricing-export-confirm')?.focus(),50);
+}
+function buildPricingLineItemRows(rows){
+  const output=[];
+  rows.forEach(d=>{
+    const v=d.versionData||ensurePricingVersions(d.rfq).find(x=>Number(x.version)===Number(d.version))||{};
+    (v.pricingItems||[]).slice().sort((a,b)=>(Number(a.sortOrder)||0)-(Number(b.sortOrder)||0)).forEach((it,index)=>{
+      const qty=Number(it.qty)||0,buy=Number(it.buy)||0,sell=Number(it.sell)||0;
+      const cost=qty*buy,selling=qty*sell,profit=selling-cost,margin=selling>0?(profit/selling)*100:0;
+      output.push([d.pricingNo,d.rfq.rfqNo||'',d.rfq.company||'',d.version,index+1,it.sortOrder??index+1,it.code||'',it.desc||'',qty,it.uom||'',it.supplierName||it.supplier||'',it.supRef||'',buy,cost,Number(it.markup)||0,sell,selling,profit,margin]);
+    });
+  });
+  return output;
+}
+function exportPricingRegisterExcel(includeLines=false,prefetchedRows=null){
+  if(typeof XLSX==='undefined'){showToast('Excel library is not available. Check your internet connection and try again.','error');return;}
+  const rows=prefetchedRows||getPricingRegisterExportRows();
+  if(!rows.length){showToast('No pricing documents match the current filters. Nothing to export.','warning');return;}
+  try{
+    const now=new Date(),exportedAt=now.toLocaleString(),companyName=settings?.coname||'BizCore';
+    const headers=['Pricing No.','RFQ No.','Updated','Customer','Customer Reference','Version','Status','Primary Supplier','Supplier Quote Ref.','Material Cost','Additional Cost','Total Cost','Selling Value','Profit','Margin %','Quotation No.'];
+    const data=rows.map(d=>{
+      const v=d.versionData||{};
+      const material=(v.pricingItems||[]).reduce((sum,it)=>sum+(Number(it.buy)||0)*(Number(it.qty)||0),0);
+      const extras=(v.internalCosts||[]).reduce((sum,c)=>sum+(Number(c.amount)||0),0);
+      return [d.pricingNo,d.rfq.rfqNo||'',String(d.updated||'').slice(0,10),d.rfq.company||'',d.rfq.ref||'',d.version,d.status,v.supplierName||d.rfq.supplierName||'',v.supRef||d.rfq.supRef||'',material,extras,d.cost,d.selling,d.profit,d.marginPct,d.quote?.qno||''];
+    });
+    const ws=XLSX.utils.aoa_to_sheet([[`${companyName} — Pricing Register`],[`Exported: ${exportedAt}`],[`Filters: ${pricingExportFilterSummary()}`],[`Records: ${rows.length}`],[],headers,...data]);
+    ws['!cols']=[{wch:24},{wch:20},{wch:13},{wch:30},{wch:24},{wch:9},{wch:13},{wch:28},{wch:22},{wch:15},{wch:15},{wch:15},{wch:15},{wch:15},{wch:12},{wch:20}];
+    ws['!autofilter']={ref:`A6:P${rows.length+6}`}; ws['!freeze']={xSplit:0,ySplit:6,topLeftCell:'A7',activePane:'bottomLeft',state:'frozen'};
+    for(let r=7;r<=rows.length+6;r++){['J','K','L','M','N'].forEach(c=>{if(ws[`${c}${r}`])ws[`${c}${r}`].z='#,##0.00';});if(ws[`O${r}`])ws[`O${r}`].z='0.00';}
+    const wb=XLSX.utils.book_new(); wb.Props={Title:'BizCore Pricing Register',Subject:includeLines?'Pricing register and line item export':'Pricing register export',Author:companyName,CreatedDate:now};
+    XLSX.utils.book_append_sheet(wb,ws,'Pricing Register');
+    let lineCount=0;
+    if(includeLines){
+      const lineHeaders=['Pricing No.','RFQ No.','Customer','Version','Item Line','Sort Order','Item Code','Description','Qty','UOM','Supplier','Supplier Quote Ref.','Buy Unit Price','Line Cost','Markup %','Sell Unit Price','Line Selling','Line Profit','Margin %'];
+      const lineRows=buildPricingLineItemRows(rows); lineCount=lineRows.length;
+      const lws=XLSX.utils.aoa_to_sheet([[`${companyName} — Pricing Line Items`],[`Exported: ${exportedAt}`],[`Filters: ${pricingExportFilterSummary()}`],[`Pricing documents: ${rows.length} | Lines: ${lineRows.length}`],[],lineHeaders,...lineRows]);
+      lws['!cols']=[{wch:24},{wch:20},{wch:30},{wch:9},{wch:10},{wch:10},{wch:16},{wch:42},{wch:11},{wch:10},{wch:28},{wch:22},{wch:15},{wch:15},{wch:12},{wch:15},{wch:15},{wch:15},{wch:12}];
+      lws['!autofilter']={ref:`A6:S${lineRows.length+6}`}; lws['!freeze']={xSplit:0,ySplit:6,topLeftCell:'A7',activePane:'bottomLeft',state:'frozen'};
+      for(let r=7;r<=lineRows.length+6;r++){['M','N','P','Q','R'].forEach(c=>{if(lws[`${c}${r}`])lws[`${c}${r}`].z='#,##0.00';});['O','S'].forEach(c=>{if(lws[`${c}${r}`])lws[`${c}${r}`].z='0.00';});}
+      XLSX.utils.book_append_sheet(wb,lws,'Pricing Line Items');
+    }
+    const dateStamp=now.toISOString().slice(0,10); XLSX.writeFile(wb,`BizCore_Pricing_Register_${dateStamp}.xlsx`,{compression:true});
+    showToast(`Pricing Excel exported: ${rows.length} document${rows.length===1?'':'s'}${includeLines?` and ${lineCount} line${lineCount===1?'':'s'}`:''}.`,'success');
+  }catch(err){console.error('Pricing Excel export failed',err);showToast('Could not create the Pricing Excel export. Please try again.','error');}
+}
+
 function goPricingDocPage(p){ pricingDocPage=p; renderPricingDocuments(); }
 
 function showPage(page, el) {
@@ -3626,6 +4042,7 @@ function showPage(page, el) {
   if(page==='quotations'){currentPage=1;renderTable();}
   if(page==='analytics')renderAnalytics();
   if(page==='salesorders')renderSOPage();
+  if(page==='deliverynotes')renderDNPage();
   closeMobileSidebar();
 }
 
@@ -3996,8 +4413,37 @@ function quotationWorkflowNext(){
 }
 
 /* ── NEW / EDIT QUOTATION ── */
+function setQuotationPricingContext(ctx=null){
+  window._pendingQuotationPricingContext=ctx||null;
+  const box=document.getElementById('quote-conversion-context');
+  const summary=document.getElementById('quote-commercial-summary');
+  if(!box||!summary)return;
+  if(!ctx){box.style.display='none';summary.style.display='none';return;}
+  box.style.display='flex';summary.style.display='block';
+  document.getElementById('quote-conversion-title').textContent='Create from Pricing '+(ctx.pricingRef||'');
+  document.getElementById('quote-conversion-subtitle').textContent=(ctx.rfqNo?('RFQ '+ctx.rfqNo+' · '):'')+'Review customer-facing terms before saving.';
+  document.getElementById('qcs-ref').innerHTML='<span>Pricing reference</span><strong>'+escapeHtml(ctx.pricingRef||'—')+'</strong>';
+  updateQuotationCommercialSummary();
+}
+function updateQuotationCommercialSummary(){
+  const ctx=window._pendingQuotationPricingContext;
+  const summary=document.getElementById('quote-commercial-summary'); if(!summary||!ctx)return;
+  let value=0,changed=0;
+  [...document.querySelectorAll('#items-tbody tr')].forEach((tr,i)=>{
+    if(tr.dataset.lineType==='heading'||tr.dataset.lineType==='note')return;
+    const qty=parseBizNumber(tr.querySelector('[data-quote-qty]')?.value), price=parseBizNumber(tr.querySelector('[data-quote-price]')?.value);
+    value+=qty*price;
+    const original=Number(tr.dataset.pricingSell||0); if(original&&Math.abs(price-original)>0.005)changed++;
+  });
+  const cost=Number(ctx.cost||0), profit=value-cost, margin=value?profit/value*100:0;
+  const money=n=>documentMoney('quotation','summary',n);
+  document.getElementById('qcs-cost').textContent=money(cost);document.getElementById('qcs-value').textContent=money(value);document.getElementById('qcs-profit').textContent=money(profit);document.getElementById('qcs-margin').textContent=margin.toFixed(1)+'%';
+  const note=document.getElementById('qcs-change'); if(note){note.style.display=changed?'flex':'none';note.querySelector('span').textContent=changed+' selling price'+(changed===1?' has':'s have')+' changed from Pricing. Margin has been recalculated.';}
+}
+
 function openNewQuotation(templateType) {
   editingId=null;
+  setQuotationPricingContext(null);
   const tax=activeTaxSettings(); currentQuoteVatRate=Number(tax.rate)||0;
   const selectedTemplate=(templateType||window._pendingQuotationType||'product')==='contracting'?'contracting':'product';
   document.getElementById('modal-title').textContent='New '+quotationTypeLabel(selectedTemplate);
@@ -4026,6 +4472,7 @@ function openNewQuotation(templateType) {
 }
 
 function editQuotation(id, skipVatCheck=false) {
+  setQuotationPricingContext(null);
   const q=quotations.find(x=>x.id===id); if(!q) return;
   if((q.status||'Draft')!=='Draft'){showToast('This quotation is '+q.status+' and is locked. Create a revision to make changes.','error');return;}
   const activeTax=activeTaxSettings();
@@ -4115,6 +4562,8 @@ function addItemRow(item={}) {
   tr.dataset.rowKind = isScopeRow ? 'scope' : 'product';
   if (item.prodId) tr.dataset.prodId = item.prodId;
   if (item.image) tr.dataset.image = item.image;
+  if(item.pricingSell!==undefined) tr.dataset.pricingSell=String(item.pricingSell);
+  if(item.pricingBuy!==undefined) tr.dataset.pricingBuy=String(item.pricingBuy);
   const selectedUom=item.uom||(isProduct?'Pcs':'Job');
   const options=(isProduct?uomMaster.filter(u=>u.active):uomMaster.filter(u=>u.active && ['Job','Hours','Days','Months','Visit','Lump sum','EA'].includes(u.code)));
   if(!options.some(u=>u.code===selectedUom)) options.push(getUomRule(selectedUom));
@@ -4342,6 +4791,7 @@ function calcTotals() {
   document.getElementById('t-before-vat').textContent=documentMoney('quotation','summary',bvat);
   document.getElementById('t-vat').textContent=documentMoney('quotation','summary',vat);
   document.getElementById('t-net').textContent=documentMoney('quotation','grandTotal',net);
+  updateQuotationCommercialSummary();
   document.getElementById('t-vat-label').textContent=`VAT (${Number(currentQuoteVatRate??getQuoteVatPercent()).toFixed(2).replace(/\.00$/,'')}%)`;
 }
 
@@ -4398,6 +4848,10 @@ async function saveQuotation(mode='save') {
   const previewRate=Number(currentQuoteVatRate??getQuoteVatPercent());
   const previewVat=Math.round(previewBvat*(previewRate/100)*100)/100;
   const previewNet=previewBvat+previewVat;
+  // Protected transactional save: only one quotation save/confirmation may own the form.
+  const quoteSaveKey='quotation:'+String(capturedEditingId||document._pendingRFQId||'new');
+  if(_documentSaveLocks.has(quoteSaveKey)) return;
+  _documentSaveLocks.add(quoteSaveKey);
   // Show confirmation — wrap in promise
   const confirmed = await new Promise(resolve => {
     showConfirm({
@@ -4420,7 +4874,7 @@ async function saveQuotation(mode='save') {
       onCancel:  () => resolve(false)
     });
   });
-  if (!confirmed) return;
+  if (!confirmed){_documentSaveLocks.delete(quoteSaveKey);return;}
   showBusyOverlay('quote-modal', 'Saving quotation…');
   try {
 
@@ -4592,7 +5046,7 @@ async function saveQuotation(mode='save') {
   ]);
   if (_rfqNeedsSave) renderRFQPage();
 
-  clearDirty(); window._pendingQuotationOrigin=null; closeModal('quote-modal');
+  clearDirty(); window._pendingQuotationOrigin=null; setQuotationPricingContext(null); closeModal('quote-modal');
   if(!capturedEditingId) resetQuotationRegisterFiltersForNewRecord();
   renderAll();
   if(typeof renderTable==='function')renderTable();
@@ -4600,7 +5054,7 @@ async function saveQuotation(mode='save') {
   showToast(capturedEditingId?'Quotation updated':'Quotation '+q.qno+' created','success');
   if(mode==='preview') setTimeout(()=>viewQuotation(q.id),80);
   return q;
-  } finally { hideBusyOverlay('quote-modal'); }
+  } finally { _documentSaveLocks.delete(quoteSaveKey); hideBusyOverlay('quote-modal'); }
 }
 
 /* ── VIEW QUOTATION ── */
@@ -4756,11 +5210,11 @@ function viewQuotation(id, skipVatCheck=false) {
   buttons.push('<button class="btn btn-secondary" onclick="closeModal(\'view-modal\')">Close</button>');
   if(lRFQ) buttons.push('<button class="btn btn-secondary" data-rfqid="'+q.rfqId+'" onclick="viewRFQFromQuote(this)"><i class="ti ti-clipboard-list"></i>RFQ</button>');
   if(hPricing) buttons.push('<button class="btn btn-secondary" data-rfqid="'+q.rfqId+'" onclick="viewPricingFromQuote(this)"><i class="ti ti-calculator"></i>Pricing</button>');
-  if(status==='Draft') buttons.push('<button class="btn btn-secondary" data-qid="'+q.id+'" onclick="closeModal(\'view-modal\');editQuotation(this.dataset.qid)"><i class="ti ti-edit"></i>Edit</button>');
+  if(status==='Draft') buttons.push('<button class="btn btn-secondary" data-qid="'+q.id+'" onclick="transitionToQuotationEdit(this)"><i class="ti ti-edit"></i>Edit</button>');
   else buttons.push('<button class="btn btn-secondary" data-qid="'+q.id+'" onclick="createQuotationRevision(this.dataset.qid)"><i class="ti ti-git-branch"></i>Revise</button>');
   buttons.push('<button class="btn btn-secondary" data-qid="'+q.id+'" onclick="duplicateQuotation(this.dataset.qid)"><i class="ti ti-copy"></i>Duplicate</button>');
   if(linkedSO) buttons.push('<button class="btn btn-success" data-soid="'+linkedSO.id+'" onclick="openSalesOrderDocument(this.dataset.soid)"><i class="ti ti-external-link"></i>'+escapeHtml(linkedSO.soNo)+'</button>');
-  else if(status==='Won') buttons.push('<button class="btn btn-success" data-qid="'+q.id+'" onclick="closeModal(\'view-modal\');openCreateSO(this.dataset.qid)"><i class="ti ti-shopping-cart"></i>Create Sales Order</button>');
+  if(status==='Won' && !getQuotationSOProgress(q.id).complete) buttons.push('<button class="btn btn-success" data-qid="'+q.id+'" onclick="transitionQuotationToSO(this)"><i class="ti ti-shopping-cart"></i>'+(linkedSO?'Create Remaining SO':'Create Sales Order')+'</button>');
   buttons.push('<button class="btn btn-primary" data-qid="'+q.id+'" onclick="openTemplatePicker(this.dataset.qid)"><i class="ti ti-printer"></i>Print / PDF</button>');
   // Delete / Cancel — mutually exclusive, rules enforced inside each function
   if (!linkedSO) {
@@ -4813,10 +5267,7 @@ async function commitStatus(id, newStatus) {
         confirmText: '🛒 Create Sales Order now',
         cancelText:  '⏱ I\'ll do it later',
         confirmClass: 'btn-success',
-        onConfirm: () => {
-          closeModal('view-modal');
-          openCreateSO(id);
-        },
+        onConfirm: () => transitionQuotationToSO(id),
         onCancel: () => {}, // just close the dialog, button is already in footer
       });
     }, 400);
@@ -5529,9 +5980,9 @@ function viewCustomer(id) {
   const c = customers.find(x=>x.id===id); if (!c) return;
   const cname=normalizeMasterValue(c.company);
   const contacts = c.contacts || (c.contact ? [{name:c.contact,title:'',phone:c.phone||'',isDefault:true}] : []);
-  const cQuotes = quotations.filter(q=>normalizeMasterValue(q.company)===cname);
-  const cRFQs = rfqs.filter(r=>normalizeMasterValue(r.company)===cname);
-  const cSOs = salesOrders.filter(o=>normalizeMasterValue(o.customer)===cname);
+  const cQuotes = quotations.filter(q=>recordBelongsToCustomer(q,c,'company'));
+  const cRFQs = rfqs.filter(r=>recordBelongsToCustomer(r,c,'company'));
+  const cSOs = salesOrders.filter(o=>recordBelongsToCustomer(o,c,'customer'));
   const totalVal = cQuotes.reduce((sum,q)=>sum+calcQuote(q).net,0);
   const wonVal = cQuotes.filter(q=>q.status==='Won').reduce((sum,q)=>sum+calcQuote(q).net,0);
   const totalRefs=cQuotes.length+cRFQs.length+cSOs.length;
@@ -5641,6 +6092,147 @@ function navigateToSO(soId) {
   setTimeout(() => viewSO(soId), 80);
 }
 
+/* ── v109: Global BizCore Screen Transition Manager ──
+   One reusable transition infrastructure for current and future screens.
+   Important rule: the overlay is operation-driven, never dismissed by an
+   elapsed-time timer.  It remains until the async action and destination
+   readiness check have both completed (or the action throws). */
+let _screenTransitionTimer=null;
+let _screenTransitionDepth=0;
+function beginScreenTransition(message,{immediate=false}={}){
+  // Nested operations share the same blocking overlay rather than flashing it.
+  _screenTransitionDepth++;
+  const existing=document.getElementById('bizcore-screen-transition');
+  if(existing){
+    const title=existing.querySelector('.screen-transition-title');
+    if(title && message) title.textContent=message;
+    return;
+  }
+  const mount=()=>{
+    _screenTransitionTimer=null;
+    if(document.getElementById('bizcore-screen-transition')) return;
+    const overlay=document.createElement('div');
+    overlay.id='bizcore-screen-transition';
+    overlay.className='bizcore-screen-transition';
+    overlay.setAttribute('role','status');
+    overlay.setAttribute('aria-live','polite');
+    overlay.setAttribute('aria-busy','true');
+    overlay.innerHTML=`<div class="screen-transition-card">
+      <div class="screen-transition-title">${escapeHtml(message||'Preparing document…')}</div>
+      <div class="screen-transition-subtitle">Please wait</div>
+      <div class="screen-transition-track" aria-hidden="true"><span></span></div>
+    </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(()=>overlay.classList.add('show'));
+  };
+  // The delay only decides whether a very fast operation needs an overlay.
+  // It NEVER controls when an already-visible overlay is removed.
+  if(immediate) mount(); else _screenTransitionTimer=setTimeout(mount,280);
+}
+function endScreenTransition({immediate=false,force=false}={}){
+  if(force) _screenTransitionDepth=0;
+  else _screenTransitionDepth=Math.max(0,_screenTransitionDepth-1);
+  if(_screenTransitionDepth>0) return;
+  if(_screenTransitionTimer){clearTimeout(_screenTransitionTimer);_screenTransitionTimer=null;}
+  const overlay=document.getElementById('bizcore-screen-transition');
+  if(!overlay) return;
+  if(immediate){overlay.remove();return;}
+  overlay.classList.remove('show');
+  // This 140ms is CSS fade cleanup only, after the operation is complete.
+  setTimeout(()=>overlay.remove(),140);
+}
+function waitForUiCondition(test){
+  // No completion timeout: slow network/rendering keeps the screen blocked.
+  return new Promise(resolve=>{
+    const check=()=>{
+      let ready=false;
+      try{ready=!!test();}catch(e){}
+      if(ready){requestAnimationFrame(()=>requestAnimationFrame(resolve));return;}
+      requestAnimationFrame(check);
+    };
+    check();
+  });
+}
+function isModalOpen(id){return !!document.getElementById(id)?.classList.contains('open');}
+async function runScreenTransition({message='Preparing document…',immediate=false,action,ready,sourceModal='',closeSource=false,errorMessage='Could not complete this operation. Please try again.',endImmediate=false}={}){
+  beginScreenTransition(message,{immediate});
+  try{
+    const result=await action?.();
+    if(ready) await waitForUiCondition(()=>ready(result));
+    if(closeSource && sourceModal && isModalOpen(sourceModal)) closeModal(sourceModal);
+    // Paint the destination underneath the still-blocking overlay before release.
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    return result;
+  }catch(err){
+    console.error(err);
+    if(errorMessage) showToast(errorMessage,'error');
+    throw err;
+  }finally{
+    endScreenTransition({immediate:endImmediate});
+  }
+}
+const BizCoreTransition={run:runScreenTransition,begin:beginScreenTransition,end:endScreenTransition,waitFor:waitForUiCondition,isModalOpen};
+window.BizCoreTransition=BizCoreTransition;
+
+async function closeEntryWithTransition(modalId,label='document'){
+  // Cancel/close is immediate and remains blocked until the source form is
+  // genuinely closed and the destination has painted. There is no close timer.
+  try{
+    await runScreenTransition({
+      message:`Closing ${label}…`, immediate:true, endImmediate:true,
+      action:async()=>{
+        await new Promise(resolve=>requestAnimationFrame(resolve));
+        if(typeof window.bizcorePerformClose==='function') window.bizcorePerformClose(modalId,true);
+        else closeModal(modalId);
+      },
+      ready:()=>!isModalOpen(modalId),
+      errorMessage:`Could not close the ${label}. Please try again.`
+    });
+  }catch(e){}
+}
+window.closeEntryWithTransition=closeEntryWithTransition;
+async function transitionToRFQEdit(btn){
+  const id=btn?.getAttribute('data-rid'); if(!id) return;
+  btn.disabled=true;
+  try{
+    await runScreenTransition({
+      message:'Preparing RFQ for editing…',
+      action:()=>editRFQ(id), ready:()=>isModalOpen('rfq-modal'),
+      sourceModal:'rfq-view-modal', closeSource:true,
+      errorMessage:'Could not open the RFQ for editing. Please try again.'
+    });
+  }catch(e){} finally{btn.disabled=false;}
+}
+async function transitionToQuotationEdit(btn){
+  const id=btn?.getAttribute('data-qid'); if(!id) return;
+  btn.disabled=true;
+  try{
+    await runScreenTransition({
+      message:'Preparing quotation for editing…',
+      action:()=>editQuotation(id), ready:()=>isModalOpen('quote-modal'),
+      sourceModal:'view-modal', closeSource:true,
+      errorMessage:'Could not open the quotation for editing. Please try again.'
+    });
+  }catch(e){} finally{btn.disabled=false;}
+}
+async function transitionRFQToPricing(btn){
+  const id=btn?.getAttribute('data-rid'); if(!id) return;
+  btn.disabled=true;
+  try{
+    await runScreenTransition({
+      message:'Preparing pricing…',
+      action:()=>openPricingSheet(id,{closeSource:false}),
+      ready:()=>isModalOpen('pricing-modal') || isModalOpen('pricing-ro-modal'),
+      sourceModal:'rfq-view-modal', closeSource:true,
+      errorMessage:'Could not open pricing. Please try again.'
+    });
+  }catch(e){} finally{btn.disabled=false;}
+}
+async function transitionQuotationToSO(btnOrId){
+  const id=typeof btnOrId==='string'?btnOrId:btnOrId?.getAttribute('data-qid');if(!id)return;
+  if(typeof btnOrId!=='string'&&btnOrId)btnOrId.disabled=true;
+  try{await runScreenTransition({message:'Preparing sales order…',action:()=>openCreateSO(id),ready:()=>isModalOpen('so-create-modal'),sourceModal:'view-modal',closeSource:true,errorMessage:'Could not prepare the Sales Order. Please try again.'});}catch(e){}finally{if(typeof btnOrId!=='string'&&btnOrId)btnOrId.disabled=false;}
+}
 /* ── BACK NAVIGATION WRAPPERS ── */
 function backToQuoteFromRFQ() {
   const qid = navFromQuoteId; navFromQuoteId = null;
@@ -5648,10 +6240,10 @@ function backToQuoteFromRFQ() {
   if (qid) viewQuotation(qid);
 }
 function closeRFQView()       { closeModal('rfq-view-modal'); }
-function editRFQFromView(btn) { const id=btn.getAttribute('data-rid'); closeModal('rfq-view-modal'); if(id) editRFQ(id); }
+function editRFQFromView(btn) { transitionToRFQEdit(btn); }
 function viewQuoteFromRFQ(btn){ const id=btn.getAttribute('data-qid'); closeModal('rfq-view-modal'); if(id) viewQuotation(id); }
 function viewPricingROFromBtn(btn) { const id=btn.getAttribute('data-rid'); if(id) viewPricingReadOnly(id); }
-function openPricingFromBtn(btn)   { const id=btn.getAttribute('data-rid'); closeModal('rfq-view-modal'); if(id) openPricingSheet(id); }
+function openPricingFromBtn(btn)   { transitionRFQToPricing(btn); }
 function openNoBidDialogFromBtn(btn) { const id=btn.getAttribute('data-rid'); if(id) openNoBidDialog(id); }
 function deleteRFQFromBtn(btn) { const id=btn.getAttribute('data-rid'); if(id) deleteRFQRecord(id); }
 function reopenRFQFromBtn(btn) { const id=btn.getAttribute('data-rid'); if(id) reopenRFQ(id); }
@@ -5758,14 +6350,15 @@ function renderSuppliers() {
   const list = suppliers.filter(s => !search || `${s.company} ${s.contact} ${s.cat}`.toLowerCase().includes(search));
   const tbody = document.getElementById('suppliers-tbody');
   if (!tbody) return;
-  const supplierPages=Math.ceil(list.length/PER_PAGE)||1;
+  const sortedList=sortRegisterRows(list,'suppliers',{company:x=>x.company,contact:x=>x.contact,phone:x=>x.phone,email:x=>x.email,category:x=>x.cat,city:x=>x.city,quotes:x=>rfqs.filter(r=>recordBelongsToSupplier(r,x)).length});
+  const supplierPages=Math.ceil(sortedList.length/PER_PAGE)||1;
   if(supplierPage>supplierPages) supplierPage=1;
-  const supplierSlice=list.slice((supplierPage-1)*PER_PAGE,supplierPage*PER_PAGE);
+  const supplierSlice=sortedList.slice((supplierPage-1)*PER_PAGE,supplierPage*PER_PAGE);
   masterVisiblePageIds.suppliers = supplierSlice.map(s=>s.id);
   document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PER_PAGE)) el.value=String(PER_PAGE); });
   tbody.innerHTML = supplierSlice.length ? supplierSlice.map(s => {
     const selected = masterSelection.suppliers.has(s.id);
-    const quoteCount = rfqs.filter(r => r.supplierId === s.id || normalizeMasterValue(r.supplierName) === normalizeMasterValue(s.company)).length;
+    const quoteCount = rfqs.filter(r => recordBelongsToSupplier(r,s)).length;
     return `<tr class="master-clickable-row${selected?' master-row-selected':''}" data-master-type="suppliers" data-master-id="${s.id}" tabindex="0" role="button" aria-label="Open supplier ${s.company}" onclick="viewSupplier('${s.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewSupplier('${s.id}');}">
       <td class="master-select-col" onclick="event.stopPropagation()"><input class="master-row-check" type="checkbox" ${selected?'checked':''} onkeydown="event.stopPropagation()" aria-label="Select ${s.company}" onchange="toggleMasterSelection('suppliers','${s.id}',this.checked)"></td>
       <td><strong>${s.company}</strong></td>
@@ -5793,14 +6386,14 @@ function viewSupplier(id) {
   const sp=suppliers.find(x=>x.id===id); if(!sp)return;
   const sname=normalizeMasterValue(sp.company);
   const related=rfqs.filter(r=>{
-    if(r.supplierId===sp.id || normalizeMasterValue(r.supplierName)===sname)return true;
-    return (r.pricingItems||[]).some(it=>normalizeMasterValue(it.supplierName||it.supplier)===sname) || (r.vendorQuotes||[]).some(v=>normalizeMasterValue(v.supplierName||v.supplier)===sname) || (r.pricingVersions||[]).some(v=>normalizeMasterValue(v.supplierName)===sname || (v.pricingItems||[]).some(it=>normalizeMasterValue(it.supplierName||it.supplier)===sname));
+    if(recordBelongsToSupplier(r,sp))return true;
+    return (r.pricingItems||[]).some(it=>supplierRefMatches(it,sp)) || (r.vendorQuotes||[]).some(v=>supplierRefMatches(v,sp)) || (r.pricingVersions||[]).some(v=>supplierRefMatches(v,sp) || (v.pricingItems||[]).some(it=>supplierRefMatches(it,sp)) || (v.vendorQuotes||[]).some(q=>supplierRefMatches(q,sp)));
   });
   const pricingDocs=[];
   related.forEach(r=>{
     const versions=(r.pricingVersions&&r.pricingVersions.length)?r.pricingVersions:[{version:r.currentPricingVersion||1,status:r.status,updated:r.updated,date:r.date,supplierName:r.supplierName}];
     versions.forEach(v=>{
-      const used=normalizeMasterValue(v.supplierName)===sname || normalizeMasterValue(r.supplierName)===sname || (v.pricingItems||r.pricingItems||[]).some(it=>normalizeMasterValue(it.supplierName||it.supplier)===sname);
+      const used=supplierRefMatches(v,sp) || recordBelongsToSupplier(r,sp) || (v.pricingItems||r.pricingItems||[]).some(it=>supplierRefMatches(it,sp));
       if(used) pricingDocs.push({r,v});
     });
   });
@@ -5944,7 +6537,7 @@ function renderRFQPage() {
     return [r.rfqNo, r.company, r.ref, r.desc, r.assigned, r.channel]
       .some(v => String(v || '').toLowerCase().includes(search));
   });
-  const sorted = [...filtered].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  let sorted = [...filtered].sort((a,b) => (b.date||'').localeCompare(a.date||''));
 
   const open    = rfqs.filter(r => !['Quoted','Sales Order','No Bid'].includes(getRFQWorkflowStage(r)));
   const overdue = rfqs.filter(r => getRfqDisplayStatus(r) === 'Overdue');
@@ -5988,6 +6581,8 @@ function renderRFQPage() {
   }
   document.querySelectorAll('.rfq-main-monitor-item').forEach(el=>el.classList.remove('active'));
 
+  sorted=sortRegisterRows(sorted,'rfq',{no:r=>r.rfqNo,customer:r=>r.company,reference:r=>r.ref,date:r=>r.date,due:r=>r.due||'',status:r=>getRFQWorkflowStage(r),progress:r=>{const qs=quotations.filter(q=>q.rfqId===r.id);return qs.some(q=>salesOrders.some(so=>so.quotationId===q.id))?'Sales Order':qs.length?'Quotation':(r.pricingItems&&r.pricingItems.length)?'Pricing':r.status||'RFQ'}});
+
   const list = document.getElementById('rfq-list');
   if (!sorted.length) {
     list.innerHTML = `<div class="empty-state"><i class="ti ti-clipboard-list"></i><strong>No RFQs found</strong><p>Try another filter or search term.</p></div>`;
@@ -6026,9 +6621,10 @@ function renderRFQPage() {
 
   list.innerHTML = `<div class="rfq-register"><table>
     <colgroup><col style="width:15%"><col style="width:26%"><col style="width:16%"><col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:11%"></colgroup>
-    <thead><tr><th>RFQ No.</th><th>Customer</th><th>Reference</th><th>RFQ Date</th><th>Due Date</th><th>Status</th><th>Progress</th></tr></thead>
+    <thead><tr><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="no" onclick="event.stopPropagation();setRegisterSort('rfq','no',renderRFQPage)">RFQ No.</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="customer" onclick="event.stopPropagation();setRegisterSort('rfq','customer',renderRFQPage)">Customer</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="reference" onclick="event.stopPropagation();setRegisterSort('rfq','reference',renderRFQPage)">Reference</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="date" onclick="event.stopPropagation();setRegisterSort('rfq','date',renderRFQPage)">RFQ Date</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="due" onclick="event.stopPropagation();setRegisterSort('rfq','due',renderRFQPage)">Due Date</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="status" onclick="event.stopPropagation();setRegisterSort('rfq','status',renderRFQPage)">Status</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="progress" onclick="event.stopPropagation();setRegisterSort('rfq','progress',renderRFQPage)">Progress</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
+  updateRegisterSortIndicators();
   document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(RFQ_PER_PAGE)) el.value = String(RFQ_PER_PAGE); });
   const rp = document.getElementById('rfq-pagination');
   if (rp) rp.innerHTML = buildPaginationHTML(rfqPage, rfqPages, 'goRFQPage');
@@ -6505,6 +7101,7 @@ function renderEmployees() {
   let list=employees.filter(e=>!q||[e.code,e.name,e.department,e.designation,e.mobile,e.iqamaNo,...(e.roles||[])].join(' ').toLowerCase().includes(q));
   if(mode==='active') list=list.filter(e=>e.active!==false);
   if(mode==='expiring') list=list.filter(e=>[e.iqamaExpiry,e.passportExpiry,e.licenseExpiry].some(d=>{const n=employeeDaysUntil(d);return n!==null&&n<=90;}));
+  list=sortRegisterRows(list,'employees',{employee:e=>e.name,department:e=>`${e.department||''} ${e.designation||''}`,roles:e=>(e.roles||[]).join(' '),contact:e=>`${e.mobile||''} ${e.email||''}`,iqama:e=>e.iqamaNo,passport:e=>e.passportNo,license:e=>e.licenseNo,status:e=>e.active!==false?'Active':'Inactive'});
   const employeePages=Math.ceil(list.length/PER_PAGE)||1;
   if(employeePage>employeePages) employeePage=1;
   const employeeSlice=list.slice((employeePage-1)*PER_PAGE,employeePage*PER_PAGE);
@@ -6598,13 +7195,42 @@ function confirmCancelRFQEntry(){
       buttons:[
         {text:'Continue editing',cls:'secondary',action:()=>{}},
         {text:isEdit?'Discard changes':'Discard RFQ',cls:'danger-outline',action:()=>{
-          if(typeof window.bizcorePerformClose==='function') window.bizcorePerformClose('rfq-modal',true);
+          if(typeof window.closeEntryWithTransition==='function') window.closeEntryWithTransition('rfq-modal','RFQ');
+          else if(typeof window.bizcorePerformClose==='function') window.bizcorePerformClose('rfq-modal',true);
           else closeModal('rfq-modal');
         }}
       ]
     });
   }
 }
+
+function confirmCancelQuotationEntry(){
+  const isEdit=!!editingId;
+  const title=isEdit?'Discard quotation changes?':'Discard new quotation?';
+  const message=isEdit
+    ? 'Changes made in this quotation have not been saved.'
+    : 'This quotation has not been saved yet.';
+  const secondary=isEdit
+    ? 'Discarding will close the form without saving the latest changes.'
+    : 'Discarding will close the form and remove this new entry.';
+  if(typeof window.bizcoreShowSafeDialog==='function'){
+    window.bizcoreShowSafeDialog({
+      icon:'ti-alert-triangle',
+      title,
+      message,
+      secondary,
+      buttons:[
+        {text:'Continue editing',cls:'secondary',action:()=>{}},
+        {text:isEdit?'Discard changes':'Discard quotation',cls:'danger-outline',action:()=>{
+          if(typeof window.closeEntryWithTransition==='function') window.closeEntryWithTransition('quote-modal','quotation');
+          else if(typeof window.bizcorePerformClose==='function') window.bizcorePerformClose('quote-modal',true);
+          else closeModal('quote-modal');
+        }}
+      ]
+    });
+  }
+}
+window.confirmCancelQuotationEntry=confirmCancelQuotationEntry;
 
 function getSelectedRFQCustomerForSave(){
   const input=document.getElementById('rfq-cust-search');
@@ -6727,7 +7353,7 @@ async function saveRFQ() {
   try {
   const r = {
     id: editingRFQId || ('r'+Date.now().toString(36)),
-    rfqNo: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.rfqNo : nextRFQNo(),
+    rfqNo: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.rfqNo : await allocateDocumentNumber('rfq',new Date(receivedISO+'T00:00:00')),
     company:selectedCustomer.company, custId:selectedCustomer.id,
     contact: document.getElementById('rfq-contact').value.trim(),
     channel: document.getElementById('rfq-channel').value,
@@ -6929,6 +7555,7 @@ function filterPricingSupDD() {
 function selectPricingSupplier(id) {
   const s = suppliers.find(x=>x.id===id); if (!s) return;
   document.getElementById('pricing-sup-search').value = s.company;
+  document.getElementById('pricing-sup-search').dataset.supplierId = s.id;
   pricingSupplierName = s.company;
   closePricingSupDD();
 }
@@ -7149,7 +7776,7 @@ function readPricingItemsFromDOM() {
     const sell=parsePricingNumber(tr.querySelector('[data-role="sell"]')?.value);
     const sortOrder=index+1;
     tr.dataset.sortOrder=String(sortOrder);
-    if(desc||buy||code) items.push({lineId:tr.dataset.lineId,productId:tr.dataset.productId||'',sortOrder,code,desc,qty,uom,supplierName,supRef,buy,markup,sell});
+    if(desc||buy||code){const lineSupplier=findUniqueMasterByName(suppliers,supplierName);items.push({lineId:tr.dataset.lineId,productId:tr.dataset.productId||'',sortOrder,code,desc,qty,uom,supplierName,supplierId:lineSupplier?.id||'',supRef,buy,markup,sell});}
   });
   return items;
 }
@@ -7910,11 +8537,11 @@ function validatePricingSupplierDate({silentEmpty=false}={}) {
   return false;
 }
 
-async function openPricingSheet(rfqId) {
+async function openPricingSheet(rfqId,{closeSource=true}={}) {
   clearTimeout(pricingDraftSaveTimer);
   pricingDraftSaveTimer=null;
   pricingReorderHadPriorDirty=false;
-  closeModal('rfq-view-modal');
+  if(closeSource) closeModal('rfq-view-modal');
   pricingSummaryManualState = null;
   pricingRFQId = rfqId;
   pricingAttachment = null;
@@ -7945,6 +8572,7 @@ async function openPricingSheet(rfqId) {
     <span style="color:var(--gray)">${r.desc||''}</span>`;
   // Supplier
   document.getElementById('pricing-sup-search').value = r.supplierName||'';
+  document.getElementById('pricing-sup-search').dataset.supplierId = r.supplierId || findUniqueMasterByName(suppliers,r.supplierName)?.id || '';
   pricingSupplierName = r.supplierName||'';
   document.getElementById('pricing-sup-ref').value = r.supRef||'';
   document.getElementById('pricing-sup-date').value = pricingISOToDisplay(r.supDate||'');
@@ -8050,6 +8678,8 @@ async function savePricing() {
   const items=readPricingItemsFromDOM();
   r.pricingItems = items; r.pricingSettingsSnapshot={...activePricingSettings()}; const _ruleSnapshot=checkPricingBusinessRules(false); r.pricingApprovalRequired=!!_ruleSnapshot.needsApproval; r.pricingApproved=!_ruleSnapshot.needsApproval||pricingManagerApprovedForCurrentSave; pricingManagerApprovedForCurrentSave=false;
   r.supplierName = document.getElementById('pricing-sup-search').value.trim()||pricingSupplierName;
+  const selectedPricingSupplier=findUniqueMasterByName(suppliers,r.supplierName);
+  r.supplierId = document.getElementById('pricing-sup-search').dataset.supplierId || selectedPricingSupplier?.id || '';
   r.supRef       = document.getElementById('pricing-sup-ref').value.trim();
   r.supDate      = getPricingSupplierDateISO();
   r.internalNotes = document.getElementById('pricing-internal-notes')?.value.trim()||'';
@@ -8063,7 +8693,7 @@ async function savePricing() {
   if(!version){version={version:r.currentPricingVersion||1,created:new Date().toISOString()};versions.push(version);}
   version.status = version.status==='Revision Draft' ? 'Revision Draft' : 'Saved';
   version.updated = new Date().toISOString();
-  version.supplierName=r.supplierName; version.supRef=r.supRef; version.supDate=r.supDate; version.internalNotes=r.internalNotes||'';
+  version.supplierName=r.supplierName; version.supplierId=r.supplierId||''; version.supRef=r.supRef; version.supDate=r.supDate; version.internalNotes=r.internalNotes||'';
   version.pricingItems=JSON.parse(JSON.stringify(r.pricingItems||[]));
   version.internalCosts=JSON.parse(JSON.stringify(r.internalCosts||[]));
   version.vendorQuotes=JSON.parse(JSON.stringify(r.vendorQuotes||[]));
@@ -8159,9 +8789,12 @@ async function convertToQuotation() {
   // Items — from pricing, use sell prices
   currentQuoteType='product'; setQuoteType('product');
   document.getElementById('items-tbody').innerHTML='';
+  const pricingRef='PR-'+String(r.rfqNo||pricingRFQId||'').replace(/^RFQ-?/i,'')+'-V'+Number(activePricingVersion?.version||r.currentPricingVersion||1);
+  const pricingCost=r.pricingItems.reduce((s,it)=>s+(Number(it.buy)||0)*(Number(it.qty)||0),0);
   r.pricingItems.forEach(it=>{
-    addItemRow({desc:it.desc, qty:it.qty, uom:it.uom||'Pcs', up:it.sell, code:'', brand:'', model:'', specs:''});
+    addItemRow({desc:it.desc, qty:it.qty, uom:it.uom||'Pcs', up:it.sell, pricingSell:it.sell, pricingBuy:it.buy, code:'', brand:'', model:'', specs:''});
   });
+  setQuotationPricingContext({rfqNo:r.rfqNo,pricingRef,cost:pricingCost,version:Number(activePricingVersion?.version||r.currentPricingVersion||1)});
   calcTotals();
   // Link RFQ
   document._pendingRFQId = pricingRFQId;
@@ -8271,6 +8904,7 @@ document.addEventListener('keydown', function(e) {
 
 let toastTimer;
 function hideToast(){
+  clearTimeout(toastTimer);
   const t=document.getElementById('toast');
   if(t) t.classList.remove('show');
 }
@@ -8306,13 +8940,20 @@ function hideBusyOverlay(containerId) {
 function showToast(msg,type='',title='') {
   const t=document.getElementById('toast'); if(!t) return;
   clearTimeout(toastTimer);
-  const kind=type||'info';
-  const defaults={success:'Success',error:'Action required',warning:'Warning',info:'Information'};
+  const kind=['success','error','warning','info'].includes(type) ? type : 'info';
+  const defaults={success:'Saved successfully',error:'Action required',warning:'Warning',info:'Information'};
   const icons={success:'ti-circle-check',error:'ti-alert-circle',warning:'ti-alert-triangle',info:'ti-info-circle'};
+  const durations={success:3200,info:4500,warning:6500,error:0};
+  const duration=durations[kind];
+  const safeTitle=esc(String(title||defaults[kind]||'Information'));
+  const safeMsg=esc(String(msg??''));
   t.className='toast '+kind;
-  t.innerHTML=`<button class="toast-close" aria-label="Close" onclick="hideToast()">×</button><div class="toast-inner"><span class="toast-icon"><i class="ti ${icons[kind]||icons.info}"></i></span><div><div class="toast-title">${title||defaults[kind]||'Information'}</div><div class="toast-message">${msg}</div></div></div>`;
+  t.style.setProperty('--toast-duration',duration+'ms');
+  t.innerHTML=`<button class="toast-close" type="button" aria-label="Close notification" onclick="hideToast()">×</button><div class="toast-inner"><span class="toast-icon" aria-hidden="true"><i class="ti ${icons[kind]}\"></i></span><div class="toast-content"><div class="toast-title">${safeTitle}</div>${safeMsg?`<div class="toast-message">${safeMsg}</div>`:''}</div></div>${duration?'<div class="toast-progress" aria-hidden="true"></div>':''}`;
+  // Reflow ensures the progress animation restarts even when notifications arrive back-to-back.
+  void t.offsetWidth;
   requestAnimationFrame(()=>t.classList.add('show'));
-  toastTimer=setTimeout(()=>t.classList.remove('show'),3800);
+  if(duration) toastTimer=setTimeout(()=>t.classList.remove('show'),duration);
 }
 
 async function resetAndReload() {
@@ -8523,7 +9164,7 @@ function getSOStatus(so) {
   deliveries.filter(d=>d.customerConfirmed).forEach(d => {
     (d.items||[]).forEach(it => {
       const idx = it.origIdx !== undefined ? it.origIdx : it.soIdx;
-      confirmedQty[idx] = (confirmedQty[idx]||0) + (parseFloat(it.qty)||0);
+      confirmedQty[idx] = (confirmedQty[idx]||0) + deliveryAcceptedQty(d,it);
     });
   });
   const totalOrdered   = (so.items||[]).reduce((s,it,i)=>s+(parseFloat(it.qty)||0),0);
@@ -8763,6 +9404,7 @@ function renderSOPage() {
   else if(sortValue==='amount-desc') list.sort((a,b)=>(parseFloat(b.total)||0)-(parseFloat(a.total)||0));
   else if(sortValue==='amount-asc') list.sort((a,b)=>(parseFloat(a.total)||0)-(parseFloat(b.total)||0));
   else list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  list=sortRegisterRows(list,'so',{no:s=>s.soNo,date:s=>s.date,customer:s=>s.customer,po:s=>s.poNo,quotation:s=>quotations.find(q=>q.id===s.quotationId)?.qno||'',items:s=>(s.items||[]).length,amount:s=>parseFloat(s.total)||0,status:s=>s._status||getSOStatus(s)});
 
   const countEl=document.getElementById('so-register-count');
   if(countEl)countEl.textContent=`${list.length} order${list.length===1?'':'s'}`;
@@ -8796,7 +9438,7 @@ function renderSOPage() {
         <td style="${rowStyle}">${escapeHtml(so.soNo||'—')}</td>
         <td style="${rowStyle}">${fmtDate(so.date)}</td>
         <td style="${rowStyle}">${escapeHtml(so.customer||'—')}</td>
-        <td style="${rowStyle}">${escapeHtml(so.poNo||'—')}</td>
+        <td style="${rowStyle}"><span class="so-register-po">${escapeHtml(so.poNo||'—')}${so.poAttachment?.url?'<i class="ti ti-paperclip so-register-attachment" title="Customer PO attached" aria-label="Customer PO attached"></i>':''}</span></td>
         <td style="${rowStyle}">${q?escapeHtml(q.qno):'—'}</td>
         <td class="center" style="${rowStyle}">${(so.items||[]).length}</td>
         <td class="right" style="${rowStyle}">${formatNumber(parseFloat(so.total)||0,2)}</td>
@@ -8812,78 +9454,57 @@ function renderSOPage() {
 function goSOPage(p){soPage=p;renderSOPage();}
 
 /* ── Open Create SO modal ── */
-function openCreateSO(quotationId) {
-  const q = quotations.find(x=>x.id===quotationId); if (!q) return;
-  const existingSO = getSalesOrderForQuotation(quotationId);
-  if (existingSO) {
-    showToast(`Sales Order ${existingSO.soNo} already exists for this quotation.`, 'info', 'Sales Order Already Created');
-    openSalesOrderDocument(existingSO.id);
-    return;
-  }
-
-  // Find already-ordered quantities for this quotation
-  const linkedSOs = salesOrders.filter(s=>s.quotationId===quotationId);
-  const orderedQty = {}; // itemIndex → total qty already ordered
-  linkedSOs.forEach(so => {
-    (so.items||[]).forEach(it => {
-      orderedQty[it.origIdx] = roundQtyForUom((orderedQty[it.origIdx]||0) + (parseFloat(it.qty)||0), it.uom);
-    });
-  });
-
-  // Build remaining items
-  const remaining = (q.items||[]).map((it,i) => {
-    const ordered = orderedQty[i]||0;
-    const rem = roundQtyForUom((parseFloat(it.qty)||0) - ordered, it.uom);
-    return {...it, origIdx:i, origQty:parseFloat(it.qty)||0, orderedQty:ordered, remainingQty:rem};
-  }).filter(it => it.remainingQty > 0);
-
-  if (!remaining.length) {
-    showToast('All items from this quotation have already been ordered.','error');
-    return;
-  }
-
-  document.getElementById('so-create-title').textContent = 'Create Sales Order — ' + q.qno;
-  document.getElementById('so-create-modal')._editingSOId = null;
-  document.getElementById('so-save-btn-text').textContent = 'Create Sales Order';
-  document.getElementById('so-no').value = nextSONo();
-  document.getElementById('so-date').value = new Date().toISOString().split('T')[0];
-  document.getElementById('so-po-no').value = '';
-  document.getElementById('so-customer').value = q.company;
-  document.getElementById('so-quote-ref').value = q.qno + ' — ' + fmtDate(q.date);
-  document.getElementById('so-notes').value = '';
-  document.getElementById('so-summary').style.display = 'none';
-
-  // Store quotation context
-  document.getElementById('so-create-modal')._quotationId = quotationId;
-  document.getElementById('so-create-modal')._remainingItems = remaining;
-  document.getElementById('so-create-modal')._vatRate = vatRate();
-
-  // Render item list
-  document.getElementById('so-items-list').innerHTML = remaining.map((it,i) => `
-    <div class="so-item-row">
-      <input type="checkbox" class="so-item-check" id="soc-chk-${i}" checked onchange="soCalcSummary()">
-      <div style="flex:1;font-size:12px">
-        <div style="font-weight:500">${it.desc||'—'}</div>
-        ${it.brand||it.model ? `<div style="font-size:11px;color:var(--gray)">${[it.brand,it.model].filter(Boolean).join(' / ')}</div>` : ''}
-      </div>
-      <div style="text-align:right;min-width:80px">
-        <div style="font-size:11px;color:var(--gray)">Unit price</div>
-        <div style="font-weight:600">${fmt(parseFloat(it.up)||0)}</div>
-      </div>
-      <div style="text-align:right;min-width:100px">
-        <div style="font-size:11px;color:var(--gray)">Qty <span class="so-qty-max">(max ${it.remainingQty} ${it.uom||''})</span></div>
-        <input type="number" class="so-qty-input" id="soc-qty-${i}" value="${it.remainingQty}" min="${qtyMin(it.uom)}" max="${it.remainingQty}" step="${qtyStep(it.uom)}" oninput="soCalcSummary()">
-      </div>
-      <div style="text-align:right;min-width:100px">
-        <div style="font-size:11px;color:var(--gray)">Total</div>
-        <div style="font-weight:600;color:var(--blue)" id="soc-tot-${i}">—</div>
-      </div>
-    </div>`).join('');
-
-  soCalcSummary();
-  openModalWithSize('so-create-modal');
+function getQuotationSOProgress(quotationId, excludeSOId='') {
+  const q=quotations.find(x=>x.id===quotationId);
+  if(!q) return {remaining:[],complete:true,linked:[]};
+  const linked=salesOrders.filter(so=>so.quotationId===quotationId && so.id!==excludeSOId);
+  const ordered={};
+  linked.forEach(so=>(so.items||[]).forEach(it=>{ const idx=Number(it.origIdx); ordered[idx]=roundQtyForUom((ordered[idx]||0)+(parseFloat(it.qty)||0),it.uom); }));
+  const remaining=(q.items||[]).map((it,i)=>{const quoted=parseFloat(it.qty)||0, prev=ordered[i]||0, rem=roundQtyForUom(Math.max(0,quoted-prev),it.uom);return {...it,origIdx:i,origQty:quoted,orderedQty:prev,remainingQty:rem};}).filter(it=>it.remainingQty>0);
+  return {remaining,complete:remaining.length===0,linked};
 }
-
+function soFormatFileSize(bytes){if(!Number.isFinite(bytes)||bytes<=0)return '';if(bytes<1024)return bytes+' B';if(bytes<1024*1024)return (bytes/1024).toFixed(bytes<10240?1:0)+' KB';return (bytes/(1024*1024)).toFixed(1)+' MB';}
+function soAttachmentMeta(att){if(!att)return '';const bits=[];if(att.type)bits.push(String(att.type).split('/').pop().toUpperCase());if(att.size)bits.push(soFormatFileSize(Number(att.size)));return bits.join(' · ')||'Customer PO attachment';}
+function soViewPOAttachment(soId){const so=salesOrders.find(x=>x.id===soId),url=so?.poAttachment?.url;if(!url){showToast('No Customer PO attachment is available for this Sales Order.','info','No Attachment');return;}const win=window.open(url,'_blank','noopener,noreferrer');if(!win)showToast('Your browser blocked the attachment preview. Allow pop-ups or use Download.','warning','Preview Blocked');}
+function soDownloadPOAttachment(soId){const so=salesOrders.find(x=>x.id===soId),att=so?.poAttachment;if(!att?.url){showToast('No Customer PO attachment is available for this Sales Order.','info','No Attachment');return;}const a=document.createElement('a');a.href=att.url;a.download=att.name||'Customer-PO';a.target='_blank';a.rel='noopener noreferrer';document.body.appendChild(a);a.click();a.remove();}
+function soRenderPOAttachment(file=null,existing=null){
+  const empty=document.getElementById('so-po-empty'),selected=document.getElementById('so-po-selected'),name=document.getElementById('so-po-file-name'),meta=document.getElementById('so-po-file-meta');
+  const has=!!(file||existing);if(empty)empty.style.display=has?'none':'flex';if(selected)selected.style.display=has?'flex':'none';
+  if(!has)return;if(name)name.textContent=file?.name||existing?.name||'Customer PO attachment';
+  if(meta)meta.textContent=file?(soFormatFileSize(file.size)+(file.type?' · '+file.type.split('/').pop().toUpperCase():'')):(existing?.url?'Attached to this Sales Order':'Existing attachment');
+}
+function soPreparePOFilePicker(event){event?.stopPropagation();const input=document.getElementById('so-po-file');if(input)input.value='';}
+function soBrowsePOFile(event){event?.preventDefault();event?.stopPropagation();const input=document.getElementById('so-po-file');if(!input)return;input.value='';input.click();}
+function soAttachmentAreaClick(event){if(event?.target?.closest('label,button,a'))return;soBrowsePOFile(event);}
+function soReplacePOFile(event){soBrowsePOFile(event);}
+function soPOAttachmentKeydown(event){if(event.key==='Enter'||event.key===' '){event.preventDefault();soBrowsePOFile(event);}}
+function soPOFileChanged(input){const f=input?.files?.[0]||null;const modal=document.getElementById('so-create-modal');if(modal)modal._poAttachmentRemoved=false;soRenderPOAttachment(f,modal?modal._poAttachment:null);}
+function soRemovePOFile(event){event?.preventDefault();event?.stopPropagation();const fi=document.getElementById('so-po-file');if(fi)fi.value='';const modal=document.getElementById('so-create-modal');if(modal){modal._poAttachment=null;modal._poAttachmentRemoved=true;}soRenderPOAttachment();}
+function renderSOCreateItems(items,currentByOrig={}){
+  document.getElementById('so-items-list').innerHTML=items.map((it,i)=>{const current=currentByOrig[it.origIdx]||0;const checked=current>0||!Object.keys(currentByOrig).length;const qty=current>0?current:it.remainingQty;const after=Math.max(0,it.remainingQty-qty);return `
+    <div class="so-item-row">
+      <input type="checkbox" class="so-item-check" id="soc-chk-${i}" ${checked?'checked':''} onchange="soCalcSummary()">
+      <div><div style="font-weight:600;color:#0f172a">${escapeHtml(it.desc||'—')}</div>${it.brand||it.model?`<div style="font-size:11px;color:var(--gray)">${escapeHtml([it.brand,it.model].filter(Boolean).join(' / '))}</div>`:''}</div>
+      <div class="so-num">${formatQtyForUom(it.origQty,it.uom)}</div><div class="so-num so-muted">${formatQtyForUom(it.orderedQty||0,it.uom)}</div>
+      <div><input type="number" class="so-qty-input" id="soc-qty-${i}" value="${qty}" min="${qtyMin(it.uom)}" max="${it.remainingQty}" step="${qtyStep(it.uom)}" oninput="soCalcSummary()"></div>
+      <div class="so-num so-remain" id="soc-rem-${i}">${formatQtyForUom(after,it.uom)}</div><div>${escapeHtml(it.uom||'—')}</div>
+      <div class="so-num">${documentMoney('salesOrder','unitPrice',parseFloat(it.up)||0)}</div><div class="so-num" style="font-weight:600;color:var(--blue)" id="soc-tot-${i}">—</div>
+    </div>`}).join('');
+}
+function openCreateSO(quotationId) {
+  const q=quotations.find(x=>x.id===quotationId); if(!q)return;
+  const progress=getQuotationSOProgress(quotationId);
+  if(progress.complete){showToast('All quoted quantities have already been ordered.','info','Quotation Fully Ordered');return;}
+  const modal=document.getElementById('so-create-modal');
+  modal._editingSOId=null;modal._quotationId=quotationId;modal._remainingItems=progress.remaining;modal._vatRate=vatRate(q);modal._poAttachment=null;modal._saveOperationId=(globalThis.crypto?.randomUUID?.()||('so-'+Date.now()+'-'+Math.random().toString(36).slice(2)));
+  document.getElementById('so-create-title').textContent='Create Sales Order';
+  document.getElementById('so-create-subtitle').textContent=`Create from ${q.qno} · ${progress.linked.length?progress.linked.length+' previous order'+(progress.linked.length===1?'':'s'):'first order'}`;
+  document.getElementById('so-save-btn-text').textContent='Save Sales Order';document.getElementById('so-no').value='Auto on Save';document.getElementById('so-date').value=new Date().toISOString().split('T')[0];
+  ['so-po-no','so-po-date','so-project','so-contact','so-expected-delivery','so-notes','so-internal-note'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  document.getElementById('so-customer').value=q.company||'';document.getElementById('so-quote-ref').value=q.qno+' — '+fmtDate(q.date);document.getElementById('so-payment').value=q.payment||settings.payment||'';document.getElementById('so-delivery').value=q.delivery||settings.delivery||'';
+  const fi=document.getElementById('so-po-file');if(fi)fi.value='';modal._poAttachment=null;modal._poAttachmentRemoved=false;soRenderPOAttachment();clearFieldValidation(document.getElementById('so-po-no'));
+  renderSOCreateItems(progress.remaining);soCalcSummary();openModalWithSize('so-create-modal');
+}
 function soSelectAll(check) {
   const modal = document.getElementById('so-create-modal');
   const items = modal._remainingItems||[];
@@ -8892,40 +9513,14 @@ function soSelectAll(check) {
 }
 
 function soCalcSummary() {
-  const modal = document.getElementById('so-create-modal');
-  const items = modal._remainingItems||[];
-  const vr = modal._vatRate||0.15;
-  let sub = 0;
-  items.forEach((it,i) => {
-    const chk = document.getElementById('soc-chk-'+i);
-    const qty = parseFloat(document.getElementById('soc-qty-'+i)?.value)||0;
-    const tot = chk?.checked ? qty * (parseFloat(it.up)||0) : 0;
-    sub += tot;
-    const totEl = document.getElementById('soc-tot-'+i);
-    if (totEl) totEl.textContent = chk?.checked ? documentMoney('salesOrder','lineAmount',tot) : '—';
-  });
-  const vat = Math.round(sub * vr * 100) / 100;
-  const total = sub + vat;
-  document.getElementById('so-sum-sub').textContent = documentMoney('salesOrder','summary',sub);
-  document.getElementById('so-sum-vat').textContent = documentMoney('salesOrder','summary',vat);
-  document.getElementById('so-sum-vat-label').textContent = 'VAT (' + Math.round(vr*100) + '%)';
-  document.getElementById('so-sum-total').textContent = documentMoney('salesOrder','grandTotal',total);
-  document.getElementById('so-summary').style.display = sub > 0 ? 'block' : 'none';
-
-  // Remaining note
-  const remNote = document.getElementById('so-remaining-note');
-  if (remNote) {
-    const qId = modal._quotationId;
-    const q = quotations.find(x=>x.id===qId);
-    if (q) {
-      const fullTotal = calcQuote(q).net;
-      const diff = fullTotal - total;
-      remNote.textContent = diff > 0.01 ? `⚡ ${documentMoney('salesOrder','summary',diff)} remaining from full quotation — can be ordered in a future PO.` : '';
-    }
-  }
+  const modal=document.getElementById('so-create-modal'),items=modal._remainingItems||[],vr=modal._vatRate||0.15;
+  let sub=0,partial=false;
+  items.forEach((it,i)=>{const chk=document.getElementById('soc-chk-'+i);let qty=roundQtyForUom(document.getElementById('soc-qty-'+i)?.value,it.uom);if(qty>it.remainingQty)qty=it.remainingQty;if(qty<0)qty=0;const selected=!!chk?.checked;const tot=selected?qty*(parseFloat(it.up)||0):0;sub+=tot;const after=selected?Math.max(0,it.remainingQty-qty):it.remainingQty;if(after>0)partial=true;const t=document.getElementById('soc-tot-'+i);if(t)t.textContent=selected?documentMoney('salesOrder','lineAmount',tot):'—';const r=document.getElementById('soc-rem-'+i);if(r)r.textContent=formatQtyForUom(after,it.uom);});
+  const vat=Math.round(sub*vr*100)/100,total=sub+vat,q=quotations.find(x=>x.id===modal._quotationId),quoteValue=q?calcQuote(q).net:0;
+  document.getElementById('so-sum-quote').textContent=documentMoney('salesOrder','summary',quoteValue);document.getElementById('so-sum-order').textContent=documentMoney('salesOrder','summary',total);document.getElementById('so-sum-sub').textContent=documentMoney('salesOrder','summary',sub);document.getElementById('so-sum-vat').textContent=documentMoney('salesOrder','summary',vat);document.getElementById('so-sum-vat-label').textContent='VAT ('+Math.round(vr*100)+'%)';document.getElementById('so-sum-total').textContent=documentMoney('salesOrder','grandTotal',total);
+  const note=document.getElementById('so-remaining-note');if(note){note.style.display=partial?'block':'none';note.innerHTML=partial?'<strong>Partial order</strong> — quantities remaining after this PO can be converted to another Sales Order later.':'';}
 }
-
-async function saveSalesOrder() {
+async function _saveSalesOrderCore() {
   const modal = document.getElementById('so-create-modal');
   const poNo = document.getElementById('so-po-no').value.trim();
   if (!poNo) {
@@ -8942,27 +9537,46 @@ async function saveSalesOrder() {
   const vr = modal._vatRate||0.15;
   const selectedItems = [];
   let sub = 0;
+  let invalidQty = false;
 
   items.forEach((it,i) => {
     const chk = document.getElementById('soc-chk-'+i);
     const qty = roundQtyForUom(document.getElementById('soc-qty-'+i)?.value, it.uom);
+    if (chk?.checked && qty > it.remainingQty) { if(!invalidQty) showValidationDialog('Quantity Exceeds Available', `The ordered quantity for ${it.desc||'this item'} cannot exceed ${formatQtyForUom(it.remainingQty,it.uom)} ${it.uom||''}.`, 'soc-qty-'+i, 'Reduce the ordered quantity'); invalidQty=true; return; }
     if (chk?.checked && qty > 0) {
       selectedItems.push({...it, qty});
       sub += qty * (parseFloat(it.up)||0);
     }
   });
 
+  if (invalidQty) return;
   if (!selectedItems.length) { showToast('Please select at least one item','error'); return; }
 
   const vat = Math.round(sub * vr * 100) / 100;
   const total = sub + vat;
 
+  const editingId = modal._editingSOId;
+  const existingSO = editingId ? salesOrders.find(x=>x.id===editingId) : null;
+  const soNumber = existingSO?.soNo || await allocateDocumentNumber('salesOrder',new Date((document.getElementById('so-date').value||new Date().toISOString().slice(0,10))+'T00:00:00'));
+  let poAttachment=modal._poAttachmentRemoved?null:(modal._poAttachment||existingSO?.poAttachment||null);
+  const poFile=document.getElementById('so-po-file')?.files?.[0];
+  if(poFile&&window.FB?.uploadFile){try{const url=await window.FB.uploadFile('sales-orders/'+soNumber+'/customer-po',poFile);if(url)poAttachment={name:poFile.name,url,size:poFile.size||0,type:poFile.type||''};}catch(e){showToast('Customer PO attachment could not be uploaded. Please try again.','error','Upload Failed');return;}}
   const so = {
-    id:          'SO-' + Date.now(),
-    soNo:        document.getElementById('so-no').value,
+    id:          existingSO?.id || ('SO-' + Date.now()),
+    creationOperationId: existingSO?.creationOperationId || modal._saveOperationId || '',
+    soNo:        soNumber,
     date:        document.getElementById('so-date').value,
     poNo,
+    poDate:      document.getElementById('so-po-date')?.value||'',
+    project:     document.getElementById('so-project')?.value.trim()||'',
+    contact:     document.getElementById('so-contact')?.value.trim()||'',
+    expectedDelivery: document.getElementById('so-expected-delivery')?.value||'',
+    payment:     document.getElementById('so-payment')?.value||'',
+    delivery:    document.getElementById('so-delivery')?.value||'',
+    internalNote:document.getElementById('so-internal-note')?.value.trim()||'',
+    poAttachment,
     customer:    document.getElementById('so-customer').value,
+    custId:      (()=>{const q=quotations.find(x=>x.id===modal._quotationId);return q?.custId||findUniqueMasterByName(customers,document.getElementById('so-customer').value)?.id||'';})(),
     quotationId: modal._quotationId,
     notes:       document.getElementById('so-notes').value.trim(),
     items:       selectedItems,
@@ -8976,15 +9590,6 @@ async function saveSalesOrder() {
     created:     new Date().toISOString(),
   };
 
-  const editingId = modal._editingSOId;
-  if (!editingId) {
-    const duplicateSO = getSalesOrderForQuotation(modal._quotationId);
-    if (duplicateSO) {
-      closeModal('so-create-modal');
-      showValidationDialog('Sales Order Already Created', `This quotation is already linked to Sales Order ${duplicateSO.soNo}. Duplicate creation is not allowed.`, '', '');
-      return;
-    }
-  }
   if (editingId) {
     const idx = salesOrders.findIndex(x=>x.id===editingId);
     if (idx<0) return;
@@ -9014,6 +9619,51 @@ async function saveSalesOrder() {
   renderSOPage();
   showToast(editingId ? `Sales Order ${so.soNo} has been updated successfully.` : `Sales Order ${so.soNo} has been created successfully.`, 'success', editingId?'Sales Order Updated':'Sales Order Created');
   viewSO(so.id);
+  return so;
+}
+
+/* ── v114: protected transactional document save ──
+   Global standard for create/update actions that may wait on Firebase, uploads,
+   numbering, or rendering. The first click owns the operation until it settles.
+   Repeated clicks are ignored, and the blocking overlay is operation-driven. */
+const _documentSaveLocks=new Set();
+async function runProtectedDocumentSave({key,message,buttonId,buttonTextId,busyText='Saving…',action,ready}={}){
+  if(!key||typeof action!=='function')return null;
+  if(_documentSaveLocks.has(key))return null;
+  _documentSaveLocks.add(key);
+  const btn=buttonId?document.getElementById(buttonId):null;
+  const text=buttonTextId?document.getElementById(buttonTextId):null;
+  const originalText=text?.textContent||'';
+  if(btn){btn.disabled=true;btn.setAttribute('aria-busy','true');}
+  if(text)text.textContent=busyText;
+  try{
+    return await runScreenTransition({message:message||busyText,immediate:true,action,ready,endImmediate:true,errorMessage:'The save could not be completed. Please try again.'});
+  }finally{
+    _documentSaveLocks.delete(key);
+    if(btn){btn.disabled=false;btn.removeAttribute('aria-busy');}
+    if(text&&document.body.contains(text))text.textContent=originalText;
+  }
+}
+window.BizCoreDocumentSave={run:runProtectedDocumentSave,isBusy:key=>_documentSaveLocks.has(key)};
+
+async function saveSalesOrder(){
+  const modal=document.getElementById('so-create-modal');
+  if(!modal)return;
+  const editingId=modal._editingSOId||'';
+  const operationId=editingId?('edit:'+editingId):(modal._saveOperationId||('create:'+modal._quotationId));
+  // Idempotency safety: if this exact creation operation already completed,
+  // never create a second SO. Re-open the document that was already created.
+  if(!editingId&&modal._saveOperationId){
+    const already=salesOrders.find(x=>x.creationOperationId===modal._saveOperationId);
+    if(already){closeModal('so-create-modal');viewSO(already.id);showToast(`Sales Order ${already.soNo} was already created.`,'info','Already Saved');return already;}
+  }
+  return runProtectedDocumentSave({
+    key:'salesOrder:'+operationId,
+    message:editingId?'Saving Sales Order changes…':'Saving Sales Order…',
+    buttonId:'so-save-btn',buttonTextId:'so-save-btn-text',busyText:editingId?'Saving Changes…':'Saving Sales Order…',
+    action:()=>_saveSalesOrderCore(),
+    ready:(so)=>!so||isModalOpen('so-view-modal')
+  });
 }
 
 /* ── Edit / delete Sales Order ── */
@@ -9021,39 +9671,14 @@ function soHasDownstreamActivity(so){
   return !!((so.deliveries||[]).length || (so.invoices||[]).length || (so.payments||[]).length);
 }
 function openEditSO(soId){
-  const so=salesOrders.find(x=>x.id===soId); if(!so) return;
-  if(soHasDownstreamActivity(so)){
-    showValidationDialog('Editing Restricted','This Sales Order already has delivery, invoice, or payment activity. To protect document history, it cannot be edited.','','');
-    return;
-  }
-  const q=quotations.find(x=>x.id===so.quotationId); if(!q){showToast('The linked quotation could not be found.','error');return;}
-  const currentByOrig={};
-  (so.items||[]).forEach(it=>{ currentByOrig[it.origIdx]=(currentByOrig[it.origIdx]||0)+(parseFloat(it.qty)||0); });
-  const usedByOthers={};
-  salesOrders.filter(x=>x.quotationId===so.quotationId&&x.id!==so.id).forEach(order=>{
-    (order.items||[]).forEach(it=>{usedByOthers[it.origIdx]=(usedByOthers[it.origIdx]||0)+(parseFloat(it.qty)||0);});
-  });
-  const available=(q.items||[]).map((it,i)=>{
-    const max=roundQtyForUom(Math.max(0,(parseFloat(it.qty)||0)-(usedByOthers[i]||0)),it.uom);
-    return {...it,origIdx:i,origQty:parseFloat(it.qty)||0,orderedQty:usedByOthers[i]||0,remainingQty:max,currentQty:currentByOrig[i]||0};
-  }).filter(it=>it.remainingQty>0);
-  const modal=document.getElementById('so-create-modal');
-  modal._editingSOId=so.id; modal._quotationId=so.quotationId; modal._remainingItems=available; modal._vatRate=so.vatRate||vatRate();
-  document.getElementById('so-create-title').textContent='Edit Sales Order — '+so.soNo;
-  document.getElementById('so-save-btn-text').textContent='Save Changes';
-  document.getElementById('so-no').value=so.soNo;
-  document.getElementById('so-date').value=so.date;
-  document.getElementById('so-po-no').value=so.poNo||'';
-  document.getElementById('so-customer').value=so.customer;
-  document.getElementById('so-quote-ref').value=q.qno+' — '+fmtDate(q.date);
-  document.getElementById('so-notes').value=so.notes||'';
-  clearFieldValidation(document.getElementById('so-po-no'));
-  document.getElementById('so-items-list').innerHTML=available.map((it,i)=>{
-    const checked=it.currentQty>0;
-    const qty=checked?it.currentQty:it.remainingQty;
-    return `<div class="so-item-row"><input type="checkbox" class="so-item-check" id="soc-chk-${i}" ${checked?'checked':''} onchange="soCalcSummary()"><div style="flex:1;font-size:12px"><div style="font-weight:500">${it.desc||'—'}</div>${it.brand||it.model?`<div style="font-size:11px;color:var(--gray)">${[it.brand,it.model].filter(Boolean).join(' / ')}</div>`:''}</div><div style="text-align:right;min-width:80px"><div style="font-size:11px;color:var(--gray)">Unit price</div><div style="font-weight:600">${fmt(parseFloat(it.up)||0)}</div></div><div style="text-align:right;min-width:100px"><div style="font-size:11px;color:var(--gray)">Qty <span class="so-qty-max">(max ${it.remainingQty} ${it.uom||''})</span></div><input type="number" class="so-qty-input" id="soc-qty-${i}" value="${qty}" min="${qtyMin(it.uom)}" max="${it.remainingQty}" step="${qtyStep(it.uom)}" oninput="soCalcSummary()"></div><div style="text-align:right;min-width:100px"><div style="font-size:11px;color:var(--gray)">Total</div><div style="font-weight:600;color:var(--blue)" id="soc-tot-${i}">—</div></div></div>`;
-  }).join('');
-  closeModal('so-view-modal'); soCalcSummary(); openModalWithSize('so-create-modal');
+  const so=salesOrders.find(x=>x.id===soId);if(!so)return;if(soHasDownstreamActivity(so)){showValidationDialog('Editing Restricted','This Sales Order already has delivery, invoice, or payment activity. To protect document history, it cannot be edited.','','');return;}
+  const q=quotations.find(x=>x.id===so.quotationId);if(!q){showToast('The linked quotation could not be found.','error');return;}
+  const currentByOrig={};(so.items||[]).forEach(it=>currentByOrig[it.origIdx]=(currentByOrig[it.origIdx]||0)+(parseFloat(it.qty)||0));
+  const progress=getQuotationSOProgress(so.quotationId,so.id),available=progress.remaining;
+  const modal=document.getElementById('so-create-modal');modal._editingSOId=so.id;modal._saveOperationId=so.creationOperationId||'';modal._quotationId=so.quotationId;modal._remainingItems=available;modal._vatRate=so.vatRate||vatRate(q);
+  document.getElementById('so-create-title').textContent='Edit Sales Order';document.getElementById('so-create-subtitle').textContent=so.soNo+' · linked to '+q.qno;document.getElementById('so-save-btn-text').textContent='Save Changes';
+  const vals={'so-no':so.soNo,'so-date':so.date,'so-po-no':so.poNo||'','so-po-date':so.poDate||'','so-project':so.project||'','so-contact':so.contact||'','so-customer':so.customer,'so-quote-ref':q.qno+' — '+fmtDate(q.date),'so-payment':so.payment||q.payment||'','so-delivery':so.delivery||q.delivery||'','so-expected-delivery':so.expectedDelivery||'','so-notes':so.notes||'','so-internal-note':so.internalNote||''};Object.entries(vals).forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.value=v;});
+  const fi=document.getElementById('so-po-file');if(fi)fi.value='';modal._poAttachment=so.poAttachment||null;modal._poAttachmentRemoved=false;soRenderPOAttachment(null,modal._poAttachment);clearFieldValidation(document.getElementById('so-po-no'));renderSOCreateItems(available,currentByOrig);closeModal('so-view-modal');soCalcSummary();openModalWithSize('so-create-modal');
 }
 function deleteSalesOrder(soId){
   const so=salesOrders.find(x=>x.id===soId); if(!so) return;
@@ -9106,64 +9731,77 @@ function viewSO(soId) {
   const totalPaid = (so.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
   const outstanding = so.total - totalPaid;
 
-  // Items table
-  const itemsHtml = (so.items||[]).map((it,i)=>`
-    <tr style="background:${i%2===0?'#F8FAFC':'#fff'}">
-      <td style="padding:7px 10px">${String(i+1).padStart(2,'0')}</td>
-      <td style="padding:7px 10px"><div style="font-weight:500">${it.desc||'—'}</div>${it.brand||it.model?`<div style="font-size:11px;color:var(--gray)">${[it.brand,it.model].filter(Boolean).join(' / ')}</div>`:''}</td>
-      <td style="padding:7px 10px;text-align:center">${it.qty}</td>
-      <td style="padding:7px 10px;text-align:center">${it.uom||'—'}</td>
-      <td style="padding:7px 10px;text-align:right">${fmt(parseFloat(it.up)||0)}</td>
-      <td style="padding:7px 10px;text-align:right;font-weight:600">${fmt((parseFloat(it.qty)||0)*(parseFloat(it.up)||0))}</td>
-    </tr>`).join('');
-
-  // Per-item delivery progress: confirmed-delivered qty, in-transit qty, pending qty
+  // Integrated order-item + delivery progress data
   const confirmedQtyMap = {};
   const transitQtyMap = {};
   (so.deliveries||[]).forEach(d => {
     (d.items||[]).forEach(it => {
       const idx = it.origIdx !== undefined ? it.origIdx : it.soIdx;
-      if (d.customerConfirmed) confirmedQtyMap[idx] = roundQty((confirmedQtyMap[idx]||0) + (parseFloat(it.qty)||0));
+      if (d.customerConfirmed) confirmedQtyMap[idx] = roundQty((confirmedQtyMap[idx]||0) + deliveryAcceptedQty(d,it));
       else transitQtyMap[idx] = roundQty((transitQtyMap[idx]||0) + (parseFloat(it.qty)||0));
     });
   });
-  const hasAnyDeliveryActivity = (so.deliveries||[]).length > 0;
-  const deliveryProgressHtml = (so.items||[]).map((it,i) => {
-    const ordered   = parseFloat(it.qty)||0;
+
+  // Compact overall delivery summary. Progress is the average fulfilment % across
+  // order lines so mixed UOMs (PCS / MTR / BOX etc.) are never added together.
+  const soItemProgress = (so.items||[]).map((it,i)=>{
+    const ordered = parseFloat(it.qty)||0;
     const confirmed = confirmedQtyMap[i]||0;
-    const transit   = transitQtyMap[i]||0;
-    const pending   = roundQty(Math.max(0, ordered - confirmed - transit));
-    const pct       = ordered>0 ? Math.round((confirmed/ordered)*100) : 0;
-    let rowState, rowIcon, rowColor;
-    if (pending<=0.001 && transit<=0.001) { rowState='Fully delivered'; rowIcon='ti-circle-check'; rowColor='var(--green)'; }
-    else if (confirmed>0 || transit>0)    { rowState='Partial'; rowIcon='ti-package'; rowColor='#b45309'; }
-    else                                   { rowState='Pending'; rowIcon='ti-clock'; rowColor='var(--gray)'; }
-    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);font-size:12px">
-      <i class="ti ${rowIcon}" style="color:${rowColor};font-size:16px;flex-shrink:0"></i>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${it.desc||'—'}</div>
-        <div style="height:5px;background:#eee;border-radius:3px;margin-top:5px;overflow:hidden">
-          <div style="height:100%;width:${pct}%;background:var(--green);border-radius:3px"></div>
-        </div>
-      </div>
-      <div style="text-align:right;min-width:74px">
-        <div style="font-weight:700;color:var(--green)">${confirmed} ${it.uom||''}</div>
-        <div style="font-size:10px;color:var(--gray)">delivered</div>
-      </div>
-      ${transit>0?`<div style="text-align:right;min-width:74px"><div style="font-weight:700;color:#b45309">${transit} ${it.uom||''}</div><div style="font-size:10px;color:var(--gray)">in transit</div></div>`:''}
-      <div style="text-align:right;min-width:74px">
-        <div style="font-weight:700;color:${pending>0?'var(--red)':'var(--green)'}">${pending>0?pending+' '+(it.uom||''):'—'}</div>
-        <div style="font-size:10px;color:var(--gray)">pending</div>
-      </div>
-    </div>`;
+    const transit = transitQtyMap[i]||0;
+    const fulfilled = Math.min(ordered, confirmed + transit);
+    const remaining = roundQty(Math.max(0, ordered - fulfilled));
+    const pct = ordered > 0 ? Math.min(100, (fulfilled / ordered) * 100) : 100;
+    return {ordered, confirmed, transit, remaining, pct};
+  });
+  const totalSOItems = soItemProgress.length;
+  const fullyDeliveredItems = soItemProgress.filter(x=>x.remaining<=0.001 && x.transit<=0.001).length;
+  const remainingItemCount = soItemProgress.filter(x=>x.remaining>0.001 || x.transit>0.001).length;
+  const deliveryProgressPct = totalSOItems
+    ? Math.round(soItemProgress.reduce((sum,x)=>sum+x.pct,0)/totalSOItems)
+    : 0;
+  const deliveryProgressSummary = totalSOItems ? `
+    <div class="so-delivery-summary">
+      <span>Delivery Progress: <strong>${deliveryProgressPct}%</strong></span>
+      <span class="so-delivery-summary-sep">·</span>
+      <span>${fullyDeliveredItems} of ${totalSOItems} items fully delivered</span>
+      <span class="so-delivery-summary-sep">·</span>
+      ${remainingItemCount > 0
+        ? `<span class="so-delivery-remaining-alert">${remainingItemCount} ${remainingItemCount===1?'item':'items'} remaining</span>`
+        : '<span class="so-delivery-complete-text"><i class="ti ti-circle-check"></i> Fully Delivered</span>'}
+    </div>` : '';
+
+  const itemsHtml = (so.items||[]).map((it,i)=>{
+    const ordered = parseFloat(it.qty)||0;
+    const confirmed = confirmedQtyMap[i]||0;
+    const transit = transitQtyMap[i]||0;
+    const remaining = roundQty(Math.max(0, ordered - confirmed - transit));
+    const deliveryState = remaining<=0.001 && transit<=0.001
+      ? '<span class="so-delivery-state complete"><i class="ti ti-circle-check"></i>Delivered</span>'
+      : (confirmed>0 || transit>0)
+        ? '<span class="so-delivery-state partial"><i class="ti ti-package"></i>Partial</span>'
+        : '<span class="so-delivery-state pending"><i class="ti ti-clock"></i>Pending</span>';
+    return `
+    <tr style="background:${i%2===0?'#F8FAFC':'#fff'}">
+      <td style="padding:7px 10px">${String(i+1).padStart(2,'0')}</td>
+      <td style="padding:7px 10px"><div style="font-weight:500">${it.desc||'—'}</div>${it.brand||it.model?`<div style="font-size:11px;color:var(--gray)">${[it.brand,it.model].filter(Boolean).join(' / ')}</div>`:''}</td>
+      <td style="padding:7px 10px;text-align:center">${ordered}</td>
+      <td style="padding:7px 10px;text-align:center">${confirmed}</td>
+      <td style="padding:7px 10px;text-align:center">${transit||'—'}</td>
+      <td class="${remaining>0.001?'so-remaining-qty':''}" style="padding:7px 10px;text-align:center;font-weight:600">${remaining}</td>
+      <td style="padding:7px 10px;text-align:center">${it.uom||'—'}</td>
+      <td style="padding:7px 10px;text-align:center">${deliveryState}</td>
+      <td style="padding:7px 10px;text-align:right">${fmt(parseFloat(it.up)||0)}</td>
+      <td style="padding:7px 10px;text-align:right;font-weight:600">${fmt(ordered*(parseFloat(it.up)||0))}</td>
+    </tr>`;
   }).join('');
 
   // Deliveries
   const deliveriesHtml = (so.deliveries||[]).length
     ? (so.deliveries||[]).map((d,i)=>{
         const confirmed = d.customerConfirmed;
+        const dnStatus=getDNStatus(d);
         const statusPill = confirmed
-          ? `<span style="background:var(--green-bg);color:var(--green-txt);border:1px solid #b8dacc;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:600">✓ Delivered &amp; confirmed</span>`
+          ? `<span style="background:var(--green-bg);color:var(--green-txt);border:1px solid #b8dacc;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:600">✓ ${dnStatus}</span>`
           : `<span style="background:#fff0e6;color:#b45309;border:1px solid #fcd4a8;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:600">⏳ Out for delivery</span>`;
         return `<div class="inv-card" style="background:${confirmed?'#f0fff4':'#fff8f0'};border-color:${confirmed?'#b8dacc':'#fcd4a8'}">
           <div>
@@ -9173,11 +9811,11 @@ function viewSO(soId) {
               ${statusPill}
             </div>
             <div style="font-size:11px;color:var(--gray)">${d.items.map(it=>`${it.desc} × ${it.qty}`).join(' | ')}</div>
-            ${d.customerConfirmedDate?`<div style="font-size:11px;color:var(--green-txt);margin-top:2px">Confirmed by customer: ${fmtDate(d.customerConfirmedDate)}</div>`:''}
+            ${d.customerConfirmedDate?`<div style="font-size:11px;color:var(--green-txt);margin-top:2px">Confirmed: ${fmtDate(d.customerConfirmedDate)}${d.receivedBy?' · Received by '+escapeHtml(d.receivedBy):''}</div>`:''}
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
             <button class="abtn abtn-view" onclick="viewDeliveryNote('${so.id}',${i})"><i class="ti ti-printer"></i>Print DN</button>
-            ${!confirmed?`<button class="abtn abtn-edit" style="background:var(--green-bg);color:var(--green-txt);border-color:#b8dacc" onclick="confirmDelivery('${so.id}',${i})"><i class="ti ti-circle-check"></i>Confirm delivered</button>`:''}
+            ${!confirmed?`<button class="abtn abtn-edit" style="background:var(--green-bg);color:var(--green-txt);border-color:#b8dacc" onclick="confirmDelivery('${so.id}',${i})"><i class="ti ti-circle-check"></i>Confirm acceptance</button>`:''}
           </div>
         </div>`;
       }).join('')
@@ -9203,6 +9841,14 @@ function viewSO(soId) {
         </div>`).join('')
     : '<p style="font-size:12px;color:var(--gray)">No payments recorded yet.</p>';
 
+  const poAtt=so.poAttachment||null;
+  const poAttachmentHtml=poAtt?.url ? `
+    <div class="so-po-view-file">
+      <div class="so-po-view-icon"><i class="ti ti-file-description"></i></div>
+      <button type="button" class="so-po-view-name" onclick="soViewPOAttachment('${so.id}')" title="View Customer PO"><strong>${escapeHtml(poAtt.name||'Customer PO attachment')}</strong><span>${escapeHtml(soAttachmentMeta(poAtt))}</span></button>
+      <div class="so-po-view-actions"><button class="btn btn-secondary btn-sm" onclick="soViewPOAttachment('${so.id}')"><i class="ti ti-eye"></i>View</button><button class="btn btn-secondary btn-sm" onclick="soDownloadPOAttachment('${so.id}')"><i class="ti ti-download"></i>Download</button></div>
+    </div>` : '<div class="so-po-view-empty"><i class="ti ti-paperclip-off"></i><span>No Customer PO attachment added.</span></div>';
+
   document.getElementById('so-view-title').textContent = so.soNo + ' — ' + so.customer;
   document.getElementById('so-view-body').innerHTML = `
     <!-- Header info -->
@@ -9210,7 +9856,8 @@ function viewSO(soId) {
       <div>
         <div class="section-title" style="margin-top:0">Order info</div>
         <div class="detail-row"><span class="dk">Customer</span><strong>${so.customer}</strong></div>
-        <div class="detail-row"><span class="dk">Customer PO No</span><strong style="color:var(--blue)">${so.poNo||'—'}</strong></div>
+        <div class="detail-row"><span class="dk">Customer PO No</span><strong style="color:var(--blue)">${escapeHtml(so.poNo||'—')}</strong></div>
+        <div class="detail-row"><span class="dk">Customer PO Date</span><span>${so.poDate?fmtDate(so.poDate):'—'}</span></div>
         <div class="detail-row"><span class="dk">Linked quotation</span>${q?`<button class="btn btn-secondary" style="padding:4px 8px" onclick="openQuotationDocument('${q.id}')"><i class="ti ti-link"></i>${q.qno}</button>`:'<span>—</span>'}</div>
         <div class="detail-row"><span class="dk">SO date</span><span>${fmtDate(so.date)}</span></div>
         ${so.notes?`<div class="detail-row"><span class="dk">Notes</span><span>${so.notes}</span></div>`:''}
@@ -9231,28 +9878,33 @@ function viewSO(soId) {
       </div>
     </div>
 
+    <section class="so-po-view-card">
+      <div class="so-po-view-head"><span><i class="ti ti-file-invoice"></i>Customer Purchase Order</span><span class="so-po-view-ref">${escapeHtml(so.poNo||'No PO number')}</span></div>
+      <div class="so-po-view-details"><div><span>PO Number</span><strong>${escapeHtml(so.poNo||'—')}</strong></div><div><span>PO Date</span><strong>${so.poDate?fmtDate(so.poDate):'—'}</strong></div></div>
+      ${poAttachmentHtml}
+    </section>
+
     ${q ? buildDocumentFlowHtml(q, so) : ''}
 
     <!-- Items -->
     <div class="section-title">Order items</div>
+    ${deliveryProgressSummary}
     <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">
       <thead><tr style="background:var(--blue);color:#fff">
         <th style="padding:7px 10px">#</th>
         <th style="padding:7px 10px;text-align:left">Description</th>
-        <th style="padding:7px 10px;text-align:center">Qty</th>
+        <th style="padding:7px 10px;text-align:center">Ordered</th>
+        <th style="padding:7px 10px;text-align:center">Delivered</th>
+        <th style="padding:7px 10px;text-align:center">In Transit</th>
+        <th style="padding:7px 10px;text-align:center">Remaining</th>
         <th style="padding:7px 10px;text-align:center">UOM</th>
+        <th style="padding:7px 10px;text-align:center">Delivery</th>
         <th style="padding:7px 10px;text-align:right">Unit price</th>
         <th style="padding:7px 10px;text-align:right">Total</th>
       </tr></thead>
       <tbody>${itemsHtml}</tbody>
     </table>
 
-    <!-- Delivery progress per item -->
-    ${hasAnyDeliveryActivity ? `
-    <div class="section-title">Delivery progress (by item)</div>
-    <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px">
-      ${deliveryProgressHtml}
-    </div>` : ''}
 
     <!-- Deliveries -->
     <div class="section-title">Delivery history</div>
@@ -9299,113 +9951,70 @@ function viewSO(soId) {
   openModalWithSize('so-view-modal');
 }
 
-/* ── Record Delivery ── */
+/* ── Delivery Notes v124 ── */
+function deliveryActor(){return (window.currentUser&&(window.currentUser.name||window.currentUser.email))||'Authenticated user';}
+function deliveryAcceptedQty(d,it){return d.customerConfirmed ? (it.acceptedQty!=null?Number(it.acceptedQty):Number(it.qty)||0) : 0;}
+function deliveryRejectedQty(d,it){return d.customerConfirmed ? (Number(it.rejectedQty)||0) : 0;}
+function getDNStatus(d){
+  if(!d.customerConfirmed) return 'Out for Delivery';
+  let a=0,r=0; (d.items||[]).forEach(it=>{a+=deliveryAcceptedQty(d,it);r+=deliveryRejectedQty(d,it)});
+  if(r<=0) return 'Delivered'; if(a<=0) return 'Rejected'; return 'Partially Accepted';
+}
+function allDeliveryNotes(){const rows=[];salesOrders.forEach(so=>(so.deliveries||[]).forEach((d,i)=>rows.push({so,d,i,status:getDNStatus(d)})));return rows;}
+function renderDNPage(){
+  const body=document.getElementById('dn-register-tbody');if(!body)return;
+  const q=(document.getElementById('dn-search')?.value||'').toLowerCase(); const st=document.getElementById('dn-status-filter')?.value||'';
+  let rows=allDeliveryNotes().filter(x=>(!st||x.status===st)&&(!q||`${x.d.dnNo} ${x.so.soNo} ${x.so.customer} ${x.so.poNo}`.toLowerCase().includes(q))).sort((a,b)=>(b.d.date||'').localeCompare(a.d.date||''));
+  body.innerHTML=rows.length?rows.map(x=>`<tr class="quotation-clickable-row" onclick="viewDeliveryNote('${x.so.id}',${x.i})"><td><strong>${escapeHtml(x.d.dnNo||'—')}</strong></td><td>${fmtDate(x.d.date)}</td><td>${escapeHtml(x.so.customer||'—')}</td><td>${escapeHtml(x.so.soNo||'—')}</td><td>${escapeHtml(x.so.poNo||'—')}</td><td>${escapeHtml(x.d.assigneeName||x.d.by||'—')}</td><td>${(x.d.items||[]).length}</td><td><span class="badge ${x.status==='Delivered'?'won':x.status==='Partially Accepted'?'pending':x.status==='Rejected'?'lost':'sent'}">${x.status}</span></td></tr>`).join(''):'<tr><td colspan="8" style="text-align:center;color:var(--gray);padding:30px">No delivery notes found.</td></tr>';
+}
 function openRecordDelivery(soId) {
-  const so = salesOrders.find(x=>x.id===soId); if (!so) return;
-  currentSOId = soId;
-  document.getElementById('dn-title').textContent = 'Dispatch Delivery — ' + so.soNo;
-  document.getElementById('dn-no').value = nextDNNo(so);
-  document.getElementById('dn-date').value = new Date().toISOString().split('T')[0];
-  document.getElementById('dn-by').value = '';
-  document.getElementById('dn-vehicle').value = '';
-  document.getElementById('dn-remarks').value = '';
-
-  // Find already-delivered quantities
-  const deliveredQty = {};
-  (so.deliveries||[]).forEach(d => {
-    (d.items||[]).forEach(it => {
-      deliveredQty[it.origIdx] = roundQtyForUom((deliveredQty[it.origIdx]||0) + (parseFloat(it.qty)||0), it.uom);
-    });
-  });
-
-  const remaining = (so.items||[]).map((it,i) => {
-    const del = deliveredQty[it.origIdx!==undefined?it.origIdx:i]||0;
-    const rem = roundQtyForUom((parseFloat(it.qty)||0) - del, it.uom);
-    return {...it, soIdx:i, deliveredQty:del, remainingQty:rem};
-  }).filter(it=>it.remainingQty>0);
-
-  if (!remaining.length) {
-    showToast('All items have already been delivered','error');
-    return;
-  }
-
-  document.getElementById('so-delivery-modal')._soId = soId;
-  document.getElementById('so-delivery-modal')._remainingItems = remaining;
-
-  document.getElementById('dn-items-list').innerHTML = remaining.map((it,i)=>`
-    <div class="so-item-row">
-      <input type="checkbox" class="so-item-check" id="dn-chk-${i}" checked>
-      <div style="flex:1;font-size:12px"><div style="font-weight:500">${it.desc||'—'}</div></div>
-      <div style="text-align:right;min-width:110px">
-        <div style="font-size:11px;color:var(--gray)">Qty <span class="so-qty-max">(max ${it.remainingQty} ${it.uom||''})</span></div>
-        <input type="number" class="so-qty-input" id="dn-qty-${i}" value="${it.remainingQty}" min="${qtyMin(it.uom)}" max="${it.remainingQty}" step="${qtyStep(it.uom)}">
-      </div>
-    </div>`).join('');
-
+  const so=salesOrders.find(x=>x.id===soId);if(!so)return;currentSOId=soId;
+  document.getElementById('dn-title').textContent='Create Delivery Note — '+so.soNo;document.getElementById('dn-no').value='Auto on Save';document.getElementById('dn-date').value=new Date().toISOString().split('T')[0];document.getElementById('dn-vehicle').value='';document.getElementById('dn-remarks').value='';document.getElementById('dn-po').value=so.poNo||'—';document.getElementById('dn-so-ref').value=so.soNo||'—';
+  const deliveryPeople=employees.filter(e=>e.active!==false&&((e.roles||[]).some(r=>/delivery|driver|store/i.test(r))));
+  const ass=document.getElementById('dn-assignee');ass.innerHTML='<option value="">Select delivery person…</option>'+deliveryPeople.map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+  const accepted={};(so.deliveries||[]).forEach(d=>(d.items||[]).forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;accepted[idx]=roundQtyForUom((accepted[idx]||0)+deliveryAcceptedQty(d,it),it.uom)}));
+  const transit={};(so.deliveries||[]).filter(d=>!d.customerConfirmed).forEach(d=>(d.items||[]).forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;transit[idx]=roundQtyForUom((transit[idx]||0)+(Number(it.qty)||0),it.uom)}));
+  const remaining=(so.items||[]).map((it,i)=>{const idx=it.origIdx!==undefined?it.origIdx:i;const rem=roundQtyForUom(Math.max(0,(Number(it.qty)||0)-(accepted[idx]||0)-(transit[idx]||0)),it.uom);return {...it,soIdx:i,origIdx:idx,acceptedQty:accepted[idx]||0,remainingQty:rem}}).filter(it=>it.remainingQty>0);
+  if(!remaining.length){showToast('No quantity is available for dispatch','warning');return;}
+  const modal=document.getElementById('so-delivery-modal');modal._soId=soId;modal._remainingItems=remaining;
+  document.getElementById('dn-items-list').innerHTML=remaining.map((it,i)=>`<tr><td class="center">${i+1}</td><td><strong>${escapeHtml(it.desc||'—')}</strong></td><td class="center">${it.qty}</td><td class="center">${it.acceptedQty}</td><td class="center"><input class="so-qty-input" id="dn-qty-${i}" type="number" value="${it.remainingQty}" min="0" max="${it.remainingQty}" step="${qtyStep(it.uom)}" oninput="updateDNRemaining(${i})"></td><td class="center"><strong id="dn-rem-${i}">0</strong></td><td class="center">${escapeHtml(it.uom||'—')}</td></tr>`).join('');
   openModalWithSize('so-delivery-modal');
 }
-
-async function saveDelivery() {
-  const modal = document.getElementById('so-delivery-modal');
-  const soId = modal._soId;
-  const so = salesOrders.find(x=>x.id===soId); if (!so) return;
-  const date = document.getElementById('dn-date').value;
-  if (!date) { showToast('Please enter delivery date','error'); return; }
-
-  const remainingItems = modal._remainingItems||[];
-  const deliveredItems = [];
-  remainingItems.forEach((it,i) => {
-    const chk = document.getElementById('dn-chk-'+i);
-    const qty = roundQtyForUom(document.getElementById('dn-qty-'+i)?.value, it.uom);
-    if (chk?.checked && qty > 0) {
-      deliveredItems.push({...it, qty, soIdx:it.soIdx});
-    }
-  });
-  if (!deliveredItems.length) { showToast('Select at least one item to deliver','error'); return; }
-
-  const delivery = {
-    id:       'DN-' + Date.now(),
-    dnNo:     document.getElementById('dn-no').value,
-    date,
-    by:       document.getElementById('dn-by').value.trim(),
-    vehicle:  document.getElementById('dn-vehicle').value.trim(),
-    remarks:  document.getElementById('dn-remarks').value.trim(),
-    items:    deliveredItems,
-    created:  new Date().toISOString(),
-  };
-  so.deliveries.push(delivery);
-  await saveSalesOrders();
-  closeModal('so-delivery-modal');
-  showToast('Delivery ' + delivery.dnNo + ' recorded', 'success');
-  renderSOPage();
-  viewSO(soId);
+function updateDNRemaining(i){const m=document.getElementById('so-delivery-modal'),it=(m._remainingItems||[])[i];if(!it)return;let q=roundQtyForUom(document.getElementById('dn-qty-'+i)?.value,it.uom);q=Math.max(0,Math.min(q,it.remainingQty));document.getElementById('dn-rem-'+i).textContent=roundQtyForUom(it.remainingQty-q,it.uom);}
+async function saveDelivery(){
+ const m=document.getElementById('so-delivery-modal'),so=salesOrders.find(x=>x.id===m._soId);if(!so)return;const date=document.getElementById('dn-date').value,assigneeId=document.getElementById('dn-assignee').value;if(!date){showToast('Please enter DN date','error');return}if(!assigneeId){showToast('Please select a delivery person','error');return}
+ const assignee=employees.find(e=>e.id===assigneeId);const items=[];(m._remainingItems||[]).forEach((it,i)=>{let qty=roundQtyForUom(document.getElementById('dn-qty-'+i)?.value,it.uom);if(qty>it.remainingQty)qty=it.remainingQty;if(qty>0)items.push({...it,qty,acceptedQty:null,rejectedQty:null})});if(!items.length){showToast('Enter at least one delivery quantity','error');return}
+ const dnNo=await allocateDocumentNumber('deliveryNote',new Date(date+'T00:00:00'));const d={id:'DN-'+Date.now(),dnNo,date,status:'Out for Delivery',assigneeId,assigneeName:assignee?.name||'',vehicle:document.getElementById('dn-vehicle').value.trim(),remarks:document.getElementById('dn-remarks').value.trim(),items,dispatchedAt:new Date().toISOString(),dispatchedBy:deliveryActor(),created:new Date().toISOString()};so.deliveries=so.deliveries||[];so.deliveries.push(d);await saveSalesOrders();closeModal('so-delivery-modal');showToast(dnNo+' saved and dispatched','success');renderSOPage();renderDNPage();viewSO(so.id);
 }
-
-async function confirmDelivery(soId, deliveryIdx) {
-  const so = salesOrders.find(x=>x.id===soId); if (!so) return;
-  const d = so.deliveries[deliveryIdx]; if (!d) return;
-  const confirmed = await new Promise(resolve => {
-    showConfirm({
-      icon: '✅',
-      title: 'Confirm delivery received?',
-      message: `Mark ${d.dnNo} as delivered and accepted by the customer?`,
-      details: { 'Items': d.items.map(it=>`${it.desc} × ${it.qty}`).join(', '), 'Dispatched': fmtDate(d.date) },
-      confirmText: '✓ Yes, customer received it',
-      cancelText: 'Cancel',
-      confirmClass: 'btn-success',
-      onConfirm: () => resolve(true),
-      onCancel:  () => resolve(false),
-    });
-  });
-  if (!confirmed) return;
-  d.customerConfirmed = true;
-  d.customerConfirmedDate = new Date().toISOString().split('T')[0];
-  await saveSalesOrders();
-  renderSOPage();
-  viewSO(soId);
-  showToast(d.dnNo + ' confirmed as delivered ✓', 'success');
+function canConfirmAssignedDelivery(d){
+  if(!window.currentUser) return {ok:false,msg:'Please sign in to BizCore.'};
+  const assigned=employees.find(e=>e.id===d.assigneeId); const signed=(window.currentUser.email||'').toLowerCase();
+  loadAccessSetup(); const appUser=appUsers.find(u=>(u.email||'').toLowerCase()===signed); const role=appRoles.find(r=>r.id===appUser?.roleId);
+  const admin=role?.name==='Administrator' || role?.permissions?.['Delivery Notes']?.approve===true;
+  if(admin) return {ok:true};
+  if(!assigned?.email) return {ok:false,msg:'The assigned delivery person has no email in Employee Master. Add the same email used for BizCore login.'};
+  if((assigned.email||'').toLowerCase()!==signed) return {ok:false,msg:`This Delivery Note is assigned to ${assigned.name}. Only the assigned delivery person or an authorized approver can confirm it.`};
+  return {ok:true};
 }
-
+function openDeliveryAcceptance(soId,deliveryIdx){
+ const so=salesOrders.find(x=>x.id===soId),d=so?.deliveries?.[deliveryIdx];if(!d)return;if(d.customerConfirmed){showToast('This delivery is already confirmed','info');return}
+ const authz=canConfirmAssignedDelivery(d);if(!authz.ok){showToast(authz.msg,'error');return}
+ const assigned=d.assigneeName||'';document.getElementById('dn-confirm-title').textContent=d.dnNo+' — Confirm Delivery';document.getElementById('dn-confirm-sub').textContent=`${so.customer} · ${so.soNo}${assigned?' · Assigned to '+assigned:''}`;document.getElementById('dn-auth-user').textContent='Signed in as '+deliveryActor();document.getElementById('dn-received-by').value='';document.getElementById('dn-customer-remarks').value='';
+ const box=document.getElementById('dn-confirm-items');box.innerHTML=(d.items||[]).map((it,i)=>`<div class="dn-accept-card"><div class="dn-accept-head"><span>${i+1}. ${escapeHtml(it.desc||'—')}</span><strong>${it.qty} ${escapeHtml(it.uom||'')}</strong></div><div class="dn-accept-grid"><label>Accepted Qty<input type="number" id="dn-acc-${i}" value="${it.qty}" min="0" max="${it.qty}" step="${qtyStep(it.uom)}" oninput="syncDNReject(${i})"></label><label>Rejected Qty<input type="number" id="dn-rej-${i}" value="0" min="0" max="${it.qty}" step="${qtyStep(it.uom)}" oninput="syncDNAccept(${i})"></label><label id="dn-reason-wrap-${i}" style="display:none">Rejection Reason<select id="dn-reason-${i}"><option value="">Select reason…</option><option>Damaged</option><option>Specification mismatch</option><option>Wrong item</option><option>Excess quantity</option><option>Quality issue</option><option>Customer requested return</option><option>Packaging damaged</option><option>Other</option></select></label><label id="dn-disposition-wrap-${i}" style="display:none">Disposition<select id="dn-disposition-${i}"><option>Returned with Driver</option><option>Left at Customer Site</option><option>Replacement Required</option><option>Under Review</option></select></label></div><input id="dn-line-remarks-${i}" class="dn-line-remarks" placeholder="Rejection / line remarks (optional)" style="display:none"></div>`).join('');
+ const modal=document.getElementById('dn-confirm-modal');modal._soId=soId;modal._deliveryIdx=deliveryIdx;openModalWithSize('dn-confirm-modal');
+}
+function syncDNReject(i){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m._soId)?.deliveries?.[m._deliveryIdx],it=d?.items?.[i];if(!it)return;let a=Math.max(0,Math.min(Number(document.getElementById('dn-acc-'+i).value)||0,Number(it.qty)||0));document.getElementById('dn-rej-'+i).value=roundQtyForUom((Number(it.qty)||0)-a,it.uom);toggleDNRejectFields(i)}
+function syncDNAccept(i){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m._soId)?.deliveries?.[m._deliveryIdx],it=d?.items?.[i];if(!it)return;let r=Math.max(0,Math.min(Number(document.getElementById('dn-rej-'+i).value)||0,Number(it.qty)||0));document.getElementById('dn-acc-'+i).value=roundQtyForUom((Number(it.qty)||0)-r,it.uom);toggleDNRejectFields(i)}
+function toggleDNRejectFields(i){const r=Number(document.getElementById('dn-rej-'+i)?.value)||0;['reason-wrap','disposition-wrap'].forEach(x=>{const e=document.getElementById('dn-'+x+'-'+i);if(e)e.style.display=r>0?'flex':'none'});const n=document.getElementById('dn-line-remarks-'+i);if(n)n.style.display=r>0?'block':'none'}
+async function saveDeliveryAcceptance(){
+ const m=document.getElementById('dn-confirm-modal'),so=salesOrders.find(x=>x.id===m._soId),d=so?.deliveries?.[m._deliveryIdx];if(!d)return;const receivedBy=document.getElementById('dn-received-by').value.trim();if(!receivedBy){showToast('Received By is required','error');return}
+ for(let i=0;i<d.items.length;i++){const it=d.items[i],qty=Number(it.qty)||0,a=roundQtyForUom(document.getElementById('dn-acc-'+i).value,it.uom),r=roundQtyForUom(document.getElementById('dn-rej-'+i).value,it.uom);if(Math.abs((a+r)-qty)>0.001){showToast(`Line ${i+1}: Accepted + Rejected must equal delivery quantity`,'error');return}const reason=document.getElementById('dn-reason-'+i)?.value||'';if(r>0&&!reason){showToast(`Line ${i+1}: Select a rejection reason`,'error');return}it.acceptedQty=a;it.rejectedQty=r;it.rejectionReason=r>0?reason:'';it.rejectionDisposition=r>0?(document.getElementById('dn-disposition-'+i)?.value||''):'';it.acceptanceRemarks=document.getElementById('dn-line-remarks-'+i)?.value.trim()||''}
+ d.customerConfirmed=true;d.customerConfirmedDate=new Date().toISOString().split('T')[0];d.confirmedAt=new Date().toISOString();d.confirmedBy=deliveryActor();d.receivedBy=receivedBy;d.customerRemarks=document.getElementById('dn-customer-remarks').value.trim();d.status=getDNStatus(d);await saveSalesOrders();closeModal('dn-confirm-modal');renderSOPage();renderDNPage();viewSO(so.id);showToast(`${d.dnNo} confirmed — ${d.status}`,'success');
+}
+async function confirmDelivery(soId,deliveryIdx){openDeliveryAcceptance(soId,deliveryIdx)}
+function getDNDeepLink(d){const base=location.href.split('?')[0].split('#')[0];return base+'?dn='+encodeURIComponent(d.id)}
+function renderDNQRCode(d){setTimeout(()=>{const el=document.getElementById('dn-qr-code');if(!el)return;el.innerHTML='';if(window.QRCode){new QRCode(el,{text:getDNDeepLink(d),width:112,height:112,correctLevel:QRCode.CorrectLevel.M})}else{el.innerHTML='<div style="font-size:10px;color:#777;width:112px">QR library unavailable. Use the delivery link from BizCore.</div>'}},0)}
+function openDNFromDeepLink(){const id=new URLSearchParams(location.search).get('dn');if(!id)return;const hit=allDeliveryNotes().find(x=>x.d.id===id);if(!hit)return;showPage('deliverynotes');if(hit.d.customerConfirmed)viewDeliveryNote(hit.so.id,hit.i);else openDeliveryAcceptance(hit.so.id,hit.i)}
 /* ── View / Print Delivery Note ── */
 function viewDeliveryNote(soId, deliveryIdx) {
   const so = salesOrders.find(x=>x.id===soId); if (!so) return;
@@ -9452,7 +10061,7 @@ function viewDeliveryNote(soId, deliveryIdx) {
           <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:#666">Customer PO:</span><strong>${so.poNo||'—'}</strong></div>
           <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:#666">Quotation:</span><strong>${q?q.qno:'—'}</strong></div>
           ${d.vehicle?`<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#666">Vehicle/AWB:</span><strong>${d.vehicle}</strong></div>`:''}
-          ${d.by?`<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#666">Delivered by:</span><strong>${d.by}</strong></div>`:''}
+          ${d.assigneeName?`<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#666">Delivery person:</span><strong>${d.assigneeName}</strong></div>`:''}
         </div>
       </div>
 
@@ -9472,6 +10081,11 @@ function viewDeliveryNote(soId, deliveryIdx) {
 
       ${d.remarks?`<div style="margin-bottom:20px;padding:10px 14px;background:#fffbea;border:1px solid #ffc107;border-radius:6px;font-size:12px"><strong>Remarks:</strong> ${d.remarks}</div>`:''}
 
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:20px;margin:18px 0;padding:12px 14px;border:1px solid #dbe5ef;border-radius:7px;background:#f8fbff">
+        <div><strong style="color:#1F4E79">Mobile Delivery Confirmation</strong><div style="font-size:11px;color:#666;margin-top:4px">Authorized BizCore users can scan this QR to update customer acceptance. Login is required.</div></div>
+        <div id="dn-qr-code" style="width:112px;height:112px;flex:0 0 112px"></div>
+      </div>
+
       <!-- Signature Block -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:32px">
         <div style="border-top:1px solid #1a1a1a;padding-top:8px">
@@ -9489,10 +10103,12 @@ function viewDeliveryNote(soId, deliveryIdx) {
       </div>
     </div>`;
 
+  renderDNQRCode(d);
   openModalWithSize('dn-print-modal');
 }
 
 function printDeliveryNote() {
+  const qr=document.querySelector('#dn-qr-code canvas');if(qr){const holder=document.getElementById('dn-qr-code');holder.innerHTML=`<img src="${qr.toDataURL('image/png')}" style="width:112px;height:112px" alt="Delivery QR">`;}
   const body = document.getElementById('dn-print-body').innerHTML;
   const w = window.open('','_blank');
   w.document.write(`<!DOCTYPE html><html><head><title>Delivery Note</title>
@@ -9505,7 +10121,7 @@ function printDeliveryNote() {
 function openCreateInvoice(soId) {
   const so = salesOrders.find(x=>x.id===soId); if (!so) return;
   currentSOId = soId;
-  const invNo = nextInvNo();
+  const invNo = 'Auto on Save';
   const today = new Date().toISOString().split('T')[0];
   const dueDate = new Date(); dueDate.setDate(dueDate.getDate()+14);
   const dueDateStr = dueDate.toISOString().split('T')[0];
@@ -9531,8 +10147,9 @@ async function saveInvoice() {
   const date = document.getElementById('inv-date').value;
   if (!date) { showToast('Please enter invoice date','error'); return; }
 
+  const invNumber=await allocateDocumentNumber('customerInvoice',new Date(date+'T00:00:00'));
   const inv = {
-    invNo:   document.getElementById('inv-no').value,
+    invNo:   invNumber,
     zohoNo:  document.getElementById('inv-zoho').value.trim(),
     date,
     dueDate: document.getElementById('inv-due').value,
@@ -10421,7 +11038,7 @@ document.addEventListener('DOMContentLoaded',restoreRFQMainMonitor);
 /* ── BIZCORE TASK-AWARE WORKSPACES ────────────────────────── */
 const modalDefaultWorkspace = {
   'pricing-modal':'fullscreen',
-  'quote-modal':'fullscreen',
+  'quote-modal':'normal',
   'pricing-ro-modal':'fullscreen',
   'so-create-modal':'fullscreen',
   'so-view-modal':'normal',
@@ -10702,6 +11319,8 @@ document.addEventListener('DOMContentLoaded',initialiseWorkspaceControls);
       e.preventDefault();e.stopImmediatePropagation();
       if(root.id==='rfq-modal' && typeof window.confirmCancelRFQEntry==='function'){
         window.confirmCancelRFQEntry();
+      }else if(root.id==='quote-modal' && typeof window.confirmCancelQuotationEntry==='function'){
+        window.confirmCancelQuotationEntry();
       }else if(root.id==='pricing-modal' && typeof window.requestClosePricingEntry==='function'){
         window.requestClosePricingEntry(text==='cancel'?'cancel':'close');
       }else{
@@ -10726,6 +11345,8 @@ document.addEventListener('DOMContentLoaded',initialiseWorkspaceControls);
       e.preventDefault();e.stopImmediatePropagation();
       if(root.id==='rfq-modal' && typeof window.confirmCancelRFQEntry==='function'){
         window.confirmCancelRFQEntry();
+      }else if(root.id==='quote-modal' && typeof window.confirmCancelQuotationEntry==='function'){
+        window.confirmCancelQuotationEntry();
       }else if(root.id==='pricing-modal' && typeof window.requestClosePricingEntry==='function'){
         window.requestClosePricingEntry('close');
       }else{
@@ -11851,3 +12472,5 @@ console.log('Document locking system active ✅');
 /* ═══════════════════════════════════════════════════════════════════
    END DOCUMENT PRESENCE LOCKING SYSTEM
 ═══════════════════════════════════════════════════════════════════ */
+
+window.addEventListener('load',()=>setTimeout(openDNFromDeepLink,1400));

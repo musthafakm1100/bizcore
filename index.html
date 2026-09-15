@@ -12,8 +12,9 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/bizcore-icon-192.png"/>
 <link rel="apple-touch-icon" href="icons/bizcore-icon-180.png"/>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=100" rel="stylesheet"/>
+<link href="css/main.css?v=124" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=35" rel="stylesheet"/>
 <link href="css/typography.css?v=35" rel="stylesheet"/>
 <link href="css/masters.css?v=97" rel="stylesheet"/>
@@ -285,13 +286,14 @@ document.addEventListener('error', function(e) {
       </div>
       <input id="search-input" class="rfq-search" oninput="currentPage=1;renderTable()" placeholder="Search quotation, customer, reference or item…" type="text"/>
       <button class="btn btn-secondary btn-sm register-clear-filters quotation-clear-filters-btn" id="quotation-clear-filters-btn" onclick="clearAllQuotationFilters()" title="Clear all quotation filters" type="button" disabled aria-disabled="true"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
+      <button class="btn btn-secondary btn-sm quotation-export-excel-btn" id="quotation-export-excel-btn" onclick="openQuotationExcelExportDialog()" title="Export the currently filtered quotation register to Excel" type="button"><i class="ti ti-file-spreadsheet"></i><span>Export Excel</span></button>
     </div>
   </div>
 
       <div class="card quotation-register-card">
         <div class="list-table-scroll quotation-table-scroll">
           <table id="quotes-table">
-            <thead><tr><th>Q No</th><th class="mob-hide">Date</th><th>Customer</th><th class="mob-hide">Reference</th><th class="mob-hide">Items</th><th class="right">Net Amount</th><th>Status</th><th class="mob-hide">Sales Orders</th><th class="mob-hide">Valid until</th></tr></thead>
+            <thead><tr><th class="sortable-register-th" data-sort-screen="quotation" data-sort-key="no" onclick="setRegisterSort('quotation','no',renderTable)">Q No</th><th class="mob-hide sortable-register-th" data-sort-screen="quotation" data-sort-key="date" onclick="setRegisterSort('quotation','date',renderTable)">Date</th><th class="sortable-register-th" data-sort-screen="quotation" data-sort-key="customer" onclick="setRegisterSort('quotation','customer',renderTable)">Customer</th><th class="mob-hide sortable-register-th" data-sort-screen="quotation" data-sort-key="reference" onclick="setRegisterSort('quotation','reference',renderTable)">Reference</th><th class="mob-hide sortable-register-th" data-sort-screen="quotation" data-sort-key="items" onclick="setRegisterSort('quotation','items',renderTable)">Items</th><th class="right sortable-register-th" data-sort-screen="quotation" data-sort-key="amount" onclick="setRegisterSort('quotation','amount',renderTable)">Net Amount</th><th class="sortable-register-th" data-sort-screen="quotation" data-sort-key="status" onclick="setRegisterSort('quotation','status',renderTable)">Status</th><th class="mob-hide sortable-register-th" data-sort-screen="quotation" data-sort-key="salesorders" onclick="setRegisterSort('quotation','salesorders',renderTable)">Sales Orders</th><th class="mob-hide sortable-register-th" data-sort-screen="quotation" data-sort-key="valid" onclick="setRegisterSort('quotation','valid',renderTable)">Valid until</th></tr></thead>
             <tbody id="quotes-tbody"></tbody>
           </table>
         </div>
@@ -467,11 +469,12 @@ document.addEventListener('error', function(e) {
       </div>
       <input class="rfq-search" id="pricing-doc-search" oninput="pricingDocPage=1;renderPricingDocuments()" placeholder="Search pricing no., RFQ, customer or quotation…" type="text"/>
       <button class="btn btn-secondary btn-sm register-clear-filters" id="pricing-clear-filters-btn" onclick="clearAllPricingFilters()" type="button" title="Clear all Pricing filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
+      <button class="btn btn-secondary btn-sm register-export-excel-btn" id="pricing-export-excel-btn" onclick="openPricingExcelExportDialog()" type="button" title="Export filtered Pricing register to Excel"><i class="ti ti-file-spreadsheet"></i><span>Export Excel</span></button>
     </div>
   </div>
 
       <div class="card pricing-register-card">
-        <div class="pricing-register-table-wrap"><table class="pricing-register-table"><colgroup><col class="col-pricing-no"><col class="col-customer"><col class="col-version"><col class="col-updated"><col class="col-money"><col class="col-money"><col class="col-money"><col class="col-margin"><col class="col-status"><col class="col-quotation"></colgroup><thead><tr><th>Pricing No.</th><th>Customer</th><th class="center">Version</th><th>Updated</th><th class="right">Cost</th><th class="right">Selling</th><th class="right">Profit</th><th class="right">Margin %</th><th class="center">Status</th><th>Quotation</th></tr></thead><tbody id="pricing-doc-tbody"></tbody></table></div>
+        <div class="pricing-register-table-wrap"><table class="pricing-register-table"><colgroup><col class="col-pricing-no"><col class="col-customer"><col class="col-version"><col class="col-updated"><col class="col-money"><col class="col-money"><col class="col-money"><col class="col-margin"><col class="col-status"><col class="col-quotation"></colgroup><thead><tr><th class="sortable-register-th" data-sort-screen="pricing" data-sort-key="no" onclick="setRegisterSort('pricing','no',renderPricingDocuments)">Pricing No.</th><th class="sortable-register-th" data-sort-screen="pricing" data-sort-key="customer" onclick="setRegisterSort('pricing','customer',renderPricingDocuments)">Customer</th><th class="sortable-register-th center" data-sort-screen="pricing" data-sort-key="version" onclick="setRegisterSort('pricing','version',renderPricingDocuments)">Version</th><th class="sortable-register-th" data-sort-screen="pricing" data-sort-key="updated" onclick="setRegisterSort('pricing','updated',renderPricingDocuments)">Updated</th><th class="sortable-register-th right" data-sort-screen="pricing" data-sort-key="cost" onclick="setRegisterSort('pricing','cost',renderPricingDocuments)">Cost</th><th class="sortable-register-th right" data-sort-screen="pricing" data-sort-key="selling" onclick="setRegisterSort('pricing','selling',renderPricingDocuments)">Selling</th><th class="sortable-register-th right" data-sort-screen="pricing" data-sort-key="profit" onclick="setRegisterSort('pricing','profit',renderPricingDocuments)">Profit</th><th class="sortable-register-th right" data-sort-screen="pricing" data-sort-key="margin" onclick="setRegisterSort('pricing','margin',renderPricingDocuments)">Margin %</th><th class="sortable-register-th center" data-sort-screen="pricing" data-sort-key="status" onclick="setRegisterSort('pricing','status',renderPricingDocuments)">Status</th><th class="sortable-register-th" data-sort-screen="pricing" data-sort-key="quotation" onclick="setRegisterSort('pricing','quotation',renderPricingDocuments)">Quotation</th></tr></thead><tbody id="pricing-doc-tbody"></tbody></table></div>
         <div class="rows-per-page-bar" style="padding:8px 12px"><label class="rows-per-page-label">Rows per page
           <select class="rows-per-page-select" onchange="setRowsPerPage(this.value)">
             <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
@@ -599,14 +602,7 @@ document.addEventListener('error', function(e) {
           <table id="so-register-table">
             <thead>
               <tr>
-                <th>SO No</th>
-                <th>Date</th>
-                <th>Customer</th>
-                <th>Customer PO</th>
-                <th>Quotation</th>
-                <th class="center">Items</th>
-                <th class="right">Net Amount</th>
-                <th>Status</th>
+                <th class="sortable-register-th" data-sort-screen="so" data-sort-key="no" onclick="setRegisterSort('so','no',renderSOPage)">SO No</th><th class="sortable-register-th" data-sort-screen="so" data-sort-key="date" onclick="setRegisterSort('so','date',renderSOPage)">Date</th><th class="sortable-register-th" data-sort-screen="so" data-sort-key="customer" onclick="setRegisterSort('so','customer',renderSOPage)">Customer</th><th class="sortable-register-th" data-sort-screen="so" data-sort-key="po" onclick="setRegisterSort('so','po',renderSOPage)">Customer PO</th><th class="sortable-register-th" data-sort-screen="so" data-sort-key="quotation" onclick="setRegisterSort('so','quotation',renderSOPage)">Quotation</th><th class="sortable-register-th center" data-sort-screen="so" data-sort-key="items" onclick="setRegisterSort('so','items',renderSOPage)">Items</th><th class="sortable-register-th right" data-sort-screen="so" data-sort-key="amount" onclick="setRegisterSort('so','amount',renderSOPage)">Net Amount</th><th class="sortable-register-th" data-sort-screen="so" data-sort-key="status" onclick="setRegisterSort('so','status',renderSOPage)">Status</th>
               </tr>
             </thead>
             <tbody id="so-register-tbody"></tbody>
@@ -626,7 +622,11 @@ document.addEventListener('error', function(e) {
   </div>
 </div>
 <!-- FUTURE / FOUNDATION MODULES -->
-<div class="page" id="page-deliverynotes"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-truck-delivery"></i></div><h2>Delivery Notes</h2><p>Create delivery documents from approved sales orders, track partial deliveries, and prepare invoice-ready records.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
+<div class="page" id="page-deliverynotes">
+<div class="page-header"><div><h2>Delivery Notes</h2><p>Dispatch, confirm customer acceptance and track delivery exceptions.</p></div></div>
+<div class="filter-bar"><div class="filter-group"><input id="dn-search" placeholder="Search DN, SO, customer or PO…" oninput="renderDNPage()" style="min-width:260px"/><select id="dn-status-filter" onchange="renderDNPage()"><option value="">All statuses</option><option>Out for Delivery</option><option>Delivered</option><option>Partially Accepted</option><option>Rejected</option></select><button class="btn btn-secondary btn-sm" onclick="document.getElementById('dn-search').value='';document.getElementById('dn-status-filter').value='';renderDNPage()"><i class="ti ti-filter-off"></i>Clear Filters</button></div></div>
+<div class="table-wrap"><table><thead><tr><th>DN No.</th><th>Date</th><th>Customer</th><th>Sales Order</th><th>Customer PO</th><th>Delivery Person</th><th>Items</th><th>Status</th></tr></thead><tbody id="dn-register-tbody"></tbody></table></div>
+</div>
 <div class="page" id="page-customerinvoices"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-receipt"></i></div><h2>Customer Invoices</h2><p>Generate customer invoices from one or multiple delivery notes and track invoice status and receivables.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
 <div class="page" id="page-supplierrfqs"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-file-search"></i></div><h2>Supplier RFQs</h2><p>Request and compare supplier offers. This module is reserved for a later development phase.</p><span class="module-tag"><i class="ti ti-clock"></i>Planned for later</span></div></div></div>
 <div class="page" id="page-purchaseorders"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-clipboard-check"></i></div><h2>Purchase Orders</h2><p>Create purchase orders for selected suppliers and connect them to sales orders and costing records.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
@@ -652,7 +652,7 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="list-table-scroll">
 <table>
-<thead><tr><th class="master-select-col"><input id="customers-select-all" class="master-row-check" type="checkbox" onkeydown="event.stopPropagation()" aria-label="Select all customers on this page" onclick="event.stopPropagation();toggleMasterPageSelection('customers',this.checked)"></th><th>Company</th><th>Default contact</th><th>Title</th><th>City</th><th>Phone</th><th class="center">Quotes</th><th class="right">Total value</th></tr></thead>
+<thead><tr><th class="master-select-col"><input id="customers-select-all" class="master-row-check" type="checkbox" onkeydown="event.stopPropagation()" aria-label="Select all customers on this page" onclick="event.stopPropagation();toggleMasterPageSelection('customers',this.checked)"></th><th class="sortable-register-th" data-sort-screen="customers" data-sort-key="company" onclick="setRegisterSort('customers','company',renderCustomers)">Company</th><th class="sortable-register-th" data-sort-screen="customers" data-sort-key="contact" onclick="setRegisterSort('customers','contact',renderCustomers)">Default contact</th><th class="sortable-register-th" data-sort-screen="customers" data-sort-key="title" onclick="setRegisterSort('customers','title',renderCustomers)">Title</th><th class="sortable-register-th" data-sort-screen="customers" data-sort-key="city" onclick="setRegisterSort('customers','city',renderCustomers)">City</th><th class="sortable-register-th" data-sort-screen="customers" data-sort-key="phone" onclick="setRegisterSort('customers','phone',renderCustomers)">Phone</th><th class="sortable-register-th center" data-sort-screen="customers" data-sort-key="quotes" onclick="setRegisterSort('customers','quotes',renderCustomers)">Quotes</th><th class="sortable-register-th right" data-sort-screen="customers" data-sort-key="total" onclick="setRegisterSort('customers','total',renderCustomers)">Total value</th></tr></thead>
 <tbody id="customers-tbody"></tbody>
 </table>
 </div>
@@ -678,7 +678,7 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="list-table-scroll">
 <table>
-<thead><tr><th class="master-select-col"><input id="suppliers-select-all" class="master-row-check" type="checkbox" onkeydown="event.stopPropagation()" aria-label="Select all suppliers on this page" onclick="event.stopPropagation();toggleMasterPageSelection('suppliers',this.checked)"></th><th>Company</th><th>Contact</th><th>Phone</th><th>Email</th><th>Category</th><th>City</th><th class="center">Quotes received</th></tr></thead>
+<thead><tr><th class="master-select-col"><input id="suppliers-select-all" class="master-row-check" type="checkbox" onkeydown="event.stopPropagation()" aria-label="Select all suppliers on this page" onclick="event.stopPropagation();toggleMasterPageSelection('suppliers',this.checked)"></th><th class="sortable-register-th" data-sort-screen="suppliers" data-sort-key="company" onclick="setRegisterSort('suppliers','company',renderSuppliers)">Company</th><th class="sortable-register-th" data-sort-screen="suppliers" data-sort-key="contact" onclick="setRegisterSort('suppliers','contact',renderSuppliers)">Contact</th><th class="sortable-register-th" data-sort-screen="suppliers" data-sort-key="phone" onclick="setRegisterSort('suppliers','phone',renderSuppliers)">Phone</th><th class="sortable-register-th" data-sort-screen="suppliers" data-sort-key="email" onclick="setRegisterSort('suppliers','email',renderSuppliers)">Email</th><th class="sortable-register-th" data-sort-screen="suppliers" data-sort-key="category" onclick="setRegisterSort('suppliers','category',renderSuppliers)">Category</th><th class="sortable-register-th" data-sort-screen="suppliers" data-sort-key="city" onclick="setRegisterSort('suppliers','city',renderSuppliers)">City</th><th class="sortable-register-th center" data-sort-screen="suppliers" data-sort-key="quotes" onclick="setRegisterSort('suppliers','quotes',renderSuppliers)">Quotes received</th></tr></thead>
 <tbody id="suppliers-tbody"></tbody>
 </table>
 </div>
@@ -708,8 +708,7 @@ document.addEventListener('error', function(e) {
 <div class="list-table-scroll">
 <table>
 <thead><tr>
-<th class="master-select-col"><input id="products-select-all" class="master-row-check" type="checkbox" onkeydown="event.stopPropagation()" aria-label="Select all products on this page" onclick="event.stopPropagation();toggleMasterPageSelection('products',this.checked)"></th><th style="width:52px">Image</th><th>Item code</th><th>Product name</th><th>Brand</th><th>Model no.</th>
-<th>Category</th><th>UOM</th><th class="right">Default price</th><th>Specs</th>
+<th class="master-select-col"><input id="products-select-all" class="master-row-check" type="checkbox" onkeydown="event.stopPropagation()" aria-label="Select all products on this page" onclick="event.stopPropagation();toggleMasterPageSelection('products',this.checked)"></th><th style="width:52px">Image</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="code" onclick="setRegisterSort('products','code',renderProducts)">Item code</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="name" onclick="setRegisterSort('products','name',renderProducts)">Product name</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="brand" onclick="setRegisterSort('products','brand',renderProducts)">Brand</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="model" onclick="setRegisterSort('products','model',renderProducts)">Model no.</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="category" onclick="setRegisterSort('products','category',renderProducts)">Category</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="uom" onclick="setRegisterSort('products','uom',renderProducts)">UOM</th><th class="sortable-register-th right" data-sort-screen="products" data-sort-key="price" onclick="setRegisterSort('products','price',renderProducts)">Default price</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="specs" onclick="setRegisterSort('products','specs',renderProducts)">Specs</th>
 </tr></thead>
 <tbody id="products-tbody"></tbody>
 </table>
@@ -788,7 +787,7 @@ document.addEventListener('error', function(e) {
 </div>
 </div>
 <div class="employee-expiry-summary" id="employee-expiry-summary"></div>
-<div class="employee-table-wrap"><table class="employee-table"><thead><tr><th>Employee</th><th>Department / Designation</th><th>Roles</th><th>Contact</th><th>Iqama</th><th>Passport</th><th>Driving licence</th><th>Status</th><th class="center">Actions</th></tr></thead><tbody id="employees-tbody"></tbody></table></div>
+<div class="employee-table-wrap"><table class="employee-table"><thead><tr><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="employee" onclick="setRegisterSort('employees','employee',renderEmployees)">Employee</th><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="department" onclick="setRegisterSort('employees','department',renderEmployees)">Department / Designation</th><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="roles" onclick="setRegisterSort('employees','roles',renderEmployees)">Roles</th><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="contact" onclick="setRegisterSort('employees','contact',renderEmployees)">Contact</th><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="iqama" onclick="setRegisterSort('employees','iqama',renderEmployees)">Iqama</th><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="passport" onclick="setRegisterSort('employees','passport',renderEmployees)">Passport</th><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="license" onclick="setRegisterSort('employees','license',renderEmployees)">Driving licence</th><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="status" onclick="setRegisterSort('employees','status',renderEmployees)">Status</th><th class="center">Actions</th></tr></thead><tbody id="employees-tbody"></tbody></table></div>
 <div class="rows-per-page-bar" style="padding:8px 16px"><label class="rows-per-page-label">Rows per page
   <select class="rows-per-page-select" onchange="setRowsPerPage(this.value)">
     <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
@@ -947,12 +946,35 @@ document.addEventListener('error', function(e) {
 </div>
 <!-- TAB: Document defaults -->
 <div class="setup-tab-content" id="setup-tab-defaults" style="display:none">
-<div class="setup-page-head"><div><h2>Numbering &amp; Document Defaults</h2><p>Manage document numbering and the standard terms automatically applied to new business documents.</p></div><span class="phase-badge">Document setup</span></div>
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
-<div class="setup-card"><h4><i class="ti ti-adjustments" style="margin-right:6px"></i>General defaults</h4><p style="font-size:12px;color:var(--gray);margin-bottom:14px">Pre-fill values for new records.</p><div style="display:flex;flex-direction:column;gap:12px"><div class="form-group"><label>Default validity (days)</label><input id="s-validity" min="1" type="number" value="7"/></div><div class="form-group"><label>RFQ response due (hours)</label><input id="s-rfqhours" min="1" type="number" value="48"/></div><button class="btn btn-primary" onclick="saveSetup()"><i class="ti ti-device-floppy"></i>Save defaults</button></div></div>
-<div class="setup-card"><h4><i class="ti ti-truck" style="margin-right:6px"></i>Delivery terms</h4><p style="font-size:12px;color:var(--gray);margin-bottom:10px">Click a term to set it as default.</p><div id="setup-delivery-list" style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;max-height:260px;overflow-y:auto"></div><div style="display:flex;gap:6px"><input id="setup-delivery-new" onkeydown="if(event.key==='Enter') addSetupTerm('delivery')" placeholder="Add delivery term…" style="flex:1;height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px"/><button class="btn btn-secondary btn-sm" onclick="addSetupTerm('delivery')"><i class="ti ti-plus"></i>Add</button></div></div>
-<div class="setup-card"><h4><i class="ti ti-credit-card" style="margin-right:6px"></i>Payment terms</h4><p style="font-size:12px;color:var(--gray);margin-bottom:10px">Click a term to set it as default.</p><div id="setup-payment-list" style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;max-height:260px;overflow-y:auto"></div><div style="display:flex;gap:6px"><input id="setup-payment-new" onkeydown="if(event.key==='Enter') addSetupTerm('payment')" placeholder="Add payment term…" style="flex:1;height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px"/><button class="btn btn-secondary btn-sm" onclick="addSetupTerm('payment')"><i class="ti ti-plus"></i>Add</button></div></div>
+<div class="setup-page-head admin-master-width"><div><h2>Numbering &amp; Defaults</h2><p>Control document numbering, standard transaction defaults and protected sequence maintenance.</p></div><span class="phase-badge">Document setup</span></div>
+<div class="numbering-subtabs admin-master-width" role="tablist" aria-label="Numbering and defaults sections">
+<button class="numbering-subtab active" id="numtab-numbering" onclick="switchNumberingSection('numbering')"><i class="ti ti-hash"></i>Document Numbering</button>
+<button class="numbering-subtab" id="numtab-defaults" onclick="switchNumberingSection('defaults')"><i class="ti ti-adjustments"></i>Document Defaults</button>
+<button class="numbering-subtab" id="numtab-sequences" onclick="switchNumberingSection('sequences')"><i class="ti ti-lock-cog"></i>Sequence Management</button>
 </div>
+<section class="numbering-section admin-master-width" id="numbering-section-numbering">
+<div class="setup-card numbering-main-card">
+<div class="numbering-section-head"><div><h4><i class="ti ti-hash"></i>Document Numbering</h4><p>Configure the prefix and reset period used when permanent document numbers are allocated.</p></div><button class="btn btn-primary btn-sm" onclick="saveDocumentNumbering()"><i class="ti ti-device-floppy"></i>Save Numbering</button></div>
+<div class="admin-master-table-wrap numbering-table-wrap"><table class="margin-status-table numbering-table"><thead><tr><th>Document</th><th>Prefix</th><th>Reset</th><th>Format Preview</th><th>Next Number</th></tr></thead><tbody id="document-numbering-tbody"></tbody></table></div>
+<div class="numbering-rule-note"><i class="ti ti-info-circle"></i><div><strong>Auto on Save</strong><span>Permanent numbers are assigned only when a new document is saved. Issued numbers are never reused. Quotation revisions use the existing -R1, -R2… suffix sequence.</span></div></div>
+</div>
+</section>
+<section class="numbering-section admin-master-width" id="numbering-section-defaults" style="display:none">
+<div class="defaults-intro"><div><strong>Document Defaults</strong><span>These values pre-fill new transactions. Users can change them on an individual document where the workflow allows.</span></div><button class="btn btn-primary btn-sm" onclick="saveSetup()"><i class="ti ti-device-floppy"></i>Save Defaults</button></div>
+<div class="numbering-default-grid">
+<div class="setup-card default-setting-card"><h4><i class="ti ti-file-settings"></i>General Defaults</h4><p>Standard timing values for newly created documents.</p><div class="default-fields"><div class="form-group"><label>Default quotation validity</label><div class="field-with-suffix"><input id="s-validity" min="1" type="number" value="7"/><span>Days</span></div></div><div class="form-group"><label>RFQ response due</label><div class="field-with-suffix"><input id="s-rfqhours" min="1" type="number" value="48"/><span>Hours</span></div></div></div></div>
+<div class="setup-card default-setting-card"><h4><i class="ti ti-truck"></i>Delivery Terms</h4><p>Click a term to make it the default for new documents.</p><div id="setup-delivery-list" class="default-term-list"></div><div class="default-term-add"><input id="setup-delivery-new" onkeydown="if(event.key==='Enter') addSetupTerm('delivery')" placeholder="Add delivery term…"/><button class="btn btn-secondary btn-sm" onclick="addSetupTerm('delivery')"><i class="ti ti-plus"></i>Add</button></div></div>
+<div class="setup-card default-setting-card"><h4><i class="ti ti-credit-card"></i>Payment Terms</h4><p>Click a term to make it the default for new documents.</p><div id="setup-payment-list" class="default-term-list"></div><div class="default-term-add"><input id="setup-payment-new" onkeydown="if(event.key==='Enter') addSetupTerm('payment')" placeholder="Add payment term…"/><button class="btn btn-secondary btn-sm" onclick="addSetupTerm('payment')"><i class="ti ti-plus"></i>Add</button></div></div>
+</div>
+<div class="numbering-rule-note defaults-master-note"><i class="ti ti-link"></i><div><strong>Master-driven settings</strong><span>VAT, currency and other controlled values should continue to come from their respective masters rather than being duplicated on this page.</span></div></div>
+</section>
+<section class="numbering-section admin-master-width" id="numbering-section-sequences" style="display:none">
+<div class="setup-card sequence-card"><div class="numbering-section-head"><div><h4><i class="ti ti-lock-cog"></i>Sequence Management</h4><p>Protected administrator maintenance for future document counters. Use only when a sequence genuinely needs correction.</p></div><span class="sequence-protected"><i class="ti ti-shield-lock"></i>Protected</span></div>
+<div class="sequence-form-grid"><div class="form-group"><label>Document</label><select id="sequence-doc-type" onchange="refreshSequenceManager()"></select></div><div class="sequence-readout"><span>Current period</span><strong id="sequence-current-period">—</strong></div><div class="sequence-readout"><span>Current counter</span><strong id="sequence-current-counter">—</strong></div><div class="sequence-readout"><span>Next number</span><strong id="sequence-next-number">—</strong></div></div>
+<div class="sequence-adjust-row"><div class="form-group"><label>Set current counter to</label><input id="sequence-adjust-value" type="number" min="0" step="1" placeholder="e.g. 47"/><small>The following saved document would receive the next number after this value.</small></div><button class="btn btn-danger" id="sequence-adjust-btn" onclick="requestSequenceAdjustment()"><i class="ti ti-edit"></i>Adjust Sequence</button></div>
+<div class="numbering-warning"><i class="ti ti-alert-triangle"></i><div><strong>Administrative control</strong><span>Changing a live counter can affect future document numbers. BizCore requires two confirmations and will not allow the counter to be set below a number already present in the current dataset.</span></div></div>
+</div>
+</section>
 </div>
 <!-- TAB: Users -->
 <div class="setup-tab-content" id="setup-tab-users" style="display:none">
@@ -1148,6 +1170,10 @@ document.addEventListener('error', function(e) {
 </div>
 </div>
 <div class="modal-body" onchange="markDirty('quote-modal')" oninput="markDirty('quote-modal')">
+<div class="quote-conversion-context" id="quote-conversion-context" style="display:none">
+<div class="quote-conversion-main"><span class="quote-conversion-kicker">PRICING → QUOTATION</span><strong id="quote-conversion-title">Create from Pricing</strong><span id="quote-conversion-subtitle">Commercial values are linked to the approved pricing document.</span></div>
+<div class="quote-flow-mini"><span>RFQ</span><i class="ti ti-arrow-right"></i><span class="done">Pricing ✓</span><i class="ti ti-arrow-right"></i><span class="active">Quotation</span><i class="ti ti-arrow-right"></i><span>Sales Order</span></div>
+</div>
 <div class="quote-head-strip">
 <div class="quote-meta"><strong id="quote-strip-no">New quotation</strong><span id="quote-strip-customer">Select a customer</span><span id="quote-valid-until">Valid until: —</span></div>
 <div style="display:flex;align-items:center;gap:8px"><span class="quote-save-state saved" id="quote-form-state">Saved</span><select class="quote-status-select" id="f-status"><option>Draft</option><option>Sent</option><option>Won</option><option>Lost</option><option>Expired</option><option>Revised</option></select></div>
@@ -1179,8 +1205,8 @@ document.addEventListener('error', function(e) {
 <section class="quote-info-panel quote-notes-panel">
 <div class="quote-info-panel-head"><i class="ti ti-notes"></i>Notes &amp; remarks</div>
 <div class="quote-info-panel-body quote-notes-grid quote-notes-grid-top">
-<div class="form-group"><label>Customer notes / remarks</label><textarea id="f-notes" placeholder="Remarks that may appear on the quotation…"></textarea></div>
-<div class="form-group"><label>Internal notes <span style="font-weight:400;color:var(--gray)">(not printed)</span></label><textarea id="f-internal-notes" placeholder="Internal instructions, follow-up notes, approvals…"></textarea></div>
+<div class="form-group"><label>Customer notes / remarks <span class="quote-note-visibility customer">Visible to customer</span></label><textarea id="f-notes" placeholder="Remarks that may appear on the quotation…"></textarea></div>
+<div class="form-group"><label>Internal notes <span class="quote-note-visibility internal">Internal only</span></label><textarea id="f-internal-notes" placeholder="Internal instructions, follow-up notes, approvals…"></textarea></div>
 </div>
 </section>
 </div>
@@ -1190,7 +1216,11 @@ document.addEventListener('error', function(e) {
 <div id="product-search-bar" style="margin-bottom:8px;display:flex;align-items:center;gap:7px"><div style="position:relative;flex:1;max-width:460px"><i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--gray);font-size:14px"></i><input autocomplete="off" id="prod-search-inp" onblur="setTimeout(closeProdSearch,200)" onfocus="openProdSearch()" oninput="filterProdSearch()" onkeydown="handleQuoteProductSearchKey(event)" placeholder="Search product database…" style="width:100%;height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px 0 32px;font-size:12px;outline:none"/><div id="prod-search-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--blue-mid);border-top:none;border-radius:0 0 var(--radius) var(--radius);max-height:220px;overflow-y:auto;z-index:300;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div></div><button class="btn btn-secondary btn-sm" onclick="addItemRow()"><i class="ti ti-plus"></i>Blank item</button><button class="btn btn-secondary btn-sm" onclick="addSpecialQuoteRow('heading')"><i class="ti ti-heading"></i>Add heading</button><button class="btn btn-secondary btn-sm" onclick="addSpecialQuoteRow('note')"><i class="ti ti-note"></i>Add note</button><button class="btn btn-secondary btn-sm" onclick="quickAddProductFromQuote()"><i class="ti ti-package-import"></i>New product</button><button class="btn btn-danger btn-sm" onclick="clearAllItems()"><i class="ti ti-trash"></i>Clear all</button></div>
 <div class="quote-items-wrap"><table class="items-table" id="items-table-main"><thead id="items-thead"><tr><th style="width:32px">SL</th><th style="width:110px">Item code</th><th style="width:145px">Brand / Model</th><th style="width:230px">Description</th><th style="width:82px">Qty *</th><th style="width:90px">UOM</th><th style="width:100px">Unit price *</th><th style="width:100px">Total</th><th style="width:32px"></th></tr></thead><tbody id="items-tbody"></tbody></table></div>
 <div id="service-add-btn" style="display:none;margin-top:8px;gap:6px"><button class="btn btn-secondary btn-sm" onclick="addServiceRow()"><i class="ti ti-plus"></i>Add scope line</button><button class="btn btn-secondary btn-sm" onclick="addSpecialQuoteRow('heading')"><i class="ti ti-heading"></i>Add heading</button><button class="btn btn-secondary btn-sm" onclick="addSpecialQuoteRow('note')"><i class="ti ti-note"></i>Add note</button><button class="btn btn-danger btn-sm" onclick="clearAllItems()"><i class="ti ti-trash"></i>Clear all</button></div>
-<div class="quote-bottom-summary"><div class="totals-box"><div class="totals-row"><span>Sub-total</span><span id="t-subtotal">SAR 0.00</span></div><div class="totals-row"><span>Discount <input id="f-discount" min="0" oninput="calcTotals()" style="width:70px;height:22px;font-size:12px;border:1px solid var(--border);border-radius:4px;padding:0 6px;margin-left:6px" type="number" value="0"/> SAR</span><span id="t-discount" style="color:var(--red)">- SAR 0.00</span></div><div class="totals-row"><span>Total before VAT</span><span id="t-before-vat">SAR 0.00</span></div><div class="totals-row"><span id="t-vat-label">VAT (15%)</span><span id="t-vat">SAR 0.00</span></div><div class="totals-row net"><span>Net amount</span><span id="t-net">SAR 0.00</span></div></div></div>
+<div class="quote-bottom-summary"><div class="quote-commercial-summary" id="quote-commercial-summary" style="display:none">
+<div class="quote-commercial-title"><span><i class="ti ti-chart-line"></i> Internal commercial summary</span><small>Screen only · never printed</small></div>
+<div class="quote-commercial-grid"><div><span>Estimated cost</span><strong id="qcs-cost">SAR 0.00</strong></div><div><span>Quotation value</span><strong id="qcs-value">SAR 0.00</strong></div><div><span>Gross profit</span><strong id="qcs-profit">SAR 0.00</strong></div><div><span>Margin</span><strong id="qcs-margin">0.0%</strong></div></div>
+<div class="quote-commercial-ref" id="qcs-ref"></div><div class="quote-price-change-note" id="qcs-change" style="display:none"><i class="ti ti-alert-triangle"></i><span></span></div>
+</div><div class="totals-box"><div class="totals-row"><span>Sub-total</span><span id="t-subtotal">SAR 0.00</span></div><div class="totals-row"><span>Discount <input id="f-discount" min="0" oninput="calcTotals()" style="width:70px;height:22px;font-size:12px;border:1px solid var(--border);border-radius:4px;padding:0 6px;margin-left:6px" type="number" value="0"/> SAR</span><span id="t-discount" style="color:var(--red)">- SAR 0.00</span></div><div class="totals-row"><span>Total before VAT</span><span id="t-before-vat">SAR 0.00</span></div><div class="totals-row"><span id="t-vat-label">VAT (15%)</span><span id="t-vat">SAR 0.00</span></div><div class="totals-row net"><span>Net amount</span><span id="t-net">SAR 0.00</span></div></div></div>
 </section>
 </div>
 <div class="modal-footer"><div class="quote-footer-state"><span id="quote-footer-state">✓ Saved</span><span>Ctrl + S to save</span></div><div class="quote-footer-actions"><button class="btn btn-secondary" onclick="confirmCloseModal('quote-modal')">Cancel</button><button class="btn btn-secondary" onclick="saveQuotation('draft')"><i class="ti ti-device-floppy"></i>Save Draft</button><button class="btn btn-primary" onclick="saveQuotation('preview')"><i class="ti ti-eye"></i>Save &amp; Preview</button><button class="btn btn-success" onclick="saveQuotation('sent')"><i class="ti ti-send"></i>Save &amp; Mark Sent</button></div></div>
@@ -1681,47 +1711,51 @@ document.addEventListener('error', function(e) {
 ═══════════════════════════════════════════════════════════ -->
 <!-- CREATE SALES ORDER MODAL -->
 <div class="modal-overlay" id="so-create-modal">
-<div class="modal modal-normal">
+<div class="modal modal-normal so-create-workspace">
 <div class="modal-header">
-<h2 id="so-create-title">Create Sales Order</h2>
+<div><h2 id="so-create-title">Create Sales Order</h2><div class="so-create-subtitle" id="so-create-subtitle">Create from won quotation</div></div>
 <button class="close-btn" onclick="closeModal('so-create-modal')">✕</button>
 </div>
 <div class="modal-body">
-<!-- SO header fields -->
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
-<div class="form-group"><label>SO Number</label><input id="so-no" readonly="" style="background:#f8f9fa;font-weight:600"/></div>
-<div class="form-group"><label>Date</label><input id="so-date" type="date"/></div>
+<div class="so-flow-strip"><span>RFQ</span><i class="ti ti-arrow-right"></i><span>Pricing</span><i class="ti ti-arrow-right"></i><span class="done">Quotation ✓</span><i class="ti ti-arrow-right"></i><span class="active">Sales Order</span></div>
+<div class="so-header-grid">
+<section class="so-entry-card"><div class="so-entry-card-title"><i class="ti ti-user"></i>Customer & Reference</div><div class="so-entry-fields two">
+<div class="form-group"><label>Customer</label><input id="so-customer" readonly class="so-readonly"/></div>
 <div class="form-group"><label>Customer PO Number *</label><input id="so-po-no" placeholder="e.g. PO-2026-00451"/></div>
+<div class="form-group"><label>Customer PO Date</label><input id="so-po-date" type="date"/></div>
+<div class="form-group"><label>Project / Reference</label><input id="so-project" placeholder="Project or customer reference"/></div>
+<div class="form-group"><label>Contact Person</label><input id="so-contact" placeholder="Contact person"/></div>
+<div class="form-group"><label>Customer PO Attachment</label>
+<input id="so-po-file" class="so-file-input-native" type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" onchange="soPOFileChanged(this)"/>
+<div class="so-attachment-control" id="so-po-attachment-control" role="button" tabindex="0" onclick="soAttachmentAreaClick(event)" onkeydown="soPOAttachmentKeydown(event)">
+<div class="so-attachment-empty" id="so-po-empty">
+<div class="so-attachment-icon"><i class="ti ti-file-upload"></i></div>
+<div class="so-attachment-copy"><strong>Upload Customer PO</strong><span>Click to browse for PDF, JPG, PNG, DOC or DOCX</span></div>
+<label class="btn btn-secondary btn-sm so-attachment-browse" for="so-po-file" onclick="soPreparePOFilePicker(event)"><i class="ti ti-paperclip"></i>Browse</label>
 </div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-<div class="form-group"><label>Customer</label><input id="so-customer" readonly="" style="background:#f8f9fa"/></div>
-<div class="form-group"><label>Linked quotation</label><input id="so-quote-ref" readonly="" style="background:#f8f9fa"/></div>
+<div class="so-attachment-selected" id="so-po-selected" style="display:none">
+<div class="so-attachment-fileicon"><i class="ti ti-file-description"></i></div>
+<div class="so-attachment-filecopy"><strong id="so-po-file-name">No file attached</strong><span id="so-po-file-meta">File ready</span></div>
+<span class="so-attachment-ready"><i class="ti ti-check"></i>Ready</span>
+<label class="btn btn-secondary btn-sm" for="so-po-file" onclick="soPreparePOFilePicker(event)"><i class="ti ti-refresh"></i>Replace</label>
+<button class="so-attachment-remove" type="button" title="Remove attachment" aria-label="Remove attachment" onclick="soRemovePOFile(event)"><i class="ti ti-trash"></i></button>
 </div>
-<div class="form-group" style="margin-bottom:16px"><label>Notes / instructions</label><textarea id="so-notes" placeholder="Any special instructions for this order…" style="height:52px;width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;resize:vertical;outline:none"></textarea></div>
-<!-- Item selector -->
-<div class="section-title" style="display:flex;align-items:center;justify-content:space-between">
-<span><i class="ti ti-list-check" style="margin-right:6px"></i>Select items from quotation</span>
-<div style="display:flex;gap:8px">
-<button class="btn btn-secondary btn-sm" onclick="soSelectAll(true)"><i class="ti ti-check"></i>Select all</button>
-<button class="btn btn-secondary btn-sm" onclick="soSelectAll(false)"><i class="ti ti-x"></i>Clear</button>
+</div></div>
+</div></section>
+<section class="so-entry-card"><div class="so-entry-card-title"><i class="ti ti-file-check"></i>Sales Order Details</div><div class="so-entry-fields two">
+<div class="form-group"><label>SO Number</label><input id="so-no" readonly class="so-readonly strong"/></div>
+<div class="form-group"><label>SO Date</label><input id="so-date" type="date"/></div>
+<div class="form-group"><label>Linked Quotation</label><input id="so-quote-ref" readonly class="so-readonly"/></div>
+<div class="form-group"><label>Expected Delivery</label><input id="so-expected-delivery" type="date"/></div>
+<div class="form-group"><label>Payment Terms</label><input id="so-payment" readonly class="so-readonly"/></div>
+<div class="form-group"><label>Delivery Terms</label><input id="so-delivery" readonly class="so-readonly"/></div>
+</div></section>
 </div>
+<section class="so-entry-card so-items-card"><div class="so-entry-card-title so-items-title"><span><i class="ti ti-list-check"></i>Order Items</span><div><button class="btn btn-secondary btn-sm" onclick="soSelectAll(true)"><i class="ti ti-check"></i>Select all</button><button class="btn btn-secondary btn-sm" onclick="soSelectAll(false)"><i class="ti ti-x"></i>Clear</button></div></div><div class="so-items-help">Commercial values come from the won quotation. Enter only the quantity covered by this customer PO.</div><div class="so-items-head"><span></span><span>Item / Description</span><span>Quoted</span><span>Previously Ordered</span><span>This Order</span><span>Remaining After</span><span>UOM</span><span>Unit Price</span><span>Amount</span></div><div id="so-items-list"></div></section>
+<div class="so-bottom-grid"><section class="so-entry-card"><div class="so-entry-card-title"><i class="ti ti-message"></i>Order Notes</div><div class="so-note-grid"><div class="form-group"><label>Customer Notes / Delivery Instructions</label><textarea id="so-notes" placeholder="Instructions that may be relevant to order execution…"></textarea></div><div class="form-group"><label>Internal Note</label><textarea id="so-internal-note" placeholder="Internal information — never shown on customer documents"></textarea></div></div></section><section class="so-entry-card so-summary-card" id="so-summary"><div class="so-entry-card-title"><i class="ti ti-calculator"></i>Order Summary</div><div class="so-summary-row muted"><span>Quotation Value</span><strong id="so-sum-quote">SAR 0.00</strong></div><div class="so-summary-row"><span>This Order</span><strong id="so-sum-order">SAR 0.00</strong></div><div class="so-summary-divider"></div><div class="so-summary-row"><span>Subtotal</span><span id="so-sum-sub">SAR 0.00</span></div><div class="so-summary-row"><span id="so-sum-vat-label">VAT (15%)</span><span id="so-sum-vat">SAR 0.00</span></div><div class="so-summary-total"><span>TOTAL</span><span id="so-sum-total">SAR 0.00</span></div><div id="so-remaining-note" class="so-partial-note"></div></section></div>
 </div>
-<p style="font-size:12px;color:var(--gray);margin:-6px 0 10px">Check the items the customer has ordered. Adjust quantity if partial PO.</p>
-<div id="so-items-list"></div>
-<!-- Summary -->
-<div id="so-summary" style="background:var(--blue-pale);border:1px solid var(--blue-light);border-radius:var(--radius);padding:12px 16px;margin-top:12px;display:none">
-<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>Sub-total</span><span id="so-sum-sub">SAR 0.00</span></div>
-<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span id="so-sum-vat-label">VAT (15%)</span><span id="so-sum-vat">SAR 0.00</span></div>
-<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;color:var(--blue);border-top:1px solid var(--blue-light);padding-top:8px;margin-top:6px"><span>Total</span><span id="so-sum-total">SAR 0.00</span></div>
-<div id="so-remaining-note" style="font-size:11px;color:var(--gray);margin-top:6px"></div>
-</div>
-</div>
-<div class="modal-footer">
-<button class="btn btn-secondary" onclick="closeModal('so-create-modal')">Cancel</button>
-<button class="btn btn-primary" id="so-save-btn" onclick="saveSalesOrder()"><i class="ti ti-shopping-cart"></i><span id="so-save-btn-text">Create Sales Order</span></button>
-</div>
-</div>
-</div>
+<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('so-create-modal')">Cancel</button><button class="btn btn-primary" id="so-save-btn" onclick="saveSalesOrder()"><i class="ti ti-shopping-cart"></i><span id="so-save-btn-text">Save Sales Order</span></button></div>
+</div></div>
 <!-- VIEW SALES ORDER MODAL -->
 <div class="modal-overlay" id="so-view-modal">
 <div class="modal modal-normal">
@@ -1739,30 +1773,25 @@ document.addEventListener('error', function(e) {
 </div>
 </div>
 <!-- RECORD DELIVERY MODAL -->
-<div class="modal-overlay" id="so-delivery-modal">
-<div class="modal modal-compact">
-<div class="modal-header">
-<h2 id="dn-title">Dispatch Delivery</h2>
-<button class="close-btn" onclick="closeModal('so-delivery-modal')">✕</button>
-</div>
+<div class="modal-overlay" id="so-delivery-modal"><div class="modal modal-normal" style="width:min(94vw,1180px);max-width:1180px">
+<div class="modal-header"><h2 id="dn-title">Create Delivery Note</h2><button class="close-btn" onclick="closeModal('so-delivery-modal')">✕</button></div>
 <div class="modal-body">
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
-<div class="form-group"><label>Delivery Note No</label><input id="dn-no" readonly="" style="background:#f8f9fa;font-weight:600"/></div>
-<div class="form-group"><label>Delivery date *</label><input id="dn-date" type="date"/></div>
-<div class="form-group"><label>Delivered by</label><input id="dn-by" placeholder="Driver / courier name"/></div>
-<div class="form-group"><label>Vehicle / AWB No</label><input id="dn-vehicle" placeholder="Vehicle plate or tracking no."/></div>
-</div>
-<div class="form-group" style="margin-bottom:14px"><label>Delivery remarks</label><textarea id="dn-remarks" placeholder="Received in good condition, partial delivery, etc." style="height:52px;width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;resize:vertical;outline:none"></textarea></div>
-<div class="section-title" style="margin-top:0"><i class="ti ti-package" style="margin-right:6px"></i>Items delivered</div>
-<p style="font-size:12px;color:var(--gray);margin:-6px 0 10px">Select and confirm quantities physically delivered.</p>
-<div id="dn-items-list"></div>
-</div>
-<div class="modal-footer">
-<button class="btn btn-secondary" onclick="closeModal('so-delivery-modal')">Cancel</button>
-<button class="btn btn-success" onclick="saveDelivery()"><i class="ti ti-truck"></i>Dispatch</button>
-</div>
-</div>
-</div>
+<div class="quote-info-panel" style="margin-bottom:14px"><div class="section-title" style="margin-top:0"><i class="ti ti-truck-delivery"></i> Delivery Details</div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+<div class="form-group"><label>Delivery Note No.</label><input id="dn-no" readonly class="so-readonly"/></div><div class="form-group"><label>DN Date *</label><input id="dn-date" type="date"/></div><div class="form-group"><label>Delivery Person *</label><select id="dn-assignee"></select></div>
+<div class="form-group"><label>Vehicle / AWB No.</label><input id="dn-vehicle" placeholder="Vehicle plate or tracking no."/></div><div class="form-group"><label>Customer PO</label><input id="dn-po" readonly class="so-readonly"/></div><div class="form-group"><label>Sales Order</label><input id="dn-so-ref" readonly class="so-readonly"/></div></div></div>
+<div class="section-title"><i class="ti ti-package"></i> Delivery Items</div><p style="font-size:12px;color:var(--gray);margin:-6px 0 10px">Enter the quantity being dispatched. Completed quantities cannot be dispatched again.</p>
+<div class="table-wrap"><table><thead><tr><th style="width:42px">#</th><th>Description</th><th class="center">Ordered</th><th class="center">Previously Accepted</th><th class="center">This Delivery</th><th class="center">Remaining After</th><th class="center">UOM</th></tr></thead><tbody id="dn-items-list"></tbody></table></div>
+<div class="form-group" style="margin-top:14px"><label>Delivery / Driver Remarks</label><textarea id="dn-remarks" placeholder="Delivery instructions or dispatch remarks…" style="height:58px"></textarea></div>
+</div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('so-delivery-modal')">Cancel</button><button class="btn btn-success" onclick="saveDelivery()"><i class="ti ti-truck"></i>Save &amp; Dispatch</button></div></div></div>
+
+<!-- MOBILE DELIVERY CONFIRMATION -->
+<div class="modal-overlay" id="dn-confirm-modal"><div class="modal modal-normal dn-mobile-confirm" style="width:min(96vw,760px);max-width:760px">
+<div class="modal-header"><div><h2 id="dn-confirm-title">Delivery Confirmation</h2><div id="dn-confirm-sub" style="font-size:12px;color:var(--gray);margin-top:3px"></div></div><button class="close-btn" onclick="closeModal('dn-confirm-modal')">✕</button></div>
+<div class="modal-body"><div class="dn-auth-banner"><i class="ti ti-shield-check"></i><div><strong>Authenticated delivery update</strong><span id="dn-auth-user">Signed in user</span></div></div>
+<p style="font-size:12px;color:var(--gray);margin:12px 0">Confirm what the customer actually accepted. Any rejected quantity returns to the Sales Order remaining quantity.</p>
+<div id="dn-accept-items"></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px"><div class="form-group"><label>Received By *</label><input id="dn-received-by" placeholder="Customer representative name"/></div><div class="form-group"><label>Customer / Delivery Remarks</label><input id="dn-customer-remarks" placeholder="Optional remarks"/></div></div>
+</div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('dn-confirm-modal')">Cancel</button><button class="btn btn-success" onclick="saveDeliveryAcceptance()"><i class="ti ti-circle-check"></i>Confirm Delivery</button></div></div></div>
 <!-- CREATE INVOICE MODAL -->
 <div class="modal-overlay" id="so-invoice-modal">
 <div class="modal modal-compact">
@@ -2193,6 +2222,38 @@ function fbListenSettings(onUpdate) {
    the same time. Firestore transactions guarantee
    only ONE device can ever claim a given number.
 ═══════════════════════════════════════════════════ */
+async function getNextDocSequence(counterKey) {
+  const counterRef = doc(db, 'counters', counterKey);
+  try {
+    return await runTransaction(db, async (tx) => {
+      const snap = await tx.get(counterRef);
+      const current = snap.exists() ? (snap.data().value || 0) : 0;
+      const next = current + 1;
+      tx.set(counterRef, { value: next, updatedAt: Date.now() });
+      return next;
+    });
+  } catch(e) { console.warn('Atomic sequence failed:', e.message); return null; }
+}
+async function getDocSequence(counterKey) {
+  try {
+    const snap = await getDoc(doc(db, 'counters', counterKey));
+    return snap.exists() ? Number(snap.data().value || 0) : 0;
+  } catch(e) { console.warn('Counter read failed:', e.message); return null; }
+}
+async function setDocSequence(counterKey, value, minimumExisting=0) {
+  const counterRef = doc(db, 'counters', counterKey);
+  try {
+    const requested = Number(value);
+    if (!Number.isInteger(requested) || requested < Number(minimumExisting||0)) return {ok:false,message:'Counter value is below an existing issued sequence.'};
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(counterRef);
+      const current = snap.exists() ? Number(snap.data().value || 0) : 0;
+      if (requested < Number(minimumExisting||0)) throw new Error('Counter is below an issued sequence');
+      tx.set(counterRef, { value: requested, previousValue: current, manuallyAdjusted:true, updatedAt: Date.now() });
+    });
+    return {ok:true};
+  } catch(e) { console.warn('Counter adjustment failed:', e.message); return {ok:false,message:e.message||'Counter adjustment failed'}; }
+}
 async function getNextDocNumber(counterKey, prefix) {
   const counterRef = doc(db, 'counters', counterKey);
   try {
@@ -2212,7 +2273,7 @@ async function getNextDocNumber(counterKey, prefix) {
 
 /* Expose to app.js */
 window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings, fbListen, fbListenSettings,
-  getNextDocNumber, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
+  getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
 
   /* ═══════════════════════════════════════════════════
      PRESENCE LOCKING SYSTEM
@@ -2328,7 +2389,7 @@ window.fbAuthInstance = auth;
 
 /* ── Auth guard ── */
 onAuthStateChanged(auth, user => {
-  if (!user) { window.location.href = 'login.html'; return; }
+  if (!user) { const target=location.pathname.split('/').pop()+(location.search||''); window.location.href='login.html?return='+encodeURIComponent(target); return; }
 
   window.currentUser = {
     uid:   user.uid,
@@ -2392,7 +2453,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=100';
+    s.src = 'js/app.js?v=124';
     document.body.appendChild(s);
   }
 });

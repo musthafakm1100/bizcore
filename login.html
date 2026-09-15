@@ -130,7 +130,7 @@ const db   = getFirestore(app);
 
 // If already logged in go straight to app
 onAuthStateChanged(auth, function(user) {
-  if (user) { window.location.href = 'index.html'; }
+  if (user) { const r=new URLSearchParams(location.search).get('return'); window.location.href = r || 'index.html'; }
 });
 
 // Try to load company logo from Firestore
