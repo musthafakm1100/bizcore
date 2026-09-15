@@ -10999,12 +10999,21 @@ initPremiumSidebar();
 initPremiumTopbar();
 loadRecycleBin();
 loadData().then(function() {
-  // After data loads, restore the page the user was on before refresh
-  // This prevents F5 always jumping back to Dashboard
+  // Deep links are authoritative. Never let normal last-page restoration
+  // (for example Pricing) override a Delivery Note QR destination.
+  const dnDeepLink = new URLSearchParams(location.search).get('dn');
+  if (dnDeepLink) {
+    if (typeof openDNFromDeepLink === 'function') openDNFromDeepLink();
+    return;
+  }
+
+  // After ordinary startup, restore the page the user was on before refresh.
   try {
     const lastPage = localStorage.getItem('bc_last_nav_page');
     if (lastPage && lastPage !== 'dashboard') {
       setTimeout(function() {
+        // Re-check in case a deep link was introduced while startup completed.
+        if (new URLSearchParams(location.search).get('dn')) return;
         if (typeof showPage === 'function') showPage(lastPage);
       }, 300);
     }
