@@ -10018,15 +10018,35 @@ function getDNDeepLink(d){const base=location.href.split('?')[0].split('#')[0];r
 function renderDNQRCode(d){setTimeout(()=>{const el=document.getElementById('dn-qr-code');if(!el)return;el.innerHTML='';if(window.QRCode){new QRCode(el,{text:getDNDeepLink(d),width:112,height:112,correctLevel:QRCode.CorrectLevel.M})}else{el.innerHTML='<div style="font-size:10px;color:#777;width:112px">QR library unavailable. Use the delivery link from BizCore.</div>'}},0)}
 function openDNFromDeepLink(){
  const id=new URLSearchParams(location.search).get('dn');
- if(!id || window._dnDeepLinkOpened===id) return false;
- // Authentication and Firebase data both need to be ready. If not, caller retries.
+ if(!id || window._dnDeepLinkOpened===id || window._dnDeepLinkRouting===id) return false;
+ // Authentication and authoritative Firebase SO/DN data must both be ready.
  if(!window.currentUser || !Array.isArray(salesOrders)) return false;
  const hit=allDeliveryNotes().find(x=>x.d.id===id);
  if(!hit) return false;
- window._dnDeepLinkOpened=id;
+
+ // v128: the QR destination is the exact DN workspace, not merely the DN register.
+ // Render the register only as the background module, then open the requested DN
+ // after that render has completed. Do not mark the deep link as consumed until
+ // the target modal is actually open.
+ window._dnDeepLinkRouting=id;
  showPage('deliverynotes');
- if(hit.d.customerConfirmed) viewDeliveryNote(hit.so.id,hit.i);
- else openDeliveryAcceptance(hit.so.id,hit.i);
+ setTimeout(()=>{
+   try{
+     if(hit.d.customerConfirmed) viewDeliveryNote(hit.so.id,hit.i);
+     else openDeliveryAcceptance(hit.so.id,hit.i);
+
+     const targetId=hit.d.customerConfirmed?'dn-print-modal':'dn-confirm-modal';
+     const target=document.getElementById(targetId);
+     if(target && target.classList.contains('open')){
+       window._dnDeepLinkOpened=id;
+     }else{
+       // Allow the startup retry loop / Firebase listener to try again.
+       window._dnDeepLinkOpened=null;
+     }
+   }finally{
+     window._dnDeepLinkRouting=null;
+   }
+ },80);
  return true;
 }
 /* ── View / Print Delivery Note ── */
