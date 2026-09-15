@@ -10003,7 +10003,11 @@ function openDeliveryAcceptance(soId,deliveryIdx){
  const authz=canConfirmDelivery(d);if(!authz.ok){showToast(authz.msg,'error');return}
  document.getElementById('dn-confirm-title').textContent=d.dnNo+' — Confirm Delivery';document.getElementById('dn-confirm-sub').textContent=`${so.customer} · ${so.soNo}`;document.getElementById('dn-auth-user').textContent='Signed in as '+deliveryActor();document.getElementById('dn-received-by').value='';document.getElementById('dn-customer-remarks').value='';
  const box=document.getElementById('dn-confirm-items');box.innerHTML=(d.items||[]).map((it,i)=>`<div class="dn-accept-card"><div class="dn-accept-head"><span>${i+1}. ${escapeHtml(it.desc||'—')}</span><strong>${it.qty} ${escapeHtml(it.uom||'')}</strong></div><div class="dn-accept-grid"><label>Accepted Qty<input type="number" id="dn-acc-${i}" value="${it.qty}" min="0" max="${it.qty}" step="${qtyStep(it.uom)}" oninput="syncDNReject(${i})"></label><label>Rejected Qty<input type="number" id="dn-rej-${i}" value="0" min="0" max="${it.qty}" step="${qtyStep(it.uom)}" oninput="syncDNAccept(${i})"></label><label id="dn-reason-wrap-${i}" style="display:none">Rejection Reason<select id="dn-reason-${i}"><option value="">Select reason…</option><option>Damaged</option><option>Specification mismatch</option><option>Wrong item</option><option>Excess quantity</option><option>Quality issue</option><option>Customer requested return</option><option>Packaging damaged</option><option>Other</option></select></label><label id="dn-disposition-wrap-${i}" style="display:none">Disposition<select id="dn-disposition-${i}"><option>Returned with Driver</option><option>Left at Customer Site</option><option>Replacement Required</option><option>Under Review</option></select></label></div><input id="dn-line-remarks-${i}" class="dn-line-remarks" placeholder="Rejection / line remarks (optional)" style="display:none"></div>`).join('');
- const modal=document.getElementById('dn-confirm-modal');modal._soId=soId;modal._deliveryIdx=deliveryIdx;openModalWithSize('dn-confirm-modal');
+ const modal=document.getElementById('dn-confirm-modal');
+ if(!modal){showToast('Delivery Confirmation screen is unavailable','error');return false;}
+ modal._soId=soId;modal._deliveryIdx=deliveryIdx;
+ openModalWithSize('dn-confirm-modal');
+ return modal.classList.contains('open');
 }
 function syncDNReject(i){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m._soId)?.deliveries?.[m._deliveryIdx],it=d?.items?.[i];if(!it)return;let a=Math.max(0,Math.min(Number(document.getElementById('dn-acc-'+i).value)||0,Number(it.qty)||0));document.getElementById('dn-rej-'+i).value=roundQtyForUom((Number(it.qty)||0)-a,it.uom);toggleDNRejectFields(i)}
 function syncDNAccept(i){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m._soId)?.deliveries?.[m._deliveryIdx],it=d?.items?.[i];if(!it)return;let r=Math.max(0,Math.min(Number(document.getElementById('dn-rej-'+i).value)||0,Number(it.qty)||0));document.getElementById('dn-acc-'+i).value=roundQtyForUom((Number(it.qty)||0)-r,it.uom);toggleDNRejectFields(i)}
@@ -10152,11 +10156,28 @@ function viewDeliveryNote(soId, deliveryIdx) {
 
 
 function openDeliveryConfirmationFromDNView(){
-  const modal=document.getElementById('dn-print-modal');
-  const soId=modal?._soId, deliveryIdx=modal?._deliveryIdx;
+  const viewModal=document.getElementById('dn-print-modal');
+  const soId=viewModal?._soId, deliveryIdx=viewModal?._deliveryIdx;
   if(soId==null || deliveryIdx==null){showToast('Unable to identify this Delivery Note','error');return;}
-  closeModal('dn-print-modal');
-  setTimeout(()=>openDeliveryAcceptance(soId,deliveryIdx),60);
+
+  // Open the confirmation workspace FIRST while the source DN still owns its
+  // record context. Only then hide the DN View. This avoids losing/interrupting
+  // the transition between two modal workspaces.
+  try{
+    const opened=openDeliveryAcceptance(soId,deliveryIdx);
+    const confirmModal=document.getElementById('dn-confirm-modal');
+    if(opened && confirmModal?.classList.contains('open')){
+      viewModal?.classList.remove('open','modal-fs-overlay');
+      updateFullscreenShellState();
+      // Keep the confirmation workspace above any other modal remnants.
+      confirmModal.style.zIndex='6200';
+      return;
+    }
+    showToast('Could not open Delivery Confirmation','error');
+  }catch(err){
+    console.error('Delivery Confirmation open failed',err);
+    showToast('Could not open Delivery Confirmation: '+(err?.message||'Unknown error'),'error');
+  }
 }
 
 function printDeliveryNote() {
