@@ -14,7 +14,7 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=132" rel="stylesheet"/>
+<link href="css/main.css?v=133" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=132" rel="stylesheet"/>
 <link href="css/typography.css?v=35" rel="stylesheet"/>
 <link href="css/masters.css?v=97" rel="stylesheet"/>
@@ -2204,6 +2204,28 @@ function fbListen(col, onUpdate) {
   }, err => console.warn('RT listener error:', col, err.message));
 }
 
+
+
+/* ── Operational event channel ─────────────────────────────────────────────
+   Business events are separate from nested Sales Order state. This gives
+   office sessions a small, reliable real-time signal and lets them force a
+   fresh SO/DN reload when a driver confirms a delivery. ── */
+async function fbPublishOperationalEvent(event) {
+  try {
+    const id = event && event.id ? String(event.id) : ('evt-' + Date.now() + '-' + Math.random().toString(36).slice(2,8));
+    await setDoc(doc(db, 'operationalEvents', id), { ...event, id, createdAt: event.createdAt || new Date().toISOString() });
+    return true;
+  } catch(e) { console.warn('Operational event publish failed:', e.message); return false; }
+}
+function fbListenOperationalEvents(onUpdate) {
+  const ref = collection(db, 'operationalEvents');
+  return onSnapshot(ref, { includeMetadataChanges: true }, snap => {
+    if (snap.metadata.hasPendingWrites) return;
+    const changes = snap.docChanges().filter(c => c.type === 'added').map(c => c.doc.data());
+    if (changes.length) onUpdate(changes, snap.metadata.fromCache);
+  }, err => console.warn('Operational event listener error:', err.message));
+}
+
 function fbListenSettings(onUpdate) {
   const ref = doc(db, 'settings', 'main');
   return onSnapshot(ref, snap => {
@@ -2273,7 +2295,7 @@ async function getNextDocNumber(counterKey, prefix) {
 }
 
 /* Expose to app.js */
-window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings, fbListen, fbListenSettings,
+window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
   getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
 
   /* ═══════════════════════════════════════════════════
@@ -2454,7 +2476,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=132';
+    s.src = 'js/app.js?v=133';
     document.body.appendChild(s);
   }
 });

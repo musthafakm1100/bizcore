@@ -466,6 +466,31 @@ async function loadData() {
           if (typeof openDNFromDeepLink === 'function') setTimeout(openDNFromDeepLink, 0);
         });
 
+
+        // Dedicated business-event channel. A DN confirmation publishes a tiny
+        // event document after the Sales Order write succeeds. Every other
+        // session receives it, force-refreshes SO/DN data from Firestore, updates
+        // the open register/view, and creates the office notification.
+        if (window.FB.fbListenOperationalEvents) {
+          let opsInitial = true;
+          window.FB.fbListenOperationalEvents(async function(events) {
+            if (opsInitial) { opsInitial = false; return; }
+            const sessionId = getBizCoreSessionId();
+            const remote = (events||[]).filter(e => e && e.type==='dn-confirmed' && e.sourceSession !== sessionId);
+            if (!remote.length) return;
+            const fresh = await window.FB.fbLoad('salesOrders');
+            if (Array.isArray(fresh)) {
+              salesOrders = fresh;
+              try { localStorage.setItem('dtq_salesorders', JSON.stringify(salesOrders)); } catch(e) {}
+              if (getActivePage()==='deliverynotes' && typeof renderDNPage==='function') renderDNPage();
+              if (getActivePage()==='salesorders' && typeof renderSOPage==='function') renderSOPage();
+              if (typeof renderDashboard==='function') renderDashboard();
+              remote.forEach(ev => handleOperationalDNEvent(ev));
+              if (typeof refreshOpenDNViewById==='function') refreshOpenDNViewById(remote.map(e=>e.dnId));
+            }
+          });
+        }
+
         window.FB.fbListen('employees', function(data) {
           employees = data;
           try { localStorage.setItem('dtq_employees', JSON.stringify(employees)); } catch(e) {}
@@ -595,7 +620,8 @@ async function saveTerms() {
 }
 async function saveSalesOrders() {
   try { localStorage.setItem('dtq_salesorders', JSON.stringify(salesOrders)); } catch(e) {}
-  if (window.FB) await window.FB.fbSave('salesOrders', salesOrders);
+  if (window.FB) return await window.FB.fbSave('salesOrders', salesOrders);
+  return true;
 }
 
 /* ── SAMPLE DATA ── */
@@ -10044,7 +10070,12 @@ async function saveDeliveryAcceptance(){
  d.customerConfirmed=true;d.customerConfirmedDate=new Date().toISOString().split('T')[0];d.confirmedAt=new Date().toISOString();d.confirmedBy=deliveryActor();d.receivedBy=receivedBy;d.customerRemarks=document.getElementById('dn-customer-remarks').value.trim();d.status=getDNStatus(d);
  // Suppress a duplicate remote-event toast on the device that performed the confirmation.
  window._dnLocalConfirmationIds=window._dnLocalConfirmationIds||new Set();window._dnLocalConfirmationIds.add(d.id);
- await saveSalesOrders();closeModal('dn-confirm-modal');renderSOPage();renderDNPage();viewSO(so.id);showToast(`${d.dnNo} confirmed — ${d.status}`,'success');
+ const saved=await saveSalesOrders();
+ if(saved===false){showToast('Delivery confirmation could not be synchronized. Please check the connection and try again.','error');return}
+ if(window.FB?.fbPublishOperationalEvent){
+   await window.FB.fbPublishOperationalEvent({id:`dn-confirmed-${d.id}-${Date.now()}`,type:'dn-confirmed',dnId:d.id,dnNo:d.dnNo,soId:so.id,status:d.status,actor:d.confirmedBy||deliveryActor(),sourceSession:getBizCoreSessionId(),createdAt:d.confirmedAt});
+ }
+ closeModal('dn-confirm-modal');renderSOPage();renderDNPage();viewSO(so.id);showToast(`${d.dnNo} confirmed — ${d.status}`,'success');
 }
 async function confirmDelivery(soId,deliveryIdx){openDeliveryAcceptance(soId,deliveryIdx)}
 function getDNDeepLink(d){const base=location.href.split('?')[0].split('#')[0];return base+'?dn='+encodeURIComponent(d.id)}
@@ -11066,6 +11097,25 @@ function toggleTopbarMenu(id){
   const target=document.getElementById(id),wasOpen=target?.classList.contains('show');closeTopbarMenus();if(target&&!wasOpen)target.classList.add('show');
 }
 function closeTopbarMenus(){document.querySelectorAll('.topbar-dropdown.show').forEach(x=>x.classList.remove('show'));}
+function getBizCoreSessionId(){
+  let id=sessionStorage.getItem('bc_session_id');
+  if(!id){id='sess-'+Date.now()+'-'+Math.random().toString(36).slice(2,10);sessionStorage.setItem('bc_session_id',id)}
+  return id;
+}
+function handleOperationalDNEvent(e){
+  const so=salesOrders.find(x=>x.id===e.soId), hit=so?.deliveries?.find(d=>d.id===e.dnId);
+  if(!so||!hit)return;
+  const status=getDNStatus(hit), rejected=(hit.items||[]).reduce((n,it)=>n+(Number(it.rejectedQty)||0),0);
+  const title=status==='Delivered'?'Delivery Confirmed':status==='Rejected'?'Delivery Rejected':'Delivery Partially Accepted';
+  const msg=`${hit.dnNo} · ${so.customer}${rejected>0?` · Rejected qty: ${rejected}`:''}`;
+  addBizCoreNotification({id:e.id||`dn-confirmed:${hit.id}:${hit.confirmedAt||''}`,type:'delivery',title,message:msg,status,soId:so.id,deliveryIdx:(so.deliveries||[]).findIndex(d=>d.id===hit.id),dnId:hit.id,actor:hit.confirmedBy||e.actor||'',createdAt:hit.confirmedAt||e.createdAt||new Date().toISOString()});
+  showToast(title,msg,status==='Delivered'?'success':'warning');
+}
+function refreshOpenDNViewById(ids){
+  const modal=document.getElementById('dn-print-modal');if(!modal?.classList.contains('open'))return;
+  const so=salesOrders.find(x=>x.id===modal._soId), d=so?.deliveries?.[modal._deliveryIdx];
+  if(d && ids.includes(d.id)) setTimeout(()=>viewDeliveryNote(modal._soId,modal._deliveryIdx),0);
+}
 const BC_NOTIFICATION_KEY='bizcore_notifications_v1';
 function loadBizCoreNotifications(){try{return JSON.parse(localStorage.getItem(BC_NOTIFICATION_KEY)||'[]')}catch(e){return []}}
 function saveBizCoreNotifications(list){try{localStorage.setItem(BC_NOTIFICATION_KEY,JSON.stringify((list||[]).slice(0,100)))}catch(e){}}
