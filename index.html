@@ -14,7 +14,7 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=124" rel="stylesheet"/>
+<link href="css/main.css?v=125" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=35" rel="stylesheet"/>
 <link href="css/typography.css?v=35" rel="stylesheet"/>
 <link href="css/masters.css?v=97" rel="stylesheet"/>
@@ -625,7 +625,7 @@ document.addEventListener('error', function(e) {
 <div class="page" id="page-deliverynotes">
 <div class="page-header"><div><h2>Delivery Notes</h2><p>Dispatch, confirm customer acceptance and track delivery exceptions.</p></div></div>
 <div class="filter-bar"><div class="filter-group"><input id="dn-search" placeholder="Search DN, SO, customer or PO…" oninput="renderDNPage()" style="min-width:260px"/><select id="dn-status-filter" onchange="renderDNPage()"><option value="">All statuses</option><option>Out for Delivery</option><option>Delivered</option><option>Partially Accepted</option><option>Rejected</option></select><button class="btn btn-secondary btn-sm" onclick="document.getElementById('dn-search').value='';document.getElementById('dn-status-filter').value='';renderDNPage()"><i class="ti ti-filter-off"></i>Clear Filters</button></div></div>
-<div class="table-wrap"><table><thead><tr><th>DN No.</th><th>Date</th><th>Customer</th><th>Sales Order</th><th>Customer PO</th><th>Delivery Person</th><th>Items</th><th>Status</th></tr></thead><tbody id="dn-register-tbody"></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>DN No.</th><th>Date</th><th>Customer</th><th>Sales Order</th><th>Customer PO</th><th>Items</th><th>Status</th></tr></thead><tbody id="dn-register-tbody"></tbody></table></div>
 </div>
 <div class="page" id="page-customerinvoices"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-receipt"></i></div><h2>Customer Invoices</h2><p>Generate customer invoices from one or multiple delivery notes and track invoice status and receivables.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
 <div class="page" id="page-supplierrfqs"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-file-search"></i></div><h2>Supplier RFQs</h2><p>Request and compare supplier offers. This module is reserved for a later development phase.</p><span class="module-tag"><i class="ti ti-clock"></i>Planned for later</span></div></div></div>
@@ -1777,11 +1777,11 @@ document.addEventListener('error', function(e) {
 <div class="modal-header"><h2 id="dn-title">Create Delivery Note</h2><button class="close-btn" onclick="closeModal('so-delivery-modal')">✕</button></div>
 <div class="modal-body">
 <div class="quote-info-panel" style="margin-bottom:14px"><div class="section-title" style="margin-top:0"><i class="ti ti-truck-delivery"></i> Delivery Details</div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
-<div class="form-group"><label>Delivery Note No.</label><input id="dn-no" readonly class="so-readonly"/></div><div class="form-group"><label>DN Date *</label><input id="dn-date" type="date"/></div><div class="form-group"><label>Delivery Person *</label><select id="dn-assignee"></select></div>
+<div class="form-group"><label>Delivery Note No.</label><input id="dn-no" readonly class="so-readonly"/></div><div class="form-group"><label>DN Date *</label><input id="dn-date" type="date"/></div>
 <div class="form-group"><label>Vehicle / AWB No.</label><input id="dn-vehicle" placeholder="Vehicle plate or tracking no."/></div><div class="form-group"><label>Customer PO</label><input id="dn-po" readonly class="so-readonly"/></div><div class="form-group"><label>Sales Order</label><input id="dn-so-ref" readonly class="so-readonly"/></div></div></div>
 <div class="section-title"><i class="ti ti-package"></i> Delivery Items</div><p style="font-size:12px;color:var(--gray);margin:-6px 0 10px">Enter the quantity being dispatched. Completed quantities cannot be dispatched again.</p>
 <div class="table-wrap"><table><thead><tr><th style="width:42px">#</th><th>Description</th><th class="center">Ordered</th><th class="center">Previously Accepted</th><th class="center">This Delivery</th><th class="center">Remaining After</th><th class="center">UOM</th></tr></thead><tbody id="dn-items-list"></tbody></table></div>
-<div class="form-group" style="margin-top:14px"><label>Delivery / Driver Remarks</label><textarea id="dn-remarks" placeholder="Delivery instructions or dispatch remarks…" style="height:58px"></textarea></div>
+<div class="form-group" style="margin-top:14px"><label>Delivery / Dispatch Remarks</label><textarea id="dn-remarks" placeholder="Delivery instructions or dispatch remarks…" style="height:58px"></textarea></div>
 </div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('so-delivery-modal')">Cancel</button><button class="btn btn-success" onclick="saveDelivery()"><i class="ti ti-truck"></i>Save &amp; Dispatch</button></div></div></div>
 
 <!-- MOBILE DELIVERY CONFIRMATION -->
@@ -2453,7 +2453,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=124';
+    s.src = 'js/app.js?v=125';
     document.body.appendChild(s);
   }
 });

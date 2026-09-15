@@ -9951,7 +9951,7 @@ function viewSO(soId) {
   openModalWithSize('so-view-modal');
 }
 
-/* ── Delivery Notes v124 ── */
+/* ── Delivery Notes v125 ── */
 function deliveryActor(){return (window.currentUser&&(window.currentUser.name||window.currentUser.email))||'Authenticated user';}
 function deliveryAcceptedQty(d,it){return d.customerConfirmed ? (it.acceptedQty!=null?Number(it.acceptedQty):Number(it.qty)||0) : 0;}
 function deliveryRejectedQty(d,it){return d.customerConfirmed ? (Number(it.rejectedQty)||0) : 0;}
@@ -9965,13 +9965,11 @@ function renderDNPage(){
   const body=document.getElementById('dn-register-tbody');if(!body)return;
   const q=(document.getElementById('dn-search')?.value||'').toLowerCase(); const st=document.getElementById('dn-status-filter')?.value||'';
   let rows=allDeliveryNotes().filter(x=>(!st||x.status===st)&&(!q||`${x.d.dnNo} ${x.so.soNo} ${x.so.customer} ${x.so.poNo}`.toLowerCase().includes(q))).sort((a,b)=>(b.d.date||'').localeCompare(a.d.date||''));
-  body.innerHTML=rows.length?rows.map(x=>`<tr class="quotation-clickable-row" onclick="viewDeliveryNote('${x.so.id}',${x.i})"><td><strong>${escapeHtml(x.d.dnNo||'—')}</strong></td><td>${fmtDate(x.d.date)}</td><td>${escapeHtml(x.so.customer||'—')}</td><td>${escapeHtml(x.so.soNo||'—')}</td><td>${escapeHtml(x.so.poNo||'—')}</td><td>${escapeHtml(x.d.assigneeName||x.d.by||'—')}</td><td>${(x.d.items||[]).length}</td><td><span class="badge ${x.status==='Delivered'?'won':x.status==='Partially Accepted'?'pending':x.status==='Rejected'?'lost':'sent'}">${x.status}</span></td></tr>`).join(''):'<tr><td colspan="8" style="text-align:center;color:var(--gray);padding:30px">No delivery notes found.</td></tr>';
+  body.innerHTML=rows.length?rows.map(x=>`<tr class="quotation-clickable-row" onclick="viewDeliveryNote('${x.so.id}',${x.i})"><td><strong>${escapeHtml(x.d.dnNo||'—')}</strong></td><td>${fmtDate(x.d.date)}</td><td>${escapeHtml(x.so.customer||'—')}</td><td>${escapeHtml(x.so.soNo||'—')}</td><td>${escapeHtml(x.so.poNo||'—')}</td><td>${(x.d.items||[]).length}</td><td><span class="badge ${x.status==='Delivered'?'won':x.status==='Partially Accepted'?'pending':x.status==='Rejected'?'lost':'sent'}">${x.status}</span></td></tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--gray);padding:30px">No delivery notes found.</td></tr>';
 }
 function openRecordDelivery(soId) {
   const so=salesOrders.find(x=>x.id===soId);if(!so)return;currentSOId=soId;
   document.getElementById('dn-title').textContent='Create Delivery Note — '+so.soNo;document.getElementById('dn-no').value='Auto on Save';document.getElementById('dn-date').value=new Date().toISOString().split('T')[0];document.getElementById('dn-vehicle').value='';document.getElementById('dn-remarks').value='';document.getElementById('dn-po').value=so.poNo||'—';document.getElementById('dn-so-ref').value=so.soNo||'—';
-  const deliveryPeople=employees.filter(e=>e.active!==false&&((e.roles||[]).some(r=>/delivery|driver|store/i.test(r))));
-  const ass=document.getElementById('dn-assignee');ass.innerHTML='<option value="">Select delivery person…</option>'+deliveryPeople.map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
   const accepted={};(so.deliveries||[]).forEach(d=>(d.items||[]).forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;accepted[idx]=roundQtyForUom((accepted[idx]||0)+deliveryAcceptedQty(d,it),it.uom)}));
   const transit={};(so.deliveries||[]).filter(d=>!d.customerConfirmed).forEach(d=>(d.items||[]).forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;transit[idx]=roundQtyForUom((transit[idx]||0)+(Number(it.qty)||0),it.uom)}));
   const remaining=(so.items||[]).map((it,i)=>{const idx=it.origIdx!==undefined?it.origIdx:i;const rem=roundQtyForUom(Math.max(0,(Number(it.qty)||0)-(accepted[idx]||0)-(transit[idx]||0)),it.uom);return {...it,soIdx:i,origIdx:idx,acceptedQty:accepted[idx]||0,remainingQty:rem}}).filter(it=>it.remainingQty>0);
@@ -9982,24 +9980,18 @@ function openRecordDelivery(soId) {
 }
 function updateDNRemaining(i){const m=document.getElementById('so-delivery-modal'),it=(m._remainingItems||[])[i];if(!it)return;let q=roundQtyForUom(document.getElementById('dn-qty-'+i)?.value,it.uom);q=Math.max(0,Math.min(q,it.remainingQty));document.getElementById('dn-rem-'+i).textContent=roundQtyForUom(it.remainingQty-q,it.uom);}
 async function saveDelivery(){
- const m=document.getElementById('so-delivery-modal'),so=salesOrders.find(x=>x.id===m._soId);if(!so)return;const date=document.getElementById('dn-date').value,assigneeId=document.getElementById('dn-assignee').value;if(!date){showToast('Please enter DN date','error');return}if(!assigneeId){showToast('Please select a delivery person','error');return}
- const assignee=employees.find(e=>e.id===assigneeId);const items=[];(m._remainingItems||[]).forEach((it,i)=>{let qty=roundQtyForUom(document.getElementById('dn-qty-'+i)?.value,it.uom);if(qty>it.remainingQty)qty=it.remainingQty;if(qty>0)items.push({...it,qty,acceptedQty:null,rejectedQty:null})});if(!items.length){showToast('Enter at least one delivery quantity','error');return}
- const dnNo=await allocateDocumentNumber('deliveryNote',new Date(date+'T00:00:00'));const d={id:'DN-'+Date.now(),dnNo,date,status:'Out for Delivery',assigneeId,assigneeName:assignee?.name||'',vehicle:document.getElementById('dn-vehicle').value.trim(),remarks:document.getElementById('dn-remarks').value.trim(),items,dispatchedAt:new Date().toISOString(),dispatchedBy:deliveryActor(),created:new Date().toISOString()};so.deliveries=so.deliveries||[];so.deliveries.push(d);await saveSalesOrders();closeModal('so-delivery-modal');showToast(dnNo+' saved and dispatched','success');renderSOPage();renderDNPage();viewSO(so.id);
+ const m=document.getElementById('so-delivery-modal'),so=salesOrders.find(x=>x.id===m._soId);if(!so)return;const date=document.getElementById('dn-date').value;if(!date){showToast('Please enter DN date','error');return}
+ const items=[];(m._remainingItems||[]).forEach((it,i)=>{let qty=roundQtyForUom(document.getElementById('dn-qty-'+i)?.value,it.uom);if(qty>it.remainingQty)qty=it.remainingQty;if(qty>0)items.push({...it,qty,acceptedQty:null,rejectedQty:null})});if(!items.length){showToast('Enter at least one delivery quantity','error');return}
+ const dnNo=await allocateDocumentNumber('deliveryNote',new Date(date+'T00:00:00'));const d={id:'DN-'+Date.now(),dnNo,date,status:'Out for Delivery',vehicle:document.getElementById('dn-vehicle').value.trim(),remarks:document.getElementById('dn-remarks').value.trim(),items,dispatchedAt:new Date().toISOString(),dispatchedBy:deliveryActor(),created:new Date().toISOString()};so.deliveries=so.deliveries||[];so.deliveries.push(d);await saveSalesOrders();closeModal('so-delivery-modal');showToast(dnNo+' saved and dispatched','success');renderSOPage();renderDNPage();viewSO(so.id);
 }
-function canConfirmAssignedDelivery(d){
+function canConfirmDelivery(d){
   if(!window.currentUser) return {ok:false,msg:'Please sign in to BizCore.'};
-  const assigned=employees.find(e=>e.id===d.assigneeId); const signed=(window.currentUser.email||'').toLowerCase();
-  loadAccessSetup(); const appUser=appUsers.find(u=>(u.email||'').toLowerCase()===signed); const role=appRoles.find(r=>r.id===appUser?.roleId);
-  const admin=role?.name==='Administrator' || role?.permissions?.['Delivery Notes']?.approve===true;
-  if(admin) return {ok:true};
-  if(!assigned?.email) return {ok:false,msg:'The assigned delivery person has no email in Employee Master. Add the same email used for BizCore login.'};
-  if((assigned.email||'').toLowerCase()!==signed) return {ok:false,msg:`This Delivery Note is assigned to ${assigned.name}. Only the assigned delivery person or an authorized approver can confirm it.`};
   return {ok:true};
 }
 function openDeliveryAcceptance(soId,deliveryIdx){
  const so=salesOrders.find(x=>x.id===soId),d=so?.deliveries?.[deliveryIdx];if(!d)return;if(d.customerConfirmed){showToast('This delivery is already confirmed','info');return}
- const authz=canConfirmAssignedDelivery(d);if(!authz.ok){showToast(authz.msg,'error');return}
- const assigned=d.assigneeName||'';document.getElementById('dn-confirm-title').textContent=d.dnNo+' — Confirm Delivery';document.getElementById('dn-confirm-sub').textContent=`${so.customer} · ${so.soNo}${assigned?' · Assigned to '+assigned:''}`;document.getElementById('dn-auth-user').textContent='Signed in as '+deliveryActor();document.getElementById('dn-received-by').value='';document.getElementById('dn-customer-remarks').value='';
+ const authz=canConfirmDelivery(d);if(!authz.ok){showToast(authz.msg,'error');return}
+ document.getElementById('dn-confirm-title').textContent=d.dnNo+' — Confirm Delivery';document.getElementById('dn-confirm-sub').textContent=`${so.customer} · ${so.soNo}`;document.getElementById('dn-auth-user').textContent='Signed in as '+deliveryActor();document.getElementById('dn-received-by').value='';document.getElementById('dn-customer-remarks').value='';
  const box=document.getElementById('dn-confirm-items');box.innerHTML=(d.items||[]).map((it,i)=>`<div class="dn-accept-card"><div class="dn-accept-head"><span>${i+1}. ${escapeHtml(it.desc||'—')}</span><strong>${it.qty} ${escapeHtml(it.uom||'')}</strong></div><div class="dn-accept-grid"><label>Accepted Qty<input type="number" id="dn-acc-${i}" value="${it.qty}" min="0" max="${it.qty}" step="${qtyStep(it.uom)}" oninput="syncDNReject(${i})"></label><label>Rejected Qty<input type="number" id="dn-rej-${i}" value="0" min="0" max="${it.qty}" step="${qtyStep(it.uom)}" oninput="syncDNAccept(${i})"></label><label id="dn-reason-wrap-${i}" style="display:none">Rejection Reason<select id="dn-reason-${i}"><option value="">Select reason…</option><option>Damaged</option><option>Specification mismatch</option><option>Wrong item</option><option>Excess quantity</option><option>Quality issue</option><option>Customer requested return</option><option>Packaging damaged</option><option>Other</option></select></label><label id="dn-disposition-wrap-${i}" style="display:none">Disposition<select id="dn-disposition-${i}"><option>Returned with Driver</option><option>Left at Customer Site</option><option>Replacement Required</option><option>Under Review</option></select></label></div><input id="dn-line-remarks-${i}" class="dn-line-remarks" placeholder="Rejection / line remarks (optional)" style="display:none"></div>`).join('');
  const modal=document.getElementById('dn-confirm-modal');modal._soId=soId;modal._deliveryIdx=deliveryIdx;openModalWithSize('dn-confirm-modal');
 }
@@ -10061,7 +10053,6 @@ function viewDeliveryNote(soId, deliveryIdx) {
           <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:#666">Customer PO:</span><strong>${so.poNo||'—'}</strong></div>
           <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:#666">Quotation:</span><strong>${q?q.qno:'—'}</strong></div>
           ${d.vehicle?`<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#666">Vehicle/AWB:</span><strong>${d.vehicle}</strong></div>`:''}
-          ${d.assigneeName?`<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#666">Delivery person:</span><strong>${d.assigneeName}</strong></div>`:''}
         </div>
       </div>
 
