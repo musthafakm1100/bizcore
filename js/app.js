@@ -10056,7 +10056,13 @@ function viewDeliveryNote(soId, deliveryIdx) {
   const dnViewModal = document.getElementById('dn-print-modal');
   if (dnViewModal) { dnViewModal._soId = soId; dnViewModal._deliveryIdx = deliveryIdx; }
   const confirmBtn = document.getElementById('dn-open-confirm-btn');
-  if (confirmBtn) confirmBtn.style.display = d.customerConfirmed ? 'none' : 'inline-flex';
+  if (confirmBtn) {
+    confirmBtn.style.display = 'inline-flex';
+    confirmBtn.disabled = !!d.customerConfirmed;
+    confirmBtn.innerHTML = d.customerConfirmed
+      ? '<i class="ti ti-circle-check"></i>Delivery Confirmed'
+      : '<i class="ti ti-device-mobile-check"></i>Delivery Confirmation';
+  }
   const co = settings.coname||'Downtown Trading Est.';
   const q = quotations.find(x=>x.id===so.quotationId);
 
@@ -10119,7 +10125,7 @@ function viewDeliveryNote(soId, deliveryIdx) {
       ${d.remarks?`<div style="margin-bottom:20px;padding:10px 14px;background:#fffbea;border:1px solid #ffc107;border-radius:6px;font-size:12px"><strong>Remarks:</strong> ${d.remarks}</div>`:''}
 
       <div style="display:flex;justify-content:space-between;align-items:center;gap:20px;margin:18px 0;padding:12px 14px;border:1px solid #dbe5ef;border-radius:7px;background:#f8fbff">
-        <div><strong style="color:#1F4E79">Mobile Delivery Confirmation</strong><div style="font-size:11px;color:#666;margin-top:4px">Authorized BizCore users can scan this QR to update customer acceptance. Login is required.</div></div>
+        <div style="flex:1"><strong style="color:#1F4E79">Mobile Delivery Confirmation</strong><div style="font-size:11px;color:#666;margin-top:4px">Authorized BizCore users can scan this QR to update customer acceptance. Login is required.</div>${d.customerConfirmed?'<div style="margin-top:10px;font-size:12px;font-weight:700;color:#15803d">✓ Delivery already confirmed</div>':'<button type="button" class="btn btn-success btn-sm" style="margin-top:10px" onclick="openDeliveryConfirmationFromDNView()"><i class="ti ti-device-mobile-check"></i> Open Delivery Confirmation</button>'}</div>
         <div id="dn-qr-code" style="width:112px;height:112px;flex:0 0 112px"></div>
       </div>
 
