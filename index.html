@@ -14,7 +14,7 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=128" rel="stylesheet"/>
+<link href="css/main.css?v=129" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=35" rel="stylesheet"/>
 <link href="css/typography.css?v=35" rel="stylesheet"/>
 <link href="css/masters.css?v=97" rel="stylesheet"/>
@@ -1853,6 +1853,7 @@ document.addEventListener('error', function(e) {
 <div class="modal-header">
 <h2 id="dn-print-title">Delivery Note</h2>
 <div style="display:flex;gap:8px;align-items:center">
+<button class="btn btn-secondary btn-sm" id="dn-open-confirm-btn" onclick="openDeliveryConfirmationFromDNView()"><i class="ti ti-device-mobile-check"></i>Delivery Confirmation</button>
 <button class="btn btn-secondary btn-sm" onclick="setModalSize('dn-print-modal','fullscreen')"><i class="ti ti-maximize"></i>Full screen</button>
 <button class="btn btn-primary btn-sm" onclick="printDeliveryNote()"><i class="ti ti-printer"></i>Print / PDF</button>
 <button class="close-btn" onclick="closeModal('dn-print-modal')">✕</button>
@@ -2453,7 +2454,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=128';
+    s.src = 'js/app.js?v=129';
     document.body.appendChild(s);
   }
 });

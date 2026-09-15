@@ -10053,6 +10053,10 @@ function openDNFromDeepLink(){
 function viewDeliveryNote(soId, deliveryIdx) {
   const so = salesOrders.find(x=>x.id===soId); if (!so) return;
   const d = so.deliveries[deliveryIdx]; if (!d) return;
+  const dnViewModal = document.getElementById('dn-print-modal');
+  if (dnViewModal) { dnViewModal._soId = soId; dnViewModal._deliveryIdx = deliveryIdx; }
+  const confirmBtn = document.getElementById('dn-open-confirm-btn');
+  if (confirmBtn) confirmBtn.style.display = d.customerConfirmed ? 'none' : 'inline-flex';
   const co = settings.coname||'Downtown Trading Est.';
   const q = quotations.find(x=>x.id===so.quotationId);
 
@@ -10138,6 +10142,15 @@ function viewDeliveryNote(soId, deliveryIdx) {
 
   renderDNQRCode(d);
   openModalWithSize('dn-print-modal');
+}
+
+
+function openDeliveryConfirmationFromDNView(){
+  const modal=document.getElementById('dn-print-modal');
+  const soId=modal?._soId, deliveryIdx=modal?._deliveryIdx;
+  if(soId==null || deliveryIdx==null){showToast('Unable to identify this Delivery Note','error');return;}
+  closeModal('dn-print-modal');
+  setTimeout(()=>openDeliveryAcceptance(soId,deliveryIdx),60);
 }
 
 function printDeliveryNote() {
