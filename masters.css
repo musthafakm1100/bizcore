@@ -1,0 +1,41 @@
+.masters-tab-content{display:none}
+.masters-tab-content.active{display:block}
+.masters-shell .masters-workspace{min-width:0}
+.masters-shell .setup-nav-head{background:linear-gradient(135deg,var(--blue),var(--blue-mid));color:#fff}
+@media(max-width:760px){.masters-shell{grid-template-columns:1fr}.masters-nav{position:static;display:grid!important;grid-template-columns:1fr 1fr;max-height:none;overflow:visible}.masters-nav .setup-nav-head,.masters-nav .setup-nav-group{grid-column:1/-1}}
+
+
+/* Units of Measure master */
+.uom-master-subtitle{margin-top:4px;font-size:12px;color:var(--gray);font-weight:400}.uom-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px}.uom-toolbar input{width:300px}.uom-count{font-size:12px;color:var(--gray);font-weight:600}.uom-form-panel{margin:0 16px 14px;border:1px solid var(--blue-light);background:var(--blue-pale,#f6f9fc);border-radius:8px;padding:14px}.uom-form-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}.uom-form-head h4{font-size:15px;margin:0;color:var(--blue)}.uom-form-head p{font-size:11px;color:var(--gray);margin:3px 0 0}.uom-form-grid{display:grid;grid-template-columns:140px minmax(220px,1fr) 190px 150px 130px;gap:12px;align-items:end}.uom-form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}.uom-table td,.uom-table th{vertical-align:middle}.uom-decimal-badge{display:inline-flex;min-width:28px;height:24px;align-items:center;justify-content:center;border-radius:12px;background:var(--blue-pale);color:var(--blue);font-weight:700;font-size:12px}@media(max-width:900px){.uom-form-grid{grid-template-columns:1fr 1fr}.uom-toolbar input{width:100%}}
+
+
+/* v94 — Master Data row selection + safe bulk delete */
+.master-select-col{width:42px!important;min-width:42px!important;max-width:42px!important;text-align:center!important;padding-left:10px!important;padding-right:10px!important}
+.master-row-check{width:16px;height:16px;cursor:pointer;accent-color:var(--blue);vertical-align:middle}
+.master-clickable-row.master-row-selected>td{background:#EEF6FF!important}
+.master-clickable-row.master-row-selected:hover>td{background:#E5F1FF!important}
+.master-bulk-delete:disabled{opacity:.45;cursor:not-allowed;filter:saturate(.65)}
+.master-bulk-delete:not(:disabled){background:#FEF2F2;color:#DC2626;border-color:#FECACA}
+
+/* v97 — Customer & Supplier bilingual party master forms */
+.master-party-form{padding:16px 18px 20px;background:#f8fafc}
+.party-form-section{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(15,23,42,.03)}
+.party-form-section:last-child{margin-bottom:0}
+.party-form-title{display:flex;align-items:center;gap:8px;color:#17365d;font-size:12px;font-weight:750;text-transform:uppercase;letter-spacing:.045em;padding-bottom:10px;margin-bottom:12px;border-bottom:1px solid #edf2f7}
+.party-form-title i{font-size:17px;color:var(--blue)}
+.party-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px}
+.party-form-grid .form-group{margin:0}
+.arabic-input{direction:rtl;text-align:right;font-family:Tahoma,Arial,sans-serif}
+.profile-arabic-name{margin-top:3px;font-family:Tahoma,Arial,sans-serif;font-size:15px;font-weight:600;color:#475569;text-align:left;direction:rtl;unicode-bidi:plaintext}
+.profile-inline-ar{display:block;margin-top:3px;font-family:Tahoma,Arial,sans-serif;color:#64748b;font-size:12px;text-align:right}
+.party-address-card{margin-top:14px}
+.party-address-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(250px,.85fr);gap:20px;align-items:start}
+.party-address-readable{display:flex;flex-direction:column;gap:4px;line-height:1.55;color:#334155;font-size:13px}
+.party-address-readable>strong{font-size:15px;color:#17365d;margin-bottom:2px}
+.party-address-ar{margin-top:10px;padding-top:10px;border-top:1px solid #edf2f7;display:flex;flex-direction:column;gap:3px;font-family:Tahoma,Arial,sans-serif;font-size:13px;color:#475569;text-align:right}
+.party-address-facts{display:grid;grid-template-columns:1fr 1fr;border:1px solid #e5eaf0;border-radius:8px;overflow:hidden;background:#fbfcfe}
+.party-address-facts>div{padding:9px 11px;border-right:1px solid #edf2f7;border-bottom:1px solid #edf2f7;min-width:0}
+.party-address-facts>div:nth-child(2n){border-right:0}.party-address-facts>div:nth-last-child(-n+2){border-bottom:0}
+.party-address-facts label{display:block;font-size:10px;font-weight:650;text-transform:uppercase;letter-spacing:.04em;color:#7b8794;margin-bottom:3px}
+.party-address-facts strong{font-size:12.5px;color:#1f2937;overflow-wrap:anywhere}
+@media(max-width:760px){.party-form-grid,.party-address-layout{grid-template-columns:1fr}.master-party-form{padding:12px}.party-address-facts{grid-template-columns:1fr 1fr}}
