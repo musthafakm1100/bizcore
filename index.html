@@ -14,10 +14,10 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=134" rel="stylesheet"/>
-<link href="css/bizcore-design.css?v=132" rel="stylesheet"/>
-<link href="css/typography.css?v=35" rel="stylesheet"/>
-<link href="css/masters.css?v=97" rel="stylesheet"/>
+<link href="css/main.css?v=156" rel="stylesheet"/>
+<link href="css/bizcore-design.css?v=139" rel="stylesheet"/>
+<link href="css/typography.css?v=139" rel="stylesheet"/>
+<link href="css/masters.css?v=139" rel="stylesheet"/>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
 .quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
@@ -623,9 +623,44 @@ document.addEventListener('error', function(e) {
 </div>
 <!-- FUTURE / FOUNDATION MODULES -->
 <div class="page" id="page-deliverynotes">
-<div class="page-header"><div><h2>Delivery Notes</h2><p>Dispatch, confirm customer acceptance and track delivery exceptions.</p></div></div>
-<div class="filter-bar"><div class="filter-group"><input id="dn-search" placeholder="Search DN, SO, customer or PO…" oninput="renderDNPage()" style="min-width:260px"/><select id="dn-status-filter" onchange="renderDNPage()"><option value="">All statuses</option><option>Out for Delivery</option><option>Delivered</option><option>Partially Accepted</option><option>Rejected</option></select><button class="btn btn-secondary btn-sm" onclick="document.getElementById('dn-search').value='';document.getElementById('dn-status-filter').value='';renderDNPage()"><i class="ti ti-filter-off"></i>Clear Filters</button></div></div>
-<div class="table-wrap"><table><thead><tr><th>DN No.</th><th>Date</th><th>Customer</th><th>Sales Order</th><th>Customer PO</th><th>Items</th><th>Status</th></tr></thead><tbody id="dn-register-tbody"></tbody></table></div>
+  <div class="deliverynotes-page-header document-page-header" aria-label="Delivery Notes page header">
+    <div class="deliverynotes-page-heading document-page-heading">
+      <h2>Delivery Notes</h2>
+      <span>Dispatch, confirm customer acceptance and track delivery exceptions</span>
+    </div>
+  </div>
+  <div class="dn-register-shell module-main-workspace" id="deliverynotes-main-workspace" data-module-monitor="deliverynotes">
+    <aside class="dn-overview-panel module-monitor" aria-label="Delivery Monitor">
+      <div class="dn-overview-head module-monitor-head"><div><strong>Delivery Monitor</strong><span>Delivery activity &amp; exceptions</span></div><button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('deliverynotes')" aria-label="Collapse Delivery Monitor" title="Collapse Delivery Monitor"><i class="ti ti-chevron-left"></i></button></div>
+      <div class="dn-overview-body module-monitor-body">
+        <button type="button" class="dn-overview-total dn-kpi active" data-dn-kpi="all" onclick="filterDNKPI('all',this)"><span>Total DNs</span><strong id="dn-k-total">0</strong></button>
+        <div class="dn-overview-section-label">Status</div>
+        <button type="button" class="dn-overview-row dn-kpi" data-dn-kpi="Awaiting Delivery" onclick="filterDNKPI('Awaiting Delivery',this)"><span><i class="dn-dot dn-dot-awaiting-delivery"></i>Awaiting Delivery</span><strong id="dn-k-awaiting">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-dn-kpi="Out for Delivery" onclick="filterDNKPI('Out for Delivery',this)"><span><i class="dn-dot dn-dot-awaiting-confirmation"></i>Awaiting Confirmation</span><strong id="dn-k-out">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-dn-kpi="Delivered" onclick="filterDNKPI('Delivered',this)"><span><i class="dn-dot dn-dot-delivered"></i>Delivered</span><strong id="dn-k-delivered">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-dn-kpi="Partially Accepted" onclick="filterDNKPI('Partially Accepted',this)"><span><i class="dn-dot dn-dot-partial"></i>Partially Accepted</span><strong id="dn-k-partial">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-dn-kpi="Rejected" onclick="filterDNKPI('Rejected',this)"><span><i class="dn-dot dn-dot-rejected"></i>Rejected</span><strong id="dn-k-rejected">0</strong></button>
+        <div class="dn-overview-section-label">Attention</div>
+        <button type="button" class="dn-overview-row dn-kpi" data-dn-kpi="attention" onclick="filterDNKPI('attention',this)"><span><i class="dn-dot dn-dot-attention"></i>Need Attention</span><strong id="dn-k-attention">0</strong></button>
+      </div>
+    </aside>
+    <button class="module-monitor-rail" type="button" onclick="toggleModuleMonitor('deliverynotes')" aria-label="Expand Delivery Monitor" title="Expand Delivery Monitor"><i class="ti ti-layout-sidebar-left-expand"></i><span>Delivery Notes</span></button>
+    <div class="dn-register-area module-register-area">
+      <div class="dn-register-toolbar page-toolbar page-toolbar--sticky page-control-bar" role="toolbar" aria-label="Delivery Note filters">
+        <div class="dn-toolbar-left">
+          <select id="dn-sort" onchange="renderDNPage()" aria-label="Sort Delivery Notes"><option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option><option value="dn-asc">DN No. A–Z</option><option value="customer-asc">Customer A–Z</option><option value="updated-desc">Recently Updated</option></select>
+          <span id="dn-register-count" class="so-toolbar-count"></span>
+        </div>
+        <div class="dn-toolbar-right">
+          <select id="dn-status-filter" onchange="dnKpiFilter='all';renderDNPage()"><option value="">All statuses</option><option>Out for Delivery</option><option>Delivered</option><option>Partially Accepted</option><option>Rejected</option></select>
+          <select id="dn-date-preset" onchange="filterDNDate(this.value)"><option value="all">All Dates</option><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="week">This Week</option><option value="lastweek">Last Week</option><option value="month">This Month</option><option value="lastmonth">Last Month</option><option value="last3months">Last 3 Months</option><option value="custom">Custom…</option></select>
+          <input id="dn-search" placeholder="Search DN, SO, customer or PO…" oninput="renderDNPage()" aria-label="Search Delivery Notes"/>
+          <button class="btn btn-secondary btn-sm register-clear-filters" id="dn-clear-filters-btn" onclick="clearAllDNFilters()"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
+        </div>
+      </div>
+      <div class="card dn-register-card"><div class="dn-table-scroll"><table id="dn-register-table"><thead><tr><th class="sortable-register-th" data-sort-screen="dn" data-sort-key="no" onclick="setRegisterSort('dn','no',renderDNPage)">DN No.</th><th class="sortable-register-th" data-sort-screen="dn" data-sort-key="date" onclick="setRegisterSort('dn','date',renderDNPage)">Date</th><th class="sortable-register-th" data-sort-screen="dn" data-sort-key="customer" onclick="setRegisterSort('dn','customer',renderDNPage)">Customer</th><th class="sortable-register-th" data-sort-screen="dn" data-sort-key="so" onclick="setRegisterSort('dn','so',renderDNPage)">Sales Order</th><th class="sortable-register-th" data-sort-screen="dn" data-sort-key="po" onclick="setRegisterSort('dn','po',renderDNPage)">Customer PO</th><th class="sortable-register-th center" data-sort-screen="dn" data-sort-key="items" onclick="setRegisterSort('dn','items',renderDNPage)">Items</th><th class="sortable-register-th" data-sort-screen="dn" data-sort-key="status" onclick="setRegisterSort('dn','status',renderDNPage)">Status</th></tr></thead><tbody id="dn-register-tbody"></tbody></table></div></div>
+    </div>
+  </div>
 </div>
 <div class="page" id="page-customerinvoices"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-receipt"></i></div><h2>Customer Invoices</h2><p>Generate customer invoices from one or multiple delivery notes and track invoice status and receivables.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
 <div class="page" id="page-supplierrfqs"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-file-search"></i></div><h2>Supplier RFQs</h2><p>Request and compare supplier offers. This module is reserved for a later development phase.</p><span class="module-tag"><i class="ti ti-clock"></i>Planned for later</span></div></div></div>
@@ -1782,7 +1817,7 @@ document.addEventListener('error', function(e) {
 <div class="section-title"><i class="ti ti-package"></i> Delivery Items</div><p style="font-size:12px;color:var(--gray);margin:-6px 0 10px">Enter the quantity being dispatched. Completed quantities cannot be dispatched again.</p>
 <div class="table-wrap"><table><thead><tr><th style="width:42px">#</th><th>Description</th><th class="center">Ordered</th><th class="center">Previously Accepted</th><th class="center">This Delivery</th><th class="center">Remaining After</th><th class="center">UOM</th></tr></thead><tbody id="dn-items-list"></tbody></table></div>
 <div class="form-group" style="margin-top:14px"><label>Delivery / Dispatch Remarks</label><textarea id="dn-remarks" placeholder="Delivery instructions or dispatch remarks…" style="height:58px"></textarea></div>
-</div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('so-delivery-modal')">Cancel</button><button class="btn btn-success" onclick="saveDelivery()"><i class="ti ti-truck"></i>Save &amp; Dispatch</button></div></div></div>
+</div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('so-delivery-modal')">Cancel</button><button class="btn btn-success" id="dn-dispatch-save-btn" onclick="saveDelivery()"><i class="ti ti-truck"></i><span id="dn-dispatch-save-btn-text">Save &amp; Dispatch</span></button></div></div></div>
 
 <!-- MOBILE DELIVERY CONFIRMATION -->
 <div class="modal-overlay" id="dn-confirm-modal"><div class="modal modal-normal dn-mobile-confirm" style="width:min(96vw,760px);max-width:760px">
@@ -1791,7 +1826,7 @@ document.addEventListener('error', function(e) {
 <p style="font-size:12px;color:var(--gray);margin:12px 0">Confirm what the customer actually accepted. Any rejected quantity returns to the Sales Order remaining quantity.</p>
 <div id="dn-confirm-items"></div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px"><div class="form-group"><label>Received By *</label><input id="dn-received-by" placeholder="Customer representative name"/></div><div class="form-group"><label>Customer / Delivery Remarks</label><input id="dn-customer-remarks" placeholder="Optional remarks"/></div></div>
-</div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('dn-confirm-modal')">Cancel</button><button class="btn btn-success" onclick="saveDeliveryAcceptance()"><i class="ti ti-circle-check"></i>Confirm Delivery</button></div></div></div>
+</div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('dn-confirm-modal')">Cancel</button><button class="btn btn-success" id="dn-confirm-save-btn" onclick="saveDeliveryAcceptance()"><i class="ti ti-circle-check"></i><span id="dn-confirm-save-btn-text">Confirm Delivery</span></button></div></div></div>
 <!-- CREATE INVOICE MODAL -->
 <div class="modal-overlay" id="so-invoice-modal">
 <div class="modal modal-compact">
@@ -1854,14 +1889,24 @@ document.addEventListener('error', function(e) {
 <h2 id="dn-print-title">Delivery Note</h2>
 <div style="display:flex;gap:8px;align-items:center">
 <button class="btn btn-success btn-sm" id="dn-open-confirm-btn" onclick="openDeliveryConfirmationFromDNView()"><i class="ti ti-device-mobile-check"></i>Delivery Confirmation</button>
-<button class="btn btn-secondary btn-sm" onclick="setModalSize('dn-print-modal','fullscreen')"><i class="ti ti-maximize"></i>Full screen</button>
-<button class="btn btn-primary btn-sm" onclick="printDeliveryNote()"><i class="ti ti-printer"></i>Print / PDF</button>
+<button class="btn btn-primary btn-sm" onclick="openDNFormatDialog('print')"><i class="ti ti-printer"></i>Print / PDF</button>
 <button class="close-btn" onclick="closeModal('dn-print-modal')">✕</button>
 </div>
 </div>
 <div class="modal-body" id="dn-print-body" style="padding:0;overflow-y:auto"></div>
 </div>
 </div>
+<!-- DELIVERY NOTE FORMAT MODAL -->
+<div class="modal-overlay dn-format-overlay" id="dn-format-modal">
+<div class="modal modal-compact" style="max-width:560px;height:auto">
+<div class="modal-header"><h2>Delivery Note Format</h2><button class="close-btn" onclick="closeModal('dn-format-modal')">✕</button></div>
+<div class="modal-body" style="padding:20px">
+<label style="display:flex;gap:12px;padding:13px;border:1px solid #d9e2ec;border-radius:8px;margin-bottom:10px;cursor:pointer"><input type="radio" name="dn-print-format" id="dn-format-standard" value="standard" checked><span><strong>Standard Delivery Note</strong><small style="display:block;color:#6b7e90;margin-top:3px">Customer-facing document with this delivery quantity.</small></span></label>
+<label style="display:flex;gap:12px;padding:13px;border:1px solid #d9e2ec;border-radius:8px;margin-bottom:10px;cursor:pointer"><input type="radio" name="dn-print-format" value="progress"><span><strong>Delivery Progress Note</strong><small style="display:block;color:#6b7e90;margin-top:3px">Ordered, previous accepted, this delivery and remaining quantities.</small></span></label>
+<label style="display:flex;gap:12px;padding:13px;border:1px solid #d9e2ec;border-radius:8px;cursor:pointer"><input type="radio" name="dn-print-format" value="internal"><span><strong>Internal Delivery Copy</strong><small style="display:block;color:#6b7e90;margin-top:3px">Adds operational status, users, timestamps and line acceptance status.</small></span></label>
+</div>
+<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('dn-format-modal')">Cancel</button><button class="btn btn-primary" onclick="continueDNFormat()"><i class="ti ti-printer"></i>Continue</button></div>
+</div></div>
 <!-- TEMPLATE PICKER MODAL -->
 <div class="modal-overlay" id="template-picker-modal">
 <div class="modal modal-compact" style="max-width:920px;height:auto;max-height:88vh">
@@ -2476,7 +2521,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=134';
+    s.src = 'js/app.js?v=156';
     document.body.appendChild(s);
   }
 });

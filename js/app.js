@@ -6747,7 +6747,7 @@ function toggleModuleMonitor(moduleKey){
   setModuleMonitorState(moduleKey,!workspace.classList.contains('monitor-collapsed'),true);
 }
 function restoreModuleMonitors(){
-  ['rfq','quotations','pricing','salesorders'].forEach(moduleKey=>{
+  ['rfq','quotations','pricing','salesorders','deliverynotes'].forEach(moduleKey=>{
     const workspace=getModuleMonitorWorkspace(moduleKey);
     if(!workspace) return;
     const saved=localStorage.getItem(moduleMonitorStorageKey(moduleKey));
@@ -7491,7 +7491,7 @@ function viewRFQ(id) {
     <div class="rfq-progress-stat info"><span>Suppliers contacted</span><strong>${supplierCount}</strong></div>
     <div class="rfq-progress-bar-wrap"><div><span>Pricing completion</span><strong>${pricingProgress}%</strong></div><div class="rfq-progress-bar"><i style="width:${pricingProgress}%"></i></div></div>
   </div>`;
-  const itemsHtml = reqItems.length ? `<div class="rfq-items-table-wrap"><table class="rfq-items-table"><thead><tr><th>#</th><th>Code</th><th>Description</th><th>Qty</th><th>UOM</th><th>Pricing status</th></tr></thead><tbody>${reqItems.map((i,n)=>`<tr><td>${n+1}</td><td>${i.code||'—'}</td><td>${i.desc||i.description||'—'}</td><td>${i.qty||'—'}</td><td>${i.uom||'—'}</td><td><span class="rfq-line-status ${parseFloat(i.buy)>0||parseFloat(i.sell)>0||i.supplier?'priced':'pending'}">${parseFloat(i.buy)>0||parseFloat(i.sell)>0||i.supplier?'Priced':'Pending'}</span></td></tr>`).join('')}</tbody></table></div>` : `<p class="rfq-view-requirements">${r.desc||'No requirement details entered.'}</p>`;
+  const itemsHtml = reqItems.length ? `<div class="rfq-items-table-wrap"><table class="rfq-items-table"><thead><tr><th>#</th><th>Code</th><th>Description</th><th class="num">Qty</th><th class="num">UOM</th><th>Pricing status</th></tr></thead><tbody>${reqItems.map((i,n)=>`<tr><td>${n+1}</td><td>${i.code||'—'}</td><td>${i.desc||i.description||'—'}</td><td>${i.qty||'—'}</td><td>${i.uom||'—'}</td><td><span class="rfq-line-status ${parseFloat(i.buy)>0||parseFloat(i.sell)>0||i.supplier?'priced':'pending'}">${parseFloat(i.buy)>0||parseFloat(i.sell)>0||i.supplier?'Priced':'Pending'}</span></td></tr>`).join('')}</tbody></table></div>` : `<p class="rfq-view-requirements">${r.desc||'No requirement details entered.'}</p>`;
 
   let nextTitle='Start pricing', nextCopy='Add supplier cost and proposed selling prices for this RFQ.';
   if (isNoBid) { nextTitle='RFQ closed as No Bid'; nextCopy='Reopen it only when the opportunity becomes active again.'; }
@@ -10022,13 +10022,79 @@ function getDNStatus(d){
   let a=0,r=0; (d.items||[]).forEach(it=>{a+=deliveryAcceptedQty(d,it);r+=deliveryRejectedQty(d,it)});
   if(r<=0) return 'Delivered'; if(a<=0) return 'Rejected'; return 'Partially Accepted';
 }
-function allDeliveryNotes(){const rows=[];salesOrders.forEach(so=>(so.deliveries||[]).forEach((d,i)=>rows.push({so,d,i,status:getDNStatus(d)})));return rows;}
-function renderDNPage(){
-  const body=document.getElementById('dn-register-tbody');if(!body)return;
-  const q=(document.getElementById('dn-search')?.value||'').toLowerCase(); const st=document.getElementById('dn-status-filter')?.value||'';
-  let rows=allDeliveryNotes().filter(x=>(!st||x.status===st)&&(!q||`${x.d.dnNo} ${x.so.soNo} ${x.so.customer} ${x.so.poNo}`.toLowerCase().includes(q))).sort((a,b)=>(b.d.date||'').localeCompare(a.d.date||''));
-  body.innerHTML=rows.length?rows.map(x=>`<tr class="quotation-clickable-row" onclick="viewDeliveryNote('${x.so.id}',${x.i})"><td><strong>${escapeHtml(x.d.dnNo||'—')}</strong></td><td>${fmtDate(x.d.date)}</td><td>${escapeHtml(x.so.customer||'—')}</td><td>${escapeHtml(x.so.soNo||'—')}</td><td>${escapeHtml(x.so.poNo||'—')}</td><td>${(x.d.items||[]).length}</td><td><span class="badge ${x.status==='Delivered'?'won':x.status==='Partially Accepted'?'pending':x.status==='Rejected'?'lost':'sent'}">${x.status}</span></td></tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--gray);padding:30px">No delivery notes found.</td></tr>';
+function getDNBadgeClass(status){
+  return {
+    'Awaiting Delivery':'badge-dn-awaiting',
+    'Out for Delivery':'badge-dn-confirmation',
+    'Awaiting Confirmation':'badge-dn-confirmation',
+    'Delivered':'badge-dn-delivered',
+    'Partially Accepted':'badge-dn-partial',
+    'Rejected':'badge-dn-rejected'
+  }[status]||'badge-so-confirmed';
 }
+function allDeliveryNotes(){const rows=[];salesOrders.forEach(so=>(so.deliveries||[]).forEach((d,i)=>rows.push({so,d,i,status:getDNStatus(d)})));return rows;}
+let dnKpiFilter='all';
+let dnDateFilter={mode:'all',from:null,to:null};
+function dnISO(d){return d.toISOString().slice(0,10)}
+function filterDNDate(mode){
+ const now=new Date(), today=new Date(now.getFullYear(),now.getMonth(),now.getDate()); let from=null,to=null;
+ if(mode==='today') from=to=dnISO(today);
+ else if(mode==='yesterday'){const d=new Date(today);d.setDate(d.getDate()-1);from=to=dnISO(d)}
+ else if(mode==='week'){const d=new Date(today);const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);from=dnISO(d);to=dnISO(today)}
+ else if(mode==='lastweek'){const e=new Date(today);const day=(e.getDay()+6)%7;e.setDate(e.getDate()-day-1);const b=new Date(e);b.setDate(e.getDate()-6);from=dnISO(b);to=dnISO(e)}
+ else if(mode==='month'){from=dnISO(new Date(today.getFullYear(),today.getMonth(),1));to=dnISO(today)}
+ else if(mode==='lastmonth'){from=dnISO(new Date(today.getFullYear(),today.getMonth()-1,1));to=dnISO(new Date(today.getFullYear(),today.getMonth(),0))}
+ else if(mode==='last3months'){const d=new Date(today);d.setMonth(d.getMonth()-3);from=dnISO(d);to=dnISO(today)}
+ else if(mode==='custom'){
+   const f=prompt('Custom date range — From (YYYY-MM-DD):',dnDateFilter.from||dnISO(today)); if(f===null){document.getElementById('dn-date-preset').value=dnDateFilter.mode;return}
+   const t=prompt('Custom date range — To (YYYY-MM-DD):',dnDateFilter.to||dnISO(today)); if(t===null){document.getElementById('dn-date-preset').value=dnDateFilter.mode;return}
+   if(!/^\d{4}-\d{2}-\d{2}$/.test(f)||!/^\d{4}-\d{2}-\d{2}$/.test(t)||f>t){showToast('Enter a valid custom date range','warning');document.getElementById('dn-date-preset').value=dnDateFilter.mode;return} from=f;to=t;
+ }
+ dnDateFilter={mode,from,to};renderDNPage();
+}
+function filterDNKPI(key,card){
+ // Keep the monitor anchored: remove button focus before the result set changes.
+ const y=window.scrollY;
+ if(card && typeof card.blur==='function') card.blur();
+ dnKpiFilter=key;
+ document.querySelectorAll('#page-deliverynotes .dn-kpi').forEach(el=>{const active=(el.dataset.dnKpi||'all')===key;el.classList.toggle('active',active);el.setAttribute('aria-pressed',active?'true':'false')});
+ renderDNPage();
+ // Keep the register viewport stationary when a monitor filter changes row count.
+ requestAnimationFrame(()=>window.scrollTo({top:y,left:window.scrollX,behavior:'auto'}));
+}
+function clearAllDNFilters(){
+ dnKpiFilter='all';dnDateFilter={mode:'all',from:null,to:null};
+ const ids={ 'dn-search':'','dn-status-filter':'','dn-sort':'date-desc','dn-date-preset':'all'};Object.entries(ids).forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.value=v});renderDNPage();
+}
+function renderDNPage(){
+ const body=document.getElementById('dn-register-tbody');if(!body)return;
+ const q=(document.getElementById('dn-search')?.value||'').trim().toLowerCase();
+ const st=document.getElementById('dn-status-filter')?.value||'';
+ const sort=document.getElementById('dn-sort')?.value||'date-desc';
+ let scope=allDeliveryNotes().filter(x=>{
+   if(st&&x.status!==st)return false;
+   if(dnDateFilter.from&&(x.d.date||'')<dnDateFilter.from)return false;
+   if(dnDateFilter.to&&(x.d.date||'')>dnDateFilter.to)return false;
+   if(q&&!`${x.d.dnNo||''} ${x.so.soNo||''} ${x.so.customer||''} ${x.so.poNo||''}`.toLowerCase().includes(q))return false;
+   return true;
+ });
+ const count=k=>scope.filter(x=>x.status===k).length;
+ const vals={'dn-k-total':scope.length,'dn-k-awaiting':count('Awaiting Delivery'),'dn-k-out':count('Out for Delivery'),'dn-k-delivered':count('Delivered'),'dn-k-partial':count('Partially Accepted'),'dn-k-rejected':count('Rejected'),'dn-k-attention':count('Partially Accepted')+count('Rejected')};
+ Object.entries(vals).forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.textContent=v});
+ document.querySelectorAll('#page-deliverynotes .dn-kpi').forEach(e=>e.classList.toggle('active',(e.dataset.dnKpi||'all')===dnKpiFilter));
+ let rows=scope.filter(x=>dnKpiFilter==='all'||(dnKpiFilter==='attention'?['Partially Accepted','Rejected'].includes(x.status):x.status===dnKpiFilter));
+ const updated=x=>x.d.confirmedAt||x.d.dispatchedAt||x.d.created||x.d.date||'';
+ if(sort==='date-asc')rows.sort((a,b)=>(a.d.date||'').localeCompare(b.d.date||''));
+ else if(sort==='dn-asc')rows.sort((a,b)=>(a.d.dnNo||'').localeCompare(b.d.dnNo||'',undefined,{numeric:true}));
+ else if(sort==='customer-asc')rows.sort((a,b)=>(a.so.customer||'').localeCompare(b.so.customer||''));
+ else if(sort==='updated-desc')rows.sort((a,b)=>updated(b).localeCompare(updated(a)));
+ else rows.sort((a,b)=>(b.d.date||'').localeCompare(a.d.date||'')||(b.d.dnNo||'').localeCompare(a.d.dnNo||'',undefined,{numeric:true}));
+ rows=sortRegisterRows(rows,'dn',{no:x=>x.d.dnNo,date:x=>x.d.date,customer:x=>x.so.customer,so:x=>x.so.soNo,po:x=>x.so.poNo,items:x=>(x.d.items||[]).length,status:x=>x.status});
+ const ce=document.getElementById('dn-register-count');if(ce)ce.textContent=`${rows.length} delivery note${rows.length===1?'':'s'}`;
+ const clear=document.getElementById('dn-clear-filters-btn');if(clear){const active=!!(q||st||dnDateFilter.mode!=='all'||sort!=='date-desc'||dnKpiFilter!=='all');clear.disabled=!active;clear.classList.toggle('active',active)}
+ body.innerHTML=rows.length?rows.map(x=>`<tr class="quotation-clickable-row" tabindex="0" role="button" onclick="viewDeliveryNote('${x.so.id}',${x.i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewDeliveryNote('${x.so.id}',${x.i})}"><td>${escapeHtml(x.d.dnNo||'—')}</td><td>${fmtDate(x.d.date)}</td><td>${escapeHtml(x.so.customer||'—')}</td><td>${escapeHtml(x.so.soNo||'—')}</td><td>${escapeHtml(x.so.poNo||'—')}</td><td class="center">${(x.d.items||[]).length}</td><td><span class="badge ${getDNBadgeClass(x.status)}">${x.status}</span></td></tr>`).join(''):'<tr><td colspan="7"><div class="empty-state"><i class="ti ti-truck-delivery"></i><strong>No delivery notes found</strong><p>Adjust the filters to see other delivery records.</p></div></td></tr>';
+}
+
 function openRecordDelivery(soId) {
   const so=salesOrders.find(x=>x.id===soId);if(!so)return;currentSOId=soId;
   document.getElementById('dn-title').textContent='Create Delivery Note — '+so.soNo;document.getElementById('dn-no').value='Auto on Save';document.getElementById('dn-date').value=new Date().toISOString().split('T')[0];document.getElementById('dn-vehicle').value='';document.getElementById('dn-remarks').value='';document.getElementById('dn-po').value=so.poNo||'—';document.getElementById('dn-so-ref').value=so.soNo||'—';
@@ -10036,15 +10102,34 @@ function openRecordDelivery(soId) {
   const transit={};(so.deliveries||[]).filter(d=>!d.customerConfirmed).forEach(d=>(d.items||[]).forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;transit[idx]=roundQtyForUom((transit[idx]||0)+(Number(it.qty)||0),it.uom)}));
   const remaining=(so.items||[]).map((it,i)=>{const idx=it.origIdx!==undefined?it.origIdx:i;const rem=roundQtyForUom(Math.max(0,(Number(it.qty)||0)-(accepted[idx]||0)-(transit[idx]||0)),it.uom);return {...it,soIdx:i,origIdx:idx,acceptedQty:accepted[idx]||0,remainingQty:rem}}).filter(it=>it.remainingQty>0);
   if(!remaining.length){showToast('No quantity is available for dispatch','warning');return;}
-  const modal=document.getElementById('so-delivery-modal');modal._soId=soId;modal._remainingItems=remaining;
+  const modal=document.getElementById('so-delivery-modal');modal._soId=soId;modal._remainingItems=remaining;modal._saveOperationId='';
   document.getElementById('dn-items-list').innerHTML=remaining.map((it,i)=>`<tr><td class="center">${i+1}</td><td><strong>${escapeHtml(it.desc||'—')}</strong></td><td class="center">${it.qty}</td><td class="center">${it.acceptedQty}</td><td class="center"><input class="so-qty-input" id="dn-qty-${i}" type="number" value="${it.remainingQty}" min="0" max="${it.remainingQty}" step="${qtyStep(it.uom)}" oninput="updateDNRemaining(${i})"></td><td class="center"><strong id="dn-rem-${i}">0</strong></td><td class="center">${escapeHtml(it.uom||'—')}</td></tr>`).join('');
   openModalWithSize('so-delivery-modal');
 }
 function updateDNRemaining(i){const m=document.getElementById('so-delivery-modal'),it=(m._remainingItems||[])[i];if(!it)return;let q=roundQtyForUom(document.getElementById('dn-qty-'+i)?.value,it.uom);q=Math.max(0,Math.min(q,it.remainingQty));document.getElementById('dn-rem-'+i).textContent=roundQtyForUom(it.remainingQty-q,it.uom);}
+async function _saveDeliveryCore(operationId){
+ const m=document.getElementById('so-delivery-modal'),so=salesOrders.find(x=>x.id===m?._soId);if(!so)return null;
+ const date=document.getElementById('dn-date').value;if(!date){showToast('Please enter DN date','error');return null}
+ const items=[];(m._remainingItems||[]).forEach((it,i)=>{let qty=roundQtyForUom(document.getElementById('dn-qty-'+i)?.value,it.uom);if(qty>it.remainingQty)qty=it.remainingQty;if(qty>0)items.push({...it,qty,acceptedQty:null,rejectedQty:null})});if(!items.length){showToast('Enter at least one delivery quantity','error');return null}
+ // Idempotency: this browser operation can create only one DN, even if the user taps again.
+ const existing=(so.deliveries||[]).find(d=>d.creationOperationId===operationId);
+ if(existing){closeModal('so-delivery-modal');viewDeliveryNote(so.id,(so.deliveries||[]).indexOf(existing));showToast(`${existing.dnNo} was already saved and dispatched.`,'info','Already Saved');return existing}
+ const dnNo=await allocateDocumentNumber('deliveryNote',new Date(date+'T00:00:00'));
+ const d={id:'DN-'+Date.now(),dnNo,date,status:'Out for Delivery',creationOperationId:operationId,deliveryAccessToken:createDeliveryAccessToken(),deliveryAccessCreatedAt:new Date().toISOString(),vehicle:document.getElementById('dn-vehicle').value.trim(),remarks:document.getElementById('dn-remarks').value.trim(),items,dispatchedAt:new Date().toISOString(),dispatchedBy:deliveryActor(),created:new Date().toISOString()};
+ so.deliveries=so.deliveries||[];so.deliveries.push(d);
+ const saved=await saveSalesOrders();
+ if(saved===false){so.deliveries=so.deliveries.filter(x=>x!==d);throw new Error('Delivery Note could not be synchronized')}
+ closeModal('so-delivery-modal');showToast(dnNo+' saved and dispatched','success');renderSOPage();renderDNPage();viewDeliveryNote(so.id,(so.deliveries||[]).indexOf(d));return d;
+}
 async function saveDelivery(){
- const m=document.getElementById('so-delivery-modal'),so=salesOrders.find(x=>x.id===m._soId);if(!so)return;const date=document.getElementById('dn-date').value;if(!date){showToast('Please enter DN date','error');return}
- const items=[];(m._remainingItems||[]).forEach((it,i)=>{let qty=roundQtyForUom(document.getElementById('dn-qty-'+i)?.value,it.uom);if(qty>it.remainingQty)qty=it.remainingQty;if(qty>0)items.push({...it,qty,acceptedQty:null,rejectedQty:null})});if(!items.length){showToast('Enter at least one delivery quantity','error');return}
- const dnNo=await allocateDocumentNumber('deliveryNote',new Date(date+'T00:00:00'));const d={id:'DN-'+Date.now(),dnNo,date,status:'Out for Delivery',vehicle:document.getElementById('dn-vehicle').value.trim(),remarks:document.getElementById('dn-remarks').value.trim(),items,dispatchedAt:new Date().toISOString(),dispatchedBy:deliveryActor(),created:new Date().toISOString()};so.deliveries=so.deliveries||[];so.deliveries.push(d);await saveSalesOrders();closeModal('so-delivery-modal');showToast(dnNo+' saved and dispatched','success');renderSOPage();renderDNPage();viewSO(so.id);
+ const m=document.getElementById('so-delivery-modal');if(!m)return null;
+ // Keep one stable operation id for this open Dispatch workspace.
+ const operationId=m._saveOperationId||(m._saveOperationId='dispatch:'+m._soId+':'+Date.now()+':'+Math.random().toString(36).slice(2));
+ return runProtectedDocumentSave({
+   key:'deliveryNote:'+operationId,
+   message:'Saving Delivery Note…',buttonId:'dn-dispatch-save-btn',buttonTextId:'dn-dispatch-save-btn-text',busyText:'Saving & Dispatching…',
+   action:()=>_saveDeliveryCore(operationId),ready:(d)=>!d||isModalOpen('dn-view-modal')||!isModalOpen('so-delivery-modal')
+ });
 }
 function canConfirmDelivery(d){
   if(!window.currentUser) return {ok:false,msg:'Please sign in to BizCore.'};
@@ -10057,42 +10142,83 @@ function openDeliveryAcceptance(soId,deliveryIdx){
  const box=document.getElementById('dn-confirm-items');box.innerHTML=(d.items||[]).map((it,i)=>`<div class="dn-accept-card"><div class="dn-accept-head"><span>${i+1}. ${escapeHtml(it.desc||'—')}</span><strong>${it.qty} ${escapeHtml(it.uom||'')}</strong></div><div class="dn-accept-grid"><label>Accepted Qty<input type="number" id="dn-acc-${i}" value="${it.qty}" min="0" max="${it.qty}" step="${qtyStep(it.uom)}" oninput="syncDNReject(${i})"></label><label>Rejected Qty<input type="number" id="dn-rej-${i}" value="0" min="0" max="${it.qty}" step="${qtyStep(it.uom)}" oninput="syncDNAccept(${i})"></label><label id="dn-reason-wrap-${i}" style="display:none">Rejection Reason<select id="dn-reason-${i}"><option value="">Select reason…</option><option>Damaged</option><option>Specification mismatch</option><option>Wrong item</option><option>Excess quantity</option><option>Quality issue</option><option>Customer requested return</option><option>Packaging damaged</option><option>Other</option></select></label><label id="dn-disposition-wrap-${i}" style="display:none">Disposition<select id="dn-disposition-${i}"><option>Returned with Driver</option><option>Left at Customer Site</option><option>Replacement Required</option><option>Under Review</option></select></label></div><input id="dn-line-remarks-${i}" class="dn-line-remarks" placeholder="Rejection / line remarks (optional)" style="display:none"></div>`).join('');
  const modal=document.getElementById('dn-confirm-modal');
  if(!modal){showToast('Delivery Confirmation screen is unavailable','error');return false;}
- modal._soId=soId;modal._deliveryIdx=deliveryIdx;
+ modal._soId=soId;modal._deliveryIdx=deliveryIdx;modal._confirmOperationId='';
  openModalWithSize('dn-confirm-modal');
  return modal.classList.contains('open');
 }
 function syncDNReject(i){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m._soId)?.deliveries?.[m._deliveryIdx],it=d?.items?.[i];if(!it)return;let a=Math.max(0,Math.min(Number(document.getElementById('dn-acc-'+i).value)||0,Number(it.qty)||0));document.getElementById('dn-rej-'+i).value=roundQtyForUom((Number(it.qty)||0)-a,it.uom);toggleDNRejectFields(i)}
 function syncDNAccept(i){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m._soId)?.deliveries?.[m._deliveryIdx],it=d?.items?.[i];if(!it)return;let r=Math.max(0,Math.min(Number(document.getElementById('dn-rej-'+i).value)||0,Number(it.qty)||0));document.getElementById('dn-acc-'+i).value=roundQtyForUom((Number(it.qty)||0)-r,it.uom);toggleDNRejectFields(i)}
 function toggleDNRejectFields(i){const r=Number(document.getElementById('dn-rej-'+i)?.value)||0;['reason-wrap','disposition-wrap'].forEach(x=>{const e=document.getElementById('dn-'+x+'-'+i);if(e)e.style.display=r>0?'flex':'none'});const n=document.getElementById('dn-line-remarks-'+i);if(n)n.style.display=r>0?'block':'none'}
-async function saveDeliveryAcceptance(){
- const m=document.getElementById('dn-confirm-modal'),so=salesOrders.find(x=>x.id===m._soId),d=so?.deliveries?.[m._deliveryIdx];if(!d)return;const receivedBy=document.getElementById('dn-received-by').value.trim();if(!receivedBy){showToast('Received By is required','error');return}
- for(let i=0;i<d.items.length;i++){const it=d.items[i],qty=Number(it.qty)||0,a=roundQtyForUom(document.getElementById('dn-acc-'+i).value,it.uom),r=roundQtyForUom(document.getElementById('dn-rej-'+i).value,it.uom);if(Math.abs((a+r)-qty)>0.001){showToast(`Line ${i+1}: Accepted + Rejected must equal delivery quantity`,'error');return}const reason=document.getElementById('dn-reason-'+i)?.value||'';if(r>0&&!reason){showToast(`Line ${i+1}: Select a rejection reason`,'error');return}it.acceptedQty=a;it.rejectedQty=r;it.rejectionReason=r>0?reason:'';it.rejectionDisposition=r>0?(document.getElementById('dn-disposition-'+i)?.value||''):'';it.acceptanceRemarks=document.getElementById('dn-line-remarks-'+i)?.value.trim()||''}
- d.customerConfirmed=true;d.customerConfirmedDate=new Date().toISOString().split('T')[0];d.confirmedAt=new Date().toISOString();d.confirmedBy=deliveryActor();d.receivedBy=receivedBy;d.customerRemarks=document.getElementById('dn-customer-remarks').value.trim();d.status=getDNStatus(d);
- // Suppress a duplicate remote-event toast on the device that performed the confirmation.
+async function _saveDeliveryAcceptanceCore(operationId){
+ const m=document.getElementById('dn-confirm-modal'),so=salesOrders.find(x=>x.id===m?._soId),d=so?.deliveries?.[m?._deliveryIdx];if(!d)return null;
+ if(d.customerConfirmed){showToast('This delivery is already confirmed','info','Already Confirmed');return d}
+ const receivedBy=document.getElementById('dn-received-by').value.trim();if(!receivedBy){showToast('Received By is required','error');return null}
+ // Validate first; do not mutate the persisted model until every line passes.
+ const lineUpdates=[];
+ for(let i=0;i<d.items.length;i++){const it=d.items[i],qty=Number(it.qty)||0,a=roundQtyForUom(document.getElementById('dn-acc-'+i).value,it.uom),r=roundQtyForUom(document.getElementById('dn-rej-'+i).value,it.uom);if(Math.abs((a+r)-qty)>0.001){showToast(`Line ${i+1}: Accepted + Rejected must equal delivery quantity`,'error');return null}const reason=document.getElementById('dn-reason-'+i)?.value||'';if(r>0&&!reason){showToast(`Line ${i+1}: Select a rejection reason`,'error');return null}lineUpdates.push({a,r,reason,disposition:r>0?(document.getElementById('dn-disposition-'+i)?.value||''):'',remarks:document.getElementById('dn-line-remarks-'+i)?.value.trim()||''})}
+ const backup=JSON.parse(JSON.stringify(d));
+ lineUpdates.forEach((u,i)=>{const it=d.items[i];it.acceptedQty=u.a;it.rejectedQty=u.r;it.rejectionReason=u.r>0?u.reason:'';it.rejectionDisposition=u.disposition;it.acceptanceRemarks=u.remarks});
+ d.customerConfirmed=true;d.customerConfirmedDate=new Date().toISOString().split('T')[0];d.confirmedAt=new Date().toISOString();d.confirmedBy=deliveryActor();d.receivedBy=receivedBy;d.customerRemarks=document.getElementById('dn-customer-remarks').value.trim();d.confirmationOperationId=operationId;d.status=getDNStatus(d);
  window._dnLocalConfirmationIds=window._dnLocalConfirmationIds||new Set();window._dnLocalConfirmationIds.add(d.id);
  const saved=await saveSalesOrders();
- if(saved===false){showToast('Delivery confirmation could not be synchronized. Please check the connection and try again.','error');return}
+ if(saved===false){Object.keys(d).forEach(k=>delete d[k]);Object.assign(d,backup);window._dnLocalConfirmationIds.delete(d.id);throw new Error('Delivery confirmation could not be synchronized')}
+ // Publish only after the business transaction has been persisted.
  if(window.FB?.fbPublishOperationalEvent){
-   await window.FB.fbPublishOperationalEvent({id:`dn-confirmed-${d.id}-${Date.now()}`,type:'dn-confirmed',dnId:d.id,dnNo:d.dnNo,soId:so.id,status:d.status,actor:d.confirmedBy||deliveryActor(),sourceSession:getBizCoreSessionId(),createdAt:d.confirmedAt});
+   try{await window.FB.fbPublishOperationalEvent({id:`dn-confirmed-${d.id}-${operationId.replace(/[^a-zA-Z0-9_-]/g,'')}`,type:'dn-confirmed',dnId:d.id,dnNo:d.dnNo,soId:so.id,status:d.status,actor:d.confirmedBy||deliveryActor(),sourceSession:getBizCoreSessionId(),createdAt:d.confirmedAt})}catch(e){console.warn('Delivery saved; operational notification publish failed',e)}
  }
- closeModal('dn-confirm-modal');renderSOPage();renderDNPage();viewSO(so.id);showToast(`${d.dnNo} confirmed — ${d.status}`,'success');
+ closeModal('dn-confirm-modal');renderSOPage();renderDNPage();viewDeliveryNote(so.id,m._deliveryIdx);showToast(`${d.dnNo} confirmed — ${d.status}`,'success');return d;
+}
+async function saveDeliveryAcceptance(){
+ const m=document.getElementById('dn-confirm-modal');if(!m)return null;
+ const so=salesOrders.find(x=>x.id===m._soId),d=so?.deliveries?.[m._deliveryIdx];if(!d)return null;
+ const operationId=m._confirmOperationId||(m._confirmOperationId='confirm:'+d.id+':'+Date.now()+':'+Math.random().toString(36).slice(2));
+ return runProtectedDocumentSave({
+   key:'deliveryConfirm:'+operationId,
+   message:'Confirming Delivery…',buttonId:'dn-confirm-save-btn',buttonTextId:'dn-confirm-save-btn-text',busyText:'Confirming Delivery…',
+   action:()=>_saveDeliveryAcceptanceCore(operationId),ready:(saved)=>!saved||!isModalOpen('dn-confirm-modal')
+ });
 }
 async function confirmDelivery(soId,deliveryIdx){openDeliveryAcceptance(soId,deliveryIdx)}
-function getDNDeepLink(d){const base=location.href.split('?')[0].split('#')[0];return base+'?dn='+encodeURIComponent(d.id)}
+function createDeliveryAccessToken(){
+ const bytes=new Uint8Array(24);
+ if(window.crypto?.getRandomValues) window.crypto.getRandomValues(bytes);
+ else for(let i=0;i<bytes.length;i++) bytes[i]=Math.floor(Math.random()*256);
+ return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+}
+function ensureDeliveryAccessToken(d){
+ if(!d) return '';
+ if(!d.deliveryAccessToken){
+   d.deliveryAccessToken=createDeliveryAccessToken();
+   d.deliveryAccessCreatedAt=new Date().toISOString();
+   // Existing DNs receive a token lazily the first time their QR is rendered.
+   // Persist it through the existing Firebase salesOrders collection.
+   Promise.resolve(saveSalesOrders()).catch(e=>console.warn('Could not persist delivery access token',e));
+ }
+ return d.deliveryAccessToken;
+}
+function getDNDeepLink(d){
+ const token=ensureDeliveryAccessToken(d);
+ const here=new URL(location.href);
+ const base=here.href.substring(0,here.href.lastIndexOf('/')+1);
+ return base+'delivery.html?t='+encodeURIComponent(token);
+}
 function renderDNQRCode(d){setTimeout(()=>{const el=document.getElementById('dn-qr-code');if(!el)return;el.innerHTML='';if(window.QRCode){new QRCode(el,{text:getDNDeepLink(d),width:112,height:112,correctLevel:QRCode.CorrectLevel.M})}else{el.innerHTML='<div style="font-size:10px;color:#777;width:112px">QR library unavailable. Use the delivery link from BizCore.</div>'}},0)}
 function openDNFromDeepLink(){
- const id=new URLSearchParams(location.search).get('dn');
- if(!id || window._dnDeepLinkOpened===id || window._dnDeepLinkRouting===id) return false;
+ const params=new URLSearchParams(location.search);
+ const token=params.get('delivery');
+ const legacyId=params.get('dn'); // Keep already-printed v133 and earlier QR codes usable.
+ const routeKey=token||legacyId;
+ if(!routeKey || window._dnDeepLinkOpened===routeKey || window._dnDeepLinkRouting===routeKey) return false;
  // Authentication and authoritative Firebase SO/DN data must both be ready.
  if(!window.currentUser || !Array.isArray(salesOrders)) return false;
- const hit=allDeliveryNotes().find(x=>x.d.id===id);
+ const hit=allDeliveryNotes().find(x=>token ? x.d.deliveryAccessToken===token : x.d.id===legacyId);
  if(!hit) return false;
 
  // v128: the QR destination is the exact DN workspace, not merely the DN register.
  // Render the register only as the background module, then open the requested DN
  // after that render has completed. Do not mark the deep link as consumed until
  // the target modal is actually open.
- window._dnDeepLinkRouting=id;
+ window._dnDeepLinkRouting=routeKey;
  showPage('deliverynotes');
  setTimeout(()=>{
    try{
@@ -10102,7 +10228,7 @@ function openDNFromDeepLink(){
      const targetId=hit.d.customerConfirmed?'dn-print-modal':'dn-confirm-modal';
      const target=document.getElementById(targetId);
      if(target && target.classList.contains('open')){
-       window._dnDeepLinkOpened=id;
+       window._dnDeepLinkOpened=routeKey;
      }else{
        // Allow the startup retry loop / Firebase listener to try again.
        window._dnDeepLinkOpened=null;
@@ -10113,141 +10239,93 @@ function openDNFromDeepLink(){
  },80);
  return true;
 }
-/* ── View / Print Delivery Note ── */
+/* ── View / Print Delivery Note v142 ── */
+function dnCompanyProfile(){
+  const s=settings||{};
+  const addr=[s.building,s.street,s.district,s.city,s.postal,s.country].filter(Boolean).join(', ');
+  return {name:s.coname||'Downtown Trading Est.',nameAr:s.conameAr||'',logo:s.logo||'',tagline:s.tagline||'',address:addr,pobox:s.pobox||'',phone:s.phone||'',mobile:s.mobile||'',email:s.email||'',website:s.website||'',cr:s.cr||'',vat:s.vat||''};
+}
+function dnCustomerProfile(so){
+  const c=customers.find(x=>x.id===so.customerId)||customers.find(x=>(x.company||'').trim()===(so.customer||'').trim())||{};
+  return {name:so.customer||c.company||'—',address:[c.building,c.street,c.district,c.city,c.postal,c.country].filter(Boolean).join(', '),phone:c.phone||'',contact:c.contact||'',title:c.title||''};
+}
+function dnItemCode(it,soItem){return it.code||it.itemCode||it.productCode||soItem?.code||soItem?.itemCode||soItem?.productCode||''}
+function dnQtyProgress(so,d,deliveryIdx,it){
+  const idx=it.origIdx!==undefined?it.origIdx:(it.soIdx!==undefined?it.soIdx:null), soItem=idx!=null?(so.items||[])[idx]:null;
+  const ordered=Number(soItem?.qty??it.orderedQty??it.qty)||0;
+  let previous=0;
+  (so.deliveries||[]).slice(0,deliveryIdx).forEach(pd=>(pd.items||[]).forEach(pi=>{const piIdx=pi.origIdx!==undefined?pi.origIdx:pi.soIdx;if(piIdx===idx)previous+=deliveryAcceptedQty(pd,pi)}));
+  const current=Number(it.qty)||0;
+  return {idx,soItem,ordered,previous:roundQtyForUom(previous,it.uom),current,remaining:roundQtyForUom(Math.max(0,ordered-previous-current),it.uom)};
+}
+function dnFormatLabel(format){return format==='progress'?'Delivery Progress Note':format==='internal'?'Internal Delivery Copy':'Standard Delivery Note'}
+function buildDeliveryNoteDocument(so,d,deliveryIdx,format='standard',screenMode=false){
+  const cp=dnCompanyProfile(), cust=dnCustomerProfile(so), q=quotations.find(x=>x.id===so.quotationId);
+  const logo=cp.logo?`<img src="${cp.logo}" alt="${escapeHtml(cp.name)}" style="max-width:260px;max-height:78px;width:auto;height:auto;object-fit:contain">`:`<div style="font-size:23px;font-weight:900;color:#174b7a">${escapeHtml(cp.name)}</div>${cp.nameAr?`<div dir="rtl" style="font-size:15px;font-weight:700;color:#174b7a;margin-top:3px">${escapeHtml(cp.nameAr)}</div>`:''}`;
+  const contact=[cp.pobox?`P.O. Box ${escapeHtml(cp.pobox)}`:'',cp.address?escapeHtml(cp.address):'',cp.phone?`Tel: ${escapeHtml(cp.phone)}`:'',cp.email?escapeHtml(cp.email):'',cp.website?escapeHtml(cp.website):''].filter(Boolean).join('<br>');
+  const progress=format!=='standard';
+  const internal=format==='internal';
+  const rows=(d.items||[]).map((it,i)=>{const pr=dnQtyProgress(so,d,deliveryIdx,it),code=dnItemCode(it,pr.soItem);return `<tr><td>${i+1}</td><td>${escapeHtml(code||'—')}</td><td class="desc">${escapeHtml(it.desc||pr.soItem?.desc||'—')}</td>${progress?`<td class="num">${formatQuantity(pr.ordered)}</td><td class="num">${formatQuantity(pr.previous)}</td>`:''}<td class="num">${formatQuantity(pr.current)}</td>${progress?`<td class="num">${formatQuantity(pr.remaining)}</td>`:''}<td class="num">${escapeHtml(it.uom||pr.soItem?.uom||'—')}</td>${internal?`<td>${escapeHtml(d.customerConfirmed?(Number(it.rejectedQty)>0?(Number(it.acceptedQty)>0?'Partial':'Rejected'):'Accepted'):'In Transit')}</td>`:''}</tr>`}).join('');
+  const th=progress?`<th>#</th><th>Item Code</th><th>Description</th><th class="num">Ordered</th><th class="num">Previous</th><th class="num">This Delivery</th><th class="num">Remaining</th><th class="num">UOM</th>${internal?'<th>Status</th>':''}`:`<th>#</th><th>Item Code</th><th>Description</th><th class="num">Qty</th><th class="num">UOM</th>`;
+  const qr=screenMode?'<div id="dn-qr-code" class="dn-doc-qr"></div>':'<div class="dn-doc-qr-slot"></div>';
+  const dnScreenStatus=getDNStatus(d);
+  const dnScreenStatusClass={
+    'Awaiting Delivery':'dn-screen-status--awaiting',
+    'Out for Delivery':'dn-screen-status--confirmation',
+    'Awaiting Confirmation':'dn-screen-status--confirmation',
+    'Delivered':'dn-screen-status--delivered',
+    'Partially Accepted':'dn-screen-status--partial',
+    'Rejected':'dn-screen-status--rejected'
+  }[dnScreenStatus]||'dn-screen-status--awaiting';
+  const screenStatus=screenMode?`<div class="dn-screen-status-row"><span class="dn-screen-status ${dnScreenStatusClass}"><span class="dn-screen-status-dot"></span>${escapeHtml(dnScreenStatus)}</span></div>`:'';
+  const internalBlock=internal?`<div class="dn-internal"><div><b>Delivery Status</b><span>${escapeHtml(d.status||'—')}</span></div><div><b>Dispatched By</b><span>${escapeHtml(d.dispatchedBy||'—')}</span></div><div><b>Dispatched At</b><span>${d.dispatchedAt?new Date(d.dispatchedAt).toLocaleString():'—'}</span></div><div><b>Confirmed By</b><span>${escapeHtml(d.confirmedBy||'—')}</span></div><div><b>Confirmed At</b><span>${d.confirmedAt?new Date(d.confirmedAt).toLocaleString():'—'}</span></div></div>`:'';
+  return `<div class="dn-a4${screenMode?' dn-a4-screen':''}" data-dn-format="${format}"><style>
+  .dn-a4{width:210mm;min-height:297mm;margin:0 auto;background:#fff;padding:12mm 11mm 10mm;font-family:Arial,sans-serif;color:#17324d;font-size:10.5px;box-sizing:border-box}.dn-a4-screen{border:1px solid #8f9aa6;box-shadow:0 4px 18px rgba(15,23,42,.10)}.dn-a4 *{box-sizing:border-box}.dn-head{display:grid;grid-template-columns:1.22fr .95fr 1.05fr;gap:8px;align-items:start;padding-bottom:10px;border-bottom:2px solid #174b7a}.dn-contact{font-size:9.5px;line-height:1.5;color:#50657a;border-left:1px solid #cbd8e5;padding-left:10px}.dn-title-stack{min-width:0;position:relative}.dn-screen-status-row{position:absolute;right:0;top:-29px;height:auto;display:flex;align-items:center;justify-content:flex-end;z-index:2;pointer-events:none}.dn-screen-status{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:9.5px;font-weight:800;line-height:1.35;white-space:nowrap}.dn-screen-status-dot{width:7px;height:7px;border-radius:50%;background:currentColor}.dn-screen-status--awaiting{color:#53657a;background:#edf2f7}.dn-screen-status--confirmation{color:#9a6700;background:#fff2cc}.dn-screen-status--delivered{color:#147a43;background:#dcfce7}.dn-screen-status--partial{color:#6941c6;background:#eee7ff}.dn-screen-status--rejected{color:#b42318;background:#fee4e2}.dn-titlebox{border:1px solid #b9cce0;min-width:0}.dn-titlebox h1{margin:0;padding:8px 10px;font-size:19px;letter-spacing:.35px;color:#174b7a;background:#f7fafc;white-space:nowrap}.dn-titlebox div{padding:7px 10px;border-top:1px solid #d7e1eb}.dn-titlebox small{display:block;text-transform:uppercase;font-weight:800;color:#5f7489;font-size:8px}.dn-titlebox strong{font-size:13px;color:#17324d}.dn-subtitle{margin:5px 0 10px;text-align:right;font-size:8px;letter-spacing:3px;color:#64788c}.dn-two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}.dn-box{border:1px solid #cbd8e5}.dn-box h3{margin:0;background:#f3f7fa;padding:6px 9px;font-size:9px;text-transform:uppercase;color:#174b7a;border-bottom:1px solid #cbd8e5}.dn-box .content{padding:8px 9px;min-height:55px;line-height:1.45}.dn-box.dn-deliver-to{display:flex;flex-direction:column}.dn-box.dn-deliver-to .content{background:#f3f7fa;flex:1;width:100%}.dn-box .content strong{display:block;font-size:11.5px;margin-bottom:2px}.dn-ref{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:9px 0}.dn-ref>div{border:1px solid #cbd8e5;background:#f3f7fa;padding:7px 8px;min-height:43px}.dn-ref small{display:block;font-size:7.5px;font-weight:800;text-transform:uppercase;color:#5e7488;margin-bottom:4px}.dn-ref strong{font-size:10px}.dn-items{width:100%;border-collapse:collapse;margin-top:6px}.dn-items th{background:#174b7a;color:#fff;padding:6px 5px;border:1px solid #174b7a;font-size:8px;text-align:left}.dn-items td{padding:6px 5px;border:1px solid #d6e0e9;color:#263f56;font-size:9px}.dn-items tbody tr:last-child td{border-bottom:1px solid #cbd8e5}.dn-items .desc{min-width:190px}.dn-items .num{text-align:center;white-space:nowrap}.dn-remarks{border:1px solid #cbd8e5;margin-top:10px;padding:8px 9px;min-height:50px}.dn-remarks b{display:block;color:#174b7a;font-size:8px;text-transform:uppercase;margin-bottom:5px}.dn-bottom{display:grid;grid-template-columns:1fr 1fr 118px;gap:10px;margin-top:12px}.dn-sign{border:1px solid #cbd8e5;min-height:118px}.dn-sign h4{margin:0;background:#f3f7fa;padding:6px 8px;font-size:8px;color:#174b7a;text-transform:uppercase;border-bottom:1px solid #cbd8e5}.dn-sign div{padding:8px;line-height:1.8}.dn-line{display:inline-block;border-bottom:1px solid #567;width:130px;height:14px}.dn-doc-qr,.dn-doc-qr-slot{border:1px solid #cbd8e5;width:118px;height:118px;display:flex;align-items:center;justify-content:center;padding:3px}.dn-doc-qr canvas,.dn-doc-qr img{max-width:108px!important;max-height:108px!important}.dn-internal{margin-top:10px;border:1px solid #e1e7ed;display:grid;grid-template-columns:repeat(5,1fr)}.dn-internal>div{padding:6px;border-right:1px solid #e1e7ed}.dn-internal>div:last-child{border-right:0}.dn-internal b{display:block;font-size:7px;color:#6b7e90;text-transform:uppercase;margin-bottom:3px}.dn-internal span{font-size:8px}.dn-foot{margin-top:12px;padding-top:7px;border-top:2px solid #174b7a;display:block;color:#52687b;font-size:8px;line-height:1.45}.dn-foot strong{color:#174b7a;font-size:9px}.dn-format-note{font-size:8px;color:#789;text-align:right;margin-top:3px}@media print{@page{size:A4 portrait;margin:10mm 11mm 18mm 11mm}.dn-a4{margin:0!important;width:auto!important;height:auto!important;min-height:0!important;padding:0!important;display:block!important;overflow:visible!important;page-break-after:auto!important}.dn-a4-screen{border:0!important;box-shadow:none!important}.dn-box.dn-deliver-to .content{background:#fff}.dn-items{page-break-inside:auto}.dn-items thead{display:table-header-group}.dn-items tfoot{display:table-footer-group}.dn-items tr{break-inside:avoid;page-break-inside:avoid}.dn-items th,.dn-items td{break-inside:avoid;page-break-inside:avoid}.dn-remarks,.dn-internal,.dn-bottom{break-inside:avoid;page-break-inside:avoid}.dn-foot{position:fixed;left:0;right:0;bottom:0;margin:0;padding-top:5px;background:#fff;border-top:1.5px solid #174b7a;z-index:10}.dn-format-note{position:fixed;right:0;bottom:-5mm;margin:0;background:#fff;z-index:10}.dn-screen-status-row{display:none!important}}
+  </style><div class="dn-head"><div>${logo}</div><div class="dn-contact">${contact||'&nbsp;'}</div><div class="dn-title-stack">${screenStatus}<div class="dn-titlebox"><h1>DELIVERY NOTE</h1><div><small>DN No.</small><strong>${escapeHtml(d.dnNo||'—')}</strong></div><div><small>Date</small><strong>${fmtDate(d.date)}</strong></div></div></div></div><div class="dn-subtitle">GOODS DISPATCHED</div>
+  <div class="dn-two"><div class="dn-box"><h3>Customer</h3><div class="content"><strong>${escapeHtml(cust.name)}</strong>${cust.address?escapeHtml(cust.address):''}${cust.contact?`<br>Attn: ${escapeHtml(cust.contact)}`:''}${cust.phone?`<br>Tel: ${escapeHtml(cust.phone)}`:''}</div></div><div class="dn-box dn-deliver-to"><h3>Deliver To</h3><div class="content"><strong>${escapeHtml(cust.name)}</strong>${cust.address?escapeHtml(cust.address):''}</div></div></div>
+  <div class="dn-ref"><div><small>Sales Order No.</small><strong>${escapeHtml(so.soNo||'—')}</strong></div><div><small>Customer PO No.</small><strong>${escapeHtml(so.poNo||'—')}</strong></div><div><small>Quotation</small><strong>${escapeHtml(q?.qno||'—')}</strong></div><div><small>Vehicle / AWB</small><strong>${escapeHtml(d.vehicle||'—')}</strong></div></div>
+  <table class="dn-items"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>
+  <div class="dn-remarks"><b>Remarks</b>${escapeHtml(d.remarks||'—')}</div>${internalBlock}
+  <div class="dn-bottom"><div class="dn-sign"><h4>Prepared / Dispatched By</h4><div>Name: ${escapeHtml(d.dispatchedBy||'________________')}<br>Date: ${fmtDate(d.date)}<br>Signature: <span class="dn-line"></span></div></div><div class="dn-sign"><h4>Received By (Customer)</h4><div>Name: ${escapeHtml(d.receivedBy||'________________')}<br>Date: ${d.confirmedAt?new Date(d.confirmedAt).toLocaleDateString('en-GB'):'________________'}<br>Signature: <span class="dn-line"></span></div></div>${qr}</div>
+  <div class="dn-foot"><div>${[cp.pobox?`P.O. Box ${escapeHtml(cp.pobox)}`:'',cp.address?escapeHtml(cp.address):'',cp.phone?`Tel: ${escapeHtml(cp.phone)}`:'',cp.email?escapeHtml(cp.email):'',cp.website?escapeHtml(cp.website):''].filter(Boolean).join(' &nbsp; | &nbsp; ')}</div></div>${format==='standard'?'':`<div class="dn-format-note">${dnFormatLabel(format)}</div>`}</div>`;
+}
 function viewDeliveryNote(soId, deliveryIdx) {
-  const so = salesOrders.find(x=>x.id===soId); if (!so) return;
-  const d = so.deliveries[deliveryIdx]; if (!d) return;
-  const dnViewModal = document.getElementById('dn-print-modal');
-  if (dnViewModal) { dnViewModal._soId = soId; dnViewModal._deliveryIdx = deliveryIdx; }
-  const confirmBtn = document.getElementById('dn-open-confirm-btn');
-  if (confirmBtn) {
-    confirmBtn.style.display = 'inline-flex';
-    confirmBtn.disabled = !!d.customerConfirmed;
-    confirmBtn.innerHTML = d.customerConfirmed
-      ? '<i class="ti ti-circle-check"></i>Delivery Confirmed'
-      : '<i class="ti ti-device-mobile-check"></i>Delivery Confirmation';
-  }
-  const co = settings.coname||'Downtown Trading Est.';
-  const q = quotations.find(x=>x.id===so.quotationId);
-
-  const itemRows = d.items.map((it,i)=>`
-    <tr>
-      <td style="padding:8px 10px;border:1px solid #ddd">${i+1}</td>
-      <td style="padding:8px 10px;border:1px solid #ddd">${it.desc||'—'}</td>
-      <td style="padding:8px 10px;border:1px solid #ddd;text-align:center">${it.qty}</td>
-      <td style="padding:8px 10px;border:1px solid #ddd;text-align:center">${it.uom||'—'}</td>
-      <td style="padding:8px 10px;border:1px solid #ddd">____________________________</td>
-    </tr>`).join('');
-
-  document.getElementById('dn-print-title').textContent = d.dnNo;
-  document.getElementById('dn-print-body').innerHTML = `
-    <div style="padding:32px;font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a">
-      <!-- Header -->
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #1F4E79">
-        <div>
-          <div style="font-size:22px;font-weight:700;color:#1F4E79">${co}</div>
-          <div style="font-size:12px;color:#666;margin-top:4px">${settings.address||''}</div>
-          <div style="font-size:12px;color:#666">${settings.phone||''} · ${settings.email||''}</div>
-          ${settings.vat?`<div style="font-size:12px;color:#666">VAT Reg: ${settings.vat}</div>`:''}
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:26px;font-weight:800;color:#1F4E79;letter-spacing:1px">DELIVERY NOTE</div>
-          <div style="font-size:16px;font-weight:700;margin-top:4px">${d.dnNo}</div>
-          <div style="font-size:12px;color:#666;margin-top:2px">Date: ${fmtDate(d.date)}</div>
-        </div>
-      </div>
-
-      <!-- Reference Info -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
-        <div style="border:1px solid #ddd;border-radius:6px;padding:14px">
-          <div style="font-size:11px;font-weight:700;color:#666;text-transform:uppercase;margin-bottom:8px">Deliver to</div>
-          <div style="font-weight:600;font-size:14px">${so.customer}</div>
-        </div>
-        <div style="border:1px solid #ddd;border-radius:6px;padding:14px">
-          <div style="font-size:11px;font-weight:700;color:#666;text-transform:uppercase;margin-bottom:8px">Reference</div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:#666">Sales Order:</span><strong>${so.soNo}</strong></div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:#666">Customer PO:</span><strong>${so.poNo||'—'}</strong></div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:#666">Quotation:</span><strong>${q?q.qno:'—'}</strong></div>
-          ${d.vehicle?`<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#666">Vehicle/AWB:</span><strong>${d.vehicle}</strong></div>`:''}
-        </div>
-      </div>
-
-      <!-- Items Table -->
-      <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-        <thead>
-          <tr style="background:#1F4E79;color:#fff">
-            <th style="padding:9px 10px;border:1px solid #1F4E79;text-align:left;width:36px">#</th>
-            <th style="padding:9px 10px;border:1px solid #1F4E79;text-align:left">Description</th>
-            <th style="padding:9px 10px;border:1px solid #1F4E79;text-align:center;width:60px">Qty</th>
-            <th style="padding:9px 10px;border:1px solid #1F4E79;text-align:center;width:60px">UOM</th>
-            <th style="padding:9px 10px;border:1px solid #1F4E79;text-align:left;width:200px">Received by (signature)</th>
-          </tr>
-        </thead>
-        <tbody>${itemRows}</tbody>
-      </table>
-
-      ${d.remarks?`<div style="margin-bottom:20px;padding:10px 14px;background:#fffbea;border:1px solid #ffc107;border-radius:6px;font-size:12px"><strong>Remarks:</strong> ${d.remarks}</div>`:''}
-
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:20px;margin:18px 0;padding:12px 14px;border:1px solid #dbe5ef;border-radius:7px;background:#f8fbff">
-        <div style="flex:1"><strong style="color:#1F4E79">Mobile Delivery Confirmation</strong><div style="font-size:11px;color:#666;margin-top:4px">Authorized BizCore users can scan this QR to update customer acceptance. Login is required.</div>${d.customerConfirmed?'<div style="margin-top:10px;font-size:12px;font-weight:700;color:#15803d">✓ Delivery already confirmed</div>':'<button type="button" class="btn btn-success btn-sm" style="margin-top:10px" onclick="openDeliveryConfirmationFromDNView()"><i class="ti ti-device-mobile-check"></i> Open Delivery Confirmation</button>'}</div>
-        <div id="dn-qr-code" style="width:112px;height:112px;flex:0 0 112px"></div>
-      </div>
-
-      <!-- Signature Block -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:32px">
-        <div style="border-top:1px solid #1a1a1a;padding-top:8px">
-          <div style="font-size:11px;color:#666">Delivered by (name &amp; signature)</div>
-          <div style="margin-top:20px;font-size:11px;color:#666">Date: _________________________</div>
-        </div>
-        <div style="border-top:1px solid #1a1a1a;padding-top:8px">
-          <div style="font-size:11px;color:#666">Received by (name &amp; signature)</div>
-          <div style="margin-top:20px;font-size:11px;color:#666">Date: _________________________</div>
-        </div>
-      </div>
-
-      <div style="margin-top:24px;text-align:center;font-size:11px;color:#999;border-top:1px solid #eee;padding-top:12px">
-        ${co} · Generated by BizCore · ${new Date().toLocaleDateString('en-GB')}
-      </div>
-    </div>`;
-
-  renderDNQRCode(d);
-  openModalWithSize('dn-print-modal');
+  const so=salesOrders.find(x=>x.id===soId);if(!so)return;const d=so.deliveries?.[deliveryIdx];if(!d)return;
+  const m=document.getElementById('dn-print-modal');if(m){m._soId=soId;m._deliveryIdx=deliveryIdx;m._printFormat='standard'}
+  const btn=document.getElementById('dn-open-confirm-btn');if(btn){btn.style.display='inline-flex';btn.disabled=!!d.customerConfirmed;btn.innerHTML=d.customerConfirmed?'<i class="ti ti-circle-check"></i>Delivery Confirmed':'<i class="ti ti-device-mobile-check"></i>Delivery Confirmation'}
+  document.getElementById('dn-print-title').textContent=d.dnNo;
+  document.getElementById('dn-print-body').innerHTML=buildDeliveryNoteDocument(so,d,deliveryIdx,'standard',true);
+  renderDNQRCode(d);openModalWithSize('dn-print-modal');
 }
-
-
+function openDNFormatDialog(action='print'){
+  const src=document.getElementById('dn-print-modal'),dlg=document.getElementById('dn-format-modal');if(!src||!dlg)return;
+  dlg._soId=src._soId;dlg._deliveryIdx=src._deliveryIdx;dlg._action=action;
+  const std=document.getElementById('dn-format-standard');if(std)std.checked=true;
+  // The format picker is a child action of the DN viewer and must always sit above it.
+  // Keep the DN viewer open behind the picker so Cancel returns to the same document.
+  dlg.style.zIndex='6500';
+  openModalWithSize('dn-format-modal');
+}
+function continueDNFormat(){
+  const dlg=document.getElementById('dn-format-modal'),format=document.querySelector('input[name="dn-print-format"]:checked')?.value||'standard';
+  const so=salesOrders.find(x=>x.id===dlg?._soId),d=so?.deliveries?.[dlg?._deliveryIdx];if(!so||!d){showToast('Unable to prepare Delivery Note','error');return}
+  closeModal('dn-format-modal');printDeliveryNote(format,so,d,dlg._deliveryIdx);
+}
 function openDeliveryConfirmationFromDNView(){
-  const viewModal=document.getElementById('dn-print-modal');
-  const soId=viewModal?._soId, deliveryIdx=viewModal?._deliveryIdx;
-  if(soId==null || deliveryIdx==null){showToast('Unable to identify this Delivery Note','error');return;}
-
-  // Open the confirmation workspace FIRST while the source DN still owns its
-  // record context. Only then hide the DN View. This avoids losing/interrupting
-  // the transition between two modal workspaces.
-  try{
-    const opened=openDeliveryAcceptance(soId,deliveryIdx);
-    const confirmModal=document.getElementById('dn-confirm-modal');
-    if(opened && confirmModal?.classList.contains('open')){
-      viewModal?.classList.remove('open','modal-fs-overlay');
-      updateFullscreenShellState();
-      // Keep the confirmation workspace above any other modal remnants.
-      confirmModal.style.zIndex='6200';
-      return;
-    }
-    showToast('Could not open Delivery Confirmation','error');
-  }catch(err){
-    console.error('Delivery Confirmation open failed',err);
-    showToast('Could not open Delivery Confirmation: '+(err?.message||'Unknown error'),'error');
-  }
+  const viewModal=document.getElementById('dn-print-modal');const soId=viewModal?._soId,deliveryIdx=viewModal?._deliveryIdx;if(soId==null||deliveryIdx==null){showToast('Unable to identify this Delivery Note','error');return}
+  try{const opened=openDeliveryAcceptance(soId,deliveryIdx),confirmModal=document.getElementById('dn-confirm-modal');if(opened&&confirmModal?.classList.contains('open')){viewModal?.classList.remove('open','modal-fs-overlay');updateFullscreenShellState();confirmModal.style.zIndex='6200';return}showToast('Could not open Delivery Confirmation','error')}catch(err){console.error('Delivery Confirmation open failed',err);showToast('Could not open Delivery Confirmation: '+(err?.message||'Unknown error'),'error')}
 }
-
-function printDeliveryNote() {
-  const qr=document.querySelector('#dn-qr-code canvas');if(qr){const holder=document.getElementById('dn-qr-code');holder.innerHTML=`<img src="${qr.toDataURL('image/png')}" style="width:112px;height:112px" alt="Delivery QR">`;}
-  const body = document.getElementById('dn-print-body').innerHTML;
-  const w = window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html><head><title>Delivery Note</title>
-    <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>
-    </head><body>${body}<scr'+'ipt>window.onload=()=>{window.print();window.close();}<'+'/script></body></html>`);
-  w.document.close();
+function printDeliveryNote(format='standard',soArg=null,dArg=null,idxArg=null) {
+  const vm=document.getElementById('dn-print-modal');
+  const so=soArg||salesOrders.find(x=>x.id===vm?._soId);
+  const idx=(idxArg!==null&&idxArg!==undefined)?idxArg:vm?._deliveryIdx;
+  const d=dArg||so?.deliveries?.[idx];if(!so||!d)return;
+  let html=buildDeliveryNoteDocument(so,d,idx,format,false);
+  const qrCanvas=document.querySelector('#dn-qr-code canvas'),qrImg=document.querySelector('#dn-qr-code img');
+  const qrSrc=qrCanvas?qrCanvas.toDataURL('image/png'):(qrImg?.src||'');
+  if(qrSrc)html=html.replace('<div class="dn-doc-qr-slot"></div>',`<div class="dn-doc-qr-slot"><img src="${qrSrc}" alt="Delivery QR" style="width:108px;height:108px"></div>`);
+  const w=window.open('','_blank');if(!w){showToast('Please allow pop-ups to print the Delivery Note','warning');return}
+  w.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(d.dnNo)} — ${dnFormatLabel(format)}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>${html}<scr`+`ipt>window.onload=function(){setTimeout(function(){window.print();},120)};</scr`+`ipt></body></html>`);w.document.close();
 }
 
 /* ── Create Invoice ── */
@@ -11189,7 +11267,8 @@ loadRecycleBin();
 loadData().then(function() {
   // Deep links are authoritative. Never let normal last-page restoration
   // (for example Pricing) override a Delivery Note QR destination.
-  const dnDeepLink = new URLSearchParams(location.search).get('dn');
+  const deepParams = new URLSearchParams(location.search);
+  const dnDeepLink = deepParams.get('delivery') || deepParams.get('dn');
   if (dnDeepLink) {
     if (typeof openDNFromDeepLink === 'function') openDNFromDeepLink();
     return;
@@ -11201,7 +11280,7 @@ loadData().then(function() {
     if (lastPage && lastPage !== 'dashboard') {
       setTimeout(function() {
         // Re-check in case a deep link was introduced while startup completed.
-        if (new URLSearchParams(location.search).get('dn')) return;
+        { const p=new URLSearchParams(location.search); if (p.get('delivery') || p.get('dn')) return; }
         if (typeof showPage === 'function') showPage(lastPage);
       }, 300);
     }
@@ -12684,7 +12763,7 @@ console.log('Document locking system active ✅');
 ═══════════════════════════════════════════════════════════════════ */
 
 window.addEventListener('load',()=>{
-  if(!new URLSearchParams(location.search).get('dn')) return;
+  {const p=new URLSearchParams(location.search);if(!p.get('delivery')&&!p.get('dn')) return;}
   let attempts=0;
   const routeDN=()=>{
     attempts++;
