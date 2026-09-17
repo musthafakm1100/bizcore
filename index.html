@@ -14,7 +14,7 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=156" rel="stylesheet"/>
+<link href="css/main.css?v=157" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=139" rel="stylesheet"/>
 <link href="css/typography.css?v=139" rel="stylesheet"/>
 <link href="css/masters.css?v=139" rel="stylesheet"/>
@@ -34,6 +34,11 @@ button,.btn{font-size:14px!important;font-weight:600!important;}
 .badge,.status-badge{font-size:13px!important;font-weight:600!important;}
 </style>
 
+
+<style id="document-display-settings-css">
+.doc-display-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.doc-display-panel{border:1px solid var(--border);border-radius:9px;padding:14px;background:#fff}.doc-display-panel h4{margin:0 0 4px;font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px}.doc-display-panel p{margin:0 0 12px;font-size:10px;color:var(--gray)}.doc-display-fields{display:grid;grid-template-columns:1fr 1fr;gap:7px 10px}.doc-display-check{display:flex;align-items:center;gap:7px;padding:7px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:11px;color:#334155;background:#f8fafc;cursor:pointer}.doc-display-check input{margin:0;accent-color:#174b7a}@media(max-width:850px){.doc-display-grid{grid-template-columns:1fr}.doc-display-fields{grid-template-columns:1fr}}
+.bp-header-details{margin-top:7px;font-size:8px;line-height:1.45;color:#52687b}.bp-empty-note{color:#94a3b8;font-style:italic}.bp-footer{line-height:1.45}
+</style>
 </head>
 <body>
 <script>
@@ -876,6 +881,7 @@ document.addEventListener('error', function(e) {
 <div class="setup-nav-group">
 <div class="setup-nav-group-title">Display Settings</div>
 <button class="setup-tab" id="stab-currency-display" onclick="switchSetupTab('currency-display')"><i class="ti ti-currency-riyal"></i><span class="tab-copy"><span class="tab-title">Currency Display</span></span></button>
+<button class="setup-tab" id="stab-quotation-print" onclick="switchSetupTab('quotation-print')"><i class="ti ti-file-invoice"></i><span class="tab-copy"><span class="tab-title">Quotation Print</span></span></button>
 </div>
 <div class="setup-nav-group">
 <div class="setup-nav-group-title">Business Rules</div>
@@ -921,6 +927,21 @@ document.addEventListener('error', function(e) {
 <input accept="image/png,image/jpeg,image/webp" id="stamp-file-input" onchange="handleBrandAssetUpload('stamp',event)" style="display:none" type="file"/>
 </div>
 </div>
+<div class="form-grid" style="margin-top:14px">
+<div class="form-group"><label>Authorized signatory name</label><input id="s-signatory-name" placeholder="e.g. Musthafa KM"/></div>
+<div class="form-group"><label>Designation</label><input id="s-signatory-designation" placeholder="e.g. Authorized Signatory"/></div>
+</div>
+<div class="signature-display-settings" style="margin-top:16px;padding:14px;border:1px solid var(--border);border-radius:10px;background:#f8fafc">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px"><div><strong style="font-size:12px;color:var(--navy)">Signature &amp; Stamp Display</strong><div style="font-size:10.5px;color:var(--gray);margin-top:3px">Company-level PDF positioning. V180 appearance is the default.</div></div><button type="button" class="btn btn-secondary btn-sm" onclick="resetSignatureDisplaySettings()">Reset Default</button></div>
+  <div class="form-grid">
+    <div class="form-group"><label>Signature size <span id="signature-size-value">100%</span></label><input type="range" id="s-signature-size" min="70" max="150" step="5" value="100" oninput="updateSignatureDisplayPreview()"/></div>
+    <div class="form-group"><label>Stamp size <span id="stamp-size-value">100%</span></label><input type="range" id="s-stamp-size" min="70" max="150" step="5" value="100" oninput="updateSignatureDisplayPreview()"/></div>
+    <div class="form-group"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="s-signature-overlap" checked onchange="updateSignatureDisplayPreview()"/> Overlap signature &amp; stamp</label><span class="field-help">When enabled, the stamp sits over the signature like a physical document.</span></div>
+    <div class="form-group" id="signature-overlap-amount-wrap"><label>Overlap amount <span id="overlap-amount-value">75%</span></label><input type="range" id="s-overlap-amount" min="0" max="100" step="5" value="75" oninput="updateSignatureDisplayPreview()"/></div>
+  </div>
+  <div style="margin-top:12px"><label style="font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.5px">Live preview</label><div id="signature-display-preview" style="position:relative;height:150px;margin-top:6px;background:#fff;border:1px solid #dbe4ed;border-radius:8px;overflow:hidden"><div id="signature-preview-stage" style="position:absolute;left:50%;bottom:25px;width:300px;height:120px;transform:translateX(-50%)"></div><div style="position:absolute;left:12%;right:12%;bottom:24px;border-top:1.5px solid #174b7a"></div><div style="position:absolute;left:12%;bottom:9px;font-size:8px;font-weight:800;color:#5d7186;text-transform:uppercase">Authorised Signature — Company</div></div></div>
+</div>
+<div class="info-box" style="margin-top:10px"><i class="ti ti-shield-check"></i><div><strong>Controlled quotation output</strong><div style="font-size:11px;margin-top:3px">Signature and stamp are never added automatically. An authorized user chooses them only when generating a quotation Print / PDF.</div></div></div>
 </div>
 </section>
 <section class="setup-section">
@@ -962,16 +983,28 @@ document.addEventListener('error', function(e) {
 </div>
 </div>
 </section>
+<section class="setup-section">
+<div class="setup-section-head"><div><h3><i class="ti ti-file-settings"></i>Document Display Settings</h3><p>Choose which Company Profile details appear in each document header and footer.</p></div></div>
+<div class="setup-section-body">
+<div class="form-group" style="max-width:360px;margin-bottom:14px"><label>Document</label><select id="doc-display-document" onchange="saveDocumentDisplayDraft();renderDocumentDisplaySettings(this.value);updateBrandPreview()"><option value="quotation">Quotation</option><option value="salesOrder">Sales Order</option><option value="deliveryNote">Delivery Note</option><option value="customerInvoice">Customer Invoice</option><option value="purchaseOrder">Purchase Order</option><option value="purchaseInvoice">Purchase Invoice</option></select></div>
+<div style="padding:10px 12px;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:#f8fafc;font-size:11px;color:var(--gray)"><strong id="doc-display-current-title" style="color:var(--text);font-size:12px">Quotation</strong> — display choices only. Company values remain maintained once in Company Profile.</div>
+<div class="doc-display-grid">
+<div class="doc-display-panel"><h4><i class="ti ti-layout-navbar"></i>Header Display</h4><p>Select details shown beside the company logo.</p><div class="doc-display-fields" id="doc-display-header-fields"></div></div>
+<div class="doc-display-panel"><h4><i class="ti ti-layout-bottombar"></i>Footer Display</h4><p>Select details shown in the page footer.</p><div class="doc-display-fields" id="doc-display-footer-fields"></div></div>
+</div>
+<span class="field-help" style="display:block;margin-top:10px">Quotation uses these settings now. The same master configuration is ready for Sales Order, Delivery Note, Customer Invoice, Purchase Order and Purchase Invoice as their document layouts are connected.</span>
+</div>
+</section>
 <div class="setup-actions-bar">
-<span class="save-note"><i class="ti ti-info-circle"></i> Branding changes apply to future previews and printed documents.</span>
+<span class="save-note"><i class="ti ti-info-circle"></i> Branding and document display changes apply to future previews and printed documents.</span>
 <button class="btn btn-primary" onclick="saveSetup()"><i class="ti ti-device-floppy"></i>Save company branding</button>
 </div>
 </div>
 <aside class="brand-preview">
 <div class="brand-preview-head"><span><i class="ti ti-eye" style="margin-right:5px"></i>Document preview</span><span style="font-size:10px;color:var(--gray);font-weight:400">Live preview</span></div>
 <div class="brand-preview-paper">
-<div class="bp-top"><div class="bp-logo" id="bp-logo">COMPANY LOGO</div><div class="bp-company"><strong id="bp-company-name">Downtown Trading Est.</strong><small id="bp-company-ar"></small><small id="bp-tagline">Trading &amp; Contracting</small></div></div>
-<div class="bp-doc-title">Quotation</div>
+<div class="bp-top"><div class="bp-logo" id="bp-logo">COMPANY LOGO</div><div class="bp-company"><strong id="bp-company-name">Downtown Trading Est.</strong><small id="bp-company-ar"></small><small id="bp-tagline">Trading &amp; Contracting</small><div class="bp-header-details" id="bp-header-details"></div></div></div>
+<div class="bp-doc-title" id="bp-doc-title">Quotation</div>
 <div class="bp-line short"></div><div class="bp-line mid"></div>
 <div class="bp-table"><div class="bp-table-head"></div><div class="bp-table-row"></div><div class="bp-table-row"></div><div class="bp-table-row"></div></div>
 <div class="bp-footer" id="bp-footer">Riyadh, Saudi Arabia   |   Tel: +966 XX XXX XXXX</div>
@@ -1117,6 +1150,20 @@ document.addEventListener('error', function(e) {
   </div>
 </div>
 <!-- TAB: Pricing Settings -->
+<div class="setup-tab-content" id="setup-tab-quotation-print" style="display:none">
+<div class="setup-page-head admin-master-width"><div><h2><i class="ti ti-file-invoice" style="margin-right:7px"></i>Quotation Print</h2><p>Control presentation choices shared by quotation print/PDF templates.</p></div></div>
+<div class="pricing-settings-grid admin-master-width">
+<section class="pricing-setting-card"><div class="pricing-setting-card-head"><h3><i class="ti ti-note" style="margin-right:6px"></i>Line Item Note Style</h3><p>Choose how customer-facing line notes appear inside the Description cell.</p></div><div class="pricing-setting-card-body">
+<div class="form-group"><label>Note presentation</label><select id="qprint-line-note-style" onchange="markQuotationPrintDirty()"><option value="highlight">Soft Highlight</option><option value="blueAccent">Blue Accent</option><option value="minimal">Minimal</option><option value="badge">Note Badge</option></select></div>
+<div class="info-box" style="margin-top:10px"><i class="ti ti-info-circle"></i><div><strong>Global quotation print preference</strong><div style="font-size:11px;margin-top:3px">The note text remains part of each quotation line. This setting changes presentation only. This preference applies across all quotation print/PDF templates, including Product, Contracting, bilingual and image-reference layouts.</div></div></div>
+</div></section>
+<section class="pricing-setting-card"><div class="pricing-setting-card-head"><h3><i class="ti ti-eye" style="margin-right:6px"></i>Live Preview</h3><p>Preview the selected style before saving.</p></div><div class="pricing-setting-card-body"><div id="qprint-note-preview"></div></div></section>
+</div>
+<style>
+#qprint-note-preview{background:#fff;border:1px solid var(--border);border-radius:7px;overflow:hidden}.qnp-table{font-size:11px;color:#17324d}.qnp-head,.qnp-row{display:grid;grid-template-columns:42px 1fr 48px 52px}.qnp-head{background:#174b7a;color:#fff;font-weight:700}.qnp-head span,.qnp-row>span{padding:7px;border-right:1px solid #d6e0e9}.qnp-row>span{min-width:0}.qnp-row strong{display:block}.qnp-row small{display:block;color:#64788c;margin-top:2px}.qnp{margin-top:7px;font-size:10px}.qnp.highlight{padding:5px 7px;background:#fffbea;border:1px solid #eadfae;color:#5a4a0a}.qnp.blue{padding:5px 7px;background:#eef6fd;border-left:3px solid #2684d8;color:#294d6d}.qnp.minimal{padding:2px 1px;color:#5d7186;font-style:italic}.qnp.badge{display:flex;gap:6px;align-items:center;color:#415a70}.qnp.badge span{background:#2684d8;color:#fff;border-radius:3px;padding:2px 5px;font-size:8px;font-weight:800;letter-spacing:.4px}
+</style>
+<div class="setup-card admin-master-width master-change-bar"><div><div id="quotation-print-change-status" style="font-size:12px;font-weight:700;color:var(--gray)">No pending changes</div><div style="font-size:11px;color:var(--gray);margin-top:2px">Presentation only: quotation data and historical values are not changed.</div></div><div class="master-change-actions"><button class="btn btn-secondary" onclick="restoreQuotationPrintDefaults()"><i class="ti ti-restore"></i>Restore Default</button><button class="btn btn-primary" disabled id="quotation-print-apply-btn" onclick="applyQuotationPrintSettings()"><i class="ti ti-device-floppy"></i>Save Settings</button></div></div>
+</div>
 <div class="setup-tab-content" id="setup-tab-currency-display" style="display:none">
 <div class="setup-page-head admin-master-width"><div><h2><i class="ti ti-currency-riyal" style="margin-right:7px"></i>Currency Display</h2><p>Set the standard currency visibility across BizCore entry, view and print/PDF screens.</p></div></div>
 <div class="pricing-settings-grid admin-master-width">
@@ -1242,6 +1289,7 @@ document.addEventListener('error', function(e) {
 <div class="quote-info-panel-body quote-notes-grid quote-notes-grid-top">
 <div class="form-group"><label>Customer notes / remarks <span class="quote-note-visibility customer">Visible to customer</span></label><textarea id="f-notes" placeholder="Remarks that may appear on the quotation…"></textarea></div>
 <div class="form-group"><label>Internal notes <span class="quote-note-visibility internal">Internal only</span></label><textarea id="f-internal-notes" placeholder="Internal instructions, follow-up notes, approvals…"></textarea></div>
+<div class="form-group" style="grid-column:1/-1"><label>Additional conditions <span class="quote-note-visibility customer">Visible to customer</span></label><textarea id="f-additional-conditions" placeholder="Optional additional commercial conditions for this quotation. Enter one condition per line…"></textarea><div class="quote-date-hint">Printed under Terms &amp; Conditions after Validity, Delivery Terms and Payment Terms.</div></div>
 </div>
 </section>
 </div>
@@ -1819,14 +1867,15 @@ document.addEventListener('error', function(e) {
 <div class="form-group" style="margin-top:14px"><label>Delivery / Dispatch Remarks</label><textarea id="dn-remarks" placeholder="Delivery instructions or dispatch remarks…" style="height:58px"></textarea></div>
 </div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('so-delivery-modal')">Cancel</button><button class="btn btn-success" id="dn-dispatch-save-btn" onclick="saveDelivery()"><i class="ti ti-truck"></i><span id="dn-dispatch-save-btn-text">Save &amp; Dispatch</span></button></div></div></div>
 
-<!-- MOBILE DELIVERY CONFIRMATION -->
-<div class="modal-overlay" id="dn-confirm-modal"><div class="modal modal-normal dn-mobile-confirm" style="width:min(96vw,760px);max-width:760px">
-<div class="modal-header"><div><h2 id="dn-confirm-title">Delivery Confirmation</h2><div id="dn-confirm-sub" style="font-size:12px;color:var(--gray);margin-top:3px"></div></div><button class="close-btn" onclick="closeModal('dn-confirm-modal')">✕</button></div>
-<div class="modal-body"><div class="dn-auth-banner"><i class="ti ti-shield-check"></i><div><strong>Authenticated delivery update</strong><span id="dn-auth-user">Signed in user</span></div></div>
-<p style="font-size:12px;color:var(--gray);margin:12px 0">Confirm what the customer actually accepted. Any rejected quantity returns to the Sales Order remaining quantity.</p>
-<div id="dn-confirm-items"></div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px"><div class="form-group"><label>Received By *</label><input id="dn-received-by" placeholder="Customer representative name"/></div><div class="form-group"><label>Customer / Delivery Remarks</label><input id="dn-customer-remarks" placeholder="Optional remarks"/></div></div>
-</div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('dn-confirm-modal')">Cancel</button><button class="btn btn-success" id="dn-confirm-save-btn" onclick="saveDeliveryAcceptance()"><i class="ti ti-circle-check"></i><span id="dn-confirm-save-btn-text">Confirm Delivery</span></button></div></div></div>
+<!-- MOBILE-FIRST DELIVERY CONFIRMATION -->
+<div class="modal-overlay" id="dn-confirm-modal"><div class="modal modal-normal dn-mobile-confirm">
+<div class="modal-header dn-confirm-header"><div class="dn-confirm-heading"><button class="dn-back-btn" type="button" onclick="closeModal('dn-confirm-modal')"><i class="ti ti-arrow-left"></i><span>Back</span></button><div><h2 id="dn-confirm-title">Delivery Confirmation</h2><div id="dn-confirm-sub" class="dn-confirm-sub"></div></div></div><button class="close-btn" onclick="closeModal('dn-confirm-modal')">✕</button></div>
+<div class="modal-body dn-confirm-body">
+<div class="dn-auth-banner"><div class="dn-auth-icon"><i class="ti ti-shield-check"></i></div><div><strong>Authenticated delivery update</strong><span id="dn-auth-user">Signed in user</span></div><span class="dn-secure-pill"><i class="ti ti-lock"></i> Secure</span></div>
+<div class="dn-confirm-intro"><div><strong>Confirm customer acceptance</strong><span>Rejected quantities automatically return to the Sales Order remaining quantity.</span></div><div id="dn-confirm-summary" class="dn-confirm-summary"></div></div>
+<div id="dn-confirm-items" class="dn-confirm-items"></div>
+<section class="dn-receiver-card"><div class="dn-section-title"><span class="dn-section-icon"><i class="ti ti-user-check"></i></span><div><strong>Customer Receipt</strong><span>Record who accepted this delivery.</span></div></div><div class="dn-receiver-grid"><div class="form-group"><label>Received By <em>*</em></label><input id="dn-received-by" autocomplete="name" placeholder="Customer representative name"/></div><div class="form-group"><label>Customer / Delivery Remarks</label><textarea id="dn-customer-remarks" rows="2" placeholder="Add remarks if required…"></textarea></div></div></section>
+</div><div class="modal-footer dn-confirm-footer"><div class="dn-footer-note"><i class="ti ti-info-circle"></i><span>Review quantities before confirming.</span></div><div class="dn-footer-actions"><button class="btn btn-secondary" onclick="closeModal('dn-confirm-modal')">Cancel</button><button class="btn btn-success dn-confirm-primary" id="dn-confirm-save-btn" onclick="saveDeliveryAcceptance()"><i class="ti ti-circle-check"></i><span id="dn-confirm-save-btn-text">Confirm Delivery</span></button></div></div></div></div>
 <!-- CREATE INVOICE MODAL -->
 <div class="modal-overlay" id="so-invoice-modal">
 <div class="modal modal-compact">
@@ -1909,21 +1958,48 @@ document.addEventListener('error', function(e) {
 </div></div>
 <!-- TEMPLATE PICKER MODAL -->
 <div class="modal-overlay" id="template-picker-modal">
-<div class="modal modal-compact" style="max-width:920px;height:auto;max-height:88vh">
+<div class="modal template-gallery-modal">
 <div class="modal-header">
 <h2><i class="ti ti-layout-grid" style="margin-right:8px"></i>Quotation Gallery</h2>
 <button class="close-btn" onclick="closeModal('template-picker-modal')">✕</button>
 </div>
-<div class="modal-body" style="overflow-y:auto">
-<p style="font-size:12px;color:var(--gray);margin-bottom:10px">Choose a quotation layout. Your selection will be remembered.</p>
-<div id="template-cards" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px"></div>
-</div>
-<div class="modal-footer">
-<button class="btn btn-secondary" onclick="closeModal('template-picker-modal')">Cancel</button>
-<button class="btn btn-primary" onclick="printWithSelectedTemplate()"><i class="ti ti-printer"></i>Print / PDF</button>
+<div class="template-gallery-toolbar">
+<div class="template-gallery-intro">Choose a quotation layout. Your selection will be remembered.</div>
+<div class="template-gallery-tools">
+<span class="template-gallery-tip"><i class="ti ti-bulb"></i> Double-click a template to select and continue</span>
+<div class="template-gallery-search"><i class="ti ti-search"></i><input id="template-gallery-search" type="search" placeholder="Search templates..." oninput="renderTemplateGallery()"></div>
 </div>
 </div>
+<div class="template-gallery-filters" id="template-gallery-filters">
+<button class="template-filter active" data-filter="all" onclick="setTemplateGalleryFilter('all')">All <span>7</span></button>
+<button class="template-filter" data-filter="standard" onclick="setTemplateGalleryFilter('standard')">Standard <span>2</span></button>
+<button class="template-filter" data-filter="bilingual" onclick="setTemplateGalleryFilter('bilingual')">Bilingual <span>1</span></button>
+<button class="template-filter" data-filter="image" onclick="setTemplateGalleryFilter('image')">Item Image <span>4</span></button>
 </div>
+<div class="modal-body template-gallery-body">
+<div id="template-cards" class="template-gallery-grid"></div>
+<div id="template-gallery-empty" class="template-gallery-empty" style="display:none"><i class="ti ti-search-off"></i><strong>No templates found</strong><span>Try another search or category.</span></div>
+</div>
+<div class="modal-footer template-gallery-footer">
+<div class="template-gallery-selected">Selected: <strong id="template-selected-name">Product</strong><span id="template-selected-desc">Standard product quotation.</span></div>
+<div class="template-gallery-actions"><button class="btn btn-secondary" onclick="closeModal('template-picker-modal')">Cancel</button><button class="btn btn-primary" onclick="printWithSelectedTemplate()"><i class="ti ti-printer"></i>Print / PDF</button></div>
+</div>
+</div>
+</div>
+<!-- QUOTATION OUTPUT OPTIONS -->
+<div class="modal-overlay" id="quotation-output-modal">
+<div class="modal qout-modal">
+<div class="modal-header qout-header"><div class="qout-header-left"><button class="qout-back" onclick="backToQuotationGallery()"><i class="ti ti-arrow-left"></i><span>Back to Gallery</span></button><span class="qout-header-divider"></span><h2><i class="ti ti-file-export"></i>Quotation Output</h2></div><button class="close-btn" onclick="closeModal('quotation-output-modal')">✕</button></div>
+<div class="modal-body qout-body">
+<div class="qout-intro"><div class="qout-intro-icon"><i class="ti ti-file-check"></i></div><div><h3>Finalize your quotation</h3><p>Choose what should appear on this PDF / print copy. Your saved quotation will not be changed.</p></div></div>
+<div class="qout-options">
+<label class="qout-option" id="qout-signature-card"><input type="checkbox" id="qout-signature" onchange="refreshQuotationOutputOptions()"><span class="qout-option-check"><i class="ti ti-check"></i></span><span class="qout-option-icon qout-sign-icon"><i class="ti ti-signature"></i></span><span class="qout-option-copy"><strong>Authorized Signature</strong><small id="qout-signature-status"></small></span></label>
+<label class="qout-option" id="qout-stamp-card"><input type="checkbox" id="qout-stamp" onchange="refreshQuotationOutputOptions()"><span class="qout-option-check"><i class="ti ti-check"></i></span><span class="qout-option-icon qout-stamp-icon"><i class="ti ti-rosette-discount-check"></i></span><span class="qout-option-copy"><strong>Company Stamp</strong><small id="qout-stamp-status"></small></span></label>
+</div>
+<div class="qout-note"><span class="qout-note-icon"><i class="ti ti-shield-lock"></i></span><div><strong>Output only</strong><p>Both options default to Off for every print. Your choices apply only to this generated copy and are logged locally for audit reference.</p></div></div>
+</div>
+<div class="modal-footer qout-footer"><div class="qout-footer-hint"><i class="ti ti-info-circle"></i> Select either option, both, or generate an unsigned copy.</div><div class="qout-actions"><button class="btn btn-secondary" onclick="closeModal('quotation-output-modal')">Cancel</button><button class="btn btn-primary" id="qout-generate" onclick="generateQuotationOutput()"><i class="ti ti-printer"></i>Generate PDF / Print</button></div></div>
+</div></div>
 <!-- RECYCLE BIN MODAL -->
 <div class="modal-overlay" id="recycle-bin-modal">
 <div class="modal modal-compact" style="max-width:600px;height:auto;max-height:80vh">
@@ -2521,7 +2597,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=156';
+    s.src = 'js/app.js?v=172';
     document.body.appendChild(s);
   }
 });

@@ -675,8 +675,56 @@ function getDefaultEmployees() {
   return [];
 }
 
+const DOCUMENT_DISPLAY_FIELDS=['address','pobox','phone','mobile','email','website','cr','vat'];
+const DOCUMENT_DISPLAY_LABELS={address:'Registered Address',pobox:'P.O. Box',phone:'Telephone',mobile:'Mobile',email:'Email',website:'Website',cr:'CR No.',vat:'VAT No.'};
+const DOCUMENT_DISPLAY_DOCS={quotation:'Quotation',salesOrder:'Sales Order',deliveryNote:'Delivery Note',customerInvoice:'Customer Invoice',purchaseOrder:'Purchase Order',purchaseInvoice:'Purchase Invoice'};
+function getDefaultDocumentDisplay(){
+  const baseHeader={address:true,pobox:false,phone:true,mobile:false,email:true,website:true,cr:false,vat:false};
+  const baseFooter={address:true,pobox:true,phone:true,mobile:false,email:true,website:true,cr:false,vat:false};
+  const out={}; Object.keys(DOCUMENT_DISPLAY_DOCS).forEach(k=>out[k]={header:{...baseHeader},footer:{...baseFooter}});
+  out.quotation.header.cr=true; out.quotation.header.vat=true;
+  return out;
+}
+function ensureDocumentDisplaySettings(){
+  const def=getDefaultDocumentDisplay(), saved=settings.documentDisplay||{};
+  const out={}; Object.keys(DOCUMENT_DISPLAY_DOCS).forEach(k=>{out[k]={header:{...def[k].header,...(saved[k]?.header||{})},footer:{...def[k].footer,...(saved[k]?.footer||{})}}});
+  settings.documentDisplay=out; return out;
+}
+let activeDocumentDisplayDoc='quotation';
+function renderDocumentDisplaySettings(docKey){
+  activeDocumentDisplayDoc=docKey||activeDocumentDisplayDoc||'quotation';
+  const cfg=ensureDocumentDisplaySettings()[activeDocumentDisplayDoc];
+  const title=document.getElementById('doc-display-current-title'); if(title) title.textContent=DOCUMENT_DISPLAY_DOCS[activeDocumentDisplayDoc]||'Quotation';
+  const sel=document.getElementById('doc-display-document'); if(sel) sel.value=activeDocumentDisplayDoc;
+  ['header','footer'].forEach(area=>{
+    const host=document.getElementById('doc-display-'+area+'-fields'); if(!host)return;
+    host.innerHTML=DOCUMENT_DISPLAY_FIELDS.map(f=>`<label class="doc-display-check"><input type="checkbox" data-area="${area}" data-field="${f}" ${cfg[area][f]!==false?'checked':''} onchange="saveDocumentDisplayDraft();updateBrandPreview()"><span>${DOCUMENT_DISPLAY_LABELS[f]}</span></label>`).join('');
+  });
+  updateBrandPreview();
+}
+function saveDocumentDisplayDraft(){
+  const all=ensureDocumentDisplaySettings(); const cfg=all[activeDocumentDisplayDoc];
+  document.querySelectorAll('#doc-display-header-fields input[data-field],#doc-display-footer-fields input[data-field]').forEach(el=>{cfg[el.dataset.area][el.dataset.field]=!!el.checked});
+  settings.documentDisplay=all;
+}
+function companyDocumentParts(docKey,area){
+  const cp=dnCompanyProfile(), cfg=ensureDocumentDisplaySettings()[docKey]?.[area]||{};
+  const parts=[];
+  if(cfg.address!==false && cp.address) parts.push(cp.address);
+  if(cfg.pobox!==false && cp.pobox) parts.push(`P.O. Box ${cp.pobox}`);
+  if(cfg.phone!==false && cp.phone) parts.push(`Tel: ${cp.phone}`);
+  if(cfg.mobile!==false && cp.mobile) parts.push(`Mobile: ${cp.mobile}`);
+  if(cfg.email!==false && cp.email) parts.push(cp.email);
+  if(cfg.website!==false && cp.website) parts.push(cp.website);
+  if(cfg.cr!==false && cp.cr) parts.push(`CR No.: ${cp.cr}`);
+  if(cfg.vat!==false && cp.vat) parts.push(`VAT No.: ${cp.vat}`);
+  return parts;
+}
+function companyDocumentHeaderHtml(docKey){return companyDocumentParts(docKey,'header').map(x=>`<div>${escapeHtml(x)}</div>`).join('');}
+function companyDocumentFooterHtml(docKey){return companyDocumentParts(docKey,'footer').map(escapeHtml).join(' &nbsp; | &nbsp; ');}
+
 function getDefaultSettings() {
-  return {coname:'Downtown Trading Est.',conameAr:'',tagline:'Trading & Contracting',cr:'',building:'',street:'',secondary:'',district:'',postal:'',city:'Riyadh',country:'Saudi Arabia',pobox:'',phone:'+966 XX XXX XXXX',mobile:'',email:'info@downtowntrading.com',vat:'3XXXXXXXXXXXXXXXXX',website:'',closingMessage:'Thank you for the opportunity to serve you.',vatrate:15,validity:7,rfqDefaultHours:48,delivery:'2–4 weeks from confirmed PO',payment:'Net 2 weeks from invoice date',logo:'',signature:'',stamp:'',documentNumbering:{rfq:{prefix:'RFQ',reset:'monthly'},pricing:{prefix:'PR',reset:'monthly'},quotation:{prefix:'Q',reset:'monthly'},salesOrder:{prefix:'SO',reset:'monthly'},deliveryNote:{prefix:'DN',reset:'monthly'},customerInvoice:{prefix:'INV',reset:'monthly'},purchaseOrder:{prefix:'PO',reset:'monthly'},purchaseInvoice:{prefix:'PI',reset:'monthly'}}};
+  return {coname:'Downtown Trading Est.',conameAr:'',tagline:'Trading & Contracting',cr:'',building:'',street:'',secondary:'',district:'',postal:'',city:'Riyadh',country:'Saudi Arabia',pobox:'',phone:'+966 XX XXX XXXX',mobile:'',email:'info@downtowntrading.com',vat:'3XXXXXXXXXXXXXXXXX',website:'',closingMessage:'Thank you for the opportunity to serve you.',signatoryName:'',signatoryDesignation:'',signatureSize:100,stampSize:100,signatureStampOverlap:true,signatureStampOverlapAmount:75,documentDisplay:getDefaultDocumentDisplay(),vatrate:15,validity:7,rfqDefaultHours:48,delivery:'2–4 weeks from confirmed PO',payment:'Net 2 weeks from invoice date',logo:'',signature:'',stamp:'',documentNumbering:{rfq:{prefix:'RFQ',reset:'monthly'},pricing:{prefix:'PR',reset:'monthly'},quotation:{prefix:'Q',reset:'monthly'},salesOrder:{prefix:'SO',reset:'monthly'},deliveryNote:{prefix:'DN',reset:'monthly'},customerInvoice:{prefix:'INV',reset:'monthly'},purchaseOrder:{prefix:'PO',reset:'monthly'},purchaseInvoice:{prefix:'PI',reset:'monthly'}}};
 }
 
 /* ── SETTINGS ── */
@@ -703,7 +751,7 @@ function applySettings() {
   // company logo — a small square slot isn't the right shape for a wide
   // wordmark logo. The company logo is still used correctly elsewhere
   // (quotation headers, PDFs) via settings.logo directly.
-  const map={coname:'coname',conameAr:'coname-ar',tagline:'tagline',cr:'cr',building:'building',street:'street',secondary:'secondary',district:'district',postal:'postal',city:'city',country:'country',pobox:'pobox',phone:'phone',mobile:'mobile',email:'email',vat:'vat',website:'website',closingMessage:'closing-message'};
+  const map={coname:'coname',conameAr:'coname-ar',tagline:'tagline',cr:'cr',building:'building',street:'street',secondary:'secondary',district:'district',postal:'postal',city:'city',country:'country',pobox:'pobox',phone:'phone',mobile:'mobile',email:'email',vat:'vat',website:'website',closingMessage:'closing-message',signatoryName:'signatory-name',signatoryDesignation:'signatory-designation'};
   Object.entries(map).forEach(([key,id])=>{const node=document.getElementById('s-'+id);if(node)node.value=settings[key]||'';});
   const vh=document.getElementById('s-rfqhours');if(vh)vh.value=settings.rfqDefaultHours||48;
   const vl=document.getElementById('s-validity');if(vl)vl.value=settings.validity||7;
@@ -711,26 +759,81 @@ function applySettings() {
   const pl=document.getElementById('s-payment');if(pl)pl.value=settings.payment||'';
   const vatLabel=document.getElementById('t-vat-label');if(vatLabel)vatLabel.textContent=`VAT (${getQuoteVatPercent()}%)`;
   ['logo','signature','stamp'].forEach(k=>setBrandAssetPreview(k,settings[k]||''));
+  const sigSize=document.getElementById('s-signature-size');if(sigSize)sigSize.value=Number(settings.signatureSize||100);
+  const stampSize=document.getElementById('s-stamp-size');if(stampSize)stampSize.value=Number(settings.stampSize||100);
+  const overlap=document.getElementById('s-signature-overlap');if(overlap)overlap.checked=settings.signatureStampOverlap!==false;
+  const overlapAmt=document.getElementById('s-overlap-amount');if(overlapAmt)overlapAmt.value=Number(settings.signatureStampOverlapAmount??75);
+  updateSignatureDisplayPreview();
   updateBrandPreview();
+  renderDocumentDisplaySettings(activeDocumentDisplayDoc);
   renderDocumentNumbering();
 }
 
 function updateBrandPreview(){
-  const val=(id,fallback='')=>document.getElementById(id)?.value.trim()||fallback;
-  const name=val('s-coname',settings.coname||'Downtown Trading Est.');
-  const ar=val('s-coname-ar',settings.conameAr||'');
-  const tagline=val('s-tagline',settings.tagline||'Trading & Contracting');
-  const city=val('s-city',settings.city||'Riyadh');
-  const country=val('s-country',settings.country||'Saudi Arabia');
-  const phone=val('s-phone',settings.phone||'');
-  const email=val('s-email',settings.email||'');
+  const val=(id,key,fallback='')=>{
+    const el=document.getElementById(id);
+    return el ? el.value.trim() : (settings[key]||fallback);
+  };
+  const name=val('s-coname','coname','Downtown Trading Est.');
+  const ar=val('s-coname-ar','conameAr','');
+  const tagline=val('s-tagline','tagline','Trading & Contracting');
+  const previewCp={
+    address:[val('s-building','building'),val('s-street','street'),val('s-district','district'),val('s-city','city'),val('s-postal','postal'),val('s-country','country')].filter(Boolean).join(', '),
+    pobox:val('s-pobox','pobox'), phone:val('s-phone','phone'), mobile:val('s-mobile','mobile'),
+    email:val('s-email','email'), website:val('s-website','website'), cr:val('s-cr','cr'), vat:val('s-vat','vat')
+  };
+  const cfg=ensureDocumentDisplaySettings()[activeDocumentDisplayDoc]||getDefaultDocumentDisplay().quotation;
+  const partsFor=(area)=>{
+    const c=cfg[area]||{}, parts=[];
+    if(c.address!==false&&previewCp.address)parts.push(previewCp.address);
+    if(c.pobox!==false&&previewCp.pobox)parts.push(`P.O. Box ${previewCp.pobox}`);
+    if(c.phone!==false&&previewCp.phone)parts.push(`Tel: ${previewCp.phone}`);
+    if(c.mobile!==false&&previewCp.mobile)parts.push(`Mobile: ${previewCp.mobile}`);
+    if(c.email!==false&&previewCp.email)parts.push(previewCp.email);
+    if(c.website!==false&&previewCp.website)parts.push(previewCp.website);
+    if(c.cr!==false&&previewCp.cr)parts.push(`CR No.: ${previewCp.cr}`);
+    if(c.vat!==false&&previewCp.vat)parts.push(`VAT No.: ${previewCp.vat}`);
+    return parts;
+  };
   const n=document.getElementById('bp-company-name');if(n)n.textContent=name;
   const a=document.getElementById('bp-company-ar');if(a){a.textContent=ar;a.style.display=ar?'block':'none';}
   const t=document.getElementById('bp-tagline');if(t)t.textContent=tagline;
   const logo=document.getElementById('bp-logo');if(logo)logo.innerHTML=settings.logo?`<img src="${settings.logo}" alt="Logo">`:'COMPANY LOGO';
-  const parts=[city,country,phone?('Tel: '+phone):'',email].filter(Boolean);
-  const f=document.getElementById('bp-footer');if(f)f.innerHTML=parts.join(' &nbsp; | &nbsp; ');
+  const h=document.getElementById('bp-header-details');if(h)h.innerHTML=partsFor('header').map(escapeHtml).join('<br>')||'<span class="bp-empty-note">No header details selected</span>';
+  const f=document.getElementById('bp-footer');if(f)f.innerHTML=partsFor('footer').map(escapeHtml).join(' &nbsp; | &nbsp; ')||'<span class="bp-empty-note">No footer details selected</span>';
+  const dt=document.getElementById('bp-doc-title');if(dt)dt.textContent=DOCUMENT_DISPLAY_DOCS[activeDocumentDisplayDoc]||'Quotation';
 }
+
+function getSignatureDisplayConfig(){
+  const sigPct=Number(document.getElementById('s-signature-size')?.value ?? settings.signatureSize ?? 100);
+  const stampPct=Number(document.getElementById('s-stamp-size')?.value ?? settings.stampSize ?? 100);
+  const overlap=document.getElementById('s-signature-overlap') ? document.getElementById('s-signature-overlap').checked : settings.signatureStampOverlap!==false;
+  const amount=Number(document.getElementById('s-overlap-amount')?.value ?? settings.signatureStampOverlapAmount ?? 75);
+  return {sigPct,stampPct,overlap,amount};
+}
+function updateSignatureDisplayPreview(){
+  const c=getSignatureDisplayConfig();
+  const sv=document.getElementById('signature-size-value');if(sv)sv.textContent=c.sigPct+'%';
+  const tv=document.getElementById('stamp-size-value');if(tv)tv.textContent=c.stampPct+'%';
+  const ov=document.getElementById('overlap-amount-value');if(ov)ov.textContent=c.amount+'%';
+  const ow=document.getElementById('signature-overlap-amount-wrap');if(ow)ow.style.opacity=c.overlap?'1':'.45';
+  const oa=document.getElementById('s-overlap-amount');if(oa)oa.disabled=!c.overlap;
+  const stage=document.getElementById('signature-preview-stage');if(!stage)return;
+  const sigW=180*c.sigPct/100, sigH=77*c.sigPct/100, stampW=110*c.stampPct/100;
+  const separated=sigW+8, deep=22, stampLeft=c.overlap ? separated-(separated-deep)*(c.amount/100) : separated;
+  stage.innerHTML=(settings.signature?`<img src="${settings.signature}" style="position:absolute;left:0;bottom:0;width:${sigW}px;height:${sigH}px;object-fit:contain;object-position:left bottom;z-index:1">`:'')+(settings.stamp?`<img src="${settings.stamp}" style="position:absolute;left:${stampLeft}px;bottom:-5px;width:${stampW}px;height:${stampW}px;object-fit:contain;z-index:2;opacity:.92">`:'');
+}
+function resetSignatureDisplaySettings(){
+  const a=document.getElementById('s-signature-size'),b=document.getElementById('s-stamp-size'),c=document.getElementById('s-signature-overlap'),d=document.getElementById('s-overlap-amount');
+  if(a)a.value=100;if(b)b.value=100;if(c)c.checked=true;if(d)d.value=75;updateSignatureDisplayPreview();
+}
+
+document.addEventListener('input',function(e){
+  if(e.target && e.target.closest && e.target.closest('#setup-tab-branding') && e.target.matches('input,select')) updateBrandPreview();
+});
+document.addEventListener('change',function(e){
+  if(e.target && e.target.closest && e.target.closest('#setup-tab-branding') && e.target.matches('input,select')) updateBrandPreview();
+});
 
 let _brandAssetUploadPromises = {};
 let _brandAssetUploadFailed = {};
@@ -738,13 +841,13 @@ function handleBrandAssetUpload(type,e){
   const file=e.target.files[0];if(!file)return;
   if(file.size>2.5*1024*1024){showToast('Please select an image smaller than 2.5 MB','error');e.target.value='';return;}
   const localPreview = URL.createObjectURL(file); // instant preview, no base64 needed
-  settings[type]=localPreview;_brandAssetUploadFailed[type]=false;setBrandAssetPreview(type,localPreview);updateBrandPreview();
+  settings[type]=localPreview;_brandAssetUploadFailed[type]=false;setBrandAssetPreview(type,localPreview);updateBrandPreview();updateSignatureDisplayPreview();
   if (window.FB) {
     showToast(`Uploading ${type}…`,'success');
     _brandAssetUploadPromises[type] = window.FB.uploadFile('branding/'+type, file).then(url=>{
       if (url) {
         URL.revokeObjectURL(localPreview);
-        settings[type]=url; _brandAssetUploadFailed[type]=false; setBrandAssetPreview(type,url); updateBrandPreview();
+        settings[type]=url; _brandAssetUploadFailed[type]=false; setBrandAssetPreview(type,url); updateBrandPreview(); updateSignatureDisplayPreview();
         showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} ready — save branding to apply`,'success');
       } else {
         _brandAssetUploadFailed[type]=true;
@@ -757,7 +860,7 @@ function handleBrandAssetUpload(type,e){
   }
 }
 function handleLogoUpload(e){handleBrandAssetUpload('logo',e);}
-function removeBrandAsset(type){settings[type]='';delete _brandAssetUploadPromises[type];_brandAssetUploadFailed[type]=false;if(window.FB)window.FB.deleteFile('branding/'+type);setBrandAssetPreview(type,'');updateBrandPreview();showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} removed — save to apply`);}
+function removeBrandAsset(type){settings[type]='';delete _brandAssetUploadPromises[type];_brandAssetUploadFailed[type]=false;if(window.FB)window.FB.deleteFile('branding/'+type);setBrandAssetPreview(type,'');updateBrandPreview();updateSignatureDisplayPreview();showToast(`${type.charAt(0).toUpperCase()+type.slice(1)} removed — save to apply`);}
 
 async function saveSetup() {
   const pendingBrandUploads = Object.values(_brandAssetUploadPromises).filter(Boolean);
@@ -769,7 +872,8 @@ async function saveSetup() {
   settings.tagline=read('s-tagline',settings.tagline);
   settings.cr=read('s-cr',settings.cr);settings.vat=read('s-vat',settings.vat);
   settings.building=read('s-building',settings.building);settings.street=read('s-street',settings.street);settings.secondary=read('s-secondary',settings.secondary);settings.district=read('s-district',settings.district);settings.postal=read('s-postal',settings.postal);settings.city=read('s-city',settings.city);settings.country=read('s-country',settings.country);settings.pobox=read('s-pobox',settings.pobox);
-  settings.phone=read('s-phone',settings.phone);settings.mobile=read('s-mobile',settings.mobile);settings.email=read('s-email',settings.email);settings.website=read('s-website',settings.website);settings.closingMessage=read('s-closing-message',settings.closingMessage);
+  settings.phone=read('s-phone',settings.phone);settings.mobile=read('s-mobile',settings.mobile);settings.email=read('s-email',settings.email);settings.website=read('s-website',settings.website);settings.closingMessage=read('s-closing-message',settings.closingMessage);settings.signatoryName=read('s-signatory-name',settings.signatoryName);settings.signatoryDesignation=read('s-signatory-designation',settings.signatoryDesignation);settings.signatureSize=Math.max(70,Math.min(150,parseInt(document.getElementById('s-signature-size')?.value||100)));settings.stampSize=Math.max(70,Math.min(150,parseInt(document.getElementById('s-stamp-size')?.value||100)));settings.signatureStampOverlap=document.getElementById('s-signature-overlap')?.checked!==false;settings.signatureStampOverlapAmount=Math.max(0,Math.min(100,parseInt(document.getElementById('s-overlap-amount')?.value||75)));
+  saveDocumentDisplayDraft();
   const validity=document.getElementById('s-validity');if(validity)settings.validity=parseInt(validity.value)||7;
   const rfq=document.getElementById('s-rfqhours');if(rfq)settings.rfqDefaultHours=parseInt(rfq.value)||48;
   await saveSettings();applySettings();showToast('Company settings saved','success');
@@ -812,6 +916,18 @@ function markCurrencyDisplayDirty(){setCurrencyDisplayDirty(true);}
 function selectAllCurrencyDisplayModules(){document.querySelectorAll('[data-cdisp-module]').forEach(el=>el.checked=true);markCurrencyDisplayDirty();}
 function restoreCurrencyDisplayDefaults(){document.getElementById('cdisp-line-unit').checked=false;document.getElementById('cdisp-line-amount').checked=false;document.getElementById('cdisp-summary').checked=true;document.getElementById('cdisp-grand-total').checked=true;document.querySelectorAll('[data-cdisp-module]').forEach(el=>el.checked=true);markCurrencyDisplayDirty();showToast('Default currency display configuration restored. Save Settings to apply.','info');}
 async function applyCurrencyDisplayChanges(){settings.currencyDisplay=collectCurrencyDisplaySettings();await saveSettings();currencyDisplayDraft={...settings.currencyDisplay};setCurrencyDisplayDirty(false);showToast('Currency display settings applied.','success');const open=document.getElementById('view-modal')?.classList.contains('open');if(open&&typeof currentViewQuotationId!=='undefined'&&currentViewQuotationId)viewQuotation(currentViewQuotationId,true);}
+
+
+const QUOTATION_LINE_NOTE_STYLES={highlight:'Soft Highlight',blueAccent:'Blue Accent',minimal:'Minimal',badge:'Note Badge'};
+function ensureQuotationPrintSettings(){const saved=settings.quotationPrint||{};settings.quotationPrint={lineNoteStyle:saved.lineNoteStyle||'highlight'};return settings.quotationPrint;}
+function quotationLineNoteStyle(){const v=ensureQuotationPrintSettings().lineNoteStyle;return QUOTATION_LINE_NOTE_STYLES[v]?v:'highlight';}
+function quotationPrintLineNoteHtml(text){const safe=escapeHtml(String(text||''));const style=quotationLineNoteStyle();if(style==='minimal')return `<div class="inline-note note-minimal"><b>Note:</b> ${safe}</div>`;if(style==='badge')return `<div class="inline-note note-badge"><span>NOTE</span><em>${safe}</em></div>`;if(style==='blueAccent')return `<div class="inline-note note-blue"><b>Note:</b> ${safe}</div>`;return `<div class="inline-note note-highlight"><b>Note:</b> ${safe}</div>`;}
+function renderQuotationPrintSettings(){const cfg=ensureQuotationPrintSettings(),sel=document.getElementById('qprint-line-note-style');if(sel)sel.value=cfg.lineNoteStyle;updateQuotationLineNotePreview();setQuotationPrintDirty(false);}
+function setQuotationPrintDirty(dirty){const st=document.getElementById('quotation-print-change-status'),btn=document.getElementById('quotation-print-apply-btn');if(st){st.textContent=dirty?'Unsaved changes':'No pending changes';st.style.color=dirty?'var(--orange-txt)':'var(--gray)';}if(btn)btn.disabled=!dirty;}
+function markQuotationPrintDirty(){setQuotationPrintDirty(true);updateQuotationLineNotePreview();}
+function updateQuotationLineNotePreview(){const host=document.getElementById('qprint-note-preview'),sel=document.getElementById('qprint-line-note-style');if(!host||!sel)return;const text='This is alternative product.';const style=sel.value;let note='';if(style==='minimal')note=`<div class="qnp minimal"><b>Note:</b> ${text}</div>`;else if(style==='badge')note=`<div class="qnp badge"><span>NOTE</span>${text}</div>`;else if(style==='blueAccent')note=`<div class="qnp blue"><b>Note:</b> ${text}</div>`;else note=`<div class="qnp highlight"><b>Note:</b> ${text}</div>`;host.innerHTML=`<div class="qnp-table"><div class="qnp-head"><span>SL</span><span>Description</span><span>Qty</span><span>UOM</span></div><div class="qnp-row"><span>001</span><span><strong>PENCIL SHARPENER</strong><small>TYPE: OFFICE TYPE | Color: Black Transparent</small>${note}</span><span>20</span><span>Pcs</span></div></div>`;}
+async function applyQuotationPrintSettings(){const sel=document.getElementById('qprint-line-note-style');settings.quotationPrint={lineNoteStyle:sel?.value||'highlight'};await saveSettings();setQuotationPrintDirty(false);showToast('Quotation print settings applied.','success');}
+function restoreQuotationPrintDefaults(){const sel=document.getElementById('qprint-line-note-style');if(sel)sel.value='highlight';markQuotationPrintDirty();showToast('Default quotation print style restored. Save Settings to apply.','info');}
 
 function fmt(n) { return 'SAR '+formatNumber(n,2); }
 // Round to 2 decimals to eliminate floating-point subtraction artifacts (e.g. 49.999999994 -> 50, 9.000000002 -> 9)
@@ -2625,6 +2741,7 @@ function switchSetupTab(tab) {
   if (tab === 'margin-status') renderMarginStatuses();
   if (tab === 'pricing-settings') renderPricingSettings();
   if (tab === 'currency-display') renderCurrencyDisplaySettings();
+  if (tab === 'quotation-print') renderQuotationPrintSettings();
   if (tab === 'branding') { applySettings(); updateBrandPreview(); }
 }
 
@@ -4350,6 +4467,12 @@ document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLower
 /* ── QUOTATION CREATION WORKFLOW ── */
 let quotationWorkflowState={step:1,origin:'standard',type:'product'};
 
+function quotationAdditionalConditionItems(q){
+  const raw=String(q?.additionalConditions||'').trim();
+  if(!raw) return '';
+  return raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean).map(x=>'<li>'+escapeHtml(x)+'</li>').join('');
+}
+
 function quotationTypeLabel(type){return type==='contracting'?'Service Quotation':'Product Quotation';}
 function quotationTypeIcon(type){return type==='contracting'?'ti-tool':'ti-package';}
 
@@ -4522,6 +4645,7 @@ function openNewQuotation(templateType) {
   populateTermsSelect('payment');
   document.getElementById('f-notes').value='';
   document.getElementById('f-internal-notes').value='';
+  document.getElementById('f-additional-conditions').value='';
   document.getElementById('f-discount').value='0';
   currentQuoteType=selectedTemplate;
   setQuoteType(selectedTemplate,{locked:true});
@@ -4600,6 +4724,7 @@ function editQuotation(id, skipVatCheck=false) {
   });
   document.getElementById('f-notes').value=q.notes||'';
   document.getElementById('f-internal-notes').value=q.internalNotes||'';
+  document.getElementById('f-additional-conditions').value=q.additionalConditions||'';
   document.getElementById('f-discount').value=q.discount||0;
   // detect type from saved items or default to product
   const savedType = q.quoteType || (q.items||[])[0]?.type || 'product';
@@ -5025,6 +5150,7 @@ async function saveQuotation(mode='save') {
     payment:(()=>{const v=document.getElementById('f-payment').value; return v==='__add__'?getDefaultTerm(paymentTerms):v;})(),
     notes:document.getElementById('f-notes').value,
     internalNotes:document.getElementById('f-internal-notes').value,
+    additionalConditions:document.getElementById('f-additional-conditions').value,
     discount:parseFloat(document.getElementById('f-discount').value)||0,
     quoteType: currentQuoteType,
     taxCode: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.taxCode||activeTaxSettings().code) : activeTaxSettings(document.getElementById('f-date')?.value).code,
@@ -5183,6 +5309,10 @@ function toggleQuotationViewSection(btn){
 }
 let currentViewQuotationId=null;
 function viewQuotation(id, skipVatCheck=false) {
+  // Register/detail view is template-neutral. Bilingual rendering is applied only when
+  // the Arabic / English print template is selected. Keeping this flag local prevents
+  // print-template variables from breaking quotation opening from the register.
+  const bilingualMode = false;
   currentViewQuotationId=id;
   const q=quotations.find(x=>x.id===id); if(!q) return;
   const activeTax=activeTaxSettings(), savedVat=getQuoteVatPercent(q), defaultVat=Number(activeTax.rate)||0;
@@ -5197,20 +5327,34 @@ function viewQuotation(id, skipVatCheck=false) {
   renderStatusBar(q,status);
 
   let itemNo=0;
-  const items=(q.items||[]).map(it=>{
-    if(it.lineType==='heading') return '<tr class="qv-heading"><td colspan="6"><i class="ti ti-heading" style="margin-right:7px"></i>'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    if(it.lineType==='note') return '<tr class="qv-note"><td></td><td colspan="5"><span class="qv-note-badge">Note</span>'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
+  const quoteItems=q.items||[], itemRows=[];
+  for(let idx=0; idx<quoteItems.length; idx++){
+    const it=quoteItems[idx];
+    if(it.lineType==='heading'){ itemRows.push('<tr class="qv-heading"><td colspan="6">'+escapeHtml(it.text||it.desc||'')+'</td></tr>'); continue; }
+    if(it.lineType==='note'){ itemRows.push('<tr class="qv-note"><td></td><td colspan="5"><div class="qdoc-inline-note"><b>Note:</b> '+escapeHtml(it.text||it.desc||'')+'</div></td></tr>'); continue; }
     itemNo++;
     const total=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0), service=it.type==='service';
     const title=escapeHtml(it.desc||'—');
     const sub=[!service&&it.specs?escapeHtml(it.specs):'',!service&&[it.brand,it.model].filter(Boolean).length?escapeHtml([it.brand,it.model].filter(Boolean).join(' / ')):''].filter(Boolean).join(' · ');
-    return '<tr class="qv-item"><td class="center">'+String(itemNo).padStart(3,'0')+'</td><td><div class="qv-desc-title">'+title+'</div>'+(sub?'<div class="qv-desc-sub">'+sub+'</div>':'')+'</td><td class="center">'+escapeHtml(String(it.qty??''))+'</td><td class="center">'+escapeHtml(it.uom||'')+'</td><td class="num">'+qvLineUnitMoney(it.up)+'</td><td class="num"><strong>'+qvLineAmountMoney(total)+'</strong></td></tr>';
-  }).join('')||'<tr><td colspan="6" style="padding:20px;text-align:center;color:#64748b">No line items</td></tr>';
+    const next=quoteItems[idx+1], inlineNote=(next&&next.lineType==='note')?String(next.text||next.desc||'').trim():'';
+    if(inlineNote) idx++;
+    itemRows.push('<tr class="qv-item"><td class="center">'+String(itemNo).padStart(3,'0')+'</td><td><div class="qv-desc-title">'+title+'</div>'+(sub?'<div class="qv-desc-sub">'+sub+'</div>':'')+(inlineNote?'<div class="qdoc-inline-note"><b>Note:</b> '+escapeHtml(inlineNote)+'</div>':'')+'</td><td class="center">'+escapeHtml(String(it.qty??''))+'</td><td class="center">'+escapeHtml(it.uom||'')+'</td><td class="num">'+qvLineUnitMoney(it.up)+'</td><td class="num"><strong>'+qvLineAmountMoney(total)+'</strong></td></tr>');
+  }
+  const items=itemRows.join('')||'<tr><td colspan="6" style="padding:20px;text-align:center;color:#64748b">No line items</td></tr>';
 
   let margin='—', pricingCost=0, pricingSell=0;
   if(hPricing){pricingCost=lRFQ.pricingItems.reduce((s,i)=>s+(parseFloat(i.buy)||0)*(parseFloat(i.qty)||0),0);pricingSell=lRFQ.pricingItems.reduce((s,i)=>s+(parseFloat(i.sell)||0)*(parseFloat(i.qty)||0),0);margin=pricingCost?(((pricingSell-pricingCost)/pricingCost)*100).toFixed(1)+'%':'0.0%';}
   const grossProfit=hPricing?(totals.sub-pricingCost):null;
-  const notes=q.notes?escapeHtml(q.notes):'No customer notes recorded.';
+  const notes=String(q.notes||'').trim();
+  const additionalConditions=quotationAdditionalConditionItems(q);
+  const validityDays=parseInt(q.validity,10)||0;
+  const termsItems=[
+    validityDays?'<li>'+(bilingualMode?'مدة صلاحية هذا العرض '+validityDays+' يوم'+(validityDays===1?'':'اً')+' من تاريخ الإصدار. / ':'')+'This quotation is valid for '+validityDays+' day'+(validityDays===1?'':'s')+' from the date of issue.</li>':'',
+    q.delivery?'<li>'+(bilingualMode?'شروط التسليم / ':'Delivery terms: ')+escapeHtml(q.delivery)+'</li>':'',
+    q.payment?'<li>'+(bilingualMode?'شروط الدفع / ':'Payment terms: ')+escapeHtml(q.payment)+'</li>':'',
+    additionalConditions
+  ].filter(Boolean).join('');
+  const termsHtml=termsItems||'<li>Terms are as stated in this quotation.</li>';
   const internal=escapeHtml(q.internalNotes||q.internalnotes||'No internal notes recorded.');
   const cust=customers.find(c=>String(c.id)===String(q.custId||''))||customers.find(c=>normalizeMasterValue(c.company)===normalizeMasterValue(q.company));
   const custAddr1=cust?[cust.buildingNo,cust.street].filter(Boolean).join(' '):'';
@@ -5238,20 +5382,33 @@ function viewQuotation(id, skipVatCheck=false) {
     <div class="qv-document-workspace">
       <main class="qv-document-column">
         <article class="qdoc-sheet" aria-label="Official quotation document preview">
-          <header class="qdoc-header">
-            <div class="qdoc-brand">${logoHtml}<div><h3>${escapeHtml(co)}</h3><p>${escapeHtml(coAddr||settings.tagline||'')}</p></div></div>
-            <div class="qdoc-title"><span>QUOTATION</span><strong>${escapeHtml(q.qno)}</strong><small>${qRevision?`Revision R${qRevision}`:'Official quotation'}</small></div>
+          <header class="qdoc-header qdoc-header-a4">
+            <div class="qdoc-brand qdoc-brand-a4">${logoHtml}</div>
+            <div class="qdoc-company-a4">${companyDocumentHeaderHtml('quotation')}</div>
+            <div class="qdoc-title-stack-a4">
+              <div class="qdoc-titlebox-a4"><h1>QUOTATION</h1><div><small>${bilingualMode?'Quotation No. / <span class="ar">رقم العرض</span>':'Quotation No.'}</small><strong>${escapeHtml(q.qno)}</strong></div><div class="qdoc-titlebox-grid"><div><small>${bilingualMode?'Date / <span class="ar">التاريخ</span>':'Date'}</small><strong>${fmtDate(q.date)}</strong></div><div><small>${bilingualMode?'Valid Until / <span class="ar">صالح حتى</span>':'Valid Until'}</small><strong>${fmtDate(vu)}</strong></div></div>${qRevision?`<div><small>Revision</small><strong>R${qRevision}</strong></div>`:''}</div>
+            </div>
           </header>
-          <section class="qdoc-meta">
-            <div class="qdoc-party"><span class="qdoc-eyebrow">QUOTATION TO</span><h4>${escapeHtml(q.company||'—')}</h4>${custAddr1?`<p>${escapeHtml(custAddr1)}</p>`:''}${custAddr2?`<p>${escapeHtml(custAddr2)}</p>`:''}${custCountry?`<p>${escapeHtml(custCountry)}</p>`:''}${cust?.vat?`<p class="qdoc-muted">VAT No. ${escapeHtml(cust.vat)}</p>`:''}${q.contact?`<p class="qdoc-muted">Attn: ${escapeHtml(q.contact)}</p>`:''}</div>
-            <div class="qdoc-details"><div><span>Quotation date</span><strong>${fmtDate(q.date)}</strong></div><div><span>Valid until</span><strong>${fmtDate(vu)}</strong></div><div><span>Customer ref.</span><strong>${escapeHtml(q.ref||'—')}</strong></div><div><span>Payment</span><strong>${escapeHtml(q.payment||'—')}</strong></div><div><span>Delivery</span><strong>${escapeHtml(q.delivery||'—')}</strong></div><div><span>VAT</span><strong>${savedVat}%</strong></div></div>
+          <div class="qdoc-subtitle-a4">COMMERCIAL OFFER</div>
+          <section class="qdoc-party-row-a4">
+            <div class="qdoc-box-a4"><h3>QUOTATION TO</h3><div class="content"><strong>${escapeHtml(q.company||'—')}</strong>${custAddr1?`<p>${escapeHtml(custAddr1)}</p>`:''}${custAddr2?`<p>${escapeHtml(custAddr2)}</p>`:''}${custCountry?`<p>${escapeHtml(custCountry)}</p>`:''}${cust?.vat?`<p>VAT No. ${escapeHtml(cust.vat)}</p>`:''}${q.contact?`<p>Attn: ${escapeHtml(q.contact)}</p>`:''}</div></div>
+            <div class="qdoc-box-a4"><h3>REFERENCE / PROJECT</h3><div class="content"><strong>${escapeHtml(q.ref||'—')}</strong>${q.project?`<p>${escapeHtml(q.project)}</p>`:''}${lRFQ?`<p>RFQ: ${escapeHtml(lRFQ.rfqNo||'—')}</p>`:''}</div></div>
           </section>
-          <section class="qdoc-items"><table><thead><tr><th class="center">SL</th><th>Description</th><th class="center">Qty</th><th class="center">UOM</th><th class="num">Unit Price</th><th class="num">Amount</th></tr></thead><tbody>${items}</tbody></table></section>
+          <section class="qdoc-ref-a4">
+            <div><small>${bilingualMode?'PAYMENT TERMS / <span class="ar">شروط الدفع</span>':'PAYMENT TERMS'}</small><strong>${escapeHtml(q.payment||'—')}</strong></div>
+            <div><small>${bilingualMode?'DELIVERY TERMS / <span class="ar">شروط التسليم</span>':'DELIVERY TERMS'}</small><strong>${escapeHtml(q.delivery||'—')}</strong></div>
+            <div><small>${bilingualMode?'VAT / <span class="ar">الضريبة</span>':'VAT'}</small><strong>${savedVat}%</strong></div>
+            <div><small>${bilingualMode?'CURRENCY / <span class="ar">العملة</span>':'CURRENCY'}</small><strong>${escapeHtml(settings.currency||settings.baseCurrency||'SAR')}</strong></div>
+          </section>
+          <section class="qdoc-items"><table><thead><tr><th class="center">SL</th><th>${bilingualMode?'Description / <span class="ar">البيان</span>':'Description'}</th><th class="center">Qty</th><th class="center">UOM</th><th class="num">Unit Price</th><th class="num">Amount</th></tr></thead><tbody>${items}</tbody></table></section>
           <section class="qdoc-bottom">
-            <div class="qdoc-terms"><span class="qdoc-eyebrow">NOTES / TERMS</span><div>${notes}</div></div>
+            <div class="qdoc-terms qdoc-terms-approved"><span class="qdoc-eyebrow">TERMS &amp; CONDITIONS</span><ul>${termsHtml}</ul></div>
             <div class="qdoc-totals"><div><span>Subtotal</span><strong>${qvSummaryMoney(totals.sub)}</strong></div>${totals.disc>0?`<div><span>Discount</span><strong>- ${qvSummaryMoney(totals.disc)}</strong></div>`:''}<div><span>VAT (${savedVat}%)</span><strong>${qvSummaryMoney(totals.vat)}</strong></div><div class="grand"><span>Grand Total</span><strong>${qvGrandTotalMoney(totals.net)}</strong></div></div>
           </section>
-          <footer class="qdoc-footer"><div><strong>${escapeHtml(settings.closingMessage||'Thank you for the opportunity to serve you.')}</strong><span>${escapeHtml(buildPrintFooterAddress(settings)||'')}</span></div><div class="qdoc-sign">Authorized Signature</div></footer>
+          ${notes?`<section class="qdoc-notes-approved"><strong>Notes.</strong> ${escapeHtml(notes)}</section>`:''}
+          <section class="qdoc-signatures-approved"><div>Customer Acceptance &amp; Signature</div><div>Authorized Signature — ${escapeHtml(co)}</div></section>
+          <section class="qdoc-thankyou-approved">Thank you for the opportunity to quote. We look forward to serving you.<br><span>If you have any questions regarding this quotation, please feel free to contact us.</span></section>
+          <footer class="qdoc-page-footer"><span>${companyDocumentFooterHtml('quotation')}</span></footer>
         </article>
       </main>
       <aside class="qv-erp-panel">
@@ -5422,6 +5579,7 @@ function createQuotationRevision(id){
 
   document.getElementById('f-notes').value=q.notes||'';
   document.getElementById('f-internal-notes').value=q.internalNotes||'';
+  document.getElementById('f-additional-conditions').value=q.additionalConditions||'';
   document.getElementById('f-discount').value=q.discount||0;
 
   const savedType=q.quoteType||(q.items||[])[0]?.type||'product';
@@ -5946,9 +6104,9 @@ function printQuotation(id) {
 +'</div></div>'
 +'<div class="terms no-break"><div class="terms-ttl">Terms &amp; Conditions</div><ul>'
 +'<li>This quotation is valid for '+(q.validity||7)+' days from the date of issue.</li>'
-+'<li>Delivery terms: '+(q.delivery||'\u2014')+'</li>'
-+'<li>Payment terms: '+(q.payment||'\u2014')+'</li>'
-+'<li>Stock is subject to availability at the time of order confirmation.</li>'
++'<li>Delivery terms: '+escapeHtml(q.delivery||'\u2014')+'</li>'
++'<li>Payment terms: '+escapeHtml(q.payment||'\u2014')+'</li>'
++quotationAdditionalConditionItems(q)
 +'</ul></div>'
 +(q.notes ? '<div class="note-box no-break"><strong>Notes:</strong> '+q.notes+'</div>' : '')
 +'<div class="sig no-break">'
@@ -10139,16 +10297,19 @@ function openDeliveryAcceptance(soId,deliveryIdx){
  const so=salesOrders.find(x=>x.id===soId),d=so?.deliveries?.[deliveryIdx];if(!d)return;if(d.customerConfirmed){showToast('This delivery is already confirmed','info');return}
  const authz=canConfirmDelivery(d);if(!authz.ok){showToast(authz.msg,'error');return}
  document.getElementById('dn-confirm-title').textContent=d.dnNo+' — Confirm Delivery';document.getElementById('dn-confirm-sub').textContent=`${so.customer} · ${so.soNo}`;document.getElementById('dn-auth-user').textContent='Signed in as '+deliveryActor();document.getElementById('dn-received-by').value='';document.getElementById('dn-customer-remarks').value='';
- const box=document.getElementById('dn-confirm-items');box.innerHTML=(d.items||[]).map((it,i)=>`<div class="dn-accept-card"><div class="dn-accept-head"><span>${i+1}. ${escapeHtml(it.desc||'—')}</span><strong>${it.qty} ${escapeHtml(it.uom||'')}</strong></div><div class="dn-accept-grid"><label>Accepted Qty<input type="number" id="dn-acc-${i}" value="${it.qty}" min="0" max="${it.qty}" step="${qtyStep(it.uom)}" oninput="syncDNReject(${i})"></label><label>Rejected Qty<input type="number" id="dn-rej-${i}" value="0" min="0" max="${it.qty}" step="${qtyStep(it.uom)}" oninput="syncDNAccept(${i})"></label><label id="dn-reason-wrap-${i}" style="display:none">Rejection Reason<select id="dn-reason-${i}"><option value="">Select reason…</option><option>Damaged</option><option>Specification mismatch</option><option>Wrong item</option><option>Excess quantity</option><option>Quality issue</option><option>Customer requested return</option><option>Packaging damaged</option><option>Other</option></select></label><label id="dn-disposition-wrap-${i}" style="display:none">Disposition<select id="dn-disposition-${i}"><option>Returned with Driver</option><option>Left at Customer Site</option><option>Replacement Required</option><option>Under Review</option></select></label></div><input id="dn-line-remarks-${i}" class="dn-line-remarks" placeholder="Rejection / line remarks (optional)" style="display:none"></div>`).join('');
+ const box=document.getElementById('dn-confirm-items');box.innerHTML=(d.items||[]).map((it,i)=>`<div class="dn-accept-card is-ok" id="dn-card-${i}"><div class="dn-accept-head"><div class="dn-item-title"><span class="dn-line-no">${i+1}</span><div class="dn-item-copy"><strong>${escapeHtml(it.desc||'—')}</strong><small>Delivery quantity</small></div></div><div class="dn-item-qty"><strong>${it.qty} ${escapeHtml(it.uom||'')}</strong><span class="dn-line-status" id="dn-status-${i}">Fully accepted</span></div></div><div class="dn-accept-grid"><label>Accepted Qty<div class="dn-qty-control"><button type="button" aria-label="Decrease accepted quantity" onclick="adjustDNQty(${i},'acc',-1)">−</button><input inputmode="decimal" type="number" id="dn-acc-${i}" value="${it.qty}" min="0" max="${it.qty}" step="${qtyStep(it.uom)}" oninput="syncDNReject(${i})"><button type="button" aria-label="Increase accepted quantity" onclick="adjustDNQty(${i},'acc',1)">+</button></div></label><label>Rejected Qty<div class="dn-qty-control"><button type="button" aria-label="Decrease rejected quantity" onclick="adjustDNQty(${i},'rej',-1)">−</button><input inputmode="decimal" type="number" id="dn-rej-${i}" value="0" min="0" max="${it.qty}" step="${qtyStep(it.uom)}" oninput="syncDNAccept(${i})"><button type="button" aria-label="Increase rejected quantity" onclick="adjustDNQty(${i},'rej',1)">+</button></div></label><label class="dn-reject-extra" id="dn-reason-wrap-${i}" style="display:none">Rejection Reason<select id="dn-reason-${i}"><option value="">Select reason…</option><option>Damaged</option><option>Specification mismatch</option><option>Wrong item</option><option>Excess quantity</option><option>Quality issue</option><option>Customer requested return</option><option>Packaging damaged</option><option>Other</option></select></label><label class="dn-reject-extra" id="dn-disposition-wrap-${i}" style="display:none">Disposition<select id="dn-disposition-${i}"><option>Returned with Driver</option><option>Left at Customer Site</option><option>Replacement Required</option><option>Under Review</option></select></label></div><input id="dn-line-remarks-${i}" class="dn-line-remarks" placeholder="Rejection / line remarks (optional)" style="display:none"></div>`).join('');
+ updateDNConfirmSummary();
  const modal=document.getElementById('dn-confirm-modal');
  if(!modal){showToast('Delivery Confirmation screen is unavailable','error');return false;}
  modal._soId=soId;modal._deliveryIdx=deliveryIdx;modal._confirmOperationId='';
  openModalWithSize('dn-confirm-modal');
  return modal.classList.contains('open');
 }
-function syncDNReject(i){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m._soId)?.deliveries?.[m._deliveryIdx],it=d?.items?.[i];if(!it)return;let a=Math.max(0,Math.min(Number(document.getElementById('dn-acc-'+i).value)||0,Number(it.qty)||0));document.getElementById('dn-rej-'+i).value=roundQtyForUom((Number(it.qty)||0)-a,it.uom);toggleDNRejectFields(i)}
-function syncDNAccept(i){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m._soId)?.deliveries?.[m._deliveryIdx],it=d?.items?.[i];if(!it)return;let r=Math.max(0,Math.min(Number(document.getElementById('dn-rej-'+i).value)||0,Number(it.qty)||0));document.getElementById('dn-acc-'+i).value=roundQtyForUom((Number(it.qty)||0)-r,it.uom);toggleDNRejectFields(i)}
-function toggleDNRejectFields(i){const r=Number(document.getElementById('dn-rej-'+i)?.value)||0;['reason-wrap','disposition-wrap'].forEach(x=>{const e=document.getElementById('dn-'+x+'-'+i);if(e)e.style.display=r>0?'flex':'none'});const n=document.getElementById('dn-line-remarks-'+i);if(n)n.style.display=r>0?'block':'none'}
+function syncDNReject(i){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m._soId)?.deliveries?.[m._deliveryIdx],it=d?.items?.[i];if(!it)return;let a=Math.max(0,Math.min(Number(document.getElementById('dn-acc-'+i).value)||0,Number(it.qty)||0));document.getElementById('dn-acc-'+i).value=roundQtyForUom(a,it.uom);document.getElementById('dn-rej-'+i).value=roundQtyForUom((Number(it.qty)||0)-a,it.uom);toggleDNRejectFields(i);updateDNConfirmSummary()}
+function syncDNAccept(i){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m._soId)?.deliveries?.[m._deliveryIdx],it=d?.items?.[i];if(!it)return;let r=Math.max(0,Math.min(Number(document.getElementById('dn-rej-'+i).value)||0,Number(it.qty)||0));document.getElementById('dn-rej-'+i).value=roundQtyForUom(r,it.uom);document.getElementById('dn-acc-'+i).value=roundQtyForUom((Number(it.qty)||0)-r,it.uom);toggleDNRejectFields(i);updateDNConfirmSummary()}
+function adjustDNQty(i,type,direction){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m?._soId)?.deliveries?.[m?._deliveryIdx],it=d?.items?.[i];if(!it)return;const id=type==='rej'?'dn-rej-':'dn-acc-',el=document.getElementById(id+i);if(!el)return;const step=Number(qtyStep(it.uom))||1,current=Number(el.value)||0;el.value=roundQtyForUom(Math.max(0,Math.min(Number(it.qty)||0,current+(direction*step))),it.uom);type==='rej'?syncDNAccept(i):syncDNReject(i)}
+function toggleDNRejectFields(i){const r=Number(document.getElementById('dn-rej-'+i)?.value)||0;['reason-wrap','disposition-wrap'].forEach(x=>{const e=document.getElementById('dn-'+x+'-'+i);if(e)e.style.display=r>0?'flex':'none'});const n=document.getElementById('dn-line-remarks-'+i);if(n)n.style.display=r>0?'block':'none';const card=document.getElementById('dn-card-'+i),status=document.getElementById('dn-status-'+i),m=document.getElementById('dn-confirm-modal'),it=salesOrders.find(x=>x.id===m?._soId)?.deliveries?.[m?._deliveryIdx]?.items?.[i],qty=Number(it?.qty)||0;if(card&&status){card.classList.remove('is-ok','is-partial','is-rejected');status.classList.remove('partial','rejected');if(r<=0){card.classList.add('is-ok');status.textContent='Fully accepted'}else if(r>=qty){card.classList.add('is-rejected');status.classList.add('rejected');status.textContent='Rejected'}else{card.classList.add('is-partial');status.classList.add('partial');status.textContent='Partial'}}}
+function updateDNConfirmSummary(){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m?._soId)?.deliveries?.[m?._deliveryIdx],sum=document.getElementById('dn-confirm-summary');if(!d||!sum)return;let full=0,partial=0,rejected=0;(d.items||[]).forEach((it,i)=>{const r=Number(document.getElementById('dn-rej-'+i)?.value)||0,q=Number(it.qty)||0;if(r<=0)full++;else if(r>=q)rejected++;else partial++});sum.innerHTML=`<span class="dn-summary-chip">${d.items.length} Item${d.items.length===1?'':'s'}</span>${full?`<span class="dn-summary-chip ok">${full} Accepted</span>`:''}${partial?`<span class="dn-summary-chip warn">${partial} Partial</span>`:''}${rejected?`<span class="dn-summary-chip bad">${rejected} Rejected</span>`:''}`}
 async function _saveDeliveryAcceptanceCore(operationId){
  const m=document.getElementById('dn-confirm-modal'),so=salesOrders.find(x=>x.id===m?._soId),d=so?.deliveries?.[m?._deliveryIdx];if(!d)return null;
  if(d.customerConfirmed){showToast('This delivery is already confirmed','info','Already Confirmed');return d}
@@ -10280,7 +10441,8 @@ function buildDeliveryNoteDocument(so,d,deliveryIdx,format='standard',screenMode
   const screenStatus=screenMode?`<div class="dn-screen-status-row"><span class="dn-screen-status ${dnScreenStatusClass}"><span class="dn-screen-status-dot"></span>${escapeHtml(dnScreenStatus)}</span></div>`:'';
   const internalBlock=internal?`<div class="dn-internal"><div><b>Delivery Status</b><span>${escapeHtml(d.status||'—')}</span></div><div><b>Dispatched By</b><span>${escapeHtml(d.dispatchedBy||'—')}</span></div><div><b>Dispatched At</b><span>${d.dispatchedAt?new Date(d.dispatchedAt).toLocaleString():'—'}</span></div><div><b>Confirmed By</b><span>${escapeHtml(d.confirmedBy||'—')}</span></div><div><b>Confirmed At</b><span>${d.confirmedAt?new Date(d.confirmedAt).toLocaleString():'—'}</span></div></div>`:'';
   return `<div class="dn-a4${screenMode?' dn-a4-screen':''}" data-dn-format="${format}"><style>
-  .dn-a4{width:210mm;min-height:297mm;margin:0 auto;background:#fff;padding:12mm 11mm 10mm;font-family:Arial,sans-serif;color:#17324d;font-size:10.5px;box-sizing:border-box}.dn-a4-screen{border:1px solid #8f9aa6;box-shadow:0 4px 18px rgba(15,23,42,.10)}.dn-a4 *{box-sizing:border-box}.dn-head{display:grid;grid-template-columns:1.22fr .95fr 1.05fr;gap:8px;align-items:start;padding-bottom:10px;border-bottom:2px solid #174b7a}.dn-contact{font-size:9.5px;line-height:1.5;color:#50657a;border-left:1px solid #cbd8e5;padding-left:10px}.dn-title-stack{min-width:0;position:relative}.dn-screen-status-row{position:absolute;right:0;top:-29px;height:auto;display:flex;align-items:center;justify-content:flex-end;z-index:2;pointer-events:none}.dn-screen-status{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:9.5px;font-weight:800;line-height:1.35;white-space:nowrap}.dn-screen-status-dot{width:7px;height:7px;border-radius:50%;background:currentColor}.dn-screen-status--awaiting{color:#53657a;background:#edf2f7}.dn-screen-status--confirmation{color:#9a6700;background:#fff2cc}.dn-screen-status--delivered{color:#147a43;background:#dcfce7}.dn-screen-status--partial{color:#6941c6;background:#eee7ff}.dn-screen-status--rejected{color:#b42318;background:#fee4e2}.dn-titlebox{border:1px solid #b9cce0;min-width:0}.dn-titlebox h1{margin:0;padding:8px 10px;font-size:19px;letter-spacing:.35px;color:#174b7a;background:#f7fafc;white-space:nowrap}.dn-titlebox div{padding:7px 10px;border-top:1px solid #d7e1eb}.dn-titlebox small{display:block;text-transform:uppercase;font-weight:800;color:#5f7489;font-size:8px}.dn-titlebox strong{font-size:13px;color:#17324d}.dn-subtitle{margin:5px 0 10px;text-align:right;font-size:8px;letter-spacing:3px;color:#64788c}.dn-two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}.dn-box{border:1px solid #cbd8e5}.dn-box h3{margin:0;background:#f3f7fa;padding:6px 9px;font-size:9px;text-transform:uppercase;color:#174b7a;border-bottom:1px solid #cbd8e5}.dn-box .content{padding:8px 9px;min-height:55px;line-height:1.45}.dn-box.dn-deliver-to{display:flex;flex-direction:column}.dn-box.dn-deliver-to .content{background:#f3f7fa;flex:1;width:100%}.dn-box .content strong{display:block;font-size:11.5px;margin-bottom:2px}.dn-ref{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:9px 0}.dn-ref>div{border:1px solid #cbd8e5;background:#f3f7fa;padding:7px 8px;min-height:43px}.dn-ref small{display:block;font-size:7.5px;font-weight:800;text-transform:uppercase;color:#5e7488;margin-bottom:4px}.dn-ref strong{font-size:10px}.dn-items{width:100%;border-collapse:collapse;margin-top:6px}.dn-items th{background:#174b7a;color:#fff;padding:6px 5px;border:1px solid #174b7a;font-size:8px;text-align:left}.dn-items td{padding:6px 5px;border:1px solid #d6e0e9;color:#263f56;font-size:9px}.dn-items tbody tr:last-child td{border-bottom:1px solid #cbd8e5}.dn-items .desc{min-width:190px}.dn-items .num{text-align:center;white-space:nowrap}.dn-remarks{border:1px solid #cbd8e5;margin-top:10px;padding:8px 9px;min-height:50px}.dn-remarks b{display:block;color:#174b7a;font-size:8px;text-transform:uppercase;margin-bottom:5px}.dn-bottom{display:grid;grid-template-columns:1fr 1fr 118px;gap:10px;margin-top:12px}.dn-sign{border:1px solid #cbd8e5;min-height:118px}.dn-sign h4{margin:0;background:#f3f7fa;padding:6px 8px;font-size:8px;color:#174b7a;text-transform:uppercase;border-bottom:1px solid #cbd8e5}.dn-sign div{padding:8px;line-height:1.8}.dn-line{display:inline-block;border-bottom:1px solid #567;width:130px;height:14px}.dn-doc-qr,.dn-doc-qr-slot{border:1px solid #cbd8e5;width:118px;height:118px;display:flex;align-items:center;justify-content:center;padding:3px}.dn-doc-qr canvas,.dn-doc-qr img{max-width:108px!important;max-height:108px!important}.dn-internal{margin-top:10px;border:1px solid #e1e7ed;display:grid;grid-template-columns:repeat(5,1fr)}.dn-internal>div{padding:6px;border-right:1px solid #e1e7ed}.dn-internal>div:last-child{border-right:0}.dn-internal b{display:block;font-size:7px;color:#6b7e90;text-transform:uppercase;margin-bottom:3px}.dn-internal span{font-size:8px}.dn-foot{margin-top:12px;padding-top:7px;border-top:2px solid #174b7a;display:block;color:#52687b;font-size:8px;line-height:1.45}.dn-foot strong{color:#174b7a;font-size:9px}.dn-format-note{font-size:8px;color:#789;text-align:right;margin-top:3px}@media print{@page{size:A4 portrait;margin:10mm 11mm 18mm 11mm}.dn-a4{margin:0!important;width:auto!important;height:auto!important;min-height:0!important;padding:0!important;display:block!important;overflow:visible!important;page-break-after:auto!important}.dn-a4-screen{border:0!important;box-shadow:none!important}.dn-box.dn-deliver-to .content{background:#fff}.dn-items{page-break-inside:auto}.dn-items thead{display:table-header-group}.dn-items tfoot{display:table-footer-group}.dn-items tr{break-inside:avoid;page-break-inside:avoid}.dn-items th,.dn-items td{break-inside:avoid;page-break-inside:avoid}.dn-remarks,.dn-internal,.dn-bottom{break-inside:avoid;page-break-inside:avoid}.dn-foot{position:fixed;left:0;right:0;bottom:0;margin:0;padding-top:5px;background:#fff;border-top:1.5px solid #174b7a;z-index:10}.dn-format-note{position:fixed;right:0;bottom:-5mm;margin:0;background:#fff;z-index:10}.dn-screen-status-row{display:none!important}}
+  .dn-a4{width:210mm;min-height:297mm;margin:0 auto;background:#fff;padding:12mm 11mm 10mm;font-family:Arial,sans-serif;color:#17324d;font-size:10.5px;box-sizing:border-box}.dn-a4-screen{border:1px solid #8f9aa6;box-shadow:0 4px 18px rgba(15,23,42,.10)}.dn-a4 *{box-sizing:border-box}.dn-head{display:grid;grid-template-columns:1.22fr .95fr 1.05fr;gap:8px;align-items:start;padding-bottom:10px;border-bottom:2px solid #174b7a}.dn-contact{font-size:9.5px;line-height:1.5;color:#50657a;border-left:1px solid #cbd8e5;padding-left:10px}.dn-title-stack{min-width:0;position:relative}.dn-screen-status-row{position:absolute;right:0;top:-29px;height:auto;display:flex;align-items:center;justify-content:flex-end;z-index:2;pointer-events:none}.dn-screen-status{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:9.5px;font-weight:800;line-height:1.35;white-space:nowrap}.dn-screen-status-dot{width:7px;height:7px;border-radius:50%;background:currentColor}.dn-screen-status--awaiting{color:#53657a;background:#edf2f7}.dn-screen-status--confirmation{color:#9a6700;background:#fff2cc}.dn-screen-status--delivered{color:#147a43;background:#dcfce7}.dn-screen-status--partial{color:#6941c6;background:#eee7ff}.dn-screen-status--rejected{color:#b42318;background:#fee4e2}.dn-titlebox{border:1px solid #b9cce0;min-width:0}.dn-titlebox h1{margin:0;padding:8px 10px;font-size:19px;letter-spacing:.35px;color:#174b7a;background:#f7fafc;white-space:nowrap}.dn-titlebox div{padding:7px 10px;border-top:1px solid #d7e1eb}.dn-titlebox small{display:block;text-transform:uppercase;font-weight:800;color:#5f7489;font-size:8px}.dn-titlebox strong{font-size:13px;color:#17324d}.dn-subtitle{margin:5px 0 10px;text-align:right;font-size:8px;letter-spacing:3px;color:#64788c}.dn-two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}.dn-box{border:1px solid #cbd8e5}.dn-box h3{margin:0;background:#f3f7fa;padding:6px 9px;font-size:9px;text-transform:uppercase;color:#174b7a;border-bottom:1px solid #cbd8e5}.dn-box .content{padding:8px 9px;min-height:55px;line-height:1.45}.dn-box.dn-deliver-to{display:flex;flex-direction:column}.dn-box.dn-deliver-to .content{background:#f3f7fa;flex:1;width:100%}.dn-box .content strong{display:block;font-size:11.5px;margin-bottom:2px}.dn-ref{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:9px 0}.dn-ref>div{border:1px solid #cbd8e5;background:#f3f7fa;padding:7px 8px;min-height:43px}.dn-ref small{display:block;font-size:7.5px;font-weight:800;text-transform:uppercase;color:#5e7488;margin-bottom:4px}.dn-ref strong{font-size:10px}.dn-items{width:100%;border-collapse:collapse;margin-top:6px}.dn-items th{background:#174b7a;color:#fff;padding:6px 5px;border:1px solid #174b7a;font-size:8px;text-align:left}.dn-items td{padding:6px 5px;border:1px solid #d6e0e9;color:#263f56;font-size:9px}.dn-items tbody tr:last-child td{border-bottom:1px solid #cbd8e5}.dn-items .desc{min-width:190px}.dn-items .num{text-align:center;white-space:nowrap}.dn-remarks{border:1px solid #cbd8e5;margin-top:10px;padding:8px 9px;min-height:50px}.dn-remarks b{display:block;color:#174b7a;font-size:8px;text-transform:uppercase;margin-bottom:5px}.dn-bottom{display:grid;grid-template-columns:1fr 1fr 118px;gap:10px;margin-top:12px}.dn-sign{border:1px solid #cbd8e5;min-height:118px}.dn-sign h4{margin:0;background:#f3f7fa;padding:6px 8px;font-size:8px;color:#174b7a;text-transform:uppercase;border-bottom:1px solid #cbd8e5}.dn-sign div{padding:8px;line-height:1.8}.dn-line{display:inline-block;border-bottom:1px solid #567;width:130px;height:14px}.dn-doc-qr,.dn-doc-qr-slot{border:1px solid #cbd8e5;width:118px;height:118px;display:flex;align-items:center;justify-content:center;padding:3px}.dn-doc-qr canvas,.dn-doc-qr img{max-width:108px!important;max-height:108px!important}.dn-internal{margin-top:10px;border:1px solid #e1e7ed;display:grid;grid-template-columns:repeat(5,1fr)}.dn-internal>div{padding:6px;border-right:1px solid #e1e7ed}.dn-internal>div:last-child{border-right:0}.dn-internal b{display:block;font-size:7px;color:#6b7e90;text-transform:uppercase;margin-bottom:3px}.dn-internal span{font-size:8px}.dn-foot{margin-top:12px;padding-top:7px;border-top:2px solid #174b7a;display:block;color:#52687b;font-size:8px;line-height:1.45}.dn-foot strong{color:#174b7a;font-size:9px}.dn-format-note{font-size:8px;color:#789;text-align:right;margin-top:3px}@media print{@page{size:A4 portrait;margin:10mm 11mm 18mm 11mm}
+.ar{font-family:Tahoma,Arial,sans-serif;direction:rtl;unicode-bidi:isolate}.dn-a4{margin:0!important;width:auto!important;height:auto!important;min-height:0!important;padding:0!important;display:block!important;overflow:visible!important;page-break-after:auto!important}.dn-a4-screen{border:0!important;box-shadow:none!important}.dn-box.dn-deliver-to .content{background:#fff}.dn-items{page-break-inside:auto}.dn-items thead{display:table-header-group}.dn-items tfoot{display:table-footer-group}.dn-items tr{break-inside:avoid;page-break-inside:avoid}.dn-items th,.dn-items td{break-inside:avoid;page-break-inside:avoid}.dn-remarks,.dn-internal,.dn-bottom{break-inside:avoid;page-break-inside:avoid}.dn-foot{position:fixed;left:0;right:0;bottom:0;margin:0;padding-top:5px;background:#fff;border-top:1.5px solid #174b7a;z-index:10}.dn-format-note{position:fixed;right:0;bottom:-5mm;margin:0;background:#fff;z-index:10}.dn-screen-status-row{display:none!important}}
   </style><div class="dn-head"><div>${logo}</div><div class="dn-contact">${contact||'&nbsp;'}</div><div class="dn-title-stack">${screenStatus}<div class="dn-titlebox"><h1>DELIVERY NOTE</h1><div><small>DN No.</small><strong>${escapeHtml(d.dnNo||'—')}</strong></div><div><small>Date</small><strong>${fmtDate(d.date)}</strong></div></div></div></div><div class="dn-subtitle">GOODS DISPATCHED</div>
   <div class="dn-two"><div class="dn-box"><h3>Customer</h3><div class="content"><strong>${escapeHtml(cust.name)}</strong>${cust.address?escapeHtml(cust.address):''}${cust.contact?`<br>Attn: ${escapeHtml(cust.contact)}`:''}${cust.phone?`<br>Tel: ${escapeHtml(cust.phone)}`:''}</div></div><div class="dn-box dn-deliver-to"><h3>Deliver To</h3><div class="content"><strong>${escapeHtml(cust.name)}</strong>${cust.address?escapeHtml(cust.address):''}</div></div></div>
   <div class="dn-ref"><div><small>Sales Order No.</small><strong>${escapeHtml(so.soNo||'—')}</strong></div><div><small>Customer PO No.</small><strong>${escapeHtml(so.poNo||'—')}</strong></div><div><small>Quotation</small><strong>${escapeHtml(q?.qno||'—')}</strong></div><div><small>Vehicle / AWB</small><strong>${escapeHtml(d.vehicle||'—')}</strong></div></div>
@@ -10448,13 +10610,13 @@ async function savePayment() {
 let _printQID = null;
 
 const TEMPLATES = [
-  { id:'erpbox',       name:'Product', desc:'Best for product supply quotations with item code, description, quantity and pricing.', badge:'Recommended' },
-  { id:'servicequote', name:'Contracting', desc:'Best for civil, MEP, HVAC, installation, maintenance and project works.' },
-  { id:'erpbilingual', name:'Arabic / English', desc:'Bilingual quotation layout for Saudi Arabia with Arabic and English labels.' },
-  { id:'imageref',     name:'Item Image – Thumbnail', desc:'Compact image reference for quotations with many line items.' },
-  { id:'imagerefmed',  name:'Item Image – Medium', desc:'Shows each product image at 4 × 3 cm for clearer visual identification.' },
-  { id:'imagereflarge',name:'Item Image – Large', desc:'Shows each product image at 6 × 5 cm for equipment, furniture and technical items.' },
-  { id:'imagerefattach',name:'Item Image – Attachment', desc:'Keeps the quotation table clean and adds product image references as an attachment section.' }
+  { id:'erpbox',       name:'Product', category:'standard', desc:'Standard product quotation with item details. Suitable for most quotations.', badge:'Recommended' },
+  { id:'servicequote', name:'Contracting', category:'standard', desc:'Service and contracting quotation layout with detailed scope.' },
+  { id:'erpbilingual', name:'Arabic / English', category:'bilingual', desc:'Bilingual quotation layout with English and Arabic labels.' },
+  { id:'imageref',     name:'Item Image – Thumbnail', category:'image', desc:'Product quotation with compact thumbnail images.' },
+  { id:'imagerefmed',  name:'Item Image – Medium', category:'image', desc:'Product quotation with medium-sized images.' },
+  { id:'imagereflarge',name:'Item Image – Large', category:'image', desc:'Product quotation with large images for better visibility.' },
+  { id:'imagerefattach',name:'Item Image – Attachment', category:'image', desc:'Product quotation with detailed image attachments.' }
 ];
 
 const TPL_PREVIEWS = {
@@ -10474,50 +10636,139 @@ const TPL_PREVIEWS = {
   bilingual: `<div style="background:#0B539D;padding:6px 8px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #F15A25"><div><div style="color:#fff;font-size:7px;font-weight:700">DOWNTOWN TRADING EST.</div><div style="color:#CFE2F4;font-size:8px;direction:rtl">داون تاون للتجارة</div></div><div style="text-align:right"><div style="display:flex;gap:3px;justify-content:flex-end"><span style="background:#F15A25;color:#fff;font-size:7px;padding:1px 3px;font-weight:800">QUOTATION</span><span style="background:#F15A25;color:#fff;font-size:8px;padding:1px 3px;direction:rtl;font-weight:800">عرض سعر</span></div><div style="color:#fff;font-size:8px;font-weight:800">Q-2606-001</div></div></div><div style="background:#FFF9F0;padding:4px 8px;font-size:7px;display:flex;justify-content:space-between;border-bottom:1px solid #ede0cc"><span><b style="color:#0B539D">Customer</b> / <span style="direction:rtl;color:#0B539D">العميل</span></span><span style="direction:rtl;font-size:7px;color:#555">مقدم إلى</span></div><div style="padding:3px 8px"><div style="background:#0B539D;color:#fff;font-size:5px;padding:2px 4px">AMOUNT المبلغ | PRICE السعر | QTY الكمية | DESCRIPTION البيان | #</div></div>`
 };
 
+let _templateGalleryFilter='all';
+let _templateGallerySelected='erpbox';
+
+function templatePreviewPage(t){
+  const bilingual=t.id==='erpbilingual';
+  const service=t.id==='servicequote';
+  const imageType=t.id.startsWith('imageref');
+  const imageMode=t.id==='imageref'?'thumb':t.id==='imagerefmed'?'medium':t.id==='imagereflarge'?'large':t.id==='imagerefattach'?'attach':'';
+  const ar=bilingual?' / عرض سعر':'';
+  const itemRows = imageType
+    ? (imageMode==='attach'
+      ? `<div class="mini-row"><b>001</b><span class="mini-desc">Industrial control panel</span><span>2</span><span>SAR 3,250</span></div>
+         <div class="mini-attach-title">PRODUCT IMAGE ATTACHMENTS</div><div class="mini-attachments"><i></i><i></i><i></i></div>`
+      : `<div class="mini-row mini-image-row ${imageMode}"><b>001</b><i class="mini-product-img p1"></i><span class="mini-desc">Electrical enclosure<br><small>Model / specification details</small></span><span>2</span><span>SAR 3,250</span></div>
+         <div class="mini-row mini-image-row ${imageMode}"><b>002</b><i class="mini-product-img p2"></i><span class="mini-desc">Office equipment<br><small>Brand / model details</small></span><span>4</span><span>SAR 1,860</span></div>`)
+    : `<div class="mini-row"><b>001</b><span class="mini-desc">${service?'Site installation & commissioning':'Industrial product description'}<br><small>${service?'Detailed scope of work':'Brand / model / specification'}</small></span><span>2</span><span>SAR 3,250</span></div>
+       <div class="mini-row"><b>002</b><span class="mini-desc">${service?'Testing and handover':'Second product description'}<br><small>${service?'Service activity':'Additional item details'}</small></span><span>4</span><span>SAR 1,860</span></div>`;
+  return `<div class="tpl-paper tpl-real ${bilingual?'is-bilingual':''} ${imageType?'is-image '+imageMode:''}">
+    <div class="mini-head"><div class="mini-brand"><strong>DOWNTOWN</strong><small>TRADING EST.</small>${bilingual?'<em>مؤسسة دون تاون التجارية</em>':''}</div><div class="mini-company"><span>Riyadh, Saudi Arabia</span><span>CR No. · VAT No.</span></div><div class="mini-qbox"><strong>${service?'CONTRACTING ':''}QUOTATION${ar}</strong><b>Q-2609-0004</b><small>17-09-2026</small></div></div>
+    <div class="mini-rule"></div>
+    <div class="mini-panels"><section><label>QUOTATION TO${bilingual?' / العميل':''}</label><b>Customer Name</b><span>Riyadh</span><span>Attn: Mr. Abdulaziz</span></section><section><label>REFERENCE / PROJECT${bilingual?' / المرجع':''}</label><b>RFQ 123</b><span>${service?'Project / Scope':'Commercial Offer'}</span></section></div>
+    <div class="mini-terms-row"><section><label>PAYMENT TERMS</label><b>Net 30 days</b></section><section><label>DELIVERY TERMS</label><b>4–6 weeks</b></section><section><label>VAT</label><b>15%</b></section><section><label>CURRENCY</label><b>SAR</b></section></div>
+    <div class="mini-table-head"><b>SL.</b>${imageType&&imageMode!=='attach'?'<b>IMAGE</b>':''}<b>${service?'SCOPE OF WORK':'DESCRIPTION'}${bilingual?' / البيان':''}</b><b>QTY</b><b>AMOUNT</b></div>
+    <div class="mini-items">${itemRows}</div>
+    <div class="mini-bottom"><section class="mini-tc"><label>TERMS & CONDITIONS${bilingual?' / الشروط والأحكام':''}</label><span>• Quotation valid for 10 days</span><span>• Delivery as confirmed</span><span>• Payment as agreed</span></section><section class="mini-total"><span>Subtotal <b>SAR 5,110</b></span><span>VAT (15%) <b>SAR 766.50</b></span><strong>Grand Total <b>SAR 5,876.50</b></strong></section></div>
+    <div class="mini-sign"><span></span><span class="signed"><i></i><em></em></span></div>
+    <div class="mini-sign-label"><b>CUSTOMER ACCEPTANCE & SIGNATURE</b><b>AUTHORISED SIGNATURE</b></div>
+    <div class="mini-footer"></div>
+  </div>`;
+}
+function updateTemplateGallerySelected(){
+  const t=TEMPLATES.find(x=>x.id===_templateGallerySelected)||TEMPLATES[0];
+  const n=document.getElementById('template-selected-name'), d=document.getElementById('template-selected-desc');
+  if(n)n.textContent=t.name;if(d)d.textContent=t.desc;
+}
+function templateGalleryIcon(t){
+  const map={
+    erpbox:{icon:'ti-file-invoice',tone:'blue',label:'Standard'},
+    servicequote:{icon:'ti-tool',tone:'violet',label:'Service'},
+    erpbilingual:{icon:'ti-language',tone:'teal',label:'Bilingual'},
+    imageref:{icon:'ti-photo',tone:'cyan',label:'Thumbnail'},
+    imagerefmed:{icon:'ti-photo-scan',tone:'indigo',label:'Medium image'},
+    imagereflarge:{icon:'ti-photo-filled',tone:'amber',label:'Large image'},
+    imagerefattach:{icon:'ti-paperclip',tone:'rose',label:'Attachment'}
+  };
+  const m=map[t.id]||map.erpbox;
+  return `<div class="tpl-icon-stage tone-${m.tone}"><div class="tpl-icon-orb"><i class="ti ${m.icon}"></i></div><span class="tpl-type-pill">${m.label}</span></div>`;
+}
+function renderTemplateGallery(){
+  const host=document.getElementById('template-cards'); if(!host)return;
+  const q=(document.getElementById('template-gallery-search')?.value||'').trim().toLowerCase();
+  const visible=TEMPLATES.filter(t=>(_templateGalleryFilter==='all'||t.category===_templateGalleryFilter)&&(!q||(t.name+' '+t.desc).toLowerCase().includes(q)));
+  host.innerHTML=visible.map(t=>`<div class="tpl-card ${t.id===_templateGallerySelected?'selected':''}" id="tpl-${t.id}" title="${t.desc}" onclick="selectTemplate('${t.id}')" ondblclick="selectTemplate('${t.id}');printWithSelectedTemplate()">${templateGalleryIcon(t)}<div class="tpl-card-content"><div class="tpl-card-meta"><div class="tpl-name">${t.name}</div>${t.badge?`<span class="tpl-badge">${t.badge}</span>`:''}</div><div class="tpl-desc">${t.desc}</div></div></div>`).join('');
+  const empty=document.getElementById('template-gallery-empty');if(empty)empty.style.display=visible.length?'none':'flex';
+  updateTemplateGallerySelected();
+}
+function setTemplateGalleryFilter(filter){
+  _templateGalleryFilter=filter;
+  document.querySelectorAll('.template-filter').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));
+  renderTemplateGallery();
+}
 function openTemplatePicker(qid) {
   _printQID = qid;
   const qForTpl = quotations.find(x=>x.id===qid);
   const typeDefault = qForTpl && qForTpl.quoteType === 'contracting' ? 'servicequote' : 'erpbox';
   const preferredTpl = settings.lastTemplate || typeDefault;
-  const saved = TEMPLATES.some(t => t.id === preferredTpl) ? preferredTpl : typeDefault;
-  document.getElementById('template-cards').innerHTML = TEMPLATES.map(t => `
-    <div class="tpl-card ${t.id===saved?'selected':''}" id="tpl-${t.id}" title="${t.desc}" onclick="selectTemplate('${t.id}')">
-      <div class="tpl-preview">${TPL_PREVIEWS[t.id]||''}</div>
-      <div style="display:flex;align-items:center;gap:6px;justify-content:space-between;margin-bottom:4px">
-        <div class="tpl-name">${t.name}</div>
-        ${t.badge ? `<span class="tpl-badge">${t.badge}</span>` : ''}
-      </div>
-      <div class="tpl-desc">${t.desc}</div>
-    </div>`).join('');
+  _templateGallerySelected = TEMPLATES.some(t => t.id === preferredTpl) ? preferredTpl : typeDefault;
+  _templateGalleryFilter='all';
+  const search=document.getElementById('template-gallery-search');if(search)search.value='';
+  document.querySelectorAll('.template-filter').forEach(b=>b.classList.toggle('active',b.dataset.filter==='all'));
+  renderTemplateGallery();
   openModalWithSize('template-picker-modal');
 }
 
 function selectTemplate(id) {
-  document.querySelectorAll('.tpl-card').forEach(c=>c.classList.remove('selected'));
-  const el = document.getElementById('tpl-'+id);
-  if (el) el.classList.add('selected');
+  _templateGallerySelected=id;
+  document.querySelectorAll('.tpl-card').forEach(c=>c.classList.toggle('selected',c.id==='tpl-'+id));
+  updateTemplateGallerySelected();
 }
 
+let _pendingQuotationTemplate='erpbox';
+let _quotationOutputOptions={signature:false,stamp:false};
 async function printWithSelectedTemplate() {
-  const sel = document.querySelector('.tpl-card.selected');
-  const tpl = sel ? sel.id.replace('tpl-','') : 'erpbox';
-  settings.lastTemplate = tpl;
+  const tpl = _templateGallerySelected || 'erpbox';
+  settings.lastTemplate = tpl; _pendingQuotationTemplate=tpl;
   try { localStorage.setItem('dtq_settings', JSON.stringify(settings)); } catch(e){}
   closeModal('template-picker-modal');
+  const sig=document.getElementById('qout-signature'), stamp=document.getElementById('qout-stamp');
+  if(sig)sig.checked=false;if(stamp)stamp.checked=false; refreshQuotationOutputOptions(); openModalWithSize('quotation-output-modal');
+}
+function refreshQuotationOutputOptions(){
+  const sig=document.getElementById('qout-signature'),stamp=document.getElementById('qout-stamp');
+  if(sig){sig.disabled=!settings.signature;if(!settings.signature)sig.checked=false;}
+  if(stamp){stamp.disabled=!settings.stamp;if(!settings.stamp)stamp.checked=false;}
+  const ss=document.getElementById('qout-signature-status'),ts=document.getElementById('qout-stamp-status');
+  if(ss)ss.textContent=settings.signature?'Stored & ready to use':'Not configured in Company Settings';
+  if(ts)ts.textContent=settings.stamp?'Stored & ready to use':'Not configured in Company Settings';
+}
+function backToQuotationGallery(){
+  closeModal('quotation-output-modal');
+  renderTemplateGallery();
+  openModalWithSize('template-picker-modal');
+}
+function quotationAuthorizationHtml(){
+  const o=_quotationOutputOptions||{}; if(!o.signature&&!o.stamp)return '';
+  const sigPct=Math.max(70,Math.min(150,Number(settings.signatureSize||100))), stampPct=Math.max(70,Math.min(150,Number(settings.stampSize||100)));
+  const sigW=225*sigPct/100,sigH=96*sigPct/100,stampW=138*stampPct/100;
+  const overlap=settings.signatureStampOverlap!==false, amount=Math.max(0,Math.min(100,Number(settings.signatureStampOverlapAmount??75)));
+  const separated=sigW+10, deep=28, stampLeft=overlap ? separated-(separated-deep)*(amount/100) : separated;
+  const authW=Math.max(270,sigW,stampLeft+stampW)+6, authH=Math.max(122,sigH,stampW)+10;
+  const sig=o.signature&&settings.signature?`<img class="digital-signature" style="width:${sigW}px;height:${sigH}px" src="${settings.signature}" alt="Authorized signature">`:'';
+  const stamp=o.stamp&&settings.stamp?`<img class="digital-stamp" style="left:${stampLeft}px;width:${stampW}px;height:${stampW}px" src="${settings.stamp}" alt="Company stamp">`:'';
+  const who=[settings.signatoryName,settings.signatoryDesignation].filter(Boolean).map(escapeHtml).join(' · ');
+  return `<div class="digital-auth" style="width:${authW}px;height:${authH}px">${sig}${stamp}</div>${who?`<div class="digital-signer">${who}</div>`:''}`;
+}
+function logQuotationOutput(){try{const q=quotations.find(x=>x.id===_printQID);const key='dtq_quotation_output_audit';const a=JSON.parse(localStorage.getItem(key)||'[]');a.push({quotationId:_printQID,quotationNo:q?.qno||'',template:_pendingQuotationTemplate,signature:!!_quotationOutputOptions.signature,stamp:!!_quotationOutputOptions.stamp,generatedAt:new Date().toISOString()});localStorage.setItem(key,JSON.stringify(a.slice(-500)));}catch(e){}}
+function generateQuotationOutput(){
+  _quotationOutputOptions={signature:!!document.getElementById('qout-signature')?.checked,stamp:!!document.getElementById('qout-stamp')?.checked};
+  closeModal('quotation-output-modal'); logQuotationOutput(); const tpl=_pendingQuotationTemplate||'erpbox';
   if      (tpl === 'professional') printQuotation(_printQID);
   else if (tpl === 'classic')      printQuotationClassic(_printQID);
   else if (tpl === 'modern')       printQuotationModern(_printQID);
   else if (tpl === 'executive')    printQuotationExecutive(_printQID);
-  else if (tpl === 'erpbox')       printQuotationInfoLayout(_printQID,'erpbox');
+  else if (tpl === 'erpbox')       printQuotationProductA4(_printQID);
   else if (tpl === 'premiumcard')  printQuotationInfoLayout(_printQID,'premiumcard');
   else if (tpl === 'executiveinfo')printQuotationInfoLayout(_printQID,'executiveinfo');
-  else if (tpl === 'erpbilingual') printQuotationErpVariant(_printQID,'bilingual');
+  else if (tpl === 'erpbilingual') printQuotationArabicEnglish(_printQID);
   else if (tpl === 'servicequote') printQuotationErpVariant(_printQID,'contracting');
-  else if (tpl === 'imageref')     printQuotationErpVariant(_printQID,'image');
-  else if (tpl === 'imagerefmed')  printQuotationErpVariant(_printQID,'image-medium');
-  else if (tpl === 'imagereflarge')printQuotationErpVariant(_printQID,'image-large');
-  else if (tpl === 'imagerefattach')printQuotationErpVariant(_printQID,'image-attachment');
-  else if (tpl === 'bilingual')    printQuotationBilingual(_printQID);
+  else if (tpl === 'imageref')     printQuotationProductA4(_printQID,'image');
+  else if (tpl === 'imagerefmed')  printQuotationProductA4(_printQID,'image-medium');
+  else if (tpl === 'imagereflarge')printQuotationProductA4(_printQID,'image-large');
+  else if (tpl === 'imagerefattach')printQuotationProductA4(_printQID,'image-attachment');
+  else if (tpl === 'bilingual')    printQuotationArabicEnglish(_printQID);
 }
 
 /* ── Shared helper: builds common data for all templates ── */
@@ -10539,6 +10790,88 @@ function _tplOpen(html) {
   w.document.write(html); w.document.close();
 }
 
+
+/* v164 — Pilot Product quotation print/PDF: approved A4 display design */
+function printQuotationProductA4(id, imageVariant){
+  const q=quotations.find(x=>x.id===id); if(!q) return;
+  const bilingualMode=imageVariant==='bilingual';
+  const imageAttachmentMode=imageVariant==='image-attachment';
+  const imageMode=['image','image-medium','image-large'].includes(imageVariant);
+  const imageCfg=imageVariant==='image-large'?{col:'42mm',w:'38mm',h:'30mm'}:(imageVariant==='image-medium'?{col:'32mm',w:'28mm',h:'21mm'}:{col:'24mm',w:'20mm',h:'16mm'});
+  const productImage=function(it){
+    if(it.image) return it.image;
+    const p=products.find(x=>(it.prodId&&x.id===it.prodId)||(it.code&&x.code===it.code)||(it.desc&&x.name===it.desc));
+    return p&&p.image?p.image:'';
+  };
+  const totals=calcQuote(q), vu=validUntil(q), savedVat=getQuoteVatPercent(q);
+  const co=settings.coname||'Downtown Trading Est.';
+  const cust=customers.find(c=>String(c.id)===String(q.custId||''))||customers.find(c=>normalizeMasterValue(c.company)===normalizeMasterValue(q.company));
+  const custAddr1=cust?[cust.buildingNo,cust.street].filter(Boolean).join(' '):'';
+  const custAddr2=cust?[cust.district,cust.city,cust.postalCode].filter(Boolean).join(', '):(q.city||'');
+  const custCountry=cust?.country||'';
+  const lRFQ=q.rfqId?rfqs.find(r=>r.id===q.rfqId):null;
+  const qRevision=Number(q.revision||q.rev||0);
+  const logoHtml=settings.logo?'<img class="q-logo" src="'+settings.logo+'" alt="'+escapeHtml(co)+'">':'<div class="q-logo-fallback">DT</div>';
+  let itemNo=0;
+  const quoteItems=q.items||[];
+  const rowParts=[];
+  for(let idx=0; idx<quoteItems.length; idx++){
+    const it=quoteItems[idx];
+    if(it.lineType==='heading'){ rowParts.push('<tr class="heading"><td colspan="6">'+escapeHtml(it.text||it.desc||'')+'</td></tr>'); continue; }
+    if(it.lineType==='note'){ rowParts.push('<tr class="note standalone-note"><td></td><td colspan="5"><div class="inline-note"><b>Note:</b> '+escapeHtml(it.text||it.desc||'')+'</div></td></tr>'); continue; }
+    itemNo++;
+    const total=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0), service=it.type==='service';
+    const sub=[!service&&it.specs?escapeHtml(it.specs):'',!service&&[it.brand,it.model].filter(Boolean).length?escapeHtml([it.brand,it.model].filter(Boolean).join(' / ')):''].filter(Boolean).join(' · ');
+    const next=quoteItems[idx+1];
+    const inlineNote=(next&&next.lineType==='note')?String(next.text||next.desc||'').trim():'';
+    if(inlineNote) idx++;
+    const imageCell=imageMode?'<td class="imgcell">'+(productImage(it)?'<img src="'+productImage(it)+'" alt="">':'<div class="imgph">No image</div>')+'</td>':'';
+    rowParts.push('<tr><td class="c">'+String(itemNo).padStart(3,'0')+'</td>'+imageCell+'<td><div class="desc">'+escapeHtml(it.desc||'—')+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+(inlineNote?quotationPrintLineNoteHtml(inlineNote):'')+'</td><td class="c">'+escapeHtml(String(it.qty??''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+qvLineUnitMoney(it.up)+'</td><td class="r">'+qvLineAmountMoney(total)+'</td></tr>');
+  }
+  const rows=rowParts.join('')||'<tr><td colspan="'+(imageMode?7:6)+'" class="empty">No line items</td></tr>';
+  const notes=String(q.notes||'').trim();
+  const additionalConditions=quotationAdditionalConditionItems(q);
+  const validityDays=parseInt(q.validity,10)||0;
+  const termsItems=[
+    validityDays?'<li>'+(bilingualMode?'مدة صلاحية هذا العرض '+validityDays+' يوم'+(validityDays===1?'':'اً')+' من تاريخ الإصدار. / ':'')+'This quotation is valid for '+validityDays+' day'+(validityDays===1?'':'s')+' from the date of issue.</li>':'',
+    q.delivery?'<li>'+(bilingualMode?'شروط التسليم / ':'Delivery terms: ')+escapeHtml(q.delivery)+'</li>':'',
+    q.payment?'<li>'+(bilingualMode?'شروط الدفع / ':'Payment terms: ')+escapeHtml(q.payment)+'</li>':'',
+    additionalConditions
+  ].filter(Boolean).join('');
+  const termsHtml=termsItems||'<li>Terms are as stated in this quotation.</li>';
+  let attachmentNo=0;
+  const attachmentCards=imageAttachmentMode?quoteItems.map(function(it){
+    if(it.lineType==='heading'||it.lineType==='note') return '';
+    attachmentNo++;
+    const img=productImage(it);
+    const details=[it.specs,[it.brand,it.model].filter(Boolean).join(' / ')].filter(Boolean).join(' · ');
+    return '<section class="attach-card"><div class="attach-item-no">ITEM '+String(attachmentNo).padStart(2,'0')+'</div><div class="attach-grid"><div class="attach-image">'+(img?'<img src="'+img+'" alt="">':'<div class="attach-ph">No image</div>')+'</div><div class="attach-copy"><h3>'+escapeHtml(it.desc||'—')+'</h3>'+(details?'<p>'+escapeHtml(details)+'</p>':'')+'<div class="attach-meta"><span><b>Qty:</b> '+escapeHtml(String(it.qty??''))+'</span><span><b>UOM:</b> '+escapeHtml(it.uom||'—')+'</span></div></div></div></section>';
+  }).join(''):'';
+  const attachmentHtml=imageAttachmentMode?'<article class="attachment-sheet"><header class="attachment-head"><div>'+logoHtml+'</div><div><h1>ITEM IMAGE ATTACHMENTS</h1><p>Quotation '+escapeHtml(q.qno)+'</p></div></header><div class="attachment-list">'+(attachmentCards||'<div class="attach-empty">No product images available.</div>')+'</div></article>':'';
+  const html=`<!DOCTYPE html><html><head><title>${escapeHtml(q.qno)}</title><meta charset="UTF-8"><style>
+*{box-sizing:border-box}html,body{margin:0;padding:0}body{font-family:Arial,Tahoma,sans-serif;color:#17324d;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:10px}
+@page{size:A4 portrait;margin:10mm 11mm 18mm 11mm}
+.ar{font-family:Tahoma,Arial,sans-serif;direction:rtl;unicode-bidi:isolate}
+.sheet{width:210mm;min-height:297mm;margin:0 auto;padding:12mm 11mm 10mm;background:#fff;display:flex;flex-direction:column}
+.header{display:grid;grid-template-columns:1.22fr .95fr 1.05fr;gap:8px;align-items:start;padding-bottom:10px;border-bottom:2px solid #174b7a}.q-logo{max-width:260px;max-height:78px;width:auto;height:auto;object-fit:contain}.q-logo-fallback{width:78px;height:78px;border:1px solid #cbd8e5;display:flex;align-items:center;justify-content:center;font-size:23px;font-weight:800;color:#174b7a}.company{font-size:9.5px;line-height:1.5;color:#50657a;border-left:1px solid #cbd8e5;padding-left:10px;min-height:58px}.titlebox{border:1px solid #b9cce0}.titlebox h1{margin:0;padding:8px 10px;font-size:19px;letter-spacing:.35px;color:#174b7a;background:#f7fafc}.titlebox>div{padding:7px 10px;border-top:1px solid #d7e1eb}.titlebox small{display:block;text-transform:uppercase;font-weight:800;color:#5f7489;font-size:8px;margin-bottom:2px}.titlebox strong{font-size:11px}.titlegrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.subtitle{margin:5px 0 10px;text-align:right;font-size:8px;letter-spacing:3px;color:#64788c}
+.party{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}.box{border:1px solid #cbd8e5}.box h3{margin:0;background:#f3f7fa;padding:6px 9px;font-size:9px;text-transform:uppercase;color:#174b7a;border-bottom:1px solid #cbd8e5}.box .content{padding:8px 9px;min-height:67px;line-height:1.45}.box .content strong{display:block;font-size:11.5px;margin-bottom:2px}.box p{font-size:9.5px;color:#50657a;margin:2px 0}.refs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:9px 0}.refs>div{border:1px solid #cbd8e5;background:#f3f7fa;padding:7px 8px;min-height:43px}.refs small{display:block;font-size:7.5px;font-weight:800;text-transform:uppercase;color:#5e7488;margin-bottom:4px}.refs strong{font-size:9.5px}
+.items{width:100%;border-collapse:collapse;border-bottom:1px solid #cbd8e5}.items thead{display:table-header-group}.items tr{break-inside:avoid;page-break-inside:avoid}.items th{background:#174b7a;color:#fff;padding:6px 5px;border:1px solid #174b7a;font-size:8px;text-align:left}.items td{padding:6px 5px;border:1px solid #d6e0e9;font-size:9px;color:#263f56;vertical-align:top}.items tbody tr:last-child td{border-bottom:1px solid #cbd8e5}.items .c{text-align:center}.items .r{text-align:right;white-space:nowrap}.items .imgcell{width:${imageCfg.col};text-align:center;vertical-align:middle;padding:4px}.items .imgcell img{display:block;max-width:${imageCfg.w};max-height:${imageCfg.h};width:auto;height:auto;object-fit:contain;margin:0 auto}.items .imgph{width:100%;min-height:${imageCfg.h};display:flex;align-items:center;justify-content:center;border:1px dashed #cbd8e5;background:#f8fafc;color:#94a3b8;font-size:7.5px}.desc{font-size:9.5px}.sub{font-size:8.5px;color:#64788c;margin-top:2px}.inline-note{margin-top:5px;font-size:8.5px;line-height:1.35}.inline-note b{font-weight:800}.note-highlight{padding:4px 6px;background:#fffbea;border:1px solid #eadfae;color:#5a4a0a}.note-blue{padding:4px 7px;background:#eef6fd;border-left:3px solid #2684d8;color:#294d6d}.note-minimal{padding:2px 1px;color:#5d7186;font-style:italic}.note-badge{display:flex;align-items:center;gap:6px;color:#415a70}.note-badge span{display:inline-block;background:#2684d8;color:#fff;border-radius:3px;padding:2px 5px;font-size:7px;font-weight:800;letter-spacing:.4px}.note-badge em{font-style:normal}.heading td{background:#eef4fb!important;color:#174b7a!important;font-weight:800!important}.note td{background:#fff!important;color:#475569!important}.standalone-note .inline-note{margin:0}.empty{text-align:center;padding:20px!important;color:#64748b!important}
+.bottom{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:18px;padding:12px 0 10px;break-inside:avoid;page-break-inside:avoid}.terms{border-left:3px solid #174b7a;background:#f7f9fb;padding:9px 12px;font-size:9.5px;line-height:1.5}.terms ul{margin:4px 0 0;padding-left:18px}.terms li{margin:3px 0}.eyebrow{display:block;font-size:9px;letter-spacing:1.2px;font-weight:800;color:#174b7a;margin-bottom:5px}.totals{border:1px solid #cbd8e5}.totals>div{display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #d7e1eb;font-size:10px}.totals .grand{background:#174b7a;color:#fff;border-bottom:0;font-weight:800;font-size:12px}.notesbox{border:1px solid #e6c75a;background:#fffbea;padding:8px 10px;margin:4px 0 12px;font-size:9.5px;line-height:1.45;break-inside:avoid;page-break-inside:avoid}.notesbox strong{color:#17324d}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:42px;margin-top:24mm;break-inside:avoid;page-break-inside:avoid}.sigbox{padding-top:7px;border-top:1.5px solid #174b7a;min-height:0;font-size:8.5px;font-weight:800;color:#5d7186;text-transform:uppercase}.sigbox.authorized{position:relative}.digital-auth{position:absolute;left:2px;bottom:20px;width:270px;height:122px;pointer-events:none}.digital-signature{position:absolute;left:0;bottom:0;width:225px;height:96px;object-fit:contain;object-position:left bottom;z-index:1}.digital-stamp{position:absolute;left:78px;bottom:-8px;width:138px;height:138px;object-fit:contain;object-position:center bottom;opacity:.92;z-index:2}.digital-signer{position:absolute;left:8px;bottom:10px;font-size:7px;color:#64788c;text-transform:none;font-weight:600;white-space:nowrap}.thankyou{text-align:center;font-size:9px;font-style:italic;color:#5c6f83;line-height:1.55;padding:8px 0 14px;break-inside:avoid;page-break-inside:avoid}
+.page-footer{margin-top:auto;border-top:2px solid #174b7a;padding-top:6px;color:#64788c;font-size:8.5px;line-height:1.35}.fixed-footer{display:none}
+.attachment-sheet{width:210mm;min-height:297mm;margin:0 auto;padding:12mm 11mm 18mm;background:#fff;page-break-before:always;break-before:page}.attachment-head{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;border-bottom:2px solid #174b7a;padding-bottom:10px;margin-bottom:12px}.attachment-head .q-logo{max-width:190px;max-height:58px}.attachment-head h1{margin:0;color:#174b7a;font-size:17px;letter-spacing:1.4px;text-align:right}.attachment-head p{margin:4px 0 0;color:#64788c;font-size:9px;text-align:right}.attachment-list{display:block}.attach-card{border:1px solid #cbd8e5;margin:0 0 10px;break-inside:avoid;page-break-inside:avoid;background:#fff}.attach-item-no{background:#f3f7fa;border-bottom:1px solid #cbd8e5;padding:6px 9px;color:#174b7a;font-size:8px;font-weight:800;letter-spacing:.8px}.attach-grid{display:grid;grid-template-columns:68mm 1fr;gap:14px;padding:10px;align-items:start}.attach-image{min-height:54mm;display:flex;align-items:center;justify-content:center}.attach-image img{display:block;max-width:64mm;max-height:52mm;width:auto;height:auto;object-fit:contain;border:1px solid #d6e0e9;padding:3px;background:#fff}.attach-ph{width:64mm;height:52mm;border:1px dashed #cbd8e5;background:#f8fafc;color:#94a3b8;display:flex;align-items:center;justify-content:center;font-size:9px}.attach-copy h3{margin:4px 0 6px;color:#174b7a;font-size:12px}.attach-copy p{margin:0;color:#50657a;font-size:9px;line-height:1.5}.attach-meta{display:flex;gap:18px;margin-top:10px;padding-top:8px;border-top:1px solid #e4ebf2;color:#50657a;font-size:8.5px}.attach-empty{padding:30px;text-align:center;border:1px dashed #cbd8e5;color:#64788c}
+@media print{.sheet{width:auto;min-height:0;margin:0;padding:0;display:block}.attachment-sheet{width:auto;min-height:0;margin:0;padding:0;page-break-before:always;break-before:page}.page-footer{display:none}.fixed-footer{display:block;position:fixed;left:0;right:0;bottom:0;border-top:1.5px solid #174b7a;padding-top:5px;background:#fff;color:#64788c;font-size:8px;line-height:1.35;z-index:10}.header,.party,.refs,.bottom,.notesbox,.signatures,.thankyou,.attachment-head,.attach-card{break-inside:avoid;page-break-inside:avoid}}
+@media screen{body{background:#d0d0d0;padding:20px 0}.sheet{box-shadow:0 4px 20px rgba(0,0,0,.2)}}
+</style></head><body><div class="fixed-footer">${companyDocumentFooterHtml('quotation')}</div><article class="sheet">
+<header class="header"><div>${logoHtml}</div><div class="company">${companyDocumentHeaderHtml('quotation')}</div><div><div class="titlebox"><h1>${bilingualMode?'QUOTATION / <span class="ar">عرض سعر</span>':'QUOTATION'}</h1><div><small>Quotation No.</small><strong>${escapeHtml(q.qno)}</strong></div><div class="titlegrid"><div><small>Date</small><strong>${fmtDate(q.date)}</strong></div><div><small>Valid Until</small><strong>${fmtDate(vu)}</strong></div></div>${qRevision?'<div><small>Revision</small><strong>R'+qRevision+'</strong></div>':''}</div></div></header>
+<div class="subtitle">${bilingualMode?'COMMERCIAL OFFER / <span class="ar">عرض تجاري</span>':'COMMERCIAL OFFER'}</div><section class="party"><div class="box"><h3>${bilingualMode?'QUOTATION TO / <span class="ar">عرض السعر إلى</span>':'QUOTATION TO'}</h3><div class="content"><strong>${escapeHtml(q.company||'—')}</strong>${custAddr1?'<p>'+escapeHtml(custAddr1)+'</p>':''}${custAddr2?'<p>'+escapeHtml(custAddr2)+'</p>':''}${custCountry?'<p>'+escapeHtml(custCountry)+'</p>':''}${cust?.vat?'<p>VAT No. '+escapeHtml(cust.vat)+'</p>':''}${q.contact?'<p>Attn: '+escapeHtml(q.contact)+'</p>':''}</div></div><div class="box"><h3>${bilingualMode?'REFERENCE / PROJECT / <span class="ar">المرجع / المشروع</span>':'REFERENCE / PROJECT'}</h3><div class="content"><strong>${escapeHtml(q.ref||'—')}</strong>${q.project?'<p>'+escapeHtml(q.project)+'</p>':''}${lRFQ?'<p>RFQ: '+escapeHtml(lRFQ.rfqNo||'—')+'</p>':''}</div></div></section>
+<section class="refs"><div><small>PAYMENT TERMS</small><strong>${escapeHtml(q.payment||'—')}</strong></div><div><small>DELIVERY TERMS</small><strong>${escapeHtml(q.delivery||'—')}</strong></div><div><small>VAT</small><strong>${savedVat}%</strong></div><div><small>CURRENCY</small><strong>${escapeHtml(settings.currency||settings.baseCurrency||'SAR')}</strong></div></section>
+<table class="items"><thead><tr><th class="c">${bilingualMode?'SL<br><span class="ar">م</span>':'SL'}</th>${imageMode?'<th class="c" style="width:'+imageCfg.col+'">Image Ref</th>':''}<th>Description</th><th class="c">${bilingualMode?'Qty<br><span class="ar">الكمية</span>':'Qty'}</th><th class="c">${bilingualMode?'UOM<br><span class="ar">الوحدة</span>':'UOM'}</th><th class="r">${bilingualMode?'Unit Price<br><span class="ar">سعر الوحدة</span>':'Unit Price'}</th><th class="r">${bilingualMode?'Amount<br><span class="ar">المبلغ</span>':'Amount'}</th></tr></thead><tbody>${rows}</tbody></table>
+<section class="bottom"><div class="terms"><span class="eyebrow">${bilingualMode?'TERMS &amp; CONDITIONS / <span class="ar">الشروط والأحكام</span>':'TERMS &amp; CONDITIONS'}</span><ul>${termsHtml}</ul></div><div class="totals"><div><span>Subtotal</span><strong>${qvSummaryMoney(totals.sub)}</strong></div>${totals.disc>0?'<div><span>Discount</span><strong>- '+qvSummaryMoney(totals.disc)+'</strong></div>':''}<div><span>VAT (${savedVat}%)</span><strong>${qvSummaryMoney(totals.vat)}</strong></div><div class="grand"><span>Grand Total</span><strong>${qvGrandTotalMoney(totals.net)}</strong></div></div></section>
+${notes?'<section class="notesbox"><strong>Notes.</strong> '+escapeHtml(notes)+'</section>':''}
+<section class="signatures"><div class="sigbox">${bilingualMode?'Customer Acceptance &amp; Signature / <span class="ar">اعتماد وتوقيع العميل</span>':'Customer Acceptance &amp; Signature'}</div><div class="sigbox authorized">${quotationAuthorizationHtml()}<div>${bilingualMode?'Authorized Signature / <span class="ar">التوقيع المعتمد</span> — ':'Authorized Signature — '}${escapeHtml(co)}</div></div></section>
+<section class="thankyou">${bilingualMode?'<span class="ar">شكراً لإتاحة الفرصة لتقديم عرضنا. نتطلع إلى خدمتكم.</span><br>':''}Thank you for the opportunity to quote. We look forward to serving you.<br>${bilingualMode?'<span class="ar">لأي استفسار بخصوص هذا العرض، يرجى التواصل معنا.</span><br>':''}If you have any questions regarding this quotation, please feel free to contact us.</section><footer class="page-footer">${companyDocumentFooterHtml('quotation')}</footer></article>${attachmentHtml}<script>window.onload=function(){setTimeout(function(){window.print()},700)}<\/script></body></html>`;
+  _tplOpen(html);
+}
 
 /* ══════════ TEMPLATE OPTIONS: QUOTATION INFORMATION LAYOUTS ══════════ */
 function printQuotationInfoLayout(id, layout) {
@@ -10598,11 +10931,11 @@ function printQuotationInfoLayout(id, layout) {
 +'<div class="header"><div class="hrow"><div class="brand"><div class="logo-card">'+logoHtml+'</div><div class="co-meta">'+headerInfo+'</div></div><div><div class="doc-chip">Quotation</div><div class="doc-no">'+q.qno+'</div></div></div></div>'
 +'<div class="info-wrap">'+infoHtml+'</div>'
 +'<div class="items-wrap"><table class="items"><thead><tr><th style="width:30px">#</th><th>Description</th><th class="c" style="width:46px">Qty</th><th class="c" style="width:48px">UOM</th><th class="r" style="width:88px">Unit Price</th><th class="r" style="width:92px">Amount</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
-+'<div class="after"><div class="terms"><div class="terms-title">Terms &amp; Conditions</div><ul><li>This quotation is valid for '+(q.validity||7)+' days from the date of issue.</li><li>Delivery terms: '+(q.delivery||'—')+'</li><li>Payment terms: '+(q.payment||'—')+'</li><li>Stock is subject to availability at the time of order confirmation.</li></ul></div><div class="tot">'
++'<div class="after"><div class="terms"><div class="terms-title">Terms &amp; Conditions</div><ul><li>This quotation is valid for '+(q.validity||7)+' days from the date of issue.</li><li>Delivery terms: '+escapeHtml(q.delivery||'—')+'</li><li>Payment terms: '+escapeHtml(q.payment||'—')+'</li>'+quotationAdditionalConditionItems(q)+'</ul></div><div class="tot">'
 +totRow('Sub-total',pdfSummaryMoney(sub))+(disc>0?totRow('Discount','− '+pdfSummaryMoney(disc))+totRow('Total before VAT',pdfSummaryMoney(bvat)):'')+totRow('VAT ('+getQuoteVatPercent(q)+'%)',pdfSummaryMoney(vat))+'<div class="tot-net"><span>Net Amount</span><b>'+pdfGrandTotalMoney(net)+'</b></div></div></div>'
 +(q.notes?'<div class="notes"><strong>Notes:</strong> '+q.notes+'</div>':'')
-+'<div class="sig"><div>CUSTOMER ACCEPTANCE &amp; SIGNATURE</div><div>AUTHORISED SIGNATURE — '+co.toUpperCase()+'</div></div>'
-+'<div class="closing">Thank you for the opportunity to quote. We look forward to serving you.<br><span>If you have any questions regarding this quotation, please feel free to contact us.</span></div>'
++'<div class="sig"><div>CUSTOMER ACCEPTANCE &amp; SIGNATURE'+(isBi?'<br><span class="ar" lang="ar" style="display:block;margin-top:2px;font-size:10px;color:#475569;text-align:left">توقيع واعتماد العميل</span>':'')+'</div><div>AUTHORISED SIGNATURE — '+co.toUpperCase()+(isBi?'<br><span class="ar" lang="ar" style="display:block;margin-top:2px;font-size:10px;color:#475569;text-align:left">التوقيع المعتمد</span>':'')+'</div></div>'
++'<div class="closing">Thank you for the opportunity to quote. We look forward to serving you.<br><span>If you have any questions regarding this quotation, please feel free to contact us.</span>'+(isBi?'<div class="ar" lang="ar" style="margin-top:3px;font-style:normal;text-align:center">نشكركم على إتاحة الفرصة لتقديم عرضنا، ونتطلع إلى خدمتكم.</div>':'')+'</div>'
 +'</td></tr></tbody></table><scr'+'ipt>window.onload=function(){setTimeout(function(){window.print()},600)}<'+'/script></body></html>';
   _tplOpen(html);
 }
@@ -10611,7 +10944,9 @@ function printQuotationInfoLayout(id, layout) {
 /* ══════════ MODERN ERP VARIANTS: BILINGUAL / SERVICE / IMAGE REF ══════════ */
 function printQuotationErpVariant(id, variant) {
   const d=_tplData(id); if(!d) return;
-  const {q,sub,disc,bvat,vat,net,vu,co,f1,f2,headerInfo}=d;
+  const {q,sub,disc,bvat,vat,net,vu,co}=d;
+  const headerInfo=companyDocumentHeaderHtml('quotation');
+  const footerInfo=companyDocumentFooterHtml('quotation');
   const logoHtml = settings.logo
     ? '<img src="'+settings.logo+'" alt="'+co+'" style="height:50px;width:auto;max-width:220px;object-fit:contain">'
     : '<div style="font-size:17px;font-weight:900;color:#1F4E79">'+co+'</div>';
@@ -10641,49 +10976,30 @@ function printQuotationErpVariant(id, variant) {
     );
     return (p && p.image) ? p.image : '';
   };
-  const normalRows=(q.items||[]).map(function(it,i){
-    if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
-    const subline=[it.brand,it.model].filter(Boolean).join(' · ');
-    return '<tr>'
-      +'<td class="num">'+String(i+1).padStart(2,'0')+'</td>'
-      +'<td><div>'+(it.desc||'')+'</div>'
-      +(subline?'<div class="dsub">'+subline+'</div>':'')
-      +(it.specs?'<div class="dsub">'+it.specs+'</div>':'')+'</td>'
-      +'<td class="c">'+(it.qty||'')+'</td>'
-      +'<td class="c">'+(it.uom||'')+'</td>'
-      +'<td class="r">'+pdfLineUnitMoney(it.up)+'</td>'
-      +'<td class="r">'+pdfLineAmountMoney(t)+'</td></tr>';
-  }).join('');
-  const serviceRows=(q.items||[]).map(function(it,i){
-    if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
-    const scope=[it.brand,it.model,it.specs].filter(Boolean).join(' · ');
-    return '<tr>'
-      +'<td class="num">'+String(i+1).padStart(2,'0')+'</td>'
-      +'<td><div>'+(it.desc||'')+'</div>'+(scope?'<div class="dsub">'+scope+'</div>':'')+'</td>'
-      +'<td class="c">'+(it.qty||'')+'</td>'
-      +'<td class="c">'+(it.uom||'Service')+'</td>'
-      +'<td class="r">'+pdfLineUnitMoney(it.up)+'</td>'
-      +'<td class="r">'+pdfLineAmountMoney(t)+'</td></tr>';
-  }).join('');
-  const imageRows=(q.items||[]).map(function(it,i){
-    if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
-    const img=productImage(it);
-    const subline=[it.brand,it.model,it.specs].filter(Boolean).join(' · ');
-    return '<tr>'
-      +'<td class="num">'+String(i+1).padStart(2,'0')+'</td>'
-      +'<td class="imgcell">'+(img?'<img src="'+img+'">':'<div class="imgph">No image</div>')+'</td>'
-      +'<td><div>'+(it.desc||'')+'</div>'+(subline?'<div class="dsub">'+subline+'</div>':'')+'</td>'
-      +'<td class="c">'+(it.qty||'')+'</td>'
-      +'<td class="c">'+(it.uom||'')+'</td>'
-      +'<td class="r">'+pdfLineUnitMoney(it.up)+'</td>'
-      +'<td class="r">'+pdfLineAmountMoney(t)+'</td></tr>';
-  }).join('');
+  function buildVariantRows(mode){
+    let no=0; const out=[]; const items=q.items||[];
+    for(let i=0;i<items.length;i++){
+      const it=items[i];
+      if(it.lineType==='heading'){out.push('<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>');continue;}
+      if(it.lineType==='note'){out.push('<tr><td></td><td colspan="98">'+quotationPrintLineNoteHtml(it.text||it.desc||'')+'</td></tr>');continue;}
+      no++;
+      const next=items[i+1], inlineNote=(next&&next.lineType==='note')?String(next.text||next.desc||'').trim():'';
+      if(inlineNote)i++;
+      const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
+      const subline=[it.brand,it.model,it.specs].filter(Boolean).join(' · ');
+      const note=inlineNote?quotationPrintLineNoteHtml(inlineNote):'';
+      if(mode==='image'){
+        const img=productImage(it);
+        out.push('<tr><td class="num">'+String(no).padStart(2,'0')+'</td><td class="imgcell">'+(img?'<img src="'+img+'">':'<div class="imgph">No image</div>')+'</td><td><div>'+escapeHtml(it.desc||'')+'</div>'+(subline?'<div class="dsub">'+escapeHtml(subline)+'</div>':'')+note+'</td><td class="c">'+escapeHtml(String(it.qty||''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+pdfLineUnitMoney(it.up)+'</td><td class="r">'+pdfLineAmountMoney(t)+'</td></tr>');
+      }else{
+        out.push('<tr><td class="num">'+String(no).padStart(2,'0')+'</td><td><div>'+escapeHtml(it.desc||'')+'</div>'+(subline?'<div class="dsub">'+escapeHtml(subline)+'</div>':'')+note+'</td><td class="c">'+escapeHtml(String(it.qty||''))+'</td><td class="c">'+escapeHtml(it.uom||(mode==='service'?'Service':''))+'</td><td class="r">'+pdfLineUnitMoney(it.up)+'</td><td class="r">'+pdfLineAmountMoney(t)+'</td></tr>');
+      }
+    }
+    return out.join('');
+  }
+  const normalRows=buildVariantRows('normal');
+  const serviceRows=buildVariantRows('service');
+  const imageRows=buildVariantRows('image');
   const infoRows = '<div class="info-row"><span>'+labels.qno+'</span><b>'+q.qno+'</b></div>'
     +(q.ref?'<div class="info-row"><span>'+labels.ref+'</span><b>'+q.ref+'</b></div>':'')
     +'<div class="info-row"><span>'+labels.date+'</span><b>'+fmtDate(q.date)+'</b></div>'
@@ -10703,7 +11019,9 @@ function printQuotationErpVariant(id, variant) {
       ? '<li>This contracting quotation is valid for '+(q.validity||7)+' days from the date of issue.</li><li>Scope of work is limited to the listed work descriptions only.</li><li>Delivery / completion terms: '+(q.delivery||'—')+'</li><li>Payment terms: '+(q.payment||'—')+'</li>'
       : (isHybrid
         ? '<li>This supply &amp; installation quotation is valid for '+(q.validity||7)+' days from the date of issue.</li><li>Material supply and site work are limited to the listed descriptions only.</li><li>Delivery / completion terms: '+(q.delivery||'—')+'</li><li>Payment terms: '+(q.payment||'—')+'</li>'
-        : '<li>This quotation is valid for '+(q.validity||7)+' days from the date of issue.</li><li>Delivery terms: '+(q.delivery||'—')+'</li><li>Payment terms: '+(q.payment||'—')+'</li><li>Stock is subject to availability at the time of order confirmation.</li>'));
+        : '<li>This quotation is valid for '+(q.validity||7)+' days from the date of issue.</li><li>Delivery terms: '+escapeHtml(q.delivery||'—')+'</li><li>Payment terms: '+escapeHtml(q.payment||'—')+'</li>'+quotationAdditionalConditionItems(q)));;
+  const termsWithAdditional = terms + quotationAdditionalConditionItems(q);
+
   const headNormal = isBi
     ? '<th style="width:30px">#</th><th>Description / البيان</th><th class="c" style="width:46px">Qty<br>الكمية</th><th class="c" style="width:48px">UOM<br>الوحدة</th><th class="r" style="width:88px">Unit Price<br>السعر</th><th class="r" style="width:92px">Amount<br>المبلغ</th>'
     : (isContracting
@@ -10727,15 +11045,15 @@ function printQuotationErpVariant(id, variant) {
 +'body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#1E293B;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
 +'@media print{@page{size:A4;margin:10mm 12mm 18mm 12mm;@bottom-right{content:"Page " counter(page) " of " counter(pages);font-family:Arial;font-size:8pt;color:#64748B}}.pw{box-shadow:none!important}}'
 +'@media screen{body{background:#d0d0d0;padding:20px 0}.pw{box-shadow:0 4px 20px rgba(0,0,0,.2)}}'
-+'.pw{width:210mm;margin:0 auto;background:#fff;border-collapse:collapse;table-layout:fixed}.pw td{vertical-align:top}.header{padding:14px 12mm 10px;border-bottom:3px solid #1F4E79}.hrow{display:flex;justify-content:space-between;align-items:center}.brand{display:flex;align-items:center;gap:12px}.logo-card{background:#fff;border:1px solid #E2E8F0;border-radius:6px;padding:6px 11px}.co-meta{font-size:9.5px;color:#475569;line-height:1.55}.doc-chip{background:#1F4E79;color:#fff;font-size:14px;letter-spacing:2px;text-transform:uppercase;font-weight:900;padding:5px 12px;border-radius:3px}.doc-chip span{font-family:Tahoma,Arial,sans-serif;font-size:15px;margin-left:8px}.doc-no{font-size:15px;color:#1F4E79;font-weight:900;margin-top:5px;text-align:right}'
++'.fixed-footer{display:none}.ar,[dir="rtl"]{font-family:Tahoma,Arial,sans-serif;direction:rtl;unicode-bidi:isolate}.pw{width:210mm;margin:0 auto;background:#fff;border-collapse:collapse;table-layout:fixed}.pw td{vertical-align:top}.header{padding:14px 12mm 10px;border-bottom:3px solid #1F4E79}.hrow{display:flex;justify-content:space-between;align-items:center}.brand{display:flex;align-items:center;gap:12px}.logo-card{background:#fff;border:1px solid #E2E8F0;border-radius:6px;padding:6px 11px}.co-meta{font-size:9.5px;color:#475569;line-height:1.55}.doc-chip{background:#1F4E79;color:#fff;font-size:14px;letter-spacing:2px;text-transform:uppercase;font-weight:900;padding:5px 12px;border-radius:3px}.doc-chip span{font-family:Tahoma,Arial,sans-serif;font-size:15px;margin-left:8px}.doc-no{font-size:15px;color:#1F4E79;font-weight:900;margin-top:5px;text-align:right}'
 +'.info-wrap{padding:11px 12mm 10px}.variant-title{text-align:center;font-size:16px;letter-spacing:2px;color:#1F4E79;font-weight:900;margin-bottom:10px}.variant-title span{font-family:Tahoma,Arial,sans-serif;font-size:18px;margin-left:10px}.split-panels{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch}.panel{border:1px solid #CBD5E1;border-radius:8px;background:#fff;min-height:92px;padding:11px 13px}.panel-title{font-size:8.5px;text-transform:uppercase;letter-spacing:1.2px;color:#64748B;font-weight:900;margin-bottom:7px}.cust-name{font-size:14px;color:#1F4E79;font-weight:900;margin-bottom:4px}.cust-line{font-size:10.5px;color:#475569;line-height:1.55}.cust-line span{display:inline-block;width:94px;color:#64748B;font-weight:700}.info-row{display:grid;grid-template-columns:130px 1fr;gap:8px;padding:4px 0;border-bottom:1px solid #EEF2F7;font-size:10.5px}.info-row:last-child{border-bottom:none}.info-row span{color:#64748B;font-weight:700}.info-row b{color:#1E293B;font-weight:800}'
-+'.items-wrap{padding:0 12mm}.items{width:100%;border-collapse:collapse}.items thead{display:table-header-group}.items tr{page-break-inside:avoid;break-inside:avoid}.items th{background:#1F4E79;color:#fff;padding:7px 8px;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.4px}.items th.r,.items td.r{text-align:right}.items th.c,.items td.c{text-align:center}.items td{padding:6px 8px;border-bottom:1px solid #EEF2F7;font-size:10.5px;color:#000!important;font-weight:400!important}.items td *{color:#000!important;font-weight:400!important}.items tbody tr:nth-child(even) td{background:#F8FAFC}.num{text-align:center;color:#64748B!important;width:30px}.dsub{font-size:9px;color:#64748B!important;margin-top:2px}.imgcell{text-align:center}.imgcell img{width:'+imageSize.w+';height:'+imageSize.h+';object-fit:contain;border:1px solid #CBD5E1;border-radius:4px;background:#fff;padding:2px}.imgph{width:'+imageSize.w+';height:'+imageSize.h+';border:1px dashed #CBD5E1;border-radius:4px;font-size:8px;color:#94A3B8!important;display:flex;align-items:center;justify-content:center;margin:0 auto}.ref-section{margin:10px 12mm 0;page-break-before:auto;page-break-inside:auto}.ref-heading{background:#1F4E79;color:#fff;padding:7px 10px;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.8px;border-radius:4px 4px 0 0}.ref-item{border:1px solid #CBD5E1;border-top:none;padding:9px 10px;page-break-inside:avoid}.ref-no{font-size:9px;color:#64748B;font-weight:900;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}.ref-body{display:grid;grid-template-columns:68mm 1fr;gap:12px;align-items:start}.ref-img img{width:60mm;height:50mm;object-fit:contain;border:1px solid #CBD5E1;border-radius:5px;background:#fff;padding:3px}.ref-ph{width:60mm;height:50mm;border:1px dashed #CBD5E1;border-radius:5px;display:flex;align-items:center;justify-content:center;color:#94A3B8!important;font-size:10px}.ref-title{font-size:12px;font-weight:800;color:#1F4E79!important;margin-bottom:4px}.ref-desc{font-size:10px;color:#475569!important;line-height:1.5}'
++'.items-wrap{padding:0 12mm}.items{width:100%;border-collapse:collapse}.items thead{display:table-header-group}.items tr{page-break-inside:avoid;break-inside:avoid}.items th{background:#1F4E79;color:#fff;padding:7px 8px;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.4px}.items th.r,.items td.r{text-align:right}.items th.c,.items td.c{text-align:center}.items td{padding:6px 8px;border-bottom:1px solid #EEF2F7;font-size:10.5px;color:#000!important;font-weight:400!important}.items td *{color:#000!important;font-weight:400!important}.items tbody tr:nth-child(even) td{background:#F8FAFC}.num{text-align:center;color:#64748B!important;width:30px}.dsub{font-size:9px;color:#64748B!important;margin-top:2px}.inline-note{margin-top:5px;font-size:8.5px;line-height:1.35}.inline-note b{font-weight:800!important}.note-highlight{padding:4px 6px;background:#fffbea;border:1px solid #eadfae;color:#5a4a0a!important}.note-blue{padding:4px 7px;background:#eef6fd;border-left:3px solid #2684d8;color:#294d6d!important}.note-minimal{padding:2px 1px;color:#5d7186!important;font-style:italic}.note-badge{display:flex;align-items:center;gap:6px;color:#415a70!important}.note-badge span{display:inline-block;background:#2684d8;color:#fff!important;border-radius:3px;padding:2px 5px;font-size:7px;font-weight:800!important;letter-spacing:.4px}.note-badge em{font-style:normal}.imgcell{text-align:center}.imgcell img{width:'+imageSize.w+';height:'+imageSize.h+';object-fit:contain;border:1px solid #CBD5E1;border-radius:4px;background:#fff;padding:2px}.imgph{width:'+imageSize.w+';height:'+imageSize.h+';border:1px dashed #CBD5E1;border-radius:4px;font-size:8px;color:#94A3B8!important;display:flex;align-items:center;justify-content:center;margin:0 auto}.ref-section{margin:10px 12mm 0;page-break-before:auto;page-break-inside:auto}.ref-heading{background:#1F4E79;color:#fff;padding:7px 10px;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.8px;border-radius:4px 4px 0 0}.ref-item{border:1px solid #CBD5E1;border-top:none;padding:9px 10px;page-break-inside:avoid}.ref-no{font-size:9px;color:#64748B;font-weight:900;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}.ref-body{display:grid;grid-template-columns:68mm 1fr;gap:12px;align-items:start}.ref-img img{width:60mm;height:50mm;object-fit:contain;border:1px solid #CBD5E1;border-radius:5px;background:#fff;padding:3px}.ref-ph{width:60mm;height:50mm;border:1px dashed #CBD5E1;border-radius:5px;display:flex;align-items:center;justify-content:center;color:#94A3B8!important;font-size:10px}.ref-title{font-size:12px;font-weight:800;color:#1F4E79!important;margin-bottom:4px}.ref-desc{font-size:10px;color:#475569!important;line-height:1.5}'
 +'.after{display:grid;grid-template-columns:1fr 270px;gap:18px;padding:12px 12mm 0;page-break-inside:avoid}.terms{background:#F8FAFC;border-left:3px solid #1F4E79;padding:9px 12px}.terms-title{font-size:8.5px;text-transform:uppercase;letter-spacing:1.2px;color:#1F4E79;font-weight:900;margin-bottom:5px}.terms ul{padding-left:15px;color:#475569;font-size:10px;line-height:1.5}.tot{border:1px solid #CBD5E1;border-radius:8px;overflow:hidden}.tot-row{display:flex;justify-content:space-between;padding:6px 11px;border-bottom:1px solid #E2E8F0;font-size:10.5px}.tot-row span{color:#64748B}.tot-row b{font-variant-numeric:tabular-nums}.tot-net{background:#1F4E79;color:#fff;padding:11px;display:flex;justify-content:space-between;align-items:center}.tot-net span{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#DCEBFA;font-weight:900}.tot-net b{font-size:17px;color:#fff;font-weight:900}.notes{margin:9px 12mm 0;padding:8px 12px;background:#FFFBEA;border:1px solid #F0D77B;font-size:10px;color:#5A4A0A}.sig{display:grid;grid-template-columns:1fr 1fr;gap:55px;margin:15mm 12mm 10px;page-break-inside:avoid}.sig div{border-top:1.5px solid #1F4E79;padding-top:6px;font-size:9px;color:#64748B;font-weight:700}.closing{margin:8px 12mm 10px;text-align:center;font-size:10px;line-height:1.5;color:#64748B;font-style:italic;page-break-inside:avoid}.closing span{font-size:9.5px;color:#6B7280}.footer{border-top:1px solid #CBD5E1;padding:6px 12mm 4px;font-size:9.5px;color:#64748B;display:flex;justify-content:space-between;line-height:1.5}'
-+'</style></head><body><table class="pw"><tfoot><tr><td style="padding:0"><div class="footer"><span>'+f1+'</span><span>'+f2+'</span></div></td></tr></tfoot><tbody><tr><td style="padding:0">'
++'</style></head><body><div class="fixed-footer">'+footerInfo+'</div><table class="pw"><tfoot><tr><td style="padding:0"><div class="footer">'+footerInfo+'</div></td></tr></tfoot><tbody><tr><td style="padding:0">'
 +'<div class="header"><div class="hrow"><div class="brand"><div class="logo-card">'+logoHtml+'</div><div class="co-meta">'+headerInfo+'</div></div><div><div class="doc-chip">'+docTitle+'</div><div class="doc-no">'+q.qno+'</div></div></div></div>'
 +'<div class="info-wrap"><div class="variant-title">'+title+'</div><div class="split-panels">'+custBlock+docPanel+'</div></div>'
 +'<div class="items-wrap"><table class="items"><thead><tr>'+tableHead+'</tr></thead><tbody>'+tableRows+'</tbody></table></div>'
-+'<div class="after"><div class="terms"><div class="terms-title">'+termsTitle+'</div><ul>'+terms+'</ul></div><div class="tot">'
++'<div class="after"><div class="terms"><div class="terms-title">'+termsTitle+'</div><ul>'+termsWithAdditional+'</ul></div><div class="tot">'
 +totRow(labels.subtotal,pdfSummaryMoney(sub))+(disc>0?totRow(labels.discount,'− '+pdfSummaryMoney(disc))+totRow(labels.beforeVat,pdfSummaryMoney(bvat)):'')+totRow(labels.vat+' ('+getQuoteVatPercent(q)+'%)',pdfSummaryMoney(vat))+'<div class="tot-net"><span>'+labels.net+'</span><b>'+pdfGrandTotalMoney(net)+'</b></div></div></div>'
 +(q.notes?'<div class="notes"><strong>Notes:</strong> '+q.notes+'</div>':'')
 +attachmentHtml
@@ -10960,139 +11278,14 @@ function printQuotationExecutive(id) {
 }
 
 /* ══════════ TEMPLATE 4: ARABIC / ENGLISH ══════════ */
-function printQuotationBilingual(id) {
-  const d=_tplData(id); if(!d) return;
-  const {q,sub,disc,bvat,vat,net,vu,co,f1,f2,headerInfo}=d;
-  const coAr='\u062f\u0627\u0648\u0646 \u062a\u0627\u0648\u0646 \u0644\u0644\u062a\u062c\u0627\u0631\u0629';
-  const rows=(q.items||[]).map(function(it,i){
-    if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
-    return '<tr style="'+(i%2===0?'background:#FFF9F0':'background:#fff')+'">'
-      +'<td style="padding:6px 8px;text-align:center;font-size:10px;color:#888;border-bottom:1px solid #ede0cc">'+String(i+1).padStart(2,'0')+'</td>'
-      +'<td style="padding:6px 8px;font-size:10.5px;border-bottom:1px solid #ede0cc">'+(it.desc||'')+'</td>'
-      +'<td style="padding:6px 8px;text-align:center;font-size:10.5px;border-bottom:1px solid #ede0cc">'+it.qty+'</td>'
-      +'<td style="padding:6px 8px;text-align:center;font-size:10px;color:#666;border-bottom:1px solid #ede0cc">'+(it.uom||'')+'</td>'
-      +'<td style="padding:6px 8px;text-align:right;font-size:10.5px;border-bottom:1px solid #ede0cc">'+Number(it.up).toLocaleString('en',{minimumFractionDigits:2})+'</td>'
-      +'<td style="padding:6px 8px;text-align:right;font-size:10.5px;font-weight:600;border-bottom:1px solid #ede0cc">'+t.toLocaleString('en',{minimumFractionDigits:2})+'</td></tr>';
-  }).join('');
-  // Arabic labels
-  const AR={q:'\u0639\u0631\u0636 \u0633\u0639\u0631',prep:'\u0627\u0644\u0639\u0645\u064a\u0644',ref:'\u0627\u0644\u0645\u0631\u062c\u0639',
-    val:'\u0627\u0644\u0635\u0644\u0627\u062d\u064a\u0629',del:'\u0627\u0644\u062a\u0633\u0644\u064a\u0645',pay:'\u0627\u0644\u062f\u0641\u0639',
-    desc:'\u0627\u0644\u0628\u064a\u0627\u0646',qty:'\u0627\u0644\u0643\u0645\u064a\u0629',uom:'\u0627\u0644\u0648\u062d\u062f\u0629',
-    price:'\u0633\u0639\u0631 \u0627\u0644\u0648\u062d\u062f\u0629',amt:'\u0627\u0644\u0645\u0628\u0644\u063a',
-    subt:'\u0627\u0644\u0645\u062c\u0645\u0648\u0639',discl:'\u062e\u0635\u0645',
-    b4vat:'\u0627\u0644\u0645\u062c\u0645\u0648\u0639 \u0642\u0628\u0644 \u0627\u0644\u0636\u0631\u064a\u0628\u0629',
-    vatl:'\u0636\u0631\u064a\u0628\u0629 \u0627\u0644\u0642\u064a\u0645\u0629 \u0627\u0644\u0645\u0636\u0627\u0641\u0629',
-    netl:'\u0635\u0627\u0641\u064a \u0627\u0644\u0645\u0628\u0644\u063a',
-    terms:'\u0627\u0644\u0634\u0631\u0648\u0637 \u0648\u0627\u0644\u0623\u062d\u0643\u0627\u0645',
-    custsig:'\u062a\u0648\u0642\u064a\u0639 \u0648\u0627\u0639\u062a\u0645\u0627\u062f \u0627\u0644\u0639\u0645\u064a\u0644',
-    authsig:'\u0627\u0644\u062a\u0648\u0642\u064a\u0639 \u0627\u0644\u0645\u0639\u062a\u0645\u062f',
-    tax:'\u0636\u0631\u064a\u0628\u0629',crl:'\u0633.\u062a'};
-  const totRow=function(en,ar,v,last){
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 12px;'+(last?'':'border-bottom:1px solid #E2D5C0;')+'font-size:10.5px">'
-      +'<div><span>'+en+'</span><br><span style="font-size:10px;color:#666;direction:rtl">'+ar+'</span></div>'
-      +'<span style="font-weight:600">'+v+'</span></div>';
-  };
-  const metaCell=function(en,ar,val){
-    return '<div><div style="display:flex;justify-content:space-between">'
-      +'<span style="font-size:7.5px;color:#8B98A8;font-weight:700;text-transform:uppercase">'+en+'</span>'
-      +'<span style="font-size:11px;color:#8B98A8;font-weight:700;direction:rtl">'+ar+'</span></div>'
-      +'<div style="font-size:10px;font-weight:600;color:#0B539D;margin-top:1px">'+val+'</div></div>';
-  };
-  const html='<!DOCTYPE html><html><head><title>'+q.qno+'</title><meta charset="UTF-8"><style>'
-+'*{box-sizing:border-box;margin:0;padding:0}'
-+'body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#1a1a1a;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
-+'.ar{direction:rtl}'
-+'@media print{@page{size:A4;margin:10mm 12mm 18mm 12mm;@bottom-right{content:"Page " counter(page) " of " counter(pages);font-family:Arial;font-size:8pt;color:#555}}'
-+'tfoot td{padding:0 !important}.pw{box-shadow:none !important}}'
-+'@media screen{body{background:#d0d0d0;padding:20px 0}.pw{box-shadow:0 4px 20px rgba(0,0,0,.2)}}'
-+'.pw{width:210mm;margin:0 auto;background:#fff;border-collapse:collapse;table-layout:fixed}'
-+'.pw>tfoot>tr>td,.pw>tbody>tr>td{padding:0;vertical-align:top}'
-+'.quote-items thead{display:table-header-group}.quote-items tr{page-break-inside:avoid;break-inside:avoid}.quote-items tbody td,.quote-items tbody td *{color:#000!important;font-weight:400!important}'
-+'</style></head><body><table class="pw">'
-+'<tfoot><tr><td><div style="border-top:1.5px solid #0B539D;padding:5px 12mm 4px;font-size:10.5px;color:#444;background:#fff;display:flex;justify-content:space-between;line-height:1.6;font-weight:500">'
-+'<span>'+f1+'</span><span>'+f2+'</span></div></td></tr></tfoot>'
-+'<tbody><tr><td>'
-// Arabic header
-+'<div style="background:#0B539D;padding:16px 12mm;border-bottom:4px solid #F15A25">'
-+'<div style="display:flex;justify-content:space-between;align-items:center">'
-+'<div style="display:flex;align-items:center;gap:12px">'
-+(settings.logo?'<div style="background:#fff;border-radius:5px;padding:5px 10px;box-shadow:0 2px 5px rgba(0,0,0,.2)"><img src="'+settings.logo+'" style="height:46px;width:auto;max-width:195px;object-fit:contain"></div>':'')
-+'<div><div style="color:#fff;font-size:13px;font-weight:700">'+co+'</div>'
-+'<div class="ar" style="color:#CFE2F4;font-size:17px;margin-top:2px;text-align:left;font-weight:700">'+coAr+'</div>'
-+'<div style="color:#CFE2F4;font-size:8.5px;margin-top:3px">'
-+headerInfo
-+'</div></div></div>'
-+'<div style="text-align:right">'
-+'<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;margin-bottom:6px">'
-+'<span style="background:#F15A25;color:#fff;font-size:13px;padding:4px 10px;border-radius:3px;letter-spacing:1.4px;font-weight:800">QUOTATION</span>'
-+'<span class="ar" style="background:#F15A25;color:#fff;font-size:13px;padding:4px 10px;border-radius:3px;font-weight:800">'+AR.q+'</span></div>'
-+'<div style="color:#fff;font-size:16px;font-weight:800">'+q.qno+'</div>'
-+(q.ref?'<div style="color:#FFD08A;font-size:9.5px;font-weight:800;margin-top:2px">Client Ref: '+q.ref+'</div>':'')
-+'<div style="color:#CFE2F4;font-size:8.5px;margin-top:3px">Issued: '+fmtDate(q.date)+' &nbsp;\u00b7&nbsp; Valid: '+fmtDate(vu)+'</div>'
-+'</div></div></div>'
-// Bilingual meta
-+'<div style="display:grid;grid-template-columns:1.3fr 1fr;margin:8px 12mm 10px;border:1px solid #E2D5C0">'
-+'<div style="padding:10px 14px;border-right:1px solid #E2D5C0">'
-+'<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
-+'<span style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#8B98A8;font-weight:700">Customer</span>'
-+'<span class="ar" style="font-size:8px;color:#8B98A8;font-weight:700">'+AR.prep+'</span></div>'
-+'<div style="font-size:12px;font-weight:700;color:#0B539D">'+q.company+'</div>'
-+(q.contact?'<div style="font-size:10px;color:#555;margin-top:2px">Attention: '+q.contact+'</div>':'')
-+(q.project?'<div style="font-size:10px;color:#555">Project: '+q.project+'</div>':'')
-+(q.city?'<div style="font-size:10px;color:#555">'+q.city+'</div>':'')+'</div>'
-+'<div style="padding:10px 14px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 10px">'
-+metaCell('Validity',AR.val,(q.validity||7)+' days')
-+metaCell('Currency','العملة','SAR')
-+metaCell('Delivery',AR.del,q.delivery||'\u2014')
-+metaCell('Payment',AR.pay,q.payment||'\u2014')
-+'</div></div></div>'
-// Bilingual items table
-+'<div style="padding:0 12mm"><table class="quote-items" style="width:100%;border-collapse:collapse">'
-+'<thead><tr style="background:#0B539D">'
-+'<th style="padding:6px 8px;color:#fff;font-size:8.5px;text-align:center;width:28px">#</th>'
-+'<th style="padding:6px 8px;color:#fff;font-size:8.5px;text-align:left">Description <span class="ar" style="font-size:11px;color:#CFE2F4;font-weight:600">/ '+AR.desc+'</span></th>'
-+'<th style="padding:6px 8px;color:#fff;font-size:8.5px;text-align:center;width:46px">Qty<span class="ar" style="font-size:10.5px;color:#CFE2F4;display:block;font-weight:600">'+AR.qty+'</span></th>'
-+'<th style="padding:6px 8px;color:#fff;font-size:8.5px;text-align:center;width:46px">UOM<span class="ar" style="font-size:10.5px;color:#CFE2F4;display:block;font-weight:600">'+AR.uom+'</span></th>'
-+'<th style="padding:6px 8px;color:#fff;font-size:8.5px;text-align:right;width:84px">Unit Price<span class="ar" style="font-size:10.5px;color:#CFE2F4;display:block;font-weight:600">'+AR.price+'</span></th>'
-+'<th style="padding:6px 8px;color:#fff;font-size:8.5px;text-align:right;width:88px">Amount<span class="ar" style="font-size:10.5px;color:#CFE2F4;display:block;font-weight:600">'+AR.amt+'</span></th>'
-+'</tr></thead><tbody>'+rows+'</tbody></table></div>'
-// Bilingual totals
-+'<div style="display:flex;justify-content:flex-end;padding:10px 12mm;page-break-inside:avoid">'
-+'<div style="width:290px;border:1px solid #E2D5C0;overflow:hidden">'
-+totRow('Sub-total',AR.subt,fmt(sub))
-+(disc>0?totRow('Discount',AR.discl,'\u2212 '+fmt(disc))+totRow('Total before VAT',AR.b4vat,fmt(bvat)):'')
-+totRow('VAT ('+getQuoteVatPercent(q)+'%)',AR.vatl,fmt(vat),true)
-+'<div style="background:#0B539D;color:#fff;padding:10px 12px;display:flex;justify-content:space-between;align-items:center">'
-+'<div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.8px;color:#BFDCF2">Net Amount</div>'
-+'<div class="ar" style="font-size:10.5px;color:#BFDCF2;margin-top:1px;text-align:left">'+AR.netl+'</div></div>'
-+'<span style="font-size:15px;font-weight:800">'+fmt(net)+'</span></div></div></div>'
-// Bilingual terms
-+'<div style="margin:0 12mm;padding:10px 13px;background:#FFF9F0;border-left:3px solid #F15A25;page-break-inside:avoid">'
-+'<div style="display:flex;justify-content:space-between;margin-bottom:6px">'
-+'<span style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#0B539D">Terms &amp; Conditions</span>'
-+'<span class="ar" style="font-size:11.5px;font-weight:700;color:#0B539D">'+AR.terms+'</span></div>'
-+'<ul style="padding-left:14px;color:#555;font-size:10px">'
-+'<li style="margin-bottom:2px">This quotation is valid for '+(q.validity||7)+' days from the date of issue.</li>'
-+'<li style="margin-bottom:2px">Delivery / '+AR.del+': '+(q.delivery||'\u2014')+'</li>'
-+'<li style="margin-bottom:2px">Payment / '+AR.pay+': '+(q.payment||'\u2014')+'</li>'
-+'<li>Stock subject to availability at the time of order confirmation.</li></ul></div>'
-+(q.notes?'<div style="margin:8px 12mm 0;padding:8px 12px;background:#fffbea;border:1px solid #F0D77B;font-size:10px"><strong>Notes:</strong> '+q.notes+'</div>':'')
-// Bilingual signature
-+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin:15mm 12mm 8px;page-break-inside:avoid">'
-+'<div style="border-top:1px solid #2B2B2B;padding-top:5px">'
-+'<div style="font-size:8.5px;color:#888">CUSTOMER ACCEPTANCE &amp; SIGNATURE</div>'
-+'<div class="ar" style="font-size:11.5px;color:#555;margin-top:1px;text-align:left">'+AR.custsig+'</div></div>'
-+'<div style="border-top:1px solid #2B2B2B;padding-top:5px">'
-+'<div style="font-size:8.5px;color:#888">AUTHORISED SIGNATURE \u2014 '+co.toUpperCase()+'</div>'
-+'<div class="ar" style="font-size:11.5px;color:#555;margin-top:1px;text-align:left">'+AR.authsig+' \u2014 '+coAr+'</div></div></div>'
-+'<div style="margin:8px 12mm 10px;text-align:center;font-size:10px;line-height:1.5;color:#64748B;font-style:italic;page-break-inside:avoid">Thank you for the opportunity to quote. We look forward to serving you.<br><span style="font-size:9.5px;color:#6B7280">If you have any questions regarding this quotation, please feel free to contact us.</span></div>'
-+'</td></tr></tbody></table>'
-+'<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print()},600)}<'+'/script>'
-+'</body></html>';
-  _tplOpen(html);
+function printQuotationArabicEnglish(id) {
+  // v175 — rebuilt from the approved Standard Product A4 master.
+  // No independent bilingual layout is maintained: structure, spacing, pagination,
+  // line-note behavior, totals, signatures and footer all come from the approved base.
+  // The bilingual flag only adds Arabic counterparts to labels/content.
+  return printQuotationProductA4(id, 'bilingual');
 }
+
 
 
 

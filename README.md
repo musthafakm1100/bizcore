@@ -112,3 +112,17 @@ v28 page action standard:
 - Other body cells: 12.5px / regular / #334155.
 - Header cells: 12px / 600 / #536273.
 - RFQ-equivalent row height, padding, borders and hover behavior.
+
+## v175 — Arabic / English template clean rebuild
+- Deleted the separate legacy Arabic / English quotation renderer.
+- Recreated Arabic / English directly from the approved Standard Product A4 print/PDF master.
+- Arabic / English now inherits the same structure, dimensions, spacing, line notes, terms/totals arrangement, signatures, pagination and footer as Product.
+- Only bilingual labels/content are added; there is no separate visual layout to drift from the approved base.
+
+## V186 — Mobile-first Delivery Confirmation
+- Redesigned Confirm Delivery as a compact, modern operational workspace.
+- Added touch-friendly +/- quantity controls while retaining direct numeric entry.
+- Added automatic Fully accepted / Partial / Rejected line states and live summary chips.
+- Added clearer authenticated-user banner and Customer Receipt section.
+- Added sticky mobile action bar, safe-area support, larger touch targets, and responsive layouts down to narrow phones.
+- Existing delivery acceptance validation, rejection reasons/disposition, persistence, and confirmation workflow remain unchanged.
