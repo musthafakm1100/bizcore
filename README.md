@@ -1,3 +1,14 @@
+V187 Delivery Confirmation UX update
+
+- Compact accepted/rejected controls on desktop and mobile
+- Accepted green / Rejected red visual separation
+- Keeps both quantity controls on one mobile row
+- Independent quantity entry with immediate validation
+- Inline invalid-line messages and status badges
+- Confirmation scrolls/focuses first invalid line
+- Fixed viewport action message above mobile sticky footer
+- Rejection details expand only when rejected qty > 0
+
 # BizCore — Downtown Trading Est.
 ## Consolidated Build — August 2026
 
