@@ -137,3 +137,19 @@ v28 page action standard:
 - Added clearer authenticated-user banner and Customer Receipt section.
 - Added sticky mobile action bar, safe-area support, larger touch targets, and responsive layouts down to narrow phones.
 - Existing delivery acceptance validation, rejection reasons/disposition, persistence, and confirmation workflow remain unchanged.
+
+## v193 — Delivery Acceptance Correction, Revision & History
+- Confirmed delivery acceptance is locked as an auditable event.
+- Added Correct Confirmation for data-entry mistakes with mandatory reason.
+- Added Revise Customer Acceptance for genuine post-confirmation acceptance changes with mandatory reason.
+- Original confirmation and every later change are retained in an immutable-style acceptanceHistory event list.
+- Current accepted/rejected quantities continue to drive SO remaining quantity calculations.
+- Added compact History timeline to the DN acceptance card.
+
+## v196 Responsive Audit
+- Added screen-specific responsive system across phones, tablets, laptops and desktops.
+- Fluid mode for forms/detail screens.
+- Adaptive mode for registers and overview/toolbars.
+- Wide Workspace mode for Pricing with controlled horizontal scrolling rather than squeezed columns.
+- Improved modal sizing, touch targets, table scrollers, pagination, topbar, form stacking and landscape-phone handling.
+- No business logic changes; V195 Delivery Confirmation quantity synchronization retained.
