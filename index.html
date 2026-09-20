@@ -360,7 +360,7 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="rfq-monitor-pro-list">
 <div class="rfq-monitor-section-label rfq-monitor-status-label">Status</div>
-<button class="rfq-main-monitor-item pricing rfq-monitor-pro-row" data-rfq-monitor-filter="Pricing" onclick="applyRFQMonitorFilter('Pricing',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-pricing"></i>Waiting Pricing</span><strong id="rfq-k-pricing">0</strong></button>
+<button class="rfq-main-monitor-item pricing rfq-monitor-pro-row" data-rfq-monitor-filter="New" onclick="applyRFQMonitorFilter('New',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-pricing"></i>Awaiting Pricing</span><strong id="rfq-k-pricing">0</strong></button>
 <button class="rfq-main-monitor-item quoted rfq-monitor-pro-row" data-rfq-monitor-filter="Quoted" onclick="applyRFQMonitorFilter('Quoted',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-quoted"></i>Quoted / Sales Order</span><strong id="rfq-k-quoted">0</strong></button>
 <button class="rfq-main-monitor-item nobid rfq-monitor-pro-row" data-rfq-monitor-filter="No Bid" onclick="applyRFQMonitorFilter('No Bid',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-nobid"></i>No Bid</span><strong id="rfq-k-nobid">0</strong></button>
 <button class="rfq-main-monitor-item overdue rfq-monitor-pro-row" data-rfq-monitor-filter="Overdue" onclick="applyRFQMonitorFilter('Overdue',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-overdue"></i>Overdue</span><strong id="rfq-k-overdue">0</strong></button>
@@ -1316,7 +1316,7 @@ document.addEventListener('error', function(e) {
 <h2 id="view-title">Quotation details</h2>
 <div style="display:flex;align-items:center;gap:8px">
 
-<button class="close-btn" onclick="closeModal('view-modal')">✕</button>
+<button class="close-btn" onclick="closeViewWithReturn('view-modal')">✕</button>
 </div>
 </div>
 <!-- Frozen status bar — never scrolls, always visible -->
@@ -1752,7 +1752,7 @@ document.addEventListener('error', function(e) {
 <h2 id="rfq-view-title">RFQ details</h2>
 <div style="display:flex;align-items:center;gap:8px">
 
-<button class="close-btn" onclick="closeModal('rfq-view-modal')">✕</button>
+<button class="close-btn" onclick="closeViewWithReturn('rfq-view-modal')">✕</button>
 </div>
 </div>
 <div class="modal-body" id="rfq-view-body"></div>
@@ -1846,7 +1846,7 @@ document.addEventListener('error', function(e) {
 <h2 id="so-view-title">Sales Order</h2>
 <div style="display:flex;align-items:center;gap:8px">
 
-<button class="close-btn" onclick="closeModal('so-view-modal')">✕</button>
+<button class="close-btn" onclick="closeViewWithReturn('so-view-modal')">✕</button>
 </div>
 </div>
 <!-- Frozen status pipeline bar -->
@@ -1936,12 +1936,12 @@ document.addEventListener('error', function(e) {
 <div class="modal modal-normal">
 <div class="modal-header">
 <h2 id="dn-print-title">Delivery Note</h2>
-<button class="close-btn" onclick="closeModal('dn-print-modal')">✕</button>
+<button class="close-btn" onclick="closeViewWithReturn('dn-print-modal')">✕</button>
 </div>
 <div class="modal-body" id="dn-print-body" style="padding:0;overflow-y:auto"></div>
 <div class="dn-view-actionbar" role="toolbar" aria-label="Delivery Note actions">
   <div class="dn-view-actionbar-spacer"></div>
-  <button class="btn btn-secondary" onclick="closeModal('dn-print-modal')"><i class="ti ti-x"></i><span>Close</span></button>
+  <button class="btn btn-secondary" onclick="closeViewWithReturn('dn-print-modal')"><i class="ti ti-x"></i><span>Close</span></button>
   <button class="btn btn-secondary" id="dn-open-so-btn" onclick="openSOFromDNView()"><i class="ti ti-file-description"></i><span>Sales Order</span></button>
   <button class="btn btn-success" id="dn-open-confirm-btn" onclick="openDeliveryConfirmationFromDNView()"><i class="ti ti-device-mobile-check"></i><span>Delivery Confirmation</span></button>
   <button class="btn btn-primary" onclick="openDNFormatDialog('print')"><i class="ti ti-printer"></i><span>Print / PDF</span></button>
@@ -1950,13 +1950,14 @@ document.addEventListener('error', function(e) {
 </div>
 <!-- DELIVERY NOTE FORMAT MODAL -->
 <div class="modal-overlay dn-format-overlay" id="dn-format-modal">
-<div class="modal modal-compact" style="max-width:560px;height:auto">
-<div class="modal-header"><h2>Delivery Note Format</h2><button class="close-btn" onclick="closeModal('dn-format-modal')">✕</button></div>
-<div class="modal-body" style="padding:20px">
-<label style="display:flex;gap:12px;padding:13px;border:1px solid #d9e2ec;border-radius:8px;margin-bottom:10px;cursor:pointer"><input type="radio" name="dn-print-format" id="dn-format-standard" value="standard" checked><span><strong>Standard Delivery Note</strong><small style="display:block;color:#6b7e90;margin-top:3px">Customer-facing document with this delivery quantity.</small></span></label>
-<label style="display:flex;gap:12px;padding:13px;border:1px solid #d9e2ec;border-radius:8px;margin-bottom:10px;cursor:pointer"><input type="radio" name="dn-print-format" value="progress"><span><strong>Delivery Progress Note</strong><small style="display:block;color:#6b7e90;margin-top:3px">Ordered, previous accepted, this delivery and remaining quantities.</small></span></label>
-<label style="display:flex;gap:12px;padding:13px;border:1px solid #d9e2ec;border-radius:8px;cursor:pointer"><input type="radio" name="dn-print-format" value="internal"><span><strong>Internal Delivery Copy</strong><small style="display:block;color:#6b7e90;margin-top:3px">Adds operational status, users, timestamps and line acceptance status.</small></span></label>
-</div>
+<div class="modal modal-compact dn-format-dialog">
+<div class="modal-header"><div class="dn-format-heading"><h2>Delivery Note Format</h2><div class="dn-format-subtitle">Choose the format you want to print.</div></div><button class="close-btn" onclick="closeModal('dn-format-modal')">✕</button></div>
+<div class="modal-body">
+<div class="dn-format-options">
+<label class="dn-format-option"><input type="radio" name="dn-print-format" id="dn-format-standard" value="standard" checked><span class="dn-format-icon"><i class="ti ti-file-description"></i></span><span class="dn-format-copy"><strong>Standard Delivery Note</strong><small>Customer-facing document with this delivery quantity.</small></span><span class="dn-format-check"><i class="ti ti-check"></i></span></label>
+<label class="dn-format-option"><input type="radio" name="dn-print-format" value="progress"><span class="dn-format-icon"><i class="ti ti-chart-bar"></i></span><span class="dn-format-copy"><strong>Delivery Progress Note</strong><small>Ordered, previous accepted, this delivery and remaining quantities.</small></span><span class="dn-format-check"><i class="ti ti-check"></i></span></label>
+<label class="dn-format-option"><input type="radio" name="dn-print-format" value="internal"><span class="dn-format-icon"><i class="ti ti-lock"></i></span><span class="dn-format-copy"><strong>Internal Delivery Copy</strong><small>Adds operational status, users, timestamps and line acceptance status.</small></span><span class="dn-format-check"><i class="ti ti-check"></i></span></label>
+</div></div>
 <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('dn-format-modal')">Cancel</button><button class="btn btn-primary" onclick="continueDNFormat()"><i class="ti ti-printer"></i>Continue</button></div>
 </div></div>
 <!-- TEMPLATE PICKER MODAL -->
@@ -2636,7 +2637,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=216';
+    s.src = 'js/app.js?v=227';
     document.body.appendChild(s);
   }
 });
@@ -2685,7 +2686,7 @@ console.log('BizCore Firebase ready ✅');
   // Runs after the main app; failure here should never block the app itself.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=215', { updateViaCache: 'none' }).catch(err => {
+      navigator.serviceWorker.register('sw.js?v=227', { updateViaCache: 'none' }).catch(err => {
         console.warn('Service worker registration failed:', err);
       });
     });

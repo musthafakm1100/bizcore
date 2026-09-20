@@ -189,3 +189,78 @@ V215 deployment consistency fix:
 - Save-as-PDF title uses Quotation No - Customer Name.
 - After print/save, focus returns to the quotation screen and the temporary print window closes where allowed.
 - Bumped app/service-worker cache version to v216 for GitHub/PWA consistency.
+
+## v217
+- Redesigned Delivery Note Format chooser as a compact centered visual modal with icon cards, clear selected state, compact footer, and responsive mobile sizing.
+
+
+## V218
+- Sales Order dispatch eligibility now uses accepted + in-transit quantities rather than historical dispatched quantity.
+- Customer-rejected quantities return to Remaining and re-enable Dispatch delivery for replacement/redelivery.
+- Existing SO status logic remains acceptance-based: rejected remainder results in Partially Delivered when some quantity was accepted.
+
+
+## V219
+- RFQ no longer advances to Pricing merely by opening the Pricing screen.
+- RFQ advances to Pricing only after a successful Pricing save.
+- Legacy RFQs falsely marked Pricing without saved pricing content display as New.
+- RFQ status display uses the clearer label In Pricing.
+- GitHub/PWA shell cache bumped to v219.
+
+
+## V220
+- RFQ Overview label changed from “Waiting Pricing” to “Awaiting Pricing”.
+- Awaiting Pricing now counts RFQs whose workflow stage is New (no saved Pricing record yet), including overdue RFQs that are still unpriced.
+- Overdue remains a separate overlapping urgency indicator and is not added on top of the Awaiting Pricing total.
+- Clicking Awaiting Pricing now filters to the same New/unpriced RFQ population.
+- GitHub/PWA shell cache bumped to v220.
+
+
+## V221
+- Added global context-aware return navigation for linked document view screens.
+- Closing a linked Quotation, RFQ, Pricing detail, Sales Order, or Delivery Note returns to the exact source modal when available.
+- Direct/register-opened documents still close normally to their register.
+- Added reusable `closeViewWithReturn(modalId)` standard for future BizCore view/detail windows.
+- GitHub/PWA shell cache bumped to v221.
+
+
+## V222
+- RFQ Detail -> Edit RFQ now returns to the same RFQ Detail on Cancel/Close.
+- Saving an edited RFQ also returns to and refreshes the same RFQ Detail.
+- Entry close transitions now honour the global V221 return-navigation stack.
+- GitHub/PWA shell cache bumped to v222.
+
+## V223 — Flicker-free RFQ View/Edit transition
+- RFQ Detail -> Edit keeps the detail screen painted until the edit form is ready, then swaps atomically.
+- Edit RFQ -> Close/Cancel returns synchronously to the same RFQ Detail without an intermediate register/transition render.
+- Preserves the V221/V222 global return-navigation context and existing edit-lock behavior.
+
+
+## V224 — RFQ Editor Blocking Overlay
+- Edit RFQ now shows the global blocking overlay immediately while the editor and edit lock are being prepared.
+- Overlay message: “Opening RFQ Editor…” with the standard BizCore progress treatment.
+- Prevents clicks, keyboard interaction and duplicate actions on the RFQ Detail during the loading delay.
+- Preserves V223 flicker-free behavior: RFQ Detail remains painted underneath until the editor is ready, then the editor is revealed directly.
+- Uses the reusable global BizCore screen-transition manager so the same pattern is available to future slow screen transitions.
+
+
+## V225 — Deterministic Repeated Edit Navigation
+- Fixed intermittent RFQ Detail → Edit → Close → Edit race that could fall back to the RFQ Register.
+- Modal return context is now unique per destination; stale Edit return entries are removed before a new transition.
+- Editor UI closes synchronously before asynchronous document-lock release, preventing overlapping open/close states.
+- Reopening Edit waits for any previous lock release to finish before reacquiring the RFQ lock; the V224 blocking overlay remains active during the wait.
+- Applied the same lock-release serialization to quotation editing for the global navigation standard.
+
+## V226 — Sales Order Accepted Delivery Status
+- SO fulfilment status now follows customer-accepted quantity: any accepted partial quantity keeps the order at Partially Delivered even while the balance is in transit.
+- Out for Delivery is used when nothing has yet been accepted and an unconfirmed DN is in transit.
+- Delivery progress now measures accepted delivery only; in-transit quantity no longer inflates the accepted percentage.
+- Order Items columns clarified to Accepted, In Transit, and To Dispatch.
+- Added separate in-transit/to-dispatch indicators and previous rejection notice.
+
+## V227 — Standard Price Revision Dialog
+- Replaced the browser-native Pricing revision `prompt()` with the standard BizCore reason modal.
+- Added Price Revision title, explanatory audit-history message, required multiline Revision Reason field, inline validation, Cancel and Revise Pricing actions.
+- Revision logic/history remains unchanged; only the interaction is standardized.
+- Enhanced the shared reason modal so future revision/cancellation workflows can reuse the same BizCore treatment.
+- GitHub/PWA shell cache bumped to v227.

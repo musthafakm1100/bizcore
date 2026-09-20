@@ -8954,3 +8954,50 @@ img,svg,canvas{max-width:100%}
 @media(max-width:700px){
   #dn-print-modal>.modal{width:100vw!important;height:100dvh!important;max-width:none!important;border-radius:0!important}
 }
+
+/* V217 — Compact visual Delivery Note format chooser */
+#dn-format-modal.dn-format-overlay{align-items:center!important;justify-content:center!important;padding:20px!important;}
+#dn-format-modal .dn-format-dialog{width:min(700px,calc(100vw - 32px));max-width:700px!important;height:auto!important;max-height:calc(100vh - 40px);border-radius:14px;overflow:hidden;box-shadow:0 18px 48px rgba(15,42,68,.22);}
+#dn-format-modal .modal-header{padding:15px 18px;border-bottom:1px solid #e3eaf2;align-items:flex-start;}
+#dn-format-modal .dn-format-heading h2{font-size:17px;line-height:1.2;margin:0;color:#163f68;font-weight:650;}
+#dn-format-modal .dn-format-subtitle{margin-top:4px;color:#728399;font-size:12px;line-height:1.35;}
+#dn-format-modal .modal-body{padding:16px 18px!important;overflow:auto;}
+#dn-format-modal .dn-format-options{display:grid;gap:10px;}
+#dn-format-modal .dn-format-option{position:relative;display:grid;grid-template-columns:38px 1fr 24px;align-items:center;gap:12px;padding:13px 14px;border:1px solid #dbe5ef;border-radius:11px;background:#fff;cursor:pointer;transition:border-color .12s ease,background-color .12s ease,box-shadow .12s ease;}
+#dn-format-modal .dn-format-option:hover{border-color:#aac6e2;background:#fbfdff;}
+#dn-format-modal .dn-format-option:has(input:checked){border-color:#2b78bd;background:#f1f7fd;box-shadow:0 0 0 1px rgba(43,120,189,.08);}
+#dn-format-modal .dn-format-option input{position:absolute;opacity:0;pointer-events:none;}
+#dn-format-modal .dn-format-icon{width:38px;height:38px;border-radius:9px;display:grid;place-items:center;background:#edf5fc;color:#1c5c91;font-size:19px;}
+#dn-format-modal .dn-format-option:has(input:checked) .dn-format-icon{background:#dcecfb;color:#124f82;}
+#dn-format-modal .dn-format-copy strong{display:block;color:#243f5a;font-size:13.5px;font-weight:650;line-height:1.25;}
+#dn-format-modal .dn-format-copy small{display:block;color:#718399;font-size:11.5px;line-height:1.35;margin-top:3px;}
+#dn-format-modal .dn-format-check{width:20px;height:20px;border:1.5px solid #b8c7d6;border-radius:50%;display:grid;place-items:center;color:transparent;font-size:13px;background:#fff;}
+#dn-format-modal .dn-format-option:has(input:checked) .dn-format-check{border-color:#2474b8;background:#2474b8;color:#fff;}
+#dn-format-modal .modal-footer{padding:12px 18px;border-top:1px solid #e3eaf2;background:#fbfcfe;gap:8px;}
+#dn-format-modal .modal-footer .btn{min-height:36px;padding:7px 14px;}
+@media(max-width:600px){
+ #dn-format-modal.dn-format-overlay{padding:12px!important;align-items:center!important;}
+ #dn-format-modal .dn-format-dialog{width:100%;max-height:calc(100vh - 24px);border-radius:12px;}
+ #dn-format-modal .modal-header{padding:13px 14px;}
+ #dn-format-modal .modal-body{padding:13px 14px!important;}
+ #dn-format-modal .dn-format-option{grid-template-columns:34px 1fr 22px;gap:10px;padding:11px 12px;}
+ #dn-format-modal .dn-format-icon{width:34px;height:34px;font-size:17px;}
+ #dn-format-modal .modal-footer{padding:10px 14px;}
+}
+
+/* V226 — Sales Order accepted-delivery progress model */
+#so-view-modal .so-delivery-state.transit{background:#eff6ff;color:#1d4f91}
+#so-view-modal .so-delivery-progress-card{display:grid;grid-template-columns:minmax(260px,1fr) auto;gap:12px 18px;align-items:center;margin:-2px 0 10px;padding:10px 12px;border:1px solid #dbe4ee;border-radius:8px;background:#f8fafc;color:#475569}
+#so-view-modal .so-delivery-progress-main{min-width:0}
+#so-view-modal .so-delivery-progress-title{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11.5px;font-weight:700;color:#475569}
+#so-view-modal .so-delivery-progress-title strong{font-size:14px;color:#173a5e;font-variant-numeric:tabular-nums}
+#so-view-modal .so-delivery-progress-track{height:6px;margin:6px 0 5px;border-radius:999px;background:#e2e8f0;overflow:hidden}
+#so-view-modal .so-delivery-progress-track span{display:block;height:100%;border-radius:inherit;background:#27936a}
+#so-view-modal .so-delivery-progress-caption{font-size:10.5px;color:#718096}
+#so-view-modal .so-delivery-progress-stats{display:grid;grid-template-columns:repeat(2,minmax(105px,1fr));gap:7px}
+#so-view-modal .so-delivery-progress-stats>div{min-width:105px;padding:7px 9px;border:1px solid #e2e8f0;border-radius:7px;background:#fff;display:flex;flex-direction:column;gap:2px}
+#so-view-modal .so-delivery-progress-stats span{font-size:9.5px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794;font-weight:700}
+#so-view-modal .so-delivery-progress-stats strong{font-size:15px;color:#173a5e;font-variant-numeric:tabular-nums}
+#so-view-modal .so-delivery-rejection-note{grid-column:1/-1;display:flex;align-items:center;gap:6px;padding-top:8px;border-top:1px solid #e5eaf0;font-size:10.5px;color:#9a3412}
+#so-view-modal .so-delivery-rejection-note i{color:#d97706;font-size:14px}
+@media(max-width:700px){#so-view-modal .so-delivery-progress-card{grid-template-columns:1fr}#so-view-modal .so-delivery-progress-stats{grid-template-columns:1fr 1fr}#so-view-modal .so-delivery-rejection-note{grid-column:1}}

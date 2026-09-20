@@ -2199,7 +2199,7 @@ function requestClosePricingDetail(){
     confirmClass:'btn-primary',
     onConfirm:()=>{
       pricingDetailCloseConfirmOpen=false;
-      closeModal('pricing-ro-modal');
+      closeViewWithReturn('pricing-ro-modal');
     },
     onCancel:()=>{
       pricingDetailCloseConfirmOpen=false;
@@ -4945,13 +4945,30 @@ function smartModalBack(currentId) {
   else updateFullscreenShellState();
 }
 
+/* Global BizCore return-navigation standard.
+   Detail/view Close actions use this helper so a linked document returns to
+   the exact screen that opened it. New future view screens should use
+   closeViewWithReturn(modalId) rather than a hard-coded module destination. */
+function closeViewWithReturn(modalId){
+  const hasReturn=modalNavHistory.some(x=>x.to===modalId);
+  if(hasReturn){ smartModalBack(modalId); _dirtyModal=null; return; }
+  closeModal(modalId);
+}
+window.closeViewWithReturn=closeViewWithReturn;
+
 function openModalWithSize(modalId) {
   const savedSize = modalSizes[modalId] || modalDefaultWorkspace[modalId] || 'normal';
   const now=Date.now();
   const currentlyOpen=[...document.querySelectorAll('.modal-overlay.open')].map(x=>x.id).filter(id=>id&&id!==modalId&&!modalNavExcluded.has(id));
   let from=currentlyOpen[currentlyOpen.length-1]||null;
   if(!from && lastClosedModal && now-lastClosedModalAt<1200 && lastClosedModal!==modalId && !modalNavExcluded.has(lastClosedModal)) from=lastClosedModal;
-  if(from && !modalNavHistory.some(x=>x.from===from&&x.to===modalId)) modalNavHistory.push({from,to:modalId});
+  // V225: each destination may have only one active return context. Remove any
+  // stale context left by an earlier open/close cycle before recording this one.
+  // This makes repeated View -> Edit -> Close cycles deterministic.
+  for(let i=modalNavHistory.length-1;i>=0;i--){
+    if(modalNavHistory[i].to===modalId) modalNavHistory.splice(i,1);
+  }
+  if(from) modalNavHistory.push({from,to:modalId});
   document.getElementById(modalId).classList.add('open');
   setModalSize(modalId, savedSize);
   ensureSmartBackButton(modalId);
@@ -5426,7 +5443,7 @@ function viewQuotation(id, skipVatCheck=false) {
     </div>`;
 
   const buttons=[];
-  buttons.push('<button class="btn btn-secondary" onclick="closeModal(\'view-modal\')">Close</button>');
+  buttons.push('<button class="btn btn-secondary" onclick="closeViewWithReturn(\'view-modal\')">Close</button>');
   if(lRFQ) buttons.push('<button class="btn btn-secondary" data-rfqid="'+q.rfqId+'" onclick="viewRFQFromQuote(this)"><i class="ti ti-clipboard-list"></i>RFQ</button>');
   if(hPricing) buttons.push('<button class="btn btn-secondary" data-rfqid="'+q.rfqId+'" onclick="viewPricingFromQuote(this)"><i class="ti ti-calculator"></i>Pricing</button>');
   if(status==='Draft') buttons.push('<button class="btn btn-secondary" data-qid="'+q.id+'" onclick="transitionToQuotationEdit(this)"><i class="ti ti-edit"></i>Edit</button>');
@@ -5751,41 +5768,56 @@ async function cancelQuotation(id) {
 /* ── Small prompt dialog that requires a typed reason before confirming ── */
 function showReasonPrompt(opts) {
   return new Promise(function(resolve) {
+    opts = opts || {};
     const existing = document.getElementById('reason-prompt-modal');
     if (existing) existing.remove();
+
     const modal = document.createElement('div');
     modal.id = 'reason-prompt-modal';
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.46);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(1px)';
+    const confirmColor = opts.confirmColor || '#DC2626';
     modal.innerHTML =
-      '<div style="background:#fff;border-radius:12px;padding:28px;max-width:400px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.2)">'
-      + '<div style="font-size:22px;margin-bottom:10px">' + (opts.icon||'⚠️') + '</div>'
-      + '<div style="font-size:15px;font-weight:700;margin-bottom:8px">' + (opts.title||'Confirm') + '</div>'
-      + '<div style="font-size:13px;color:#5A6677;margin-bottom:14px">' + (opts.message||'') + '</div>'
+      '<div role="dialog" aria-modal="true" style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;max-width:460px;width:100%;box-shadow:0 18px 55px rgba(15,23,42,.22);overflow:hidden">'
+      + '<div style="padding:20px 22px 14px;border-bottom:1px solid #EEF2F7;display:flex;gap:12px;align-items:flex-start">'
+      + '<div style="width:34px;height:34px;border-radius:9px;background:#EFF6FF;color:#1D4ED8;display:flex;align-items:center;justify-content:center;font-size:18px;flex:0 0 auto">' + (opts.icon||'⚠️') + '</div>'
+      + '<div><div style="font-size:16px;font-weight:700;color:#0F2744;line-height:1.25">' + (opts.title||'Confirm') + '</div>'
+      + '<div style="font-size:13px;color:#64748B;line-height:1.5;margin-top:5px">' + (opts.message||'') + '</div></div></div>'
+      + '<div style="padding:16px 22px 18px">'
+      + (opts.label ? '<label for="reason-prompt-input" style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:7px">' + opts.label + ' <span style="color:#DC2626">*</span></label>' : '')
       + '<textarea id="reason-prompt-input" placeholder="' + (opts.placeholder||'Reason') + '" '
-      + 'style="width:100%;min-height:70px;border:1.5px solid #E2E8F0;border-radius:7px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;margin-bottom:16px"></textarea>'
-      + '<div style="display:flex;gap:10px;justify-content:flex-end">'
-      + '<button id="reason-prompt-cancel" style="height:36px;padding:0 16px;border:1.5px solid #E2E8F0;border-radius:7px;background:#fff;cursor:pointer;font-size:13px;font-weight:600">Back</button>'
-      + '<button id="reason-prompt-confirm" style="height:36px;padding:0 16px;border:none;border-radius:7px;background:#DC2626;color:#fff;cursor:pointer;font-size:13px;font-weight:600">' + (opts.confirmText||'Confirm') + '</button>'
+      + 'style="box-sizing:border-box;width:100%;min-height:88px;border:1.5px solid #CBD5E1;border-radius:8px;padding:10px 11px;font-size:13px;line-height:1.45;font-family:inherit;resize:vertical;outline:none"></textarea>'
+      + '<div id="reason-prompt-error" style="display:none;color:#DC2626;font-size:12px;margin-top:6px">' + (opts.requiredText||'A reason is required.') + '</div>'
+      + '</div>'
+      + '<div style="padding:12px 22px 16px;border-top:1px solid #EEF2F7;display:flex;gap:9px;justify-content:flex-end">'
+      + '<button id="reason-prompt-cancel" class="btn btn-secondary" style="min-width:82px">' + (opts.cancelText||'Cancel') + '</button>'
+      + '<button id="reason-prompt-confirm" class="btn btn-primary" style="min-width:112px;background:' + confirmColor + ';border-color:' + confirmColor + '">' + (opts.confirmText||'Confirm') + '</button>'
       + '</div></div>';
     document.body.appendChild(modal);
 
     const input = document.getElementById('reason-prompt-input');
-    input.focus();
+    const error = document.getElementById('reason-prompt-error');
+    setTimeout(function(){ input.focus(); }, 0);
 
-    document.getElementById('reason-prompt-cancel').onclick = function() {
-      modal.remove();
-      resolve(null);
-    };
-    document.getElementById('reason-prompt-confirm').onclick = function() {
+    function cancel() { modal.remove(); resolve(null); }
+    function confirm() {
       const val = input.value.trim();
       if (!val) {
         input.style.borderColor = '#DC2626';
-        input.placeholder = 'A reason is required';
+        error.style.display = 'block';
+        input.focus();
         return;
       }
-      modal.remove();
-      resolve(val);
-    };
+      modal.remove(); resolve(val);
+    }
+    input.addEventListener('input', function(){
+      if (input.value.trim()) { input.style.borderColor='#CBD5E1'; error.style.display='none'; }
+    });
+    document.getElementById('reason-prompt-cancel').onclick = cancel;
+    document.getElementById('reason-prompt-confirm').onclick = confirm;
+    modal.addEventListener('keydown', function(e){
+      if(e.key==='Escape'){ e.preventDefault(); cancel(); }
+      if((e.ctrlKey||e.metaKey) && e.key==='Enter'){ e.preventDefault(); confirm(); }
+    });
   });
 }
 
@@ -6395,13 +6427,26 @@ const BizCoreTransition={run:runScreenTransition,begin:beginScreenTransition,end
 window.BizCoreTransition=BizCoreTransition;
 
 async function closeEntryWithTransition(modalId,label='document'){
-  // Cancel/close is immediate and remains blocked until the source form is
-  // genuinely closed and the destination has painted. There is no close timer.
+  // V223: when an entry form has a return context, swap back synchronously.
+  // Do not render an intermediate register or transition overlay; this keeps
+  // View <-> Edit navigation visually stable and flicker-free.
+  const hasReturn=modalNavHistory.some(x=>x.to===modalId);
+  if(hasReturn){
+    try{
+      if(typeof window.bizcorePerformClose==='function') window.bizcorePerformClose(modalId,true);
+      else closeModal(modalId);
+      smartModalBack(modalId);
+      _dirtyModal=null;
+    }catch(e){
+      console.error(e);
+      showToast(`Could not close the ${label}. Please try again.`,'error');
+    }
+    return;
+  }
   try{
     await runScreenTransition({
       message:`Closing ${label}…`, immediate:true, endImmediate:true,
       action:async()=>{
-        await new Promise(resolve=>requestAnimationFrame(resolve));
         if(typeof window.bizcorePerformClose==='function') window.bizcorePerformClose(modalId,true);
         else closeModal(modalId);
       },
@@ -6414,14 +6459,27 @@ window.closeEntryWithTransition=closeEntryWithTransition;
 async function transitionToRFQEdit(btn){
   const id=btn?.getAttribute('data-rid'); if(!id) return;
   btn.disabled=true;
+  // V224: block the current RFQ immediately while the editor/record lock is
+  // prepared.  The RFQ Detail stays painted underneath, but cannot receive
+  // clicks, keyboard input or duplicate Edit actions during the wait.
+  beginScreenTransition('Opening RFQ Editor…',{immediate:true});
   try{
-    await runScreenTransition({
-      message:'Preparing RFQ for editing…',
-      action:()=>editRFQ(id), ready:()=>isModalOpen('rfq-modal'),
-      sourceModal:'rfq-view-modal', closeSource:true,
-      errorMessage:'Could not open the RFQ for editing. Please try again.'
-    });
-  }catch(e){} finally{btn.disabled=false;}
+    await editRFQ(id);
+    if(!isModalOpen('rfq-modal')) return;
+    const source=document.getElementById('rfq-view-modal');
+    if(source?.classList.contains('open')){
+      source.classList.remove('open','modal-fs-overlay');
+      updateFullscreenShellState();
+    }
+    // Let the ready editor paint behind the blocking overlay, then release it.
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  }catch(e){
+    console.error(e);
+    showToast('Could not open the RFQ for editing. Please try again.','error');
+  } finally{
+    endScreenTransition();
+    btn.disabled=false;
+  }
 }
 async function transitionToQuotationEdit(btn){
   const id=btn?.getAttribute('data-qid'); if(!id) return;
@@ -6459,7 +6517,7 @@ function backToQuoteFromRFQ() {
   closeModal('rfq-view-modal');
   if (qid) viewQuotation(qid);
 }
-function closeRFQView()       { closeModal('rfq-view-modal'); }
+function closeRFQView()       { closeViewWithReturn('rfq-view-modal'); }
 function editRFQFromView(btn) { transitionToRFQEdit(btn); }
 function viewQuoteFromRFQ(btn){ const id=btn.getAttribute('data-qid'); closeModal('rfq-view-modal'); if(id) viewQuotation(id); }
 function viewPricingROFromBtn(btn) { const id=btn.getAttribute('data-rid'); if(id) viewPricingReadOnly(id); }
@@ -6508,14 +6566,26 @@ function backToRFQFromRO(btn) {
   closeModal('pricing-ro-modal');
   if (rid) viewRFQ(rid);
 }
-function revisePricingFromRO(btn) {
+async function revisePricingFromRO(btn) {
   const rid=btn.getAttribute('data-rid');
   if(!rid)return;
   const r=rfqs.find(x=>x.id===rid); if(!r)return;
   const current=getCurrentPricingVersion(r);
   if(!current || !['Converted','Superseded'].includes(current.status)){closeModal('pricing-ro-modal');openPricingSheet(rid);return;}
-  const reason=(window.prompt('Revision reason (required):','')||'').trim();
-  if(!reason){showToast('Enter a revision reason to continue','error');return;}
+
+  const reason = await showReasonPrompt({
+    icon: '<i class=\"ti ti-edit\"></i>',
+    title: 'Price Revision',
+    message: 'Please provide a reason for revising this pricing record. This will be recorded in the revision history.',
+    label: 'Revision Reason',
+    placeholder: 'Enter revision reason…',
+    cancelText: 'Cancel',
+    confirmText: 'Revise Pricing',
+    confirmColor: '#1D4ED8',
+    requiredText: 'Revision reason is required.'
+  });
+  if(!reason)return;
+
   const nextVersion=Math.max(0,...ensurePricingVersions(r).map(v=>Number(v.version)||0))+1;
   const revised={
     ...JSON.parse(JSON.stringify(current)), version:nextVersion, status:'Revision Draft', revisionReason:reason,
@@ -6523,7 +6593,9 @@ function revisePricingFromRO(btn) {
     created:new Date().toISOString(), updated:new Date().toISOString()
   };
   r.pricingVersions.push(revised); r.currentPricingVersion=nextVersion; syncRFQFromPricingVersion(r,revised); r.status='Pricing';
-  saveRFQs().then(()=>{closeModal('pricing-ro-modal');renderRFQPage();openPricingSheet(rid);showToast('Pricing V'+nextVersion+' created for revision','success');});
+  await saveRFQs();
+  closeModal('pricing-ro-modal'); renderRFQPage(); openPricingSheet(rid);
+  showToast('Pricing V'+nextVersion+' created for revision','success');
 }
 function editPricingFromRO(btn) {
   const rid = btn.getAttribute('data-rid');
@@ -6703,7 +6775,13 @@ function getRFQWorkflowStage(r) {
   if ([...quoteIds].some(qid => salesOrders.some(so => so.quotationId === qid))) return 'Sales Order';
   if (quoteIds.size) return 'Quoted';
   if ((r.pricingItems && r.pricingItems.length) || (r.pricingVersions && r.pricingVersions.length)) return 'Pricing';
+  // Repair legacy false-positive status created by older builds that marked Pricing on screen open.
+  if (r.status === 'Pricing') return 'New';
   return r.status || 'New';
+}
+
+function getRFQWorkflowStageLabel(stage) {
+  return stage === 'Pricing' ? 'In Pricing' : stage;
 }
 
 function rfqAge(rfq) {
@@ -6768,7 +6846,9 @@ function renderRFQPage() {
   if (totalRfqKpi) totalRfqKpi.textContent = rfqs.length;
   document.getElementById('rfq-k-open').textContent    = open.length;
   document.getElementById('rfq-k-overdue').textContent = overdue.length;
-  document.getElementById('rfq-k-pricing').textContent = rfqs.filter(r=>getRFQWorkflowStage(r)==='Pricing').length;
+  // Awaiting Pricing = all RFQs that have not yet produced a saved Pricing record.
+  // Overdue unpriced RFQs remain part of this count; Overdue is an overlapping urgency indicator.
+  document.getElementById('rfq-k-pricing').textContent = rfqs.filter(r=>getRFQWorkflowStage(r)==='New').length;
   document.getElementById('rfq-k-quoted').textContent  = quoted.length;
   document.getElementById('rfq-k-nobid').textContent   = noBid.length;
   updateRFQMonitorSelection();
@@ -6834,7 +6914,7 @@ function renderRFQPage() {
       <td class="rfq-cell-muted" title="${r.ref||''}">${r.ref||'—'}</td>
       <td class="rfq-cell-muted">${dateText}</td>
       <td class="rfq-cell-muted" style="${overdue?'color:var(--red);font-weight:700':''}">${dueStr}</td>
-      <td><span class="badge ${stClass}">${displayStatus}</span></td>
+      <td><span class="badge ${stClass}">${getRFQWorkflowStageLabel(displayStatus)}</span></td>
       <td><span class="rfq-progress">${progress}</span></td>
     </tr>`;
   }).join('');
@@ -7603,9 +7683,18 @@ async function saveRFQ() {
   if (editingRFQId) { const i=rfqs.findIndex(x=>x.id===editingRFQId); if(i>-1) rfqs[i]=r; }
   else rfqs.unshift(r);
   await saveRFQs();
+  const wasEditing=!!editingRFQId;
+  const returnIdx=wasEditing ? [...modalNavHistory].map(x=>x.to).lastIndexOf('rfq-modal') : -1;
+  const returnEntry=returnIdx>=0 ? modalNavHistory[returnIdx] : null;
   clearDirty(); closeModal('rfq-modal');
   renderRFQPage();
-  showToast(editingRFQId?'RFQ updated':'RFQ logged — '+r.rfqNo,'success');
+  // V222: after updating an RFQ opened from RFQ Detail, return to the same
+  // RFQ and re-render it so the user sees the newly saved values immediately.
+  if(returnEntry?.from==='rfq-view-modal'){
+    modalNavHistory.splice(returnIdx,1);
+    viewRFQ(r.id);
+  }
+  showToast(wasEditing?'RFQ updated':'RFQ logged — '+r.rfqNo,'success');
   editingRFQId=null; rfqAttachment=null;
   } finally { hideBusyOverlay('rfq-modal'); }
 }
@@ -7660,14 +7749,14 @@ function viewRFQ(id) {
   document.getElementById('rfq-view-body').innerHTML = `
     <div class="rfq-view-hero">
       <div><div class="rfq-view-id">${r.rfqNo}</div><div class="rfq-view-company">${r.company}</div><div class="rfq-view-ref">${r.ref ? 'Customer reference: '+r.ref : 'No customer reference provided'}</div></div>
-      <div class="rfq-view-status-wrap"><span class="badge ${stClass}">${displayStatus}</span><div class="rfq-view-age">Received ${ageLabel}${overdue?' · due '+dueStr:''}</div></div>
+      <div class="rfq-view-status-wrap"><span class="badge ${stClass}">${getRFQWorkflowStageLabel(displayStatus)}</span><div class="rfq-view-age">Received ${ageLabel}${overdue?' · due '+dueStr:''}</div></div>
     </div>
     <div class="rfq-view-grid">
       <div style="display:flex;flex-direction:column;gap:14px">
         <div class="rfq-view-card rfq-section-info"><div class="rfq-view-card-title rfq-collapsible-title" role="button" tabindex="0" aria-expanded="true" onclick="toggleRFQDetailSection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleRFQDetailSection(this)}"><i class="ti ti-building"></i>RFQ information<i class="ti ti-chevron-down rfq-section-chevron"></i></div><div class="rfq-card-content"><div class="rfq-view-info">
           <div class="detail-row"><span class="dk">Contact</span><span>${r.contact||'—'}</span></div><div class="detail-row"><span class="dk">Channel</span><span>${r.channel||'—'}</span></div>
           <div class="detail-row"><span class="dk">Received date</span><span>${fmtDate(r.date)}</span></div><div class="detail-row"><span class="dk">Response due</span><span style="${overdue?'color:var(--red);font-weight:700':''}">${dueStr||'—'}</span></div>
-          <div class="detail-row"><span class="dk">Assigned to</span><span>${r.assigned||'—'}</span></div><div class="detail-row"><span class="dk">Current stage</span><span>${displayStatus}</span></div>
+          <div class="detail-row"><span class="dk">Assigned to</span><span>${r.assigned||'—'}</span></div><div class="detail-row"><span class="dk">Current stage</span><span>${getRFQWorkflowStageLabel(displayStatus)}</span></div>
         </div></div></div>
         <div class="rfq-view-card rfq-items-card"><div class="rfq-view-card-title rfq-collapsible-title" role="button" tabindex="0" aria-expanded="true" onclick="toggleRFQDetailSection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleRFQDetailSection(this)}"><i class="ti ti-list-details"></i>Required Items<i class="ti ti-chevron-down rfq-section-chevron"></i></div><div class="rfq-card-content">${itemsHtml}${reqItems.length&&r.desc?`<div class="rfq-requirement-note"><strong>General requirements</strong><p>${r.desc}</p></div>`:''}</div></div>
         <div class="rfq-view-card rfq-section-pricing"><div class="rfq-view-card-title rfq-collapsible-title" role="button" tabindex="0" aria-expanded="true" onclick="toggleRFQDetailSection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleRFQDetailSection(this)}"><i class="ti ti-progress-check"></i>Pricing progress<i class="ti ti-chevron-down rfq-section-chevron"></i></div><div class="rfq-card-content">${pricingHtml}</div></div>
@@ -8777,12 +8866,8 @@ async function openPricingSheet(rfqId,{closeSource=true}={}) {
     showToast('Converted pricing is locked. Use Revise Pricing to create a new version.','info');
     return;
   }
-  // Auto-advance status to Pricing when opened
-  if (r.status === 'New') {
-    r.status = 'Pricing';
-    await saveRFQs();
-    renderRFQPage();
-  }
+  // Opening Pricing is navigation only. RFQ advances to Pricing only after a successful Pricing save.
+  // This prevents Start Pricing -> Cancel/Close from changing the RFQ workflow status.
   document.getElementById('pricing-modal-title').textContent = 'Pricing V'+(r.currentPricingVersion||1)+' — '+r.rfqNo+' / '+r.company;
   // RFQ info bar
   document.getElementById('pricing-rfq-info').innerHTML = `
@@ -9398,8 +9483,10 @@ function getSOStatus(so) {
   if (totalPaid > 0 && totalPaid < so.total) return 'Partially Paid';
   if (hasInvoice) return 'Invoiced';
   if (allDelivered && !anyDispatched) return 'Delivered';
-  if (partDelivered && anyDispatched) return 'Out for Delivery'; // some confirmed, some still in transit
-  if (partDelivered) return 'Partially Delivered';              // some confirmed, nothing in transit
+  // Accepted quantity defines fulfilment. Once the customer has accepted any
+  // part of the order, keep the SO at Partially Delivered even when the balance
+  // is currently in transit. In-transit quantity is shown separately in the view.
+  if (partDelivered) return 'Partially Delivered';
   if (anyDispatched) return 'Out for Delivery';                 // nothing confirmed yet
   return 'Confirmed';
 }
@@ -9962,44 +10049,52 @@ function viewSO(soId) {
     });
   });
 
-  // Compact overall delivery summary. Progress is the average fulfilment % across
-  // order lines so mixed UOMs (PCS / MTR / BOX etc.) are never added together.
+  // V226 — Accepted delivery is the fulfilment measure. In-transit quantity is
+  // operational progress, not customer-accepted delivery. Percentages are averaged
+  // by order line so unlike UOMs are never added together.
   const soItemProgress = (so.items||[]).map((it,i)=>{
     const ordered = parseFloat(it.qty)||0;
-    const confirmed = confirmedQtyMap[i]||0;
-    const transit = transitQtyMap[i]||0;
-    const fulfilled = Math.min(ordered, confirmed + transit);
-    const remaining = roundQty(Math.max(0, ordered - fulfilled));
-    const pct = ordered > 0 ? Math.min(100, (fulfilled / ordered) * 100) : 100;
-    return {ordered, confirmed, transit, remaining, pct};
+    const accepted = Math.min(ordered, confirmedQtyMap[i]||0);
+    const transit = Math.min(Math.max(0, ordered-accepted), transitQtyMap[i]||0);
+    const toDispatch = roundQty(Math.max(0, ordered - accepted - transit));
+    const acceptedPct = ordered > 0 ? Math.min(100, (accepted / ordered) * 100) : 100;
+    return {ordered, accepted, transit, toDispatch, acceptedPct};
   });
   const totalSOItems = soItemProgress.length;
-  const fullyDeliveredItems = soItemProgress.filter(x=>x.remaining<=0.001 && x.transit<=0.001).length;
-  const remainingItemCount = soItemProgress.filter(x=>x.remaining>0.001 || x.transit>0.001).length;
-  const deliveryProgressPct = totalSOItems
-    ? Math.round(soItemProgress.reduce((sum,x)=>sum+x.pct,0)/totalSOItems)
+  const fullyAcceptedItems = soItemProgress.filter(x=>x.accepted>=x.ordered-0.001 && x.ordered>0).length;
+  const transitItemCount = soItemProgress.filter(x=>x.transit>0.001).length;
+  const toDispatchItemCount = soItemProgress.filter(x=>x.toDispatch>0.001).length;
+  const acceptedProgressPct = totalSOItems
+    ? Math.round(soItemProgress.reduce((sum,x)=>sum+x.acceptedPct,0)/totalSOItems)
     : 0;
+  const rejectedItemCount = (so.deliveries||[]).filter(d=>d.customerConfirmed).reduce((n,d)=>
+    n + ((d.items||[]).filter(it=>deliveryRejectedQty(d,it)>0.001).length), 0);
   const deliveryProgressSummary = totalSOItems ? `
-    <div class="so-delivery-summary">
-      <span>Delivery Progress: <strong>${deliveryProgressPct}%</strong></span>
-      <span class="so-delivery-summary-sep">·</span>
-      <span>${fullyDeliveredItems} of ${totalSOItems} items fully delivered</span>
-      <span class="so-delivery-summary-sep">·</span>
-      ${remainingItemCount > 0
-        ? `<span class="so-delivery-remaining-alert">${remainingItemCount} ${remainingItemCount===1?'item':'items'} remaining</span>`
-        : '<span class="so-delivery-complete-text"><i class="ti ti-circle-check"></i> Fully Delivered</span>'}
+    <div class="so-delivery-progress-card">
+      <div class="so-delivery-progress-main">
+        <div class="so-delivery-progress-title"><span>Accepted Delivery</span><strong>${acceptedProgressPct}%</strong></div>
+        <div class="so-delivery-progress-track"><span style="width:${acceptedProgressPct}%"></span></div>
+        <div class="so-delivery-progress-caption">${fullyAcceptedItems} of ${totalSOItems} ${totalSOItems===1?'item':'items'} fully accepted</div>
+      </div>
+      <div class="so-delivery-progress-stats">
+        <div><span>Currently in Transit</span><strong>${transitItemCount}</strong></div>
+        <div><span>To Dispatch</span><strong>${toDispatchItemCount}</strong></div>
+      </div>
+      ${rejectedItemCount>0?`<div class="so-delivery-rejection-note"><i class="ti ti-alert-triangle"></i> Previous delivery ${rejectedItemCount===1?'attempt includes':'attempts include'} <strong>${rejectedItemCount} rejected ${rejectedItemCount===1?'item':'items'}</strong></div>`:''}
     </div>` : '';
 
   const itemsHtml = (so.items||[]).map((it,i)=>{
     const ordered = parseFloat(it.qty)||0;
-    const confirmed = confirmedQtyMap[i]||0;
-    const transit = transitQtyMap[i]||0;
+    const confirmed = Math.min(ordered, confirmedQtyMap[i]||0);
+    const transit = Math.min(Math.max(0, ordered-confirmed), transitQtyMap[i]||0);
     const remaining = roundQty(Math.max(0, ordered - confirmed - transit));
-    const deliveryState = remaining<=0.001 && transit<=0.001
-      ? '<span class="so-delivery-state complete"><i class="ti ti-circle-check"></i>Delivered</span>'
-      : (confirmed>0 || transit>0)
-        ? '<span class="so-delivery-state partial"><i class="ti ti-package"></i>Partial</span>'
-        : '<span class="so-delivery-state pending"><i class="ti ti-clock"></i>Pending</span>';
+    const deliveryState = confirmed>=ordered-0.001 && ordered>0
+      ? '<span class="so-delivery-state complete"><i class="ti ti-circle-check"></i>Accepted</span>'
+      : transit>0.001
+        ? '<span class="so-delivery-state transit"><i class="ti ti-truck"></i>In Transit</span>'
+        : confirmed>0.001
+          ? '<span class="so-delivery-state partial"><i class="ti ti-package"></i>Partial</span>'
+          : '<span class="so-delivery-state pending"><i class="ti ti-clock"></i>Pending</span>';
     return `
     <tr style="background:${i%2===0?'#F8FAFC':'#fff'}">
       <td style="padding:7px 10px">${String(i+1).padStart(2,'0')}</td>
@@ -10114,9 +10209,9 @@ function viewSO(soId) {
         <th style="padding:7px 10px">#</th>
         <th style="padding:7px 10px;text-align:left">Description</th>
         <th style="padding:7px 10px;text-align:center">Ordered</th>
-        <th style="padding:7px 10px;text-align:center">Delivered</th>
+        <th style="padding:7px 10px;text-align:center">Accepted</th>
         <th style="padding:7px 10px;text-align:center">In Transit</th>
-        <th style="padding:7px 10px;text-align:center">Remaining</th>
+        <th style="padding:7px 10px;text-align:center">To Dispatch</th>
         <th style="padding:7px 10px;text-align:center">UOM</th>
         <th style="padding:7px 10px;text-align:center">Delivery</th>
         <th style="padding:7px 10px;text-align:right">Unit price</th>
@@ -10138,22 +10233,35 @@ function viewSO(soId) {
     <div class="section-title">Payment history</div>
     <div>${paymentsHtml}</div>`;
 
-  // Check if any items still need dispatching
-  const dispatchedQty = {};
+  // Dispatch eligibility must follow the CURRENT fulfilment position, not the
+  // historical quantity printed on earlier DNs. A customer-rejected quantity is
+  // returned to the SO and must become available for a replacement/redelivery DN.
+  // Confirmed DNs contribute only their accepted quantity; unconfirmed DNs remain
+  // in transit and are temporarily unavailable so the same quantity cannot be
+  // dispatched twice.
+  const acceptedForDispatch = {};
+  const transitForDispatch = {};
   (so.deliveries||[]).forEach(d => {
     (d.items||[]).forEach(it => {
       const idx = it.origIdx !== undefined ? it.origIdx : it.soIdx;
-      dispatchedQty[idx] = (dispatchedQty[idx]||0) + (parseFloat(it.qty)||0);
+      if (d.customerConfirmed) {
+        acceptedForDispatch[idx] = roundQtyForUom((acceptedForDispatch[idx]||0) + deliveryAcceptedQty(d,it), it.uom);
+      } else {
+        transitForDispatch[idx] = roundQtyForUom((transitForDispatch[idx]||0) + (parseFloat(it.qty)||0), it.uom);
+      }
     });
   });
   const hasUndelivered = (so.items||[]).some((it,i) => {
-    const dispatched = dispatchedQty[it.origIdx!==undefined?it.origIdx:i]||0;
-    return (parseFloat(it.qty)||0) - dispatched > 0.001;
+    const idx = it.origIdx !== undefined ? it.origIdx : i;
+    const remaining = roundQtyForUom(Math.max(0,
+      (parseFloat(it.qty)||0) - (acceptedForDispatch[idx]||0) - (transitForDispatch[idx]||0)
+    ), it.uom);
+    return remaining > 0;
   });
 
   // Footer buttons
   const fBtns = [];
-  fBtns.push('<button class="btn btn-secondary" onclick="closeModal(\'so-view-modal\')">Close</button>');
+  fBtns.push('<button class="btn btn-secondary" onclick="closeViewWithReturn(\'so-view-modal\')">Close</button>');
   if (!soHasDownstreamActivity(so)) {
     fBtns.push(`<button class="btn btn-secondary" data-sid="${so.id}" onclick="openEditSO(this.dataset.sid)"><i class="ti ti-edit"></i>Edit Order</button>`);
     fBtns.push(`<button class="btn btn-danger" data-sid="${so.id}" onclick="deleteSalesOrder(this.dataset.sid)"><i class="ti ti-trash"></i>Delete Order</button>`);
@@ -13090,6 +13198,7 @@ const _origEditRFQ       = typeof editRFQ       === 'function' ? editRFQ       :
 /* Wrap editQuotation */
 if (_origEditQuotation) {
   editQuotation = async function(id, skipVatCheck) {
+    if (_lockReleasePromise) { try { await _lockReleasePromise; } catch(e) {} }
     const q = quotations.find(x => x.id === id);
     const label = q ? ('Quotation ' + (q.qno || id)) : ('Quotation ' + id);
     // Release any existing lock first
@@ -13109,6 +13218,9 @@ if (_origEditQuotation) {
 /* Wrap editRFQ */
 if (_origEditRFQ) {
   editRFQ = async function(id) {
+    // V225: if the previous editor close is still releasing its remote lock,
+    // wait for that release before reacquiring. The loading overlay remains up.
+    if (_lockReleasePromise) { try { await _lockReleasePromise; } catch(e) {} }
     const r = rfqs.find(x => x.id === id);
     const label = r ? ('RFQ ' + (r.rfqno || id)) : ('RFQ ' + id);
     if (_activeLock && (_activeLock.docId !== id || _activeLock.docType !== 'rfq')) {
@@ -13140,20 +13252,34 @@ if (_origSaveRFQ) {
   };
 }
 
-/* Release lock when cancel buttons are clicked (modal close) */
+/* Release lock when cancel buttons are clicked (modal close).
+   V225: close the visual modal synchronously, then release the remote lock.
+   Older code waited for the network lock release before actually closing the
+   modal; closeEntryWithTransition could therefore restore the RFQ Detail while
+   the editor was still technically open, creating a race on the next Edit. */
+let _lockReleasePromise = null;
 (function() {
   const orig = window.closeModal;
   if (typeof orig === 'function') {
-    window.closeModal = async function(id) {
-      if (id === 'quote-modal' || id === 'rfq-modal') {
-        await releaseLock();
-      }
+    window.closeModal = function(id) {
+      const needsRelease = id === 'quote-modal' || id === 'rfq-modal';
       if(id==='quote-modal'){
         document._pendingQuotationRevision=null;
         document._pendingRFQId=null;
         document._pendingPricingVersion=null;
       }
+      // Always complete the UI close first so navigation history has one
+      // deterministic state before any asynchronous Firebase work continues.
       orig(id);
+      if(needsRelease){
+        const pending = Promise.resolve().then(()=>releaseLock());
+        _lockReleasePromise = pending.finally(()=>{
+          if(_lockReleasePromise===pending || _lockReleasePromise===wrapped) _lockReleasePromise=null;
+        });
+        const wrapped = _lockReleasePromise;
+        return wrapped;
+      }
+      return Promise.resolve();
     };
   }
 })();
