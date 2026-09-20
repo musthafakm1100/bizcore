@@ -264,3 +264,5 @@ V215 deployment consistency fix:
 - Revision logic/history remains unchanged; only the interaction is standardized.
 - Enhanced the shared reason modal so future revision/cancellation workflows can reuse the same BizCore treatment.
 - GitHub/PWA shell cache bumped to v227.
+
+V229: Simplified Customer Invoice entry and added accepted-quantity partial invoicing. Available invoice quantity is customer accepted minus previously invoiced; invoice items and partial totals are stored per invoice.

@@ -14,7 +14,7 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=215" rel="stylesheet"/>
+<link href="css/main.css?v=230" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=215" rel="stylesheet"/>
 <link href="css/typography.css?v=215" rel="stylesheet"/>
 <link href="css/masters.css?v=215" rel="stylesheet"/>
@@ -1878,28 +1878,34 @@ document.addEventListener('error', function(e) {
 </div><div class="modal-footer dn-confirm-footer"><div class="dn-footer-note"><i class="ti ti-info-circle"></i><span>Review quantities before confirming.</span></div><div class="dn-footer-actions"><button class="btn btn-secondary" onclick="closeModal('dn-confirm-modal')">Cancel</button><button class="btn btn-success dn-confirm-primary" id="dn-confirm-save-btn" onclick="saveDeliveryAcceptance()"><i class="ti ti-circle-check"></i><span id="dn-confirm-save-btn-text">Confirm Delivery</span></button></div></div></div></div>
 <!-- CREATE INVOICE MODAL -->
 <div class="modal-overlay" id="so-invoice-modal">
-<div class="modal modal-compact">
+<div class="modal inv-create-modal">
 <div class="modal-header">
-<h2 id="inv-modal-title">Create Invoice</h2>
+<div><h2 id="inv-modal-title">Create Invoice</h2><div class="inv-modal-subtitle">Invoice only customer-accepted quantities. Partial invoicing is supported.</div></div>
 <button class="close-btn" onclick="closeModal('so-invoice-modal')">✕</button>
 </div>
-<div class="modal-body">
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
-<div class="form-group"><label>Invoice No (BizCore)</label><input id="inv-no" readonly="" style="background:#f8f9fa;font-weight:600"/></div>
+<div class="modal-body inv-create-body">
+<div class="inv-head-grid">
 <div class="form-group"><label>Invoice date *</label><input id="inv-date" type="date"/></div>
-<div class="form-group"><label>Zoho Invoice No</label><input id="inv-zoho" placeholder="Zoho Books invoice number"/></div>
 <div class="form-group"><label>Payment due date</label><input id="inv-due" type="date"/></div>
+<div class="form-group inv-zoho-field"><label>Zoho Invoice No. <span class="inv-optional">Optional</span></label><input id="inv-zoho" placeholder="Enter after creating in Zoho Books"/></div>
 </div>
-<div class="form-group" style="margin-bottom:14px"><label>Invoice notes</label><textarea id="inv-notes" placeholder="Payment terms, bank details reference, etc." style="height:52px;width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;resize:vertical;outline:none"></textarea></div>
-<div id="inv-summary" style="background:var(--blue-pale);border:1px solid var(--blue-light);border-radius:var(--radius);padding:12px 16px">
-<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>Sub-total (ex-VAT)</span><span id="inv-sum-sub">SAR 0.00</span></div>
-<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span id="inv-sum-vat-label">VAT (15%)</span><span id="inv-sum-vat">SAR 0.00</span></div>
-<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;color:var(--blue);border-top:1px solid var(--blue-light);padding-top:8px;margin-top:6px"><span>Invoice total</span><span id="inv-sum-total">SAR 0.00</span></div>
+<section class="inv-items-section">
+<div class="inv-items-head"><div><strong>Items to Invoice</strong><span>Available = Accepted − Previously invoiced</span></div><div class="inv-quick-actions"><button type="button" class="btn btn-secondary btn-sm" onclick="clearInvoiceQty()">Clear</button><button type="button" class="btn btn-secondary btn-sm" onclick="invoiceAllAvailable()"><i class="ti ti-checks"></i> Invoice All Available</button></div></div>
+<div class="inv-items-table-wrap"><table class="inv-items-table"><thead><tr><th>#</th><th>Description</th><th>Accepted</th><th>Invoiced</th><th>Available</th><th>UOM</th><th>Unit Price</th><th>Invoice Qty</th><th>Amount</th></tr></thead><tbody id="inv-items-list"></tbody></table></div>
+<div id="inv-empty-note" class="inv-empty-note" hidden><i class="ti ti-info-circle"></i><span>No customer-accepted quantity is currently available to invoice.</span></div>
+</section>
+<div class="inv-bottom-grid">
+<div class="form-group inv-notes-field"><label>Invoice Notes <span class="inv-optional">Optional</span></label><textarea id="inv-notes" placeholder="Payment terms, bank details reference, etc."></textarea></div>
+<div id="inv-summary" class="inv-summary-card">
+<div><span>Sub-total (ex-VAT)</span><span id="inv-sum-sub">SAR 0.00</span></div>
+<div><span id="inv-sum-vat-label">VAT (15%)</span><span id="inv-sum-vat">SAR 0.00</span></div>
+<div class="inv-summary-total"><span>Invoice Total</span><span id="inv-sum-total">SAR 0.00</span></div>
 </div>
 </div>
-<div class="modal-footer">
-<button class="btn btn-secondary" onclick="closeModal('so-invoice-modal')">Cancel</button>
-<button class="btn btn-primary" onclick="saveInvoice()"><i class="ti ti-file-invoice"></i>Create invoice</button>
+</div>
+<div class="modal-footer inv-create-footer">
+<span class="inv-number-note"><i class="ti ti-hash"></i> BizCore invoice number assigned automatically on save</span>
+<div><button class="btn btn-secondary" onclick="closeModal('so-invoice-modal')">Cancel</button><button class="btn btn-primary" id="inv-create-btn" onclick="saveInvoice()"><i class="ti ti-file-invoice"></i>Create Invoice</button></div>
 </div>
 </div>
 </div>
@@ -2637,7 +2643,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=227';
+    s.src = 'js/app.js?v=230';
     document.body.appendChild(s);
   }
 });
@@ -2686,7 +2692,7 @@ console.log('BizCore Firebase ready ✅');
   // Runs after the main app; failure here should never block the app itself.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=227', { updateViaCache: 'none' }).catch(err => {
+      navigator.serviceWorker.register('sw.js?v=228', { updateViaCache: 'none' }).catch(err => {
         console.warn('Service worker registration failed:', err);
       });
     });

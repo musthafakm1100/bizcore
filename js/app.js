@@ -5307,7 +5307,7 @@ function openInvoiceDocument(soId, invoiceIdx) {
   closeModal('view-modal'); closeModal('so-view-modal'); closeModal('dn-print-modal');
   const modal = ensureDocumentSummaryModal();
   document.getElementById('document-summary-title').textContent = inv.invNo + ' — Customer Invoice';
-  document.getElementById('document-summary-body').innerHTML = `<div class="section-title" style="margin-top:0">Invoice information</div><div class="detail-row"><span class="dk">Invoice number</span><strong style="color:var(--blue)">${inv.invNo}</strong></div><div class="detail-row"><span class="dk">Customer</span><strong>${so.customer}</strong></div><div class="detail-row"><span class="dk">Invoice date</span><span>${fmtDate(inv.date)}</span></div><div class="detail-row"><span class="dk">Due date</span><span>${fmtDate(inv.dueDate)}</span></div><div class="detail-row"><span class="dk">Zoho reference</span><span>${inv.zohoNo||'—'}</span></div><div class="detail-row"><span class="dk">Total</span><strong>${fmt(inv.total)}</strong></div>${inv.notes?`<div class="detail-row"><span class="dk">Notes</span><span>${inv.notes}</span></div>`:''}<div class="section-title">Document flow</div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${q?`<button class="btn btn-secondary" onclick="openQuotationDocument('${q.id}')"><i class="ti ti-file-description"></i>${q.qno}</button><span style="color:var(--gray)">→</span>`:''}<button class="btn btn-secondary" onclick="openSalesOrderDocument('${so.id}')"><i class="ti ti-shopping-cart"></i>${so.soNo}</button><span style="color:var(--gray)">→</span><button class="btn btn-primary" disabled><i class="ti ti-file-invoice"></i>${inv.invNo}</button></div>`;
+  document.getElementById('document-summary-body').innerHTML = `<div class="section-title" style="margin-top:0">Invoice information</div><div class="detail-row"><span class="dk">Invoice number</span><strong style="color:var(--blue)">${inv.invNo}</strong></div><div class="detail-row"><span class="dk">Customer</span><strong>${so.customer}</strong></div><div class="detail-row"><span class="dk">Invoice date</span><span>${fmtDate(inv.date)}</span></div><div class="detail-row"><span class="dk">Due date</span><span>${fmtDate(inv.dueDate)}</span></div><div class="detail-row"><span class="dk">Zoho reference</span><span>${inv.zohoNo||'—'}</span></div><div class="detail-row"><span class="dk">Total</span><strong>${fmt(inv.total)}</strong></div>${Array.isArray(inv.items)&&inv.items.length?`<div class="section-title">Invoiced items</div><div class="table-wrap"><table><thead><tr><th>Description</th><th class="center">Qty</th><th class="center">UOM</th><th style="text-align:right">Amount</th></tr></thead><tbody>${inv.items.map(it=>`<tr><td>${escapeHtml(it.desc||'—')}</td><td class="center">${formatQuantity(it.qty)}</td><td class="center">${escapeHtml(it.uom||'—')}</td><td style="text-align:right">${fmt(it.subtotal||0)}</td></tr>`).join('')}</tbody></table></div>`:''}${inv.notes?`<div class="detail-row"><span class="dk">Notes</span><span>${inv.notes}</span></div>`:''}<div class="section-title">Document flow</div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${q?`<button class="btn btn-secondary" onclick="openQuotationDocument('${q.id}')"><i class="ti ti-file-description"></i>${q.qno}</button><span style="color:var(--gray)">→</span>`:''}<button class="btn btn-secondary" onclick="openSalesOrderDocument('${so.id}')"><i class="ti ti-shopping-cart"></i>${so.soNo}</button><span style="color:var(--gray)">→</span><button class="btn btn-primary" disabled><i class="ti ti-file-invoice"></i>${inv.invNo}</button></div>`;
   modal.classList.add('open');
 }
 function buildDocumentFlowHtml(q, so) {
@@ -10369,7 +10369,7 @@ function openRecordDelivery(soId) {
   const remaining=(so.items||[]).map((it,i)=>{const idx=it.origIdx!==undefined?it.origIdx:i;const rem=roundQtyForUom(Math.max(0,(Number(it.qty)||0)-(accepted[idx]||0)-(transit[idx]||0)),it.uom);return {...it,soIdx:i,origIdx:idx,acceptedQty:accepted[idx]||0,remainingQty:rem}}).filter(it=>it.remainingQty>0);
   if(!remaining.length){showToast('No quantity is available for dispatch','warning');return;}
   const modal=document.getElementById('so-delivery-modal');modal._soId=soId;modal._remainingItems=remaining;modal._saveOperationId='';
-  document.getElementById('dn-items-list').innerHTML=remaining.map((it,i)=>`<tr><td class="center">${i+1}</td><td><strong>${escapeHtml(it.desc||'—')}</strong></td><td class="center">${it.qty}</td><td class="center">${it.acceptedQty}</td><td class="center"><input class="so-qty-input" id="dn-qty-${i}" type="number" value="${it.remainingQty}" min="0" max="${it.remainingQty}" step="${qtyStep(it.uom)}" oninput="updateDNRemaining(${i})"></td><td class="center"><strong id="dn-rem-${i}">0</strong></td><td class="center">${escapeHtml(it.uom||'—')}</td></tr>`).join('');
+  document.getElementById('dn-items-list').innerHTML=remaining.map((it,i)=>`<tr><td class="center">${i+1}</td><td class="inv-item-description">${escapeHtml(it.desc||'—')}</td><td class="center">${it.qty}</td><td class="center">${it.acceptedQty}</td><td class="center"><input class="so-qty-input" id="dn-qty-${i}" type="number" value="${it.remainingQty}" min="0" max="${it.remainingQty}" step="${qtyStep(it.uom)}" oninput="updateDNRemaining(${i})"></td><td class="center"><strong id="dn-rem-${i}">0</strong></td><td class="center">${escapeHtml(it.uom||'—')}</td></tr>`).join('');
   openModalWithSize('so-delivery-modal');
 }
 function updateDNRemaining(i){const m=document.getElementById('so-delivery-modal'),it=(m._remainingItems||[])[i];if(!it)return;let q=roundQtyForUom(document.getElementById('dn-qty-'+i)?.value,it.uom);q=Math.max(0,Math.min(q,it.remainingQty));document.getElementById('dn-rem-'+i).textContent=roundQtyForUom(it.remainingQty-q,it.uom);}
@@ -10415,7 +10415,7 @@ function openDeliveryAcceptance(soId,deliveryIdx,opts={}){
  // Correction/Revision can be launched from the open Delivery Note viewer.
  // Keep the editor above the DN modal; otherwise it opens successfully but is hidden behind the viewer.
  modal.style.zIndex='6600';
- modal._soId=soId;modal._deliveryIdx=deliveryIdx;modal._confirmOperationId='';modal._acceptanceMode=editMode?opts.mode:'confirm';document.getElementById('dn-confirm-save-btn-text').textContent=editMode?(opts.mode==='correction'?'Save Correction':'Save Revision'):'Confirm Delivery';
+ modal._soId=soId;modal._deliveryIdx=deliveryIdx;modal._confirmOperationId='';modal._acceptanceMode=editMode?opts.mode:'confirm';modal._entrySource=opts.source||'bizcore';document.getElementById('dn-confirm-save-btn-text').textContent=editMode?(opts.mode==='correction'?'Save Correction':'Save Revision'):'Confirm Delivery';
  openModalWithSize('dn-confirm-modal');
  return modal.classList.contains('open');
 }
@@ -10504,18 +10504,59 @@ async function _saveDeliveryAcceptanceCore(operationId){
  if(window.FB?.fbPublishOperationalEvent){
    try{await window.FB.fbPublishOperationalEvent({id:`dn-confirmed-${d.id}-${operationId.replace(/[^a-zA-Z0-9_-]/g,'')}`,type:'dn-confirmed',dnId:d.id,dnNo:d.dnNo,soId:so.id,status:d.status,actor:deliveryActor(),sourceSession:getBizCoreSessionId(),createdAt:new Date().toISOString(),acceptanceMode:mode})}catch(e){console.warn('Delivery saved; operational notification publish failed',e)}
  }
- closeModal('dn-confirm-modal');renderSOPage();renderDNPage();viewDeliveryNote(so.id,m._deliveryIdx);showToast(mode==='confirm'?`${d.dnNo} confirmed — ${d.status}`:`${d.dnNo} ${mode==='correction'?'correction saved':'acceptance revised'}`,'success');return d;
+ const entrySource=m._entrySource||'bizcore';const deliveryIdx=m._deliveryIdx;
+ closeModal('dn-confirm-modal');renderSOPage();renderDNPage();
+ if(mode==='confirm'&&entrySource==='qr') showQRDeliverySuccess(so,d,deliveryIdx);
+ else viewDeliveryNote(so.id,deliveryIdx);
+ showToast(mode==='confirm'?`${d.dnNo} confirmed — ${d.status}`:`${d.dnNo} ${mode==='correction'?'correction saved':'acceptance revised'}`,'success');return d;
+}
+function collectDNConfirmationReview(){
+ const m=document.getElementById('dn-confirm-modal'),so=salesOrders.find(x=>x.id===m?._soId),d=so?.deliveries?.[m?._deliveryIdx];if(!d)return null;
+ const receivedBy=document.getElementById('dn-received-by')?.value.trim()||'';if(!receivedBy){const el=document.getElementById('dn-received-by');el?.focus();el?.scrollIntoView({behavior:'smooth',block:'center'});showDNActionMessage('Received By is required.','error');return null}
+ const check=validateAllDNLines({requireReason:true});if(!check.ok){const bad=document.getElementById('dn-card-'+check.first);bad?.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>document.querySelector(`#dn-card-${check.first} input.invalid, #dn-card-${check.first} select`)?.focus(),250);showDNActionMessage('Please correct the highlighted delivery quantities before confirming.','error');return null}
+ let accepted=0,rejected=0,total=0;
+ for(let i=0;i<d.items.length;i++){const it=d.items[i],q=Number(it.qty)||0,a=roundQtyForUom(document.getElementById('dn-acc-'+i)?.value,it.uom),r=roundQtyForUom(document.getElementById('dn-rej-'+i)?.value,it.uom);if(Math.abs((a+r)-q)>0.001){showDNActionMessage(`Line ${i+1}: Accepted + Rejected must equal delivery quantity`,'error');return null}if(r>0&&!document.getElementById('dn-reason-'+i)?.value){showDNActionMessage(`Line ${i+1}: Select a rejection reason`,'error');return null}accepted+=a;rejected+=r;total+=q}
+ return {so,d,accepted, rejected,total,receivedBy};
 }
 async function saveDeliveryAcceptance(){
  const m=document.getElementById('dn-confirm-modal');if(!m)return null;
  const so=salesOrders.find(x=>x.id===m._soId),d=so?.deliveries?.[m._deliveryIdx];if(!d)return null;
- const mode=m._acceptanceMode||'confirm';const operationId=m._confirmOperationId||(m._confirmOperationId=mode+':'+d.id+':'+Date.now()+':'+Math.random().toString(36).slice(2));
+ const mode=m._acceptanceMode||'confirm';
+ // Initial confirmation gets an explicit second review. Correction/revision already have their own audit reason workflow.
+ if(mode==='confirm'){
+   const review=collectDNConfirmationReview();if(!review)return null;
+   const rejected=review.rejected>0;
+   const ok=await showConfirmAsync({icon:rejected?'⚠️':'✅',title:'Confirm Delivery Acceptance',message:rejected?'Rejected quantity will return to the Sales Order for redelivery. Please review before confirming.':'Please review the quantities before confirming this delivery acceptance.',details:{'Delivery Note':review.d.dnNo,'Accepted':formatQuantity(review.accepted),'Rejected':formatQuantity(review.rejected),'Total':formatQuantity(review.total),'Received By':escapeHtml(review.receivedBy)},confirmText:'Confirm Acceptance',cancelText:'Back to Review',confirmClass:rejected?'btn-danger':'btn-success'});
+   if(!ok)return null;
+ }
+ const operationId=m._confirmOperationId||(m._confirmOperationId=mode+':'+d.id+':'+Date.now()+':'+Math.random().toString(36).slice(2));
  return runProtectedDocumentSave({
    key:'deliveryConfirm:'+operationId,
    message:mode==='confirm'?'Confirming Delivery…':(mode==='correction'?'Saving Correction…':'Saving Revision…'),buttonId:'dn-confirm-save-btn',buttonTextId:'dn-confirm-save-btn-text',busyText:'Confirming Delivery…',
    action:()=>_saveDeliveryAcceptanceCore(operationId),ready:(saved)=>!saved||!isModalOpen('dn-confirm-modal')
  });
 }
+
+function ensureQRWorkflowUI(){
+ if(document.getElementById('dn-qr-success-overlay'))return;
+ const style=document.createElement('style');style.textContent=`
+ #dn-qr-success-overlay,#dn-qr-scanner-overlay{position:fixed;inset:0;z-index:120000;background:rgba(15,23,42,.58);display:none;align-items:center;justify-content:center;padding:18px}
+ #dn-qr-success-overlay.open,#dn-qr-scanner-overlay.open{display:flex}.dn-qr-flow-card{width:min(460px,100%);background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(15,23,42,.28);overflow:hidden}.dn-qr-flow-body{padding:28px 24px;text-align:center}.dn-qr-success-icon{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;background:#dcfce7;color:#15803d;font-size:30px}.dn-qr-flow-body h2{margin:0 0 6px;font-size:21px;color:#0f2740}.dn-qr-flow-body p{margin:0;color:#64748b;font-size:13px}.dn-qr-result{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}.dn-qr-result div{border:1px solid #e2e8f0;border-radius:10px;padding:10px}.dn-qr-result span{display:block;font-size:11px;color:#64748b}.dn-qr-result strong{display:block;font-size:18px;margin-top:3px}.dn-qr-result .ok strong{color:#15803d}.dn-qr-result .bad strong{color:#b42318}.dn-qr-flow-actions{display:flex;gap:10px;justify-content:flex-end;padding:14px 18px;border-top:1px solid #e5e7eb;background:#f8fafc}.dn-qr-flow-actions .btn{min-width:130px}.dn-qr-video-wrap{position:relative;background:#0f172a;aspect-ratio:1/1;overflow:hidden}.dn-qr-video-wrap video{width:100%;height:100%;object-fit:cover}.dn-qr-scan-guide{position:absolute;inset:18%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.18)}.dn-qr-scan-msg{padding:12px 18px;font-size:12px;color:#64748b;text-align:center}@media(max-width:520px){.dn-qr-flow-actions{flex-direction:column-reverse}.dn-qr-flow-actions .btn{width:100%}}`;
+ document.head.appendChild(style);
+ document.body.insertAdjacentHTML('beforeend',`<div id="dn-qr-success-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body"><div class="dn-qr-success-icon"><i class="ti ti-check"></i></div><h2>Delivery Confirmed</h2><p id="dn-qr-success-text"></p><div class="dn-qr-result"><div class="ok"><span>Accepted</span><strong id="dn-qr-success-accepted">0</strong></div><div class="bad"><span>Rejected</span><strong id="dn-qr-success-rejected">0</strong></div></div></div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="finishQRDeliveryWorkflow()">Done</button><button class="btn btn-primary" onclick="startDeliveryQRScanner()"><i class="ti ti-scan"></i> Scan Another QR</button></div></div></div><div id="dn-qr-scanner-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body" style="padding-bottom:14px"><h2>Scan Delivery QR</h2><p>Point the camera at the QR code on the next Delivery Note.</p></div><div class="dn-qr-video-wrap"><video id="dn-qr-video" playsinline muted></video><div class="dn-qr-scan-guide"></div></div><div class="dn-qr-scan-msg" id="dn-qr-scan-msg">Starting camera…</div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="stopDeliveryQRScanner()">Cancel</button></div></div></div>`);
+}
+function showQRDeliverySuccess(so,d,deliveryIdx){
+ ensureQRWorkflowUI();let a=0,r=0;(d.items||[]).forEach(it=>{a+=deliveryAcceptedQty(d,it);r+=deliveryRejectedQty(d,it)});document.getElementById('dn-qr-success-text').textContent=`${d.dnNo} has been successfully recorded.`;document.getElementById('dn-qr-success-accepted').textContent=formatQuantity(a);document.getElementById('dn-qr-success-rejected').textContent=formatQuantity(r);const o=document.getElementById('dn-qr-success-overlay');o.dataset.soId=so.id;o.dataset.deliveryIdx=deliveryIdx;o.classList.add('open');
+}
+function finishQRDeliveryWorkflow(){stopDeliveryQRScanner();document.getElementById('dn-qr-success-overlay')?.classList.remove('open');history.replaceState({},'',location.pathname);showPage('deliverynotes');renderDNPage();}
+let _dnQRStream=null,_dnQRScanTimer=null;
+function stopDeliveryQRScanner(){if(_dnQRScanTimer){clearInterval(_dnQRScanTimer);_dnQRScanTimer=null}if(_dnQRStream){_dnQRStream.getTracks().forEach(t=>t.stop());_dnQRStream=null}document.getElementById('dn-qr-scanner-overlay')?.classList.remove('open')}
+async function startDeliveryQRScanner(){
+ ensureQRWorkflowUI();document.getElementById('dn-qr-success-overlay')?.classList.remove('open');const overlay=document.getElementById('dn-qr-scanner-overlay'),video=document.getElementById('dn-qr-video'),msg=document.getElementById('dn-qr-scan-msg');overlay.classList.add('open');msg.textContent='Starting camera…';
+ if(!('BarcodeDetector'in window)){msg.textContent='QR camera scanning is not supported by this browser. Use the phone camera to scan the next Delivery Note QR.';return}
+ try{_dnQRStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});video.srcObject=_dnQRStream;await video.play();const detector=new BarcodeDetector({formats:['qr_code']});msg.textContent='Ready — scan the next Delivery Note QR.';_dnQRScanTimer=setInterval(async()=>{if(video.readyState<2)return;try{const codes=await detector.detect(video);if(!codes.length)return;const raw=codes[0].rawValue||'';const u=new URL(raw,location.href),token=u.searchParams.get('t')||u.searchParams.get('delivery');if(!token)return;stopDeliveryQRScanner();location.href='index.html?delivery='+encodeURIComponent(token)}catch(e){}},450)}catch(e){msg.textContent='Camera could not be opened. Check camera permission and try again.'}
+}
+
 async function confirmDelivery(soId,deliveryIdx){openDeliveryAcceptance(soId,deliveryIdx)}
 function createDeliveryAccessToken(){
  const bytes=new Uint8Array(24);
@@ -10561,7 +10602,7 @@ function openDNFromDeepLink(){
  setTimeout(()=>{
    try{
      if(hit.d.customerConfirmed) viewDeliveryNote(hit.so.id,hit.i);
-     else openDeliveryAcceptance(hit.so.id,hit.i);
+     else openDeliveryAcceptance(hit.so.id,hit.i,{source:'qr'});
 
      const targetId=hit.d.customerConfirmed?'dn-print-modal':'dn-confirm-modal';
      const target=document.getElementById(targetId);
@@ -10722,54 +10763,57 @@ function printDeliveryNote(format='standard',soArg=null,dArg=null,idxArg=null) {
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeTitle}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>${html}<scr`+`ipt>(function(){var returned=false;var wantedTitle=${JSON.stringify(printTitle)};function keepTitle(){try{document.title=wantedTitle;}catch(e){}}function backToBizCore(){if(returned)return;returned=true;try{if(window.opener&&!window.opener.closed){window.opener.focus();}}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},80);}window.addEventListener('beforeprint',keepTitle);window.addEventListener('afterprint',backToBizCore);window.onload=function(){keepTitle();requestAnimationFrame(function(){requestAnimationFrame(function(){keepTitle();setTimeout(function(){keepTitle();window.print();},180);});});};})();</scr`+`ipt></body></html>`);w.document.close();
 }
 
-/* ── Create Invoice ── */
-function openCreateInvoice(soId) {
-  const so = salesOrders.find(x=>x.id===soId); if (!so) return;
-  currentSOId = soId;
-  const invNo = 'Auto on Save';
-  const today = new Date().toISOString().split('T')[0];
-  const dueDate = new Date(); dueDate.setDate(dueDate.getDate()+14);
-  const dueDateStr = dueDate.toISOString().split('T')[0];
-
-  document.getElementById('inv-modal-title').textContent = 'Create Invoice — ' + so.soNo;
-  document.getElementById('inv-no').value = invNo;
-  document.getElementById('inv-date').value = today;
-  document.getElementById('inv-zoho').value = '';
-  document.getElementById('inv-due').value = dueDateStr;
-  document.getElementById('inv-notes').value = '';
-  document.getElementById('inv-sum-sub').textContent = documentMoney('customerInvoice','summary',so.subtotal);
-  document.getElementById('inv-sum-vat').textContent = documentMoney('customerInvoice','summary',so.vat);
-  document.getElementById('inv-sum-vat-label').textContent = 'VAT (' + Math.round((so.vatRate||0.15)*100) + '%)';
-  document.getElementById('inv-sum-total').textContent = documentMoney('customerInvoice','grandTotal',so.total);
-  document.getElementById('so-invoice-modal')._soId = soId;
-  openModalWithSize('so-invoice-modal');
+/* ── Create Invoice / Partial Invoicing (V229) ── */
+function invoiceAcceptedQtyMap(so){
+  const map={};
+  (so.deliveries||[]).forEach(d=>{if(!d.customerConfirmed)return;(d.items||[]).forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;if(idx==null)return;map[idx]=roundQty((map[idx]||0)+deliveryAcceptedQty(d,it));});});
+  return map;
 }
-
+function invoicePreviouslyInvoicedQtyMap(so){
+  const map={};
+  (so.invoices||[]).forEach(inv=>{
+    if(Array.isArray(inv.items)&&inv.items.length){inv.items.forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;if(idx==null)return;map[idx]=roundQty((map[idx]||0)+(Number(it.qty)||0));});}
+    else { // Backward compatibility: invoices created before partial invoicing represented the full SO.
+      (so.items||[]).forEach((it,i)=>{map[i]=roundQty((map[i]||0)+(Number(it.qty)||0));});
+    }
+  });
+  return map;
+}
+function invoiceAvailableLines(so){
+  const accepted=invoiceAcceptedQtyMap(so), invoiced=invoicePreviouslyInvoicedQtyMap(so);
+  return (so.items||[]).map((it,i)=>{const ordered=Number(it.qty)||0,a=Math.min(ordered,accepted[i]||0),iv=Math.min(ordered,invoiced[i]||0),available=roundQtyForUom(Math.max(0,a-iv),it.uom);return {...it,origIdx:i,acceptedQty:a,invoicedQty:iv,availableQty:available,invoiceQty:available};});
+}
+function invoiceLineVatRate(so,it){const r=Number(it.vatRate);return Number.isFinite(r)?r:Number(so.vatRate||0.15);}
+function recalcInvoiceSummary(){
+  const modal=document.getElementById('so-invoice-modal'),so=salesOrders.find(x=>x.id===modal?._soId);if(!so)return;
+  let sub=0,vat=0,hasQty=false;
+  (modal._invoiceLines||[]).forEach((it,i)=>{let q=roundQtyForUom(document.getElementById('inv-qty-'+i)?.value,it.uom);q=Math.max(0,Math.min(it.availableQty,q));const el=document.getElementById('inv-qty-'+i);if(el&&Number(el.value)!==q)el.value=q||0;const line=q*(Number(it.up)||0);sub+=line;vat+=line*invoiceLineVatRate(so,it);hasQty=hasQty||q>0;const amt=document.getElementById('inv-line-amount-'+i);if(amt)amt.textContent=documentMoney('customerInvoice','lineAmount',line);});
+  sub=Math.round(sub*100)/100;vat=Math.round(vat*100)/100;const total=Math.round((sub+vat)*100)/100;
+  document.getElementById('inv-sum-sub').textContent=documentMoney('customerInvoice','summary',sub);document.getElementById('inv-sum-vat').textContent=documentMoney('customerInvoice','summary',vat);document.getElementById('inv-sum-vat-label').textContent='VAT ('+Math.round((so.vatRate||0.15)*100)+'%)';document.getElementById('inv-sum-total').textContent=documentMoney('customerInvoice','grandTotal',total);
+  const btn=document.getElementById('inv-create-btn');if(btn)btn.disabled=!hasQty;modal._invoiceTotals={subtotal:sub,vat,total};
+}
+function invoiceAllAvailable(){const m=document.getElementById('so-invoice-modal');(m._invoiceLines||[]).forEach((it,i)=>{const e=document.getElementById('inv-qty-'+i);if(e)e.value=it.availableQty;});recalcInvoiceSummary();}
+function clearInvoiceQty(){const m=document.getElementById('so-invoice-modal');(m._invoiceLines||[]).forEach((it,i)=>{const e=document.getElementById('inv-qty-'+i);if(e)e.value=0;});recalcInvoiceSummary();}
+function openCreateInvoice(soId) {
+  const so=salesOrders.find(x=>x.id===soId);if(!so)return;currentSOId=soId;
+  const lines=invoiceAvailableLines(so),availableLines=lines.filter(x=>x.availableQty>0.001);
+  const today=new Date().toISOString().split('T')[0],dueDate=new Date();dueDate.setDate(dueDate.getDate()+14);
+  document.getElementById('inv-modal-title').textContent='Create Invoice — '+so.soNo;document.getElementById('inv-date').value=today;document.getElementById('inv-zoho').value='';document.getElementById('inv-due').value=dueDate.toISOString().split('T')[0];document.getElementById('inv-notes').value='';
+  const body=document.getElementById('inv-items-list');body.innerHTML=availableLines.map((it,i)=>`<tr><td>${i+1}</td><td class="inv-item-description">${escapeHtml(it.desc||'—')}</td><td>${formatQuantity(it.acceptedQty)}</td><td>${formatQuantity(it.invoicedQty)}</td><td class="inv-available">${formatQuantity(it.availableQty)}</td><td>${escapeHtml(it.uom||'—')}</td><td>${documentMoney('customerInvoice','unitPrice',Number(it.up)||0)}</td><td><input class="inv-qty-input" id="inv-qty-${i}" type="number" min="0" max="${it.availableQty}" step="${qtyStep(it.uom)}" value="${it.availableQty}" oninput="recalcInvoiceSummary()"></td><td class="inv-line-amount" id="inv-line-amount-${i}">—</td></tr>`).join('');
+  document.getElementById('inv-empty-note').hidden=availableLines.length>0;document.querySelector('#so-invoice-modal .inv-items-table-wrap').style.display=availableLines.length?'block':'none';
+  const modal=document.getElementById('so-invoice-modal');modal._soId=soId;modal._invoiceLines=availableLines;modal._invoiceTotals={subtotal:0,vat:0,total:0};openModalWithSize('so-invoice-modal');recalcInvoiceSummary();
+}
 async function saveInvoice() {
-  const modal = document.getElementById('so-invoice-modal');
-  const soId = modal._soId;
-  const so = salesOrders.find(x=>x.id===soId); if (!so) return;
-  const date = document.getElementById('inv-date').value;
-  if (!date) { showToast('Please enter invoice date','error'); return; }
-
+  const modal=document.getElementById('so-invoice-modal'),soId=modal._soId,so=salesOrders.find(x=>x.id===soId);if(!so)return;
+  const date=document.getElementById('inv-date').value;if(!date){showToast('Please enter invoice date','error');return;}
+  const items=[];(modal._invoiceLines||[]).forEach((it,i)=>{let qty=roundQtyForUom(document.getElementById('inv-qty-'+i)?.value,it.uom);qty=Math.max(0,Math.min(it.availableQty,qty));if(qty>0){const up=Number(it.up)||0,subtotal=Math.round(qty*up*100)/100,vatRate=invoiceLineVatRate(so,it),vat=Math.round(subtotal*vatRate*100)/100;items.push({origIdx:it.origIdx,desc:it.desc||'',uom:it.uom||'',qty,up,vatRate,subtotal,vat,total:Math.round((subtotal+vat)*100)/100});}});
+  if(!items.length){showToast('Enter at least one invoice quantity','error');return;}
+  // Recheck availability at save time to protect against duplicate/parallel invoicing.
+  const latest=invoiceAvailableLines(so);for(const row of items){const avail=latest.find(x=>x.origIdx===row.origIdx)?.availableQty||0;if(row.qty>avail+0.001){showToast('Available quantity changed. Please reopen the invoice screen and try again.','error');return;}}
+  const subtotal=Math.round(items.reduce((s,x)=>s+x.subtotal,0)*100)/100,vat=Math.round(items.reduce((s,x)=>s+x.vat,0)*100)/100,total=Math.round((subtotal+vat)*100)/100;
   const invNumber=await allocateDocumentNumber('customerInvoice',new Date(date+'T00:00:00'));
-  const inv = {
-    invNo:   invNumber,
-    zohoNo:  document.getElementById('inv-zoho').value.trim(),
-    date,
-    dueDate: document.getElementById('inv-due').value,
-    notes:   document.getElementById('inv-notes').value.trim(),
-    subtotal:so.subtotal,
-    vat:     so.vat,
-    total:   so.total,
-    created: new Date().toISOString(),
-  };
-  so.invoices.push(inv);
-  await saveSalesOrders();
-  closeModal('so-invoice-modal');
-  showToast('Invoice ' + inv.invNo + ' created', 'success');
-  renderSOPage();
-  viewSO(soId);
+  const inv={invNo:invNumber,zohoNo:document.getElementById('inv-zoho').value.trim(),date,dueDate:document.getElementById('inv-due').value,notes:document.getElementById('inv-notes').value.trim(),items,subtotal,vat,total,isPartial:items.some(x=>(latest.find(y=>y.origIdx===x.origIdx)?.availableQty||0)>x.qty+0.001)||latest.some(x=>x.availableQty>0.001&&!items.some(y=>y.origIdx===x.origIdx)),created:new Date().toISOString()};
+  so.invoices=so.invoices||[];so.invoices.push(inv);await saveSalesOrders();closeModal('so-invoice-modal');showToast('Invoice '+inv.invNo+' created','success');renderSOPage();viewSO(soId);
 }
 
 /* ── Record Payment ── */
