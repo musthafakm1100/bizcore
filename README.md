@@ -182,3 +182,10 @@ V215 deployment consistency fix:
 - Bumps the PWA service-worker cache and disables service-worker update caching.
 - Reasserts the DN print title immediately before printing so Save as PDF uses DN No. - Customer Name.
 - Keeps the approved V214/V209 DN print template unchanged.
+
+
+## v216
+- Applied the proven DN hosted/PWA print lifecycle to quotation output.
+- Save-as-PDF title uses Quotation No - Customer Name.
+- After print/save, focus returns to the quotation screen and the temporary print window closes where allowed.
+- Bumped app/service-worker cache version to v216 for GitHub/PWA consistency.

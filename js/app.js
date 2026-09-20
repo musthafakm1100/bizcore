@@ -10909,9 +10909,29 @@ function _tplData(id) {
     f2:buildPrintFooterInfo(settings)};
 }
 
+function _quotationPrintFilenameTitle(){
+  const q=quotations.find(x=>x.id===_printQID);
+  if(!q) return 'Quotation';
+  const rawCustomer=(q.company||q.customer||q.customerName||'').trim();
+  const safeCustomer=rawCustomer.replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim();
+  const safeNo=String(q.qno||'Quotation').replace(/[\\/:*?"<>|]+/g,'-').trim();
+  return safeCustomer ? safeNo+' - '+safeCustomer : safeNo;
+}
 function _tplOpen(html) {
   const w=window.open('','_blank','width=880,height=1020');
-  w.document.write(html); w.document.close();
+  if(!w) return;
+  const printTitle=_quotationPrintFilenameTitle();
+  const escTitle=String(printTitle).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  // Hosted/PWA builds can otherwise retain the BizCore shell title.  Make the
+  // quotation print document self-contained and reassert its title immediately
+  // before printing so Save as PDF proposes "Quotation No - Customer".
+  html=String(html||'').replace(/<title>[\s\S]*?<\/title>/i,'<title>'+escTitle+'</title>');
+  const lifecycle='<scr'+'ipt>(function(){var t='+JSON.stringify(printTitle)+';function setTitle(){try{document.title=t}catch(e){}}setTitle();window.addEventListener("beforeprint",setTitle);window.addEventListener("afterprint",function(){try{if(window.opener&&!window.opener.closed){window.opener.focus();}}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},120);});})();<'+'/script>';
+  html=html.replace(/<\/body>/i,lifecycle+'</body>');
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  try{w.document.title=printTitle;}catch(e){}
 }
 
 
