@@ -274,9 +274,15 @@ V229: Simplified Customer Invoice entry and added accepted-quantity partial invo
 - Fully releases video tracks/srcObject between scans and guards scanner restart state.
 
 
-## v232
+## v233
 - Prevents Dashboard flash when a Delivery Note QR deep link is opened; a neutral Opening Delivery Confirmation overlay remains until the target workflow is ready.
 - Scan Another QR routes inside the SPA instead of reloading index.html, avoiding Dashboard exposure between scans.
 - iPhone/Safari QR fallback now attempts multiple decoder CDNs when native BarcodeDetector is unavailable.
 - Scanner stays in Starting QR scanner state until a decoder is actually ready.
-- PWA cache/version bumped to v232.
+- PWA cache/version bumped to v233.
+
+
+## v233
+- Fixed repeated QR scanning session lifecycle on mobile: old deep-link/navigation state can no longer close a newly opened scanner.
+- Mobile QR Finish now ends on a controlled completion screen and attempts to close the QR-opened window when the browser permits; it never exposes the ERP screens.
+- Desktop QR Finish keeps BizCore open and returns to the completed Delivery Note.

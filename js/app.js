@@ -10540,16 +10540,39 @@ async function saveDeliveryAcceptance(){
 function ensureQRWorkflowUI(){
  if(document.getElementById('dn-qr-success-overlay'))return;
  const style=document.createElement('style');style.textContent=`
- #dn-qr-success-overlay,#dn-qr-scanner-overlay{position:fixed;inset:0;z-index:120000;background:rgba(15,23,42,.58);display:none;align-items:center;justify-content:center;padding:18px}
- #dn-qr-success-overlay.open,#dn-qr-scanner-overlay.open{display:flex}.dn-qr-flow-card{width:min(460px,100%);background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(15,23,42,.28);overflow:hidden}.dn-qr-flow-body{padding:28px 24px;text-align:center}.dn-qr-success-icon{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;background:#dcfce7;color:#15803d;font-size:30px}.dn-qr-flow-body h2{margin:0 0 6px;font-size:21px;color:#0f2740}.dn-qr-flow-body p{margin:0;color:#64748b;font-size:13px}.dn-qr-result{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}.dn-qr-result div{border:1px solid #e2e8f0;border-radius:10px;padding:10px}.dn-qr-result span{display:block;font-size:11px;color:#64748b}.dn-qr-result strong{display:block;font-size:18px;margin-top:3px}.dn-qr-result .ok strong{color:#15803d}.dn-qr-result .bad strong{color:#b42318}.dn-qr-flow-actions{display:flex;gap:10px;justify-content:flex-end;padding:14px 18px;border-top:1px solid #e5e7eb;background:#f8fafc}.dn-qr-flow-actions .btn{min-width:130px}.dn-qr-video-wrap{position:relative;background:#0f172a;aspect-ratio:1/1;overflow:hidden}.dn-qr-video-wrap video{width:100%;height:100%;object-fit:cover}.dn-qr-scan-guide{position:absolute;inset:18%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.18)}.dn-qr-scan-msg{padding:12px 18px;font-size:12px;color:#64748b;text-align:center}@media(max-width:520px){.dn-qr-flow-actions{flex-direction:column-reverse}.dn-qr-flow-actions .btn{width:100%}}`;
+ #dn-qr-success-overlay,#dn-qr-scanner-overlay,#dn-qr-finished-overlay{position:fixed;inset:0;z-index:120000;background:rgba(15,23,42,.58);display:none;align-items:center;justify-content:center;padding:18px}
+ #dn-qr-success-overlay.open,#dn-qr-scanner-overlay.open,#dn-qr-finished-overlay.open{display:flex}.dn-qr-flow-card{width:min(460px,100%);background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(15,23,42,.28);overflow:hidden}.dn-qr-flow-body{padding:28px 24px;text-align:center}.dn-qr-success-icon{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;background:#dcfce7;color:#15803d;font-size:30px}.dn-qr-flow-body h2{margin:0 0 6px;font-size:21px;color:#0f2740}.dn-qr-flow-body p{margin:0;color:#64748b;font-size:13px}.dn-qr-result{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}.dn-qr-result div{border:1px solid #e2e8f0;border-radius:10px;padding:10px}.dn-qr-result span{display:block;font-size:11px;color:#64748b}.dn-qr-result strong{display:block;font-size:18px;margin-top:3px}.dn-qr-result .ok strong{color:#15803d}.dn-qr-result .bad strong{color:#b42318}.dn-qr-flow-actions{display:flex;gap:10px;justify-content:flex-end;padding:14px 18px;border-top:1px solid #e5e7eb;background:#f8fafc}.dn-qr-flow-actions .btn{min-width:130px}.dn-qr-video-wrap{position:relative;background:#0f172a;aspect-ratio:1/1;overflow:hidden}.dn-qr-video-wrap video{width:100%;height:100%;object-fit:cover}.dn-qr-scan-guide{position:absolute;inset:18%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.18)}.dn-qr-scan-msg{padding:12px 18px;font-size:12px;color:#64748b;text-align:center}@media(max-width:520px){.dn-qr-flow-actions{flex-direction:column-reverse}.dn-qr-flow-actions .btn{width:100%}}`;
  document.head.appendChild(style);
  document.body.insertAdjacentHTML('beforeend',`<div id="dn-qr-success-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body"><div class="dn-qr-success-icon"><i class="ti ti-check"></i></div><h2>Delivery Confirmed</h2><p id="dn-qr-success-text"></p><div class="dn-qr-result"><div class="ok"><span>Accepted</span><strong id="dn-qr-success-accepted">0</strong></div><div class="bad"><span>Rejected</span><strong id="dn-qr-success-rejected">0</strong></div></div></div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="finishQRDeliveryWorkflow()">Done</button><button class="btn btn-primary" onclick="startDeliveryQRScanner()"><i class="ti ti-scan"></i> Scan Another QR</button></div></div></div><div id="dn-qr-scanner-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body" style="padding-bottom:14px"><h2>Scan Delivery QR</h2><p>Point the camera at the QR code on the next Delivery Note.</p></div><div class="dn-qr-video-wrap"><video id="dn-qr-video" playsinline muted></video><div class="dn-qr-scan-guide"></div></div><div class="dn-qr-scan-msg" id="dn-qr-scan-msg">Starting camera…</div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="stopDeliveryQRScanner()">Cancel</button></div></div></div>`);
 }
 function showQRDeliverySuccess(so,d,deliveryIdx){
  ensureQRWorkflowUI();let a=0,r=0;(d.items||[]).forEach(it=>{a+=deliveryAcceptedQty(d,it);r+=deliveryRejectedQty(d,it)});document.getElementById('dn-qr-success-text').textContent=`${d.dnNo} has been successfully recorded.`;document.getElementById('dn-qr-success-accepted').textContent=formatQuantity(a);document.getElementById('dn-qr-success-rejected').textContent=formatQuantity(r);const o=document.getElementById('dn-qr-success-overlay');o.dataset.soId=so.id;o.dataset.deliveryIdx=deliveryIdx;o.classList.add('open');
 }
-function finishQRDeliveryWorkflow(){stopDeliveryQRScanner();document.getElementById('dn-qr-success-overlay')?.classList.remove('open');history.replaceState({},'',location.pathname);showPage('deliverynotes');renderDNPage();}
-let _dnQRStream=null,_dnQRScanTimer=null,_dnQRScanGeneration=0,_dnQRStarting=false,_dnQRDecoderPromise=null;
+function isMobileQRWorkflow(){
+ return !!(window.matchMedia?.('(max-width: 820px)').matches && (window.matchMedia?.('(pointer: coarse)').matches || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent||'')));
+}
+function showMobileQRFinished(){
+ stopDeliveryQRScanner();
+ document.getElementById('dn-qr-success-overlay')?.classList.remove('open');
+ history.replaceState({},'',location.pathname);
+ let o=document.getElementById('dn-qr-finished-overlay');
+ if(!o){
+   document.body.insertAdjacentHTML('beforeend',`<div id="dn-qr-finished-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body"><div class="dn-qr-success-icon"><i class="ti ti-check"></i></div><h2>Delivery Update Completed</h2><p>The delivery update has been saved. You can now close this window.</p></div></div></div>`);
+   o=document.getElementById('dn-qr-finished-overlay');
+ }
+ o.classList.add('open');
+ // Browsers only allow script-closing in limited cases. Attempt it, but keep a safe mobile-only final screen if blocked.
+ setTimeout(()=>{try{window.close()}catch(e){}},180);
+}
+function finishQRDeliveryWorkflow(){
+ const success=document.getElementById('dn-qr-success-overlay');
+ const soId=success?.dataset.soId,deliveryIdx=Number(success?.dataset.deliveryIdx);
+ if(isMobileQRWorkflow()){showMobileQRFinished();return}
+ stopDeliveryQRScanner();success?.classList.remove('open');history.replaceState({},'',location.pathname);
+ if(soId && Number.isFinite(deliveryIdx)){viewDeliveryNote(soId,deliveryIdx);return}
+ showPage('deliverynotes');renderDNPage();
+}
+let _dnQRStream=null,_dnQRScanTimer=null,_dnQRScanGeneration=0,_dnQRStarting=false,_dnQRDecoderPromise=null,_dnQRSessionId=0;
 function _loadDNQRDecoder(){
  if(typeof window.jsQR==='function') return Promise.resolve(window.jsQR);
  if(_dnQRDecoderPromise) return _dnQRDecoderPromise;
@@ -10593,11 +10616,17 @@ function _extractDeliveryQRToken(raw){
 async function startDeliveryQRScanner(){
  if(_dnQRStarting)return;
  _dnQRStarting=true;
+ const sessionId=++_dnQRSessionId;
+ // A new scan is a fresh workflow session. Clear the previous deep-link route first so
+ // Firebase/render retries cannot reopen the just-completed DN and close the new scanner.
+ history.replaceState({},'',location.pathname);
+ window._dnDeepLinkOpened=null;window._dnDeepLinkRouting=null;
  // Always release a previous iOS camera session before requesting the next one.
  if(_dnQRScanTimer){clearInterval(_dnQRScanTimer);_dnQRScanTimer=null}
  if(_dnQRStream){_dnQRStream.getTracks().forEach(t=>{try{t.stop()}catch(e){}});_dnQRStream=null}
  ensureQRWorkflowUI();
  document.getElementById('dn-qr-success-overlay')?.classList.remove('open');
+ document.getElementById('dn-qr-finished-overlay')?.classList.remove('open');
  const overlay=document.getElementById('dn-qr-scanner-overlay'),video=document.getElementById('dn-qr-video'),msg=document.getElementById('dn-qr-scan-msg');
  try{video.pause()}catch(e){};video.srcObject=null;
  overlay.classList.add('open');msg.textContent='Starting camera…';
@@ -10605,7 +10634,7 @@ async function startDeliveryQRScanner(){
  if(!navigator.mediaDevices?.getUserMedia){msg.textContent='Camera Scanner Unavailable. Use your phone Camera app to scan the Delivery Note QR and open the BizCore link.';_dnQRStarting=false;return}
  try{
    _dnQRStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
-   if(generation!==_dnQRScanGeneration){_dnQRStream.getTracks().forEach(t=>t.stop());_dnQRStream=null;_dnQRStarting=false;return}
+   if(generation!==_dnQRScanGeneration||sessionId!==_dnQRSessionId){_dnQRStream.getTracks().forEach(t=>t.stop());_dnQRStream=null;_dnQRStarting=false;return}
    video.srcObject=_dnQRStream;await video.play();
    let detector=null;
    if('BarcodeDetector' in window){try{detector=new BarcodeDetector({formats:['qr_code']})}catch(e){detector=null}}
@@ -10619,7 +10648,7 @@ async function startDeliveryQRScanner(){
    msg.textContent='Ready — scan the next Delivery Note QR.';_dnQRStarting=false;
    let busy=false;
    _dnQRScanTimer=setInterval(async()=>{
-     if(busy||generation!==_dnQRScanGeneration||video.readyState<2||!video.videoWidth)return;
+     if(busy||generation!==_dnQRScanGeneration||sessionId!==_dnQRSessionId||video.readyState<2||!video.videoWidth)return;
      busy=true;
      try{
        let raw='';
