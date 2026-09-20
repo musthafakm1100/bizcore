@@ -14,7 +14,7 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
-// v233: jsQR is loaded on demand by the scanner with multiple CDN fallbacks.
+// v234: jsQR is loaded on demand by the scanner with multiple CDN fallbacks.
 // Avoid blocking BizCore startup when one CDN is unavailable on iPhone/Safari.
 </script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -1895,7 +1895,7 @@ document.addEventListener('error', function(e) {
 <div class="dn-confirm-intro"><div><strong>Confirm customer acceptance</strong><span>Rejected quantities automatically return to the Sales Order remaining quantity.</span></div><div id="dn-confirm-summary" class="dn-confirm-summary"></div></div>
 <div id="dn-confirm-items" class="dn-confirm-items"></div>
 <section class="dn-receiver-card"><div class="dn-section-title"><span class="dn-section-icon"><i class="ti ti-user-check"></i></span><div><strong>Customer Receipt</strong><span>Record who accepted this delivery.</span></div></div><div class="dn-receiver-grid"><div class="form-group"><label>Received By <em>*</em></label><input id="dn-received-by" autocomplete="name" placeholder="Customer representative name"/></div><div class="form-group"><label>Customer / Delivery Remarks</label><textarea id="dn-customer-remarks" rows="2" placeholder="Add remarks if required…"></textarea></div></div></section>
-</div><div class="modal-footer dn-confirm-footer"><div class="dn-footer-note"><i class="ti ti-info-circle"></i><span>Review quantities before confirming.</span></div><div class="dn-footer-actions"><button class="btn btn-secondary" onclick="closeModal('dn-confirm-modal')">Cancel</button><button class="btn btn-success dn-confirm-primary" id="dn-confirm-save-btn" onclick="saveDeliveryAcceptance()"><i class="ti ti-circle-check"></i><span id="dn-confirm-save-btn-text">Confirm Delivery</span></button></div></div></div></div>
+</div><div class="modal-footer dn-confirm-footer"><div class="dn-footer-note"><i class="ti ti-info-circle"></i><span>Review quantities before confirming.</span></div><div class="dn-footer-actions"><button class="btn btn-secondary" onclick="cancelDeliveryConfirmation()">Cancel</button><button class="btn btn-success dn-confirm-primary" id="dn-confirm-save-btn" onclick="saveDeliveryAcceptance()"><i class="ti ti-circle-check"></i><span id="dn-confirm-save-btn-text">Confirm Delivery</span></button></div></div></div></div>
 <!-- CREATE INVOICE MODAL -->
 <div class="modal-overlay" id="so-invoice-modal">
 <div class="modal inv-create-modal">

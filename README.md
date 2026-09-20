@@ -286,3 +286,11 @@ V229: Simplified Customer Invoice entry and added accepted-quantity partial invo
 - Fixed repeated QR scanning session lifecycle on mobile: old deep-link/navigation state can no longer close a newly opened scanner.
 - Mobile QR Finish now ends on a controlled completion screen and attempts to close the QR-opened window when the browser permits; it never exposes the ERP screens.
 - Desktop QR Finish keeps BizCore open and returns to the completed Delivery Note.
+
+
+### v234 – Mobile QR Cancel & Close controls
+- Mobile QR Delivery Confirmation Cancel now asks for confirmation and never leaks into Dashboard/DN/ERP screens.
+- Cancel Update ends on a controlled mobile screen with Scan Another QR and Close.
+- Successful mobile QR completion now provides actual Scan Another QR and Close controls.
+- Close attempts browser/tab close; when iOS Safari blocks scripted closing, BizCore remains on a protected exit screen with a Close Window control/instruction.
+- Desktop/PC cancellation and completion retain normal BizCore behavior.

@@ -10541,28 +10541,63 @@ function ensureQRWorkflowUI(){
  if(document.getElementById('dn-qr-success-overlay'))return;
  const style=document.createElement('style');style.textContent=`
  #dn-qr-success-overlay,#dn-qr-scanner-overlay,#dn-qr-finished-overlay{position:fixed;inset:0;z-index:120000;background:rgba(15,23,42,.58);display:none;align-items:center;justify-content:center;padding:18px}
- #dn-qr-success-overlay.open,#dn-qr-scanner-overlay.open,#dn-qr-finished-overlay.open{display:flex}.dn-qr-flow-card{width:min(460px,100%);background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(15,23,42,.28);overflow:hidden}.dn-qr-flow-body{padding:28px 24px;text-align:center}.dn-qr-success-icon{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;background:#dcfce7;color:#15803d;font-size:30px}.dn-qr-flow-body h2{margin:0 0 6px;font-size:21px;color:#0f2740}.dn-qr-flow-body p{margin:0;color:#64748b;font-size:13px}.dn-qr-result{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}.dn-qr-result div{border:1px solid #e2e8f0;border-radius:10px;padding:10px}.dn-qr-result span{display:block;font-size:11px;color:#64748b}.dn-qr-result strong{display:block;font-size:18px;margin-top:3px}.dn-qr-result .ok strong{color:#15803d}.dn-qr-result .bad strong{color:#b42318}.dn-qr-flow-actions{display:flex;gap:10px;justify-content:flex-end;padding:14px 18px;border-top:1px solid #e5e7eb;background:#f8fafc}.dn-qr-flow-actions .btn{min-width:130px}.dn-qr-video-wrap{position:relative;background:#0f172a;aspect-ratio:1/1;overflow:hidden}.dn-qr-video-wrap video{width:100%;height:100%;object-fit:cover}.dn-qr-scan-guide{position:absolute;inset:18%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.18)}.dn-qr-scan-msg{padding:12px 18px;font-size:12px;color:#64748b;text-align:center}@media(max-width:520px){.dn-qr-flow-actions{flex-direction:column-reverse}.dn-qr-flow-actions .btn{width:100%}}`;
+ #dn-qr-success-overlay.open,#dn-qr-scanner-overlay.open,#dn-qr-finished-overlay.open{display:flex}.dn-qr-flow-card{width:min(460px,100%);background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(15,23,42,.28);overflow:hidden}.dn-qr-flow-body{padding:28px 24px;text-align:center}.dn-qr-exit-icon{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;background:#eff6ff;color:#1d4ed8;font-size:30px}.dn-qr-success-icon{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;background:#dcfce7;color:#15803d;font-size:30px}.dn-qr-flow-body h2{margin:0 0 6px;font-size:21px;color:#0f2740}.dn-qr-flow-body p{margin:0;color:#64748b;font-size:13px}.dn-qr-result{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}.dn-qr-result div{border:1px solid #e2e8f0;border-radius:10px;padding:10px}.dn-qr-result span{display:block;font-size:11px;color:#64748b}.dn-qr-result strong{display:block;font-size:18px;margin-top:3px}.dn-qr-result .ok strong{color:#15803d}.dn-qr-result .bad strong{color:#b42318}.dn-qr-flow-actions{display:flex;gap:10px;justify-content:flex-end;padding:14px 18px;border-top:1px solid #e5e7eb;background:#f8fafc}.dn-qr-flow-actions .btn{min-width:130px}.dn-qr-video-wrap{position:relative;background:#0f172a;aspect-ratio:1/1;overflow:hidden}.dn-qr-video-wrap video{width:100%;height:100%;object-fit:cover}.dn-qr-scan-guide{position:absolute;inset:18%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.18)}.dn-qr-scan-msg{padding:12px 18px;font-size:12px;color:#64748b;text-align:center}@media(max-width:520px){.dn-qr-flow-actions{flex-direction:column-reverse}.dn-qr-flow-actions .btn{width:100%}}`;
  document.head.appendChild(style);
- document.body.insertAdjacentHTML('beforeend',`<div id="dn-qr-success-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body"><div class="dn-qr-success-icon"><i class="ti ti-check"></i></div><h2>Delivery Confirmed</h2><p id="dn-qr-success-text"></p><div class="dn-qr-result"><div class="ok"><span>Accepted</span><strong id="dn-qr-success-accepted">0</strong></div><div class="bad"><span>Rejected</span><strong id="dn-qr-success-rejected">0</strong></div></div></div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="finishQRDeliveryWorkflow()">Done</button><button class="btn btn-primary" onclick="startDeliveryQRScanner()"><i class="ti ti-scan"></i> Scan Another QR</button></div></div></div><div id="dn-qr-scanner-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body" style="padding-bottom:14px"><h2>Scan Delivery QR</h2><p>Point the camera at the QR code on the next Delivery Note.</p></div><div class="dn-qr-video-wrap"><video id="dn-qr-video" playsinline muted></video><div class="dn-qr-scan-guide"></div></div><div class="dn-qr-scan-msg" id="dn-qr-scan-msg">Starting camera…</div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="stopDeliveryQRScanner()">Cancel</button></div></div></div>`);
+ document.body.insertAdjacentHTML('beforeend',`<div id="dn-qr-success-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body"><div class="dn-qr-success-icon"><i class="ti ti-check"></i></div><h2>Delivery Confirmed</h2><p id="dn-qr-success-text"></p><div class="dn-qr-result"><div class="ok"><span>Accepted</span><strong id="dn-qr-success-accepted">0</strong></div><div class="bad"><span>Rejected</span><strong id="dn-qr-success-rejected">0</strong></div></div></div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="finishQRDeliveryWorkflow()"><i class="ti ti-x"></i> <span id="dn-qr-finish-label">Done</span></button><button class="btn btn-primary" onclick="startDeliveryQRScanner()"><i class="ti ti-scan"></i> Scan Another QR</button></div></div></div><div id="dn-qr-scanner-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body" style="padding-bottom:14px"><h2>Scan Delivery QR</h2><p>Point the camera at the QR code on the next Delivery Note.</p></div><div class="dn-qr-video-wrap"><video id="dn-qr-video" playsinline muted></video><div class="dn-qr-scan-guide"></div></div><div class="dn-qr-scan-msg" id="dn-qr-scan-msg">Starting camera…</div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="stopDeliveryQRScanner()">Cancel</button></div></div></div>`);
 }
 function showQRDeliverySuccess(so,d,deliveryIdx){
- ensureQRWorkflowUI();let a=0,r=0;(d.items||[]).forEach(it=>{a+=deliveryAcceptedQty(d,it);r+=deliveryRejectedQty(d,it)});document.getElementById('dn-qr-success-text').textContent=`${d.dnNo} has been successfully recorded.`;document.getElementById('dn-qr-success-accepted').textContent=formatQuantity(a);document.getElementById('dn-qr-success-rejected').textContent=formatQuantity(r);const o=document.getElementById('dn-qr-success-overlay');o.dataset.soId=so.id;o.dataset.deliveryIdx=deliveryIdx;o.classList.add('open');
+ ensureQRWorkflowUI();let a=0,r=0;(d.items||[]).forEach(it=>{a+=deliveryAcceptedQty(d,it);r+=deliveryRejectedQty(d,it)});document.getElementById('dn-qr-success-text').textContent=`${d.dnNo} has been successfully recorded.`;document.getElementById('dn-qr-success-accepted').textContent=formatQuantity(a);document.getElementById('dn-qr-success-rejected').textContent=formatQuantity(r);const finishLabel=document.getElementById('dn-qr-finish-label');if(finishLabel)finishLabel.textContent=isMobileQRWorkflow()?'Close':'Done';const o=document.getElementById('dn-qr-success-overlay');o.dataset.soId=so.id;o.dataset.deliveryIdx=deliveryIdx;o.classList.add('open');
 }
 function isMobileQRWorkflow(){
  return !!(window.matchMedia?.('(max-width: 820px)').matches && (window.matchMedia?.('(pointer: coarse)').matches || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent||'')));
 }
-function showMobileQRFinished(){
+function showMobileQRFinished(opts={}){
  stopDeliveryQRScanner();
  document.getElementById('dn-qr-success-overlay')?.classList.remove('open');
  history.replaceState({},'',location.pathname);
  let o=document.getElementById('dn-qr-finished-overlay');
  if(!o){
-   document.body.insertAdjacentHTML('beforeend',`<div id="dn-qr-finished-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body"><div class="dn-qr-success-icon"><i class="ti ti-check"></i></div><h2>Delivery Update Completed</h2><p>The delivery update has been saved. You can now close this window.</p></div></div></div>`);
+   document.body.insertAdjacentHTML('beforeend',`<div id="dn-qr-finished-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body"><div id="dn-qr-finished-icon" class="dn-qr-success-icon"><i class="ti ti-check"></i></div><h2 id="dn-qr-finished-title">Delivery Update Completed</h2><p id="dn-qr-finished-text">The delivery update has been saved.</p></div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="closeMobileQRWorkflow()"><i class="ti ti-x"></i> Close</button><button class="btn btn-primary" onclick="startDeliveryQRScanner()"><i class="ti ti-scan"></i> Scan Another QR</button></div></div></div>`);
    o=document.getElementById('dn-qr-finished-overlay');
  }
+ const cancelled=opts.cancelled===true;
+ const icon=document.getElementById('dn-qr-finished-icon'),title=document.getElementById('dn-qr-finished-title'),text=document.getElementById('dn-qr-finished-text');
+ if(icon){icon.className=cancelled?'dn-qr-exit-icon':'dn-qr-success-icon';icon.innerHTML=cancelled?'<i class="ti ti-arrow-back-up"></i>':'<i class="ti ti-check"></i>'}
+ if(title)title.textContent=cancelled?'Delivery Update Cancelled':'Delivery Update Completed';
+ if(text)text.textContent=cancelled?'No delivery changes were saved.':'The delivery update has been saved successfully.';
  o.classList.add('open');
- // Browsers only allow script-closing in limited cases. Attempt it, but keep a safe mobile-only final screen if blocked.
- setTimeout(()=>{try{window.close()}catch(e){}},180);
+}
+function closeMobileQRWorkflow(){
+ stopDeliveryQRScanner();
+ document.getElementById('dn-qr-success-overlay')?.classList.remove('open');
+ document.getElementById('dn-qr-scanner-overlay')?.classList.remove('open');
+ history.replaceState({},'',location.pathname);
+ // A tab opened by the phone Camera app usually cannot be closed by script on iOS.
+ // Try once; if Safari blocks it, keep the driver on the controlled exit screen.
+ try{window.close()}catch(e){}
+ const o=document.getElementById('dn-qr-finished-overlay');
+ if(o){
+   const title=document.getElementById('dn-qr-finished-title'),text=document.getElementById('dn-qr-finished-text');
+   if(title)title.textContent='You Can Close This Window';
+   if(text)text.textContent='The QR delivery workflow has ended. Use your browser Close/Done control to close this window.';
+   const actions=o.querySelector('.dn-qr-flow-actions');if(actions)actions.innerHTML='<button class="btn btn-primary" onclick="closeMobileQRWorkflow()"><i class="ti ti-x"></i> Close Window</button>';
+   o.classList.add('open');
+ }
+}
+async function cancelDeliveryConfirmation(){
+ const m=document.getElementById('dn-confirm-modal');
+ if(!m){return}
+ const qr=m._entrySource==='qr';
+ if(qr && isMobileQRWorkflow()){
+   const ok=await showConfirmAsync({icon:'⚠️',title:'Cancel Delivery Update?',message:'Your changes have not been saved.',confirmText:'Cancel Update',cancelText:'Continue Update',confirmClass:'btn-danger'});
+   if(!ok)return;
+   closeModal('dn-confirm-modal');
+   window._dnDeepLinkOpened=null;window._dnDeepLinkRouting=null;
+   history.replaceState({},'',location.pathname);
+   showMobileQRFinished({cancelled:true});
+   return;
+ }
+ closeModal('dn-confirm-modal');
 }
 function finishQRDeliveryWorkflow(){
  const success=document.getElementById('dn-qr-success-overlay');
