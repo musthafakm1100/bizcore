@@ -169,5 +169,9 @@ V207: Refined Delivery Confirmation expanded details typography, filters, quanti
 
 V209: Delivery Note viewer now fills the available viewport edge-to-edge, removing the top/bottom modal gaps while preserving the sticky bottom action bar and print behavior.
 
-
-V212: DN output reliability: embedded self-contained logo fallback for PDF/print; lightweight native print path, especially mobile; no PDF/canvas work during Print.
+V214 DN print return + Save-as-PDF filename
+- Based directly on stable V209.
+- After native print/save dialog closes, temporary DN print tab returns focus to BizCore DN and closes where browser permits.
+- Print document title/default Save-as-PDF filename now uses: DN Number - Customer Name.
+- Filename characters invalid on Windows/macOS are sanitized.
+- No direct PDF generator, html2canvas, or print-layout redesign added.

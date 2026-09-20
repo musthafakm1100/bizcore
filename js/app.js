@@ -10573,35 +10573,45 @@ function openDNFormatDialog(action='print'){
 function continueDNFormat(){
   const dlg=document.getElementById('dn-format-modal'),format=document.querySelector('input[name="dn-print-format"]:checked')?.value||'standard';
   const so=salesOrders.find(x=>x.id===dlg?._soId),d=so?.deliveries?.[dlg?._deliveryIdx];if(!so||!d){showToast('Unable to prepare Delivery Note','error');return}
-  closeModal('dn-format-modal');
-  printDeliveryNote(format,so,d,dlg._deliveryIdx);
+  closeModal('dn-format-modal');printDeliveryNote(format,so,d,dlg._deliveryIdx);
 }
-function deliveryNotePrintHtml(format,so,d,idx){
-  // Native print only. Reuse the same document builder and the logo already held
-  // by BizCore; there is no canvas/PDF conversion or external PDF library.
-  let html=buildDeliveryNoteDocument(so,d,idx,format,false);
-  const qrCanvas=document.querySelector('#dn-qr-code canvas'),qrImg=document.querySelector('#dn-qr-code img');
-  const qrSrc=qrCanvas?qrCanvas.toDataURL('image/png'):(qrImg?.src||'');
-  if(qrSrc)html=html.replace('<div class="dn-doc-qr-slot"></div>',`<div class="dn-doc-qr-slot"><img src="${qrSrc}" alt="Delivery QR" style="width:108px;height:108px"></div>`);
-  return html;
+function openSOFromDNView(){
+  const viewModal=document.getElementById('dn-print-modal');
+  const soId=viewModal?._soId;
+  if(!soId){showToast('Unable to identify the linked Sales Order','error');return}
+  closeModal('dn-print-modal');
+  viewSO(soId);
+}
+function openDeliveryConfirmationFromDNView(){
+  const viewModal=document.getElementById('dn-print-modal');const soId=viewModal?._soId,deliveryIdx=viewModal?._deliveryIdx;if(soId==null||deliveryIdx==null){showToast('Unable to identify this Delivery Note','error');return}
+  const so=salesOrders.find(x=>x.id===soId),d=so?.deliveries?.[deliveryIdx];
+  if(d?.customerConfirmed){
+    const panel=document.querySelector('#dn-print-body .dn-confirm-result');
+    const toggle=panel?.querySelector('.dn-confirm-toggle');
+    if(toggle&&toggle.getAttribute('aria-expanded')!=='true')toggle.click();
+    panel?.scrollIntoView({behavior:'smooth',block:'start'});
+    return;
+  }
+  try{const opened=openDeliveryAcceptance(soId,deliveryIdx),confirmModal=document.getElementById('dn-confirm-modal');if(opened&&confirmModal?.classList.contains('open')){viewModal?.classList.remove('open','modal-fs-overlay');updateFullscreenShellState();confirmModal.style.zIndex='6200';return}showToast('Could not open Delivery Confirmation','error')}catch(err){console.error('Delivery Confirmation open failed',err);showToast('Could not open Delivery Confirmation: '+(err?.message||'Unknown error'),'error')}
+}
+function dnSafeFilePart(value){
+  return String(value||'').replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim().replace(/[. ]+$/,'');
 }
 function printDeliveryNote(format='standard',soArg=null,dArg=null,idxArg=null) {
   const vm=document.getElementById('dn-print-modal');
   const so=soArg||salesOrders.find(x=>x.id===vm?._soId);
   const idx=(idxArg!==null&&idxArg!==undefined)?idxArg:vm?._deliveryIdx;
   const d=dArg||so?.deliveries?.[idx];if(!so||!d)return;
-  // Print inside the current page. This avoids a popup/new tab and avoids all
-  // html2canvas/jsPDF work, which is substantially lighter on mobile devices.
-  document.getElementById('dn-native-print-host')?.remove();
-  const host=document.createElement('div');host.id='dn-native-print-host';host.setAttribute('aria-hidden','true');
-  host.innerHTML=deliveryNotePrintHtml(format,so,d,idx);document.body.appendChild(host);
-  const cleanup=()=>{document.body.classList.remove('dn-native-printing');host.remove();window.removeEventListener('afterprint',cleanup)};
-  document.body.classList.add('dn-native-printing');
-  window.addEventListener('afterprint',cleanup,{once:true});
-  // Let the DOM paint once, then invoke the native browser/OS print UI directly.
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{try{window.focus();window.print()}catch(err){console.error('DN print failed',err);cleanup();showToast('Could not open the print dialog','error')}}));
-  // Safety cleanup for browsers that do not reliably fire afterprint after cancel.
-  setTimeout(()=>{if(document.body.classList.contains('dn-native-printing')&&!window.matchMedia?.('print').matches)cleanup()},120000);
+  let html=buildDeliveryNoteDocument(so,d,idx,format,false);
+  const qrCanvas=document.querySelector('#dn-qr-code canvas'),qrImg=document.querySelector('#dn-qr-code img');
+  const qrSrc=qrCanvas?qrCanvas.toDataURL('image/png'):(qrImg?.src||'');
+  if(qrSrc)html=html.replace('<div class="dn-doc-qr-slot"></div>',`<div class="dn-doc-qr-slot"><img src="${qrSrc}" alt="Delivery QR" style="width:108px;height:108px"></div>`);
+  const cust=dnCustomerProfile(so);
+  const baseName=[dnSafeFilePart(d.dnNo||'Delivery Note'),dnSafeFilePart(cust?.name)].filter(Boolean).join(' - ');
+  const printTitle=baseName||'Delivery Note';
+  const w=window.open('','_blank');if(!w){showToast('Please allow pop-ups to print the Delivery Note','warning');return}
+  const safeTitle=escapeHtml(printTitle);
+  w.document.write(`<!DOCTYPE html><html><head><title>${safeTitle}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>${html}<scr`+`ipt>(function(){var returned=false;function backToBizCore(){if(returned)return;returned=true;try{if(window.opener&&!window.opener.closed){window.opener.focus();}}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},80);}window.addEventListener('afterprint',backToBizCore);window.onload=function(){document.title=${JSON.stringify(printTitle)};setTimeout(function(){window.print();},120);};})();</scr`+`ipt></body></html>`);w.document.close();
 }
 
 /* ── Create Invoice ── */

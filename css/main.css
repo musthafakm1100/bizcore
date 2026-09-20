@@ -8954,26 +8954,3 @@ img,svg,canvas{max-width:100%}
 @media(max-width:700px){
   #dn-print-modal>.modal{width:100vw!important;height:100dvh!important;max-width:none!important;border-radius:0!important}
 }
-/* V210 — Delivery Note output menu */
-#dn-print-modal .dn-output-menu-wrap{position:relative;flex:0 0 auto}
-#dn-print-modal .dn-output-menu-wrap>.btn{width:100%}
-#dn-print-modal .dn-output-chevron{font-size:14px;margin-left:2px;transition:transform .15s ease}
-#dn-print-modal .dn-output-menu-wrap.open .dn-output-chevron{transform:rotate(180deg)}
-#dn-print-modal .dn-output-menu{position:absolute;right:0;bottom:calc(100% + 8px);z-index:180;width:270px;padding:6px;background:#fff;border:1px solid #d9e2ec;border-radius:10px;box-shadow:0 14px 34px rgba(15,23,42,.16);display:none}
-#dn-print-modal .dn-output-menu-wrap.open .dn-output-menu{display:block}
-#dn-print-modal .dn-output-menu button{width:100%;border:0;background:transparent;border-radius:7px;padding:10px 11px;display:flex;align-items:flex-start;gap:10px;text-align:left;color:#17324d;cursor:pointer;font:inherit}
-#dn-print-modal .dn-output-menu button:hover,#dn-print-modal .dn-output-menu button:focus{background:#f3f7fa;outline:none}
-#dn-print-modal .dn-output-menu button>i{font-size:19px;color:#174b7a;margin-top:1px}
-#dn-print-modal .dn-output-menu button span{display:flex;flex-direction:column;gap:2px;min-width:0}
-#dn-print-modal .dn-output-menu button strong{font-size:12.5px;font-weight:600}
-#dn-print-modal .dn-output-menu button small{font-size:10.5px;font-weight:400;color:#6b7e90;line-height:1.3}
-@media(max-width:640px){#dn-print-modal .dn-output-menu-wrap{margin-left:auto}#dn-print-modal .dn-output-menu{position:fixed;left:10px;right:10px;bottom:calc(64px + env(safe-area-inset-bottom));width:auto}#dn-print-modal .dn-output-menu button{padding:12px}}
-@media print{#dn-print-modal .dn-output-menu-wrap{display:none!important}}
-
-/* V213 — lightweight native Delivery Note printing */
-#dn-native-print-host{display:none}
-@media print{
-  body.dn-native-printing > *:not(#dn-native-print-host){display:none!important}
-  body.dn-native-printing #dn-native-print-host{display:block!important;position:static!important;width:auto!important;height:auto!important;margin:0!important;padding:0!important;background:#fff!important}
-  body.dn-native-printing #dn-native-print-host .dn-a4{display:block!important;margin:0!important;box-shadow:none!important;border:0!important}
-}
