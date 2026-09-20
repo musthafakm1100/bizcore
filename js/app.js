@@ -10549,12 +10549,64 @@ function showQRDeliverySuccess(so,d,deliveryIdx){
  ensureQRWorkflowUI();let a=0,r=0;(d.items||[]).forEach(it=>{a+=deliveryAcceptedQty(d,it);r+=deliveryRejectedQty(d,it)});document.getElementById('dn-qr-success-text').textContent=`${d.dnNo} has been successfully recorded.`;document.getElementById('dn-qr-success-accepted').textContent=formatQuantity(a);document.getElementById('dn-qr-success-rejected').textContent=formatQuantity(r);const o=document.getElementById('dn-qr-success-overlay');o.dataset.soId=so.id;o.dataset.deliveryIdx=deliveryIdx;o.classList.add('open');
 }
 function finishQRDeliveryWorkflow(){stopDeliveryQRScanner();document.getElementById('dn-qr-success-overlay')?.classList.remove('open');history.replaceState({},'',location.pathname);showPage('deliverynotes');renderDNPage();}
-let _dnQRStream=null,_dnQRScanTimer=null;
-function stopDeliveryQRScanner(){if(_dnQRScanTimer){clearInterval(_dnQRScanTimer);_dnQRScanTimer=null}if(_dnQRStream){_dnQRStream.getTracks().forEach(t=>t.stop());_dnQRStream=null}document.getElementById('dn-qr-scanner-overlay')?.classList.remove('open')}
+let _dnQRStream=null,_dnQRScanTimer=null,_dnQRScanGeneration=0,_dnQRStarting=false;
+function stopDeliveryQRScanner(){
+ _dnQRScanGeneration++;
+ if(_dnQRScanTimer){clearInterval(_dnQRScanTimer);_dnQRScanTimer=null}
+ const video=document.getElementById('dn-qr-video');
+ if(video){try{video.pause()}catch(e){};try{video.srcObject=null}catch(e){}}
+ if(_dnQRStream){_dnQRStream.getTracks().forEach(t=>{try{t.stop()}catch(e){}});_dnQRStream=null}
+ _dnQRStarting=false;
+ document.getElementById('dn-qr-scanner-overlay')?.classList.remove('open');
+}
+function _extractDeliveryQRToken(raw){
+ try{const u=new URL(raw,location.href);return u.searchParams.get('t')||u.searchParams.get('delivery')||''}catch(e){return ''}
+}
 async function startDeliveryQRScanner(){
- ensureQRWorkflowUI();document.getElementById('dn-qr-success-overlay')?.classList.remove('open');const overlay=document.getElementById('dn-qr-scanner-overlay'),video=document.getElementById('dn-qr-video'),msg=document.getElementById('dn-qr-scan-msg');overlay.classList.add('open');msg.textContent='Starting camera…';
- if(!('BarcodeDetector'in window)){msg.textContent='QR camera scanning is not supported by this browser. Use the phone camera to scan the next Delivery Note QR.';return}
- try{_dnQRStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});video.srcObject=_dnQRStream;await video.play();const detector=new BarcodeDetector({formats:['qr_code']});msg.textContent='Ready — scan the next Delivery Note QR.';_dnQRScanTimer=setInterval(async()=>{if(video.readyState<2)return;try{const codes=await detector.detect(video);if(!codes.length)return;const raw=codes[0].rawValue||'';const u=new URL(raw,location.href),token=u.searchParams.get('t')||u.searchParams.get('delivery');if(!token)return;stopDeliveryQRScanner();location.href='index.html?delivery='+encodeURIComponent(token)}catch(e){}},450)}catch(e){msg.textContent='Camera could not be opened. Check camera permission and try again.'}
+ if(_dnQRStarting)return;
+ _dnQRStarting=true;
+ // Always release a previous iOS camera session before requesting the next one.
+ if(_dnQRScanTimer){clearInterval(_dnQRScanTimer);_dnQRScanTimer=null}
+ if(_dnQRStream){_dnQRStream.getTracks().forEach(t=>{try{t.stop()}catch(e){}});_dnQRStream=null}
+ ensureQRWorkflowUI();
+ document.getElementById('dn-qr-success-overlay')?.classList.remove('open');
+ const overlay=document.getElementById('dn-qr-scanner-overlay'),video=document.getElementById('dn-qr-video'),msg=document.getElementById('dn-qr-scan-msg');
+ try{video.pause()}catch(e){};video.srcObject=null;
+ overlay.classList.add('open');msg.textContent='Starting camera…';
+ const generation=++_dnQRScanGeneration;
+ if(!navigator.mediaDevices?.getUserMedia){msg.textContent='Camera Scanner Unavailable. Use your phone Camera app to scan the Delivery Note QR and open the BizCore link.';_dnQRStarting=false;return}
+ try{
+   _dnQRStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+   if(generation!==_dnQRScanGeneration){_dnQRStream.getTracks().forEach(t=>t.stop());_dnQRStream=null;_dnQRStarting=false;return}
+   video.srcObject=_dnQRStream;await video.play();
+   let detector=null;
+   if('BarcodeDetector' in window){try{detector=new BarcodeDetector({formats:['qr_code']})}catch(e){detector=null}}
+   const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d',{willReadFrequently:true});
+   if(!detector && typeof window.jsQR!=='function'){
+     msg.textContent='QR scanner could not be loaded. Check your connection, or use the phone Camera app to scan the Delivery Note QR.';_dnQRStarting=false;return;
+   }
+   msg.textContent='Ready — scan the next Delivery Note QR.';_dnQRStarting=false;
+   let busy=false;
+   _dnQRScanTimer=setInterval(async()=>{
+     if(busy||generation!==_dnQRScanGeneration||video.readyState<2||!video.videoWidth)return;
+     busy=true;
+     try{
+       let raw='';
+       if(detector){
+         const codes=await detector.detect(video);raw=codes?.[0]?.rawValue||'';
+       }else{
+         // Safari/iPhone fallback: decode the live camera frame with jsQR.
+         const max=720,scale=Math.min(1,max/video.videoWidth);canvas.width=Math.max(1,Math.round(video.videoWidth*scale));canvas.height=Math.max(1,Math.round(video.videoHeight*scale));ctx.drawImage(video,0,0,canvas.width,canvas.height);const image=ctx.getImageData(0,0,canvas.width,canvas.height);const code=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'dontInvert'});raw=code?.data||'';
+       }
+       const token=_extractDeliveryQRToken(raw);if(!token)return;
+       stopDeliveryQRScanner();location.href='index.html?delivery='+encodeURIComponent(token);
+     }catch(e){}finally{busy=false}
+   },300);
+ }catch(e){
+   _dnQRStarting=false;
+   const denied=e?.name==='NotAllowedError'||e?.name==='PermissionDeniedError';
+   msg.textContent=denied?'Camera permission is blocked. Allow camera access in Safari settings and try again.':'Camera could not be opened. Close other camera apps and try again.';
+ }
 }
 
 async function confirmDelivery(soId,deliveryIdx){openDeliveryAcceptance(soId,deliveryIdx)}

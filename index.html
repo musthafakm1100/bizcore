@@ -13,8 +13,9 @@
 <link rel="apple-touch-icon" href="icons/bizcore-icon-180.png"/>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=230" rel="stylesheet"/>
+<link href="css/main.css?v=231" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=215" rel="stylesheet"/>
 <link href="css/typography.css?v=215" rel="stylesheet"/>
 <link href="css/masters.css?v=215" rel="stylesheet"/>
@@ -2643,7 +2644,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=230';
+    s.src = 'js/app.js?v=231';
     document.body.appendChild(s);
   }
 });
@@ -2692,7 +2693,7 @@ console.log('BizCore Firebase ready ✅');
   // Runs after the main app; failure here should never block the app itself.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=228', { updateViaCache: 'none' }).catch(err => {
+      navigator.serviceWorker.register('sw.js?v=231', { updateViaCache: 'none' }).catch(err => {
         console.warn('Service worker registration failed:', err);
       });
     });

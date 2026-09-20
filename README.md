@@ -266,3 +266,9 @@ V215 deployment consistency fix:
 - GitHub/PWA shell cache bumped to v227.
 
 V229: Simplified Customer Invoice entry and added accepted-quantity partial invoicing. Available invoice quantity is customer accepted minus previously invoiced; invoice items and partial totals are stored per invoice.
+
+
+## V231
+- iPhone/Safari compatible repeated Delivery Note QR scanning.
+- Uses native BarcodeDetector when available and jsQR camera-frame decoding fallback on Safari/iPhone.
+- Fully releases video tracks/srcObject between scans and guards scanner restart state.
