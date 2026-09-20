@@ -2422,7 +2422,7 @@ function saveAccessSetup(){localStorage.setItem('bizcore_roles',JSON.stringify(a
 function populateUserRoles(){const sel=document.getElementById('u-role');if(sel)sel.innerHTML=appRoles.map(r=>`<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');}
 function openUserForm(id=null){loadAccessSetup();editingUserId=id;populateUserRoles();const card=document.getElementById('user-form-card');if(!card)return;card.style.display='block';const u=id?appUsers.find(x=>x.id===id):null;document.getElementById('user-form-title').textContent=u?'Edit user':'New user';document.getElementById('u-fullname').value=u?.fullname||'';document.getElementById('u-username').value=u?.username||'';document.getElementById('u-password').value=u?.password||'';document.getElementById('u-email').value=u?.email||'';document.getElementById('u-role').value=u?.roleId||appRoles[0]?.id||'';document.getElementById('u-active').value=String(u?.active!==false);setTimeout(()=>document.getElementById('u-fullname')?.focus(),50);}
 function closeUserForm(){editingUserId=null;const c=document.getElementById('user-form-card');if(c)c.style.display='none';}
-function saveUser(){const fullname=document.getElementById('u-fullname').value.trim(),username=document.getElementById('u-username').value.trim();if(!fullname||!username){showToast('Full name and username are required','error');return;}if(appUsers.some(u=>u.username.toLowerCase()===username.toLowerCase()&&u.id!==editingUserId)){showToast('Username already exists','error');return;}const obj={id:editingUserId||('user-'+Date.now()),fullname,username,password:document.getElementById('u-password').value,email:document.getElementById('u-email').value.trim(),roleId:document.getElementById('u-role').value,active:document.getElementById('u-active').value==='true'};if(editingUserId){const i=appUsers.findIndex(x=>x.id===editingUserId);appUsers[i]=obj;}else appUsers.push(obj);saveAccessSetup();closeUserForm();renderUsers();showToast('User saved','success');}
+function saveUser(){const fullname=document.getElementById('u-fullname').value.trim(),username=document.getElementById('u-username').value.trim();if(!fullname||!username){showToast('Full name and username are required','error');return;}if(appUsers.some(u=>u.username.toLowerCase()===username.toLowerCase()&&u.id!==editingUserId)){showToast('Username already exists','error');return;}const obj={id:editingUserId||('user-'+Date.now()),fullname,username,password:document.getElementById('u-password').value,email:document.getElementById('u-email').value.trim(),roleId:document.getElementById('u-role').value,active:document.getElementById('u-active').value==='true'};if(editingUserId){const i=appUsers.findIndex(x=>x.id===editingUserId);appUsers[i]=obj;}else appUsers.push(obj);saveAccessSetup();closeUserForm();renderUsers();if(typeof window.syncTopbarUserIdentity==='function')window.syncTopbarUserIdentity();showToast('User saved','success');}
 function deleteUser(id){if(id==='user-admin'){showToast('The default administrator cannot be deleted','error');return;}showConfirm({icon:'👤',title:'Delete user?',message:'This removes the prototype login account.',confirmText:'Delete user',confirmClass:'btn-danger',onConfirm:()=>{appUsers=appUsers.filter(x=>x.id!==id);saveAccessSetup();renderUsers();showToast('User deleted');}});}
 function renderUsers(){loadAccessSetup();populateUserRoles();const body=document.getElementById('users-tbody');if(!body)return;const q=(document.getElementById('user-search')?.value||'').toLowerCase();const rows=appUsers.filter(u=>{const role=appRoles.find(r=>r.id===u.roleId)?.name||'';return [u.fullname,u.username,u.email,role].join(' ').toLowerCase().includes(q);});body.innerHTML=rows.length?rows.map(u=>{const role=appRoles.find(r=>r.id===u.roleId)?.name||'—';const initials=(u.fullname||'?').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();return `<tr><td><div style="display:flex;align-items:center;gap:9px"><div class="user-avatar">${escapeHtml(initials)}</div><div><strong>${escapeHtml(u.fullname)}</strong><div style="font-size:10px;color:var(--gray)">${escapeHtml(u.email||'No email')}</div></div></div></td><td>${escapeHtml(u.username)}</td><td>${escapeHtml(role)}</td><td><span class="status-pill ${u.active?'active':'inactive'}"><i class="ti ti-circle-filled" style="font-size:6px"></i>${u.active?'Active':'Inactive'}</span></td><td><div class="action-btns"><button class="abtn abtn-edit" onclick="openUserForm('${u.id}')"><i class="ti ti-edit"></i></button><button class="abtn abtn-del" onclick="deleteUser('${u.id}')"><i class="ti ti-trash"></i></button></div></td></tr>`;}).join(''):`<tr><td colspan="5" style="text-align:center;color:var(--gray);padding:24px">No users found.</td></tr>`;}
 function renderRoles(){loadAccessSetup();const list=document.getElementById('role-list');if(!list)return;if(!appRoles.some(r=>r.id===selectedRoleId))selectedRoleId=appRoles[0]?.id;list.innerHTML=appRoles.map(r=>`<div class="role-item ${r.id===selectedRoleId?'active':''}" onclick="selectRole('${r.id}')"><span>${escapeHtml(r.name)}</span><span style="font-size:10px;color:var(--gray)">${appUsers.filter(u=>u.roleId===r.id).length} users</span></div>`).join('');renderPermissionMatrix();}
@@ -10378,9 +10378,23 @@ async function _saveDeliveryAcceptanceCore(operationId){
  window._dnLocalConfirmationIds=window._dnLocalConfirmationIds||new Set();window._dnLocalConfirmationIds.add(d.id);
  const saved=await saveSalesOrders();
  if(saved===false){Object.keys(d).forEach(k=>delete d[k]);Object.assign(d,backup);window._dnLocalConfirmationIds.delete(d.id);throw new Error('Delivery confirmation could not be synchronized')}
- // Publish only after the business transaction has been persisted.
+ // Create the notification in the SAME session that saved the confirmation.
+ // V201 only notified other sessions via the operational-event listener, while
+ // _dnLocalConfirmationIds deliberately suppressed the local realtime echo.
+ // That meant the driver/admin who performed the action saw no bell notification.
+ try{
+   const rejected=(d.items||[]).reduce((n,it)=>n+(Number(it.rejectedQty)||0),0);
+   const status=getDNStatus(d);
+   const actionLabel=mode==='correction'?'Delivery Correction':mode==='revision'?'Acceptance Revision':(status==='Delivered'?'Delivery Confirmed':status==='Rejected'?'Delivery Rejected':'Delivery Partially Accepted');
+   const title=mode==='confirm'?(status==='Delivered'?'Delivery Confirmed':status==='Rejected'?'Delivery Rejected':'Delivery Partially Accepted'):actionLabel;
+   const msg=`${d.dnNo} · ${so.customer}${rejected>0?` · Rejected qty: ${roundQtyForUom(rejected,'')}`:''}`;
+   addBizCoreNotification({id:`dn-action:${d.id}:${operationId}`,type:'delivery',title,message:msg,status,severity:status==='Rejected'?'critical':status==='Delivered'?'success':'attention',soId:so.id,deliveryIdx:m._deliveryIdx,dnId:d.id,actor:deliveryActor(),createdAt:new Date().toISOString()});
+ }catch(e){console.warn('Delivery saved; local notification creation failed',e)}
+
+ // Publish only after the business transaction has been persisted so OTHER
+ // logged-in sessions/devices receive the same operational update.
  if(window.FB?.fbPublishOperationalEvent){
-   try{await window.FB.fbPublishOperationalEvent({id:`dn-confirmed-${d.id}-${operationId.replace(/[^a-zA-Z0-9_-]/g,'')}`,type:'dn-confirmed',dnId:d.id,dnNo:d.dnNo,soId:so.id,status:d.status,actor:d.confirmedBy||deliveryActor(),sourceSession:getBizCoreSessionId(),createdAt:d.confirmedAt})}catch(e){console.warn('Delivery saved; operational notification publish failed',e)}
+   try{await window.FB.fbPublishOperationalEvent({id:`dn-confirmed-${d.id}-${operationId.replace(/[^a-zA-Z0-9_-]/g,'')}`,type:'dn-confirmed',dnId:d.id,dnNo:d.dnNo,soId:so.id,status:d.status,actor:deliveryActor(),sourceSession:getBizCoreSessionId(),createdAt:new Date().toISOString(),acceptanceMode:mode})}catch(e){console.warn('Delivery saved; operational notification publish failed',e)}
  }
  closeModal('dn-confirm-modal');renderSOPage();renderDNPage();viewDeliveryNote(so.id,m._deliveryIdx);showToast(mode==='confirm'?`${d.dnNo} confirmed — ${d.status}`:`${d.dnNo} ${mode==='correction'?'correction saved':'acceptance revised'}`,'success');return d;
 }
@@ -10542,7 +10556,7 @@ function buildDeliveryNoteDocument(so,d,deliveryIdx,format='standard',screenMode
 function viewDeliveryNote(soId, deliveryIdx) {
   const so=salesOrders.find(x=>x.id===soId);if(!so)return;const d=so.deliveries?.[deliveryIdx];if(!d)return;
   const m=document.getElementById('dn-print-modal');if(m){m._soId=soId;m._deliveryIdx=deliveryIdx;m._printFormat='standard'}
-  const btn=document.getElementById('dn-open-confirm-btn');if(btn){btn.style.display='inline-flex';btn.disabled=!!d.customerConfirmed;btn.innerHTML=d.customerConfirmed?'<i class="ti ti-circle-check"></i>Delivery Confirmed':'<i class="ti ti-device-mobile-check"></i>Delivery Confirmation'}
+  const btn=document.getElementById('dn-open-confirm-btn');if(btn){btn.style.display='inline-flex';btn.disabled=false;btn.classList.toggle('btn-success',!d.customerConfirmed);btn.classList.toggle('btn-secondary',!!d.customerConfirmed);btn.innerHTML=d.customerConfirmed?'<i class="ti ti-clipboard-check"></i><span>View Acceptance</span>':'<i class="ti ti-device-mobile-check"></i><span>Delivery Confirmation</span>'}
   document.getElementById('dn-print-title').textContent=d.dnNo;
   window._activeDNView={soId:so.id,deliveryIdx};document.getElementById('dn-print-body').innerHTML=`<div class="dn-view-workspace"><div class="dn-view-document">${buildDeliveryNoteDocument(so,d,deliveryIdx,'standard',true)}</div><aside class="dn-view-acceptance" aria-label="Delivery confirmation">${buildDNConfirmationPanel(d)}</aside></div>`;
   renderDNQRCode(d);openModalWithSize('dn-print-modal');
@@ -10559,10 +10573,60 @@ function openDNFormatDialog(action='print'){
 function continueDNFormat(){
   const dlg=document.getElementById('dn-format-modal'),format=document.querySelector('input[name="dn-print-format"]:checked')?.value||'standard';
   const so=salesOrders.find(x=>x.id===dlg?._soId),d=so?.deliveries?.[dlg?._deliveryIdx];if(!so||!d){showToast('Unable to prepare Delivery Note','error');return}
-  closeModal('dn-format-modal');printDeliveryNote(format,so,d,dlg._deliveryIdx);
+  const action=dlg?._action||'print';
+  closeModal('dn-format-modal');
+  if(action==='download')downloadDeliveryNotePDF(format,so,d,dlg._deliveryIdx);else printDeliveryNote(format,so,d,dlg._deliveryIdx);
+}
+function closeDNOutputMenu(){
+  const wrap=document.querySelector('#dn-print-modal .dn-output-menu-wrap'),btn=document.getElementById('dn-output-menu-btn');
+  wrap?.classList.remove('open');if(btn)btn.setAttribute('aria-expanded','false');
+}
+function toggleDNOutputMenu(ev){
+  ev?.stopPropagation();const wrap=document.querySelector('#dn-print-modal .dn-output-menu-wrap'),btn=document.getElementById('dn-output-menu-btn');if(!wrap)return;
+  const open=!wrap.classList.contains('open');wrap.classList.toggle('open',open);if(btn)btn.setAttribute('aria-expanded',open?'true':'false');
+}
+function chooseDNOutput(action){closeDNOutputMenu();openDNFormatDialog(action)}
+if(!window._dnOutputMenuOutsideBound){document.addEventListener('click',function(e){if(!e.target.closest?.('.dn-output-menu-wrap'))closeDNOutputMenu()});window._dnOutputMenuOutsideBound=true}
+function deliveryNoteFileName(so,d){
+  const customer=dnCustomerProfile(so).name||'Customer';
+  const clean=v=>String(v||'').replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim().replace(/[. ]+$/,'');
+  return `${clean(d.dnNo)||'Delivery Note'} - ${clean(customer)||'Customer'}.pdf`;
+}
+function deliveryNoteOutputHtml(format,so,d,idx){
+  let html=buildDeliveryNoteDocument(so,d,idx,format,false);
+  const qrCanvas=document.querySelector('#dn-qr-code canvas'),qrImg=document.querySelector('#dn-qr-code img');
+  const qrSrc=qrCanvas?qrCanvas.toDataURL('image/png'):(qrImg?.src||'');
+  if(qrSrc)html=html.replace('<div class="dn-doc-qr-slot"></div>',`<div class="dn-doc-qr-slot"><img src="${qrSrc}" alt="Delivery QR" style="width:108px;height:108px"></div>`);
+  return html;
+}
+async function downloadDeliveryNotePDF(format='standard',soArg=null,dArg=null,idxArg=null){
+  const vm=document.getElementById('dn-print-modal'),so=soArg||salesOrders.find(x=>x.id===vm?._soId),idx=(idxArg!==null&&idxArg!==undefined)?idxArg:vm?._deliveryIdx,d=dArg||so?.deliveries?.[idx];if(!so||!d)return;
+  if(typeof html2pdf!=='function'){showToast('PDF generator is not available. Check your internet connection and try again.','error');return}
+  const host=document.createElement('div');host.className='dn-pdf-render-host';host.style.cssText='position:fixed;left:-100000px;top:0;width:210mm;background:#fff;z-index:-1;';host.innerHTML=deliveryNoteOutputHtml(format,so,d,idx);document.body.appendChild(host);
+  const el=host.querySelector('.dn-a4')||host;const filename=deliveryNoteFileName(so,d);
+  try{
+    showToast('Preparing '+filename,'info');
+    await html2pdf().set({margin:0,filename,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy'],avoid:['tr','.dn-remarks','.dn-internal','.dn-bottom']}}).from(el).save();
+    showToast('PDF ready: '+filename,'success');
+  }catch(err){console.error('DN PDF download failed',err);showToast('Could not generate the Delivery Note PDF','error')}finally{host.remove()}
+}
+function openSOFromDNView(){
+  const viewModal=document.getElementById('dn-print-modal');
+  const soId=viewModal?._soId;
+  if(!soId){showToast('Unable to identify the linked Sales Order','error');return}
+  closeModal('dn-print-modal');
+  viewSO(soId);
 }
 function openDeliveryConfirmationFromDNView(){
   const viewModal=document.getElementById('dn-print-modal');const soId=viewModal?._soId,deliveryIdx=viewModal?._deliveryIdx;if(soId==null||deliveryIdx==null){showToast('Unable to identify this Delivery Note','error');return}
+  const so=salesOrders.find(x=>x.id===soId),d=so?.deliveries?.[deliveryIdx];
+  if(d?.customerConfirmed){
+    const panel=document.querySelector('#dn-print-body .dn-confirm-result');
+    const toggle=panel?.querySelector('.dn-confirm-toggle');
+    if(toggle&&toggle.getAttribute('aria-expanded')!=='true')toggle.click();
+    panel?.scrollIntoView({behavior:'smooth',block:'start'});
+    return;
+  }
   try{const opened=openDeliveryAcceptance(soId,deliveryIdx),confirmModal=document.getElementById('dn-confirm-modal');if(opened&&confirmModal?.classList.contains('open')){viewModal?.classList.remove('open','modal-fs-overlay');updateFullscreenShellState();confirmModal.style.zIndex='6200';return}showToast('Could not open Delivery Confirmation','error')}catch(err){console.error('Delivery Confirmation open failed',err);showToast('Could not open Delivery Confirmation: '+(err?.message||'Unknown error'),'error')}
 }
 function printDeliveryNote(format='standard',soArg=null,dArg=null,idxArg=null) {
@@ -10570,12 +10634,10 @@ function printDeliveryNote(format='standard',soArg=null,dArg=null,idxArg=null) {
   const so=soArg||salesOrders.find(x=>x.id===vm?._soId);
   const idx=(idxArg!==null&&idxArg!==undefined)?idxArg:vm?._deliveryIdx;
   const d=dArg||so?.deliveries?.[idx];if(!so||!d)return;
-  let html=buildDeliveryNoteDocument(so,d,idx,format,false);
-  const qrCanvas=document.querySelector('#dn-qr-code canvas'),qrImg=document.querySelector('#dn-qr-code img');
-  const qrSrc=qrCanvas?qrCanvas.toDataURL('image/png'):(qrImg?.src||'');
-  if(qrSrc)html=html.replace('<div class="dn-doc-qr-slot"></div>',`<div class="dn-doc-qr-slot"><img src="${qrSrc}" alt="Delivery QR" style="width:108px;height:108px"></div>`);
+  const html=deliveryNoteOutputHtml(format,so,d,idx);
   const w=window.open('','_blank');if(!w){showToast('Please allow pop-ups to print the Delivery Note','warning');return}
-  w.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(d.dnNo)} — ${dnFormatLabel(format)}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>${html}<scr`+`ipt>window.onload=function(){setTimeout(function(){window.print();},120)};</scr`+`ipt></body></html>`);w.document.close();
+  const title=deliveryNoteFileName(so,d).replace(/\.pdf$/i,'');
+  w.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>${html}<scr`+`ipt>(function(){var closed=false;function finish(){if(closed)return;closed=true;setTimeout(function(){try{window.close()}catch(e){}},80)}window.addEventListener('afterprint',finish);window.onload=function(){setTimeout(function(){window.print();setTimeout(finish,1500)},150)};})();</scr`+`ipt></body></html>`);w.document.close();
 }
 
 /* ── Create Invoice ── */
@@ -11475,21 +11537,90 @@ function refreshOpenDNViewById(ids){
   const so=salesOrders.find(x=>x.id===modal._soId), d=so?.deliveries?.[modal._deliveryIdx];
   if(d && ids.includes(d.id)) setTimeout(()=>viewDeliveryNote(modal._soId,modal._deliveryIdx),0);
 }
-const BC_NOTIFICATION_KEY='bizcore_notifications_v1';
-function loadBizCoreNotifications(){try{return JSON.parse(localStorage.getItem(BC_NOTIFICATION_KEY)||'[]')}catch(e){return []}}
-function saveBizCoreNotifications(list){try{localStorage.setItem(BC_NOTIFICATION_KEY,JSON.stringify((list||[]).slice(0,100)))}catch(e){}}
+const BC_NOTIFICATION_KEY='bizcore_notifications_v2';
+function bizCoreNotificationUserKey(){
+ const u=window.currentUser||{};
+ return String(u.uid||u.email||'anonymous').trim().toLowerCase().replace(/[^a-z0-9@._-]+/g,'_');
+}
+function bizCoreNotificationStorageKey(){return BC_NOTIFICATION_KEY+':'+bizCoreNotificationUserKey()}
+function loadBizCoreNotifications(){
+ try{return JSON.parse(localStorage.getItem(bizCoreNotificationStorageKey())||'[]')}catch(e){return []}
+}
+function saveBizCoreNotifications(list){
+ try{localStorage.setItem(bizCoreNotificationStorageKey(),JSON.stringify((list||[]).slice(0,150)))}catch(e){}
+}
 function addBizCoreNotification(n){
  const list=loadBizCoreNotifications();
  if(list.some(x=>x.id===n.id))return;
  list.unshift({...n,read:false,createdAt:n.createdAt||new Date().toISOString()});
  saveBizCoreNotifications(list);refreshTopbarNotifications();
 }
-function markBizCoreNotificationsRead(){const list=loadBizCoreNotifications().map(x=>({...x,read:true}));saveBizCoreNotifications(list);refreshTopbarNotifications();}
+function markBizCoreNotificationsRead(){
+ const list=loadBizCoreNotifications().map(x=>({...x,read:true}));
+ saveBizCoreNotifications(list);refreshTopbarNotifications();renderAllBizCoreNotifications();
+}
+function clearReadBizCoreNotifications(){
+ const list=loadBizCoreNotifications(), readCount=list.filter(x=>x.read).length;
+ if(!readCount){if(typeof showToast==='function')showToast('Notifications','There are no read notifications to clear.','info');return;}
+ const apply=()=>{saveBizCoreNotifications(list.filter(x=>!x.read));refreshTopbarNotifications();renderAllBizCoreNotifications();if(typeof showToast==='function')showToast('Notifications',readCount+' read notification'+(readCount===1?'':'s')+' cleared.','success')};
+ if(typeof showConfirm==='function') showConfirm({
+  icon:'🗑️',
+  title:'Clear Read Notifications?',
+  message:'This will remove '+readCount+' notification'+(readCount===1?'':'s')+' that you have already read. Unread notifications will not be affected.',
+  confirmText:'Clear Read',
+  cancelText:'Cancel',
+  confirmClass:'btn-danger',
+  onConfirm:apply
+ });
+ else apply();
+}
+function toggleBizCoreNotificationRead(id){
+ const list=loadBizCoreNotifications(),n=list.find(x=>x.id===id);if(!n)return;
+ n.read=!n.read;saveBizCoreNotifications(list);refreshTopbarNotifications();renderAllBizCoreNotifications();
+}
 function openBizCoreNotification(id){
  const list=loadBizCoreNotifications(),n=list.find(x=>x.id===id);if(!n)return;
- n.read=true;saveBizCoreNotifications(list);refreshTopbarNotifications();closeTopbarMenus();
+ n.read=true;saveBizCoreNotifications(list);refreshTopbarNotifications();renderAllBizCoreNotifications();closeTopbarMenus();closeAllBizCoreNotifications();
  if(n.type==='delivery'&&n.soId){showPage('deliverynotes');setTimeout(()=>viewDeliveryNote(n.soId,n.deliveryIdx),80)}
 }
+function bizCoreNotificationTime(value){
+ if(!value)return '';
+ const d=new Date(value); if(Number.isNaN(d.getTime()))return '';
+ const diff=Math.max(0,Date.now()-d.getTime()),min=Math.floor(diff/60000),hr=Math.floor(min/60),day=Math.floor(hr/24);
+ if(min<1)return 'Just now'; if(min<60)return min+' min ago'; if(hr<24)return hr+' hr'+(hr===1?'':'s')+' ago'; if(day<7)return day+' day'+(day===1?'':'s')+' ago';
+ return d.toLocaleString();
+}
+function bizCoreNotificationSeverity(n){
+ const explicit=String(n.severity||'').toLowerCase();if(['critical','attention','action','success','info'].includes(explicit))return explicit;
+ const status=String(n.status||'').toLowerCase(),title=String(n.title||'').toLowerCase();
+ if(status==='rejected'||title.includes('rejected'))return 'critical';
+ if(title.includes('partially')||title.includes('partial')||title.includes('overdue'))return 'attention';
+ if(title.includes('correction')||title.includes('revision')||title.includes('assigned')||title.includes('approval'))return 'action';
+ if(status==='delivered'||title.includes('confirmed')||title.includes('approved'))return 'success';
+ return 'info';
+}
+function bizCoreNotificationSeverityLabel(n){return {critical:'Critical',attention:'Attention',action:'Action',success:'Success',info:'Info'}[bizCoreNotificationSeverity(n)]||'Info'}
+function bizCoreNotificationIcon(n){const sev=bizCoreNotificationSeverity(n);return {critical:'ti-circle-x',attention:'ti-alert-triangle',action:'ti-bolt',success:'ti-circle-check',info:'ti-info-circle'}[sev]||'ti-info-circle'}
+function bizCoreNotificationRow(n,full){
+ const id=escapeHtml(n.id||''), actor=n.actor?'<span>'+escapeHtml(n.actor)+'</span>':'',sev=bizCoreNotificationSeverity(n),sevLabel=bizCoreNotificationSeverityLabel(n);
+ return `<div class="bc-notification-row severity-${sev} ${n.read?'':'unread'}">
+   <button type="button" class="bc-notification-main" onclick="openBizCoreNotification('${id}')">
+    <i class="ti ${bizCoreNotificationIcon(n)}"></i><div><div class="bc-notification-title-line"><strong>${escapeHtml(n.title||'Workflow update')}</strong><span class="bc-severity-badge ${sev}">${escapeHtml(sevLabel)}</span></div><small>${escapeHtml(n.message||'')}</small><em>${actor}${n.createdAt?'<span>'+escapeHtml(bizCoreNotificationTime(n.createdAt))+'</span>':''}</em></div>
+   </button>${full?`<button type="button" class="bc-notification-read-toggle" title="${n.read?'Mark unread':'Mark read'}" onclick="toggleBizCoreNotificationRead('${id}')"><i class="ti ${n.read?'ti-mail':'ti-mail-opened'}"></i></button>`:''}
+  </div>`;
+}
+function openAllBizCoreNotifications(){
+ closeTopbarMenus(); let el=document.getElementById('bc-all-notifications');
+ if(!el){el=document.createElement('div');el.id='bc-all-notifications';el.className='bc-notification-overlay';el.innerHTML=`<div class="bc-notification-modal" role="dialog" aria-modal="true" aria-labelledby="bc-notification-title"><div class="bc-notification-modal-head"><div><h3 id="bc-notification-title"><i class="ti ti-bell"></i> Notifications</h3><p id="bc-notification-subtitle"></p></div><button type="button" class="bc-notification-close" onclick="closeAllBizCoreNotifications()" aria-label="Close"><i class="ti ti-x"></i></button></div><div class="bc-notification-modal-tools"><button type="button" onclick="markBizCoreNotificationsRead()"><i class="ti ti-checks"></i>Mark all as read</button><button type="button" onclick="clearReadBizCoreNotifications()"><i class="ti ti-trash"></i>Clear read</button></div><div class="bc-notification-modal-list" id="bc-all-notification-list"></div></div>`;document.body.appendChild(el);el.addEventListener('click',e=>{if(e.target===el)closeAllBizCoreNotifications()});}
+ renderAllBizCoreNotifications();el.classList.add('open');
+}
+function closeAllBizCoreNotifications(){document.getElementById('bc-all-notifications')?.classList.remove('open')}
+function renderAllBizCoreNotifications(){
+ const list=loadBizCoreNotifications(), box=document.getElementById('bc-all-notification-list'),sub=document.getElementById('bc-notification-subtitle'); if(!box)return;
+ const unread=list.filter(x=>!x.read).length;if(sub)sub.textContent=unread?unread+' unread · '+list.length+' total':list.length+' notification'+(list.length===1?'':'s');
+ box.innerHTML=list.length?list.map(n=>bizCoreNotificationRow(n,true)).join(''):'<div class="bc-notification-empty-large"><i class="ti ti-bell-off"></i><strong>No notifications</strong><span>You are all caught up.</span></div>';
+}
+
 function detectRemoteDNEvents(oldSOs,newSOs){
  const oldMap=new Map();(oldSOs||[]).forEach(so=>(so.deliveries||[]).forEach(d=>oldMap.set(d.id,{so,d})));
  const events=[];(newSOs||[]).forEach(so=>(so.deliveries||[]).forEach((d,i)=>{
@@ -11504,7 +11635,7 @@ function handleRemoteDNEvents(events){
    const status=e.status||getDNStatus(e.d);
    const title=status==='Delivered'?'Delivery Confirmed':status==='Rejected'?'Delivery Rejected':'Delivery Partially Accepted';
    const msg=`${e.d.dnNo} · ${e.so.customer}${rejected>0?` · Rejected qty: ${rejected}`:''}`;
-   addBizCoreNotification({id:`dn-confirmed:${e.d.id}:${e.d.confirmedAt||''}`,type:'delivery',title,message:msg,status,soId:e.soId,deliveryIdx:e.deliveryIdx,dnId:e.d.id,actor:e.d.confirmedBy||'',createdAt:e.d.confirmedAt||new Date().toISOString()});
+   addBizCoreNotification({id:`dn-confirmed:${e.d.id}:${e.d.confirmedAt||''}`,type:'delivery',title,message:msg,status,severity:status==='Rejected'?'critical':status==='Delivered'?'success':'attention',soId:e.soId,deliveryIdx:e.deliveryIdx,dnId:e.d.id,actor:e.d.confirmedBy||'',createdAt:e.d.confirmedAt||new Date().toISOString()});
    showToast(title,msg,status==='Delivered'?'success':'warning');
  });
 }
@@ -11521,17 +11652,13 @@ function refreshTopbarNotifications(){
   if(badge('so-badge'))workflow.push(['ti-shopping-cart',badge('so-badge')+' sales order update(s)','Review pending sales-order activity']);
   const ops=loadBizCoreNotifications(),unread=ops.filter(x=>!x.read).length;
   const list=document.getElementById('topbar-notification-list'),dot=document.getElementById('topbar-alert-dot');if(!list)return;
-  let html='';
-  if(ops.length){
-    html+='<div class="bc-notification-tools"><strong>Delivery updates</strong><button type="button" onclick="markBizCoreNotificationsRead()">Mark all read</button></div>';
-    html+=ops.slice(0,12).map(n=>`<button type="button" class="topbar-notification bc-op-notification ${n.read?'':'unread'}" onclick="openBizCoreNotification('${escapeHtml(n.id)}')"><i class="ti ${n.status==='Delivered'?'ti-circle-check':'ti-alert-triangle'}"></i><div><strong>${escapeHtml(n.title||'Delivery update')}</strong><small>${escapeHtml(n.message||'')}</small><small>${escapeHtml(n.actor||'')}${n.createdAt?' · '+new Date(n.createdAt).toLocaleString():''}</small></div></button>`).join('');
-  }
-  if(workflow.length){
-    html+='<div class="bc-notification-tools"><strong>Workflow</strong></div>'+workflow.map(x=>'<div class="topbar-notification"><i class="ti '+x[0]+'"></i><div><strong>'+escapeHtml(x[1])+'</strong><small>'+escapeHtml(x[2])+'</small></div></div>').join('');
-  }
-  if(!html)html='<div class="topbar-notification-empty"><i class="ti ti-circle-check" style="font-size:22px;display:block;margin-bottom:6px"></i>No pending notifications</div>';
+  let html=`<div class="bc-notification-dropdown-summary"><div><strong>${unread?unread+' unread':'You’re up to date'}</strong><span>${ops.length} saved notification${ops.length===1?'':'s'}</span></div>${unread?'<button type="button" onclick="markBizCoreNotificationsRead()">Mark all as read</button>':''}</div>`;
+  if(ops.length) html+=ops.slice(0,6).map(n=>bizCoreNotificationRow(n,false)).join('');
+  if(workflow.length){html+='<div class="bc-notification-section-label">Current workflow</div>'+workflow.map(x=>'<div class="topbar-notification bc-workflow-notification"><i class="ti '+x[0]+'"></i><div><strong>'+escapeHtml(x[1])+'</strong><small>'+escapeHtml(x[2])+'</small></div></div>').join('')}
+  if(!ops.length&&!workflow.length)html+='<div class="topbar-notification-empty"><i class="ti ti-circle-check" style="font-size:22px;display:block;margin-bottom:6px"></i>No pending notifications</div>';
+  html+='<div class="bc-notification-dropdown-footer"><button type="button" onclick="openAllBizCoreNotifications()"><i class="ti ti-list"></i>View all notifications</button>'+(ops.some(x=>x.read)?'<button type="button" onclick="clearReadBizCoreNotifications()">Clear read</button>':'')+'</div>';
   list.innerHTML=html;
-  if(dot){dot.classList.toggle('show',unread>0||workflow.length>0);dot.textContent=unread?String(Math.min(unread,99)):'';dot.classList.toggle('has-count',unread>0)}
+  if(dot){dot.classList.toggle('show',unread>0);dot.textContent=unread?String(Math.min(unread,99)):'';dot.classList.toggle('has-count',unread>0)}
 }
 
 function initPremiumTopbar(){

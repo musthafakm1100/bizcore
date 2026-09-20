@@ -153,3 +153,18 @@ v28 page action standard:
 - Wide Workspace mode for Pricing with controlled horizontal scrolling rather than squeezed columns.
 - Improved modal sizing, touch targets, table scrollers, pagination, topbar, form stacking and landscape-phone handling.
 - No business logic changes; V195 Delivery Confirmation quantity synchronization retained.
+
+## v202 — DN notification trigger fix
+- Delivery Confirmation now creates a notification immediately in the same logged-in session after the DN save succeeds.
+- Rejected/partially accepted confirmations therefore update the bell count without refresh.
+- Correction and Revision saves also create distinct notification entries.
+- Operational events remain enabled for other logged-in sessions/devices; the local session is not dependent on its own realtime echo.
+
+## v205 — Register header alignment & sticky restoration
+- Restored desktop sticky register headers by removing the unintended overflow containing block around register workspaces.
+- Corrected sortable numeric/center header geometry so headings align with their data columns.
+- Preserved controlled horizontal scrolling on compact Pricing/Quotation/Sales Order workspaces.
+
+V207: Refined Delivery Confirmation expanded details typography, filters, quantity cards, exception panel and metadata hierarchy.
+
+V209: Delivery Note viewer now fills the available viewport edge-to-edge, removing the top/bottom modal gaps while preserving the sticky bottom action bar and print behavior.
