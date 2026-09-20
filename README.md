@@ -294,3 +294,9 @@ V229: Simplified Customer Invoice entry and added accepted-quantity partial invo
 - Successful mobile QR completion now provides actual Scan Another QR and Close controls.
 - Close attempts browser/tab close; when iOS Safari blocks scripted closing, BizCore remains on a protected exit screen with a Close Window control/instruction.
 - Desktop/PC cancellation and completion retain normal BizCore behavior.
+
+### v235 – Mobile QR Fast Open & Cancel Exit Fix
+- QR deep links now open Delivery Confirmation directly once authenticated delivery data is ready, without first rendering the Delivery Note register/overview.
+- Mobile QR flow state is retained explicitly so Cancel cannot fall through to Delivery Access/Login when responsive/device state changes.
+- Cancel Update places the protected QR exit screen before closing the confirmation modal, preventing underlying ERP/login screens from flashing or becoming the destination.
+- PWA app/SW cache references bumped to v235.

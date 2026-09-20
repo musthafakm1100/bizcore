@@ -2663,7 +2663,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=232';
+    s.src = 'js/app.js?v=235';
     document.body.appendChild(s);
   }
 });
@@ -2712,7 +2712,7 @@ console.log('BizCore Firebase ready ✅');
   // Runs after the main app; failure here should never block the app itself.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=232', { updateViaCache: 'none' }).catch(err => {
+      navigator.serviceWorker.register('sw.js?v=235', { updateViaCache: 'none' }).catch(err => {
         console.warn('Service worker registration failed:', err);
       });
     });

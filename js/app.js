@@ -10415,7 +10415,7 @@ function openDeliveryAcceptance(soId,deliveryIdx,opts={}){
  // Correction/Revision can be launched from the open Delivery Note viewer.
  // Keep the editor above the DN modal; otherwise it opens successfully but is hidden behind the viewer.
  modal.style.zIndex='6600';
- modal._soId=soId;modal._deliveryIdx=deliveryIdx;modal._confirmOperationId='';modal._acceptanceMode=editMode?opts.mode:'confirm';modal._entrySource=opts.source||'bizcore';document.getElementById('dn-confirm-save-btn-text').textContent=editMode?(opts.mode==='correction'?'Save Correction':'Save Revision'):'Confirm Delivery';
+ modal._soId=soId;modal._deliveryIdx=deliveryIdx;modal._confirmOperationId='';modal._acceptanceMode=editMode?opts.mode:'confirm';modal._entrySource=opts.source||'bizcore';if(modal._entrySource==='qr'&&isMobileQRWorkflow())window._mobileQRFlowActive=true;document.getElementById('dn-confirm-save-btn-text').textContent=editMode?(opts.mode==='correction'?'Save Correction':'Save Revision'):'Confirm Delivery';
  openModalWithSize('dn-confirm-modal');
  return modal.classList.contains('open');
 }
@@ -10549,7 +10549,7 @@ function showQRDeliverySuccess(so,d,deliveryIdx){
  ensureQRWorkflowUI();let a=0,r=0;(d.items||[]).forEach(it=>{a+=deliveryAcceptedQty(d,it);r+=deliveryRejectedQty(d,it)});document.getElementById('dn-qr-success-text').textContent=`${d.dnNo} has been successfully recorded.`;document.getElementById('dn-qr-success-accepted').textContent=formatQuantity(a);document.getElementById('dn-qr-success-rejected').textContent=formatQuantity(r);const finishLabel=document.getElementById('dn-qr-finish-label');if(finishLabel)finishLabel.textContent=isMobileQRWorkflow()?'Close':'Done';const o=document.getElementById('dn-qr-success-overlay');o.dataset.soId=so.id;o.dataset.deliveryIdx=deliveryIdx;o.classList.add('open');
 }
 function isMobileQRWorkflow(){
- return !!(window.matchMedia?.('(max-width: 820px)').matches && (window.matchMedia?.('(pointer: coarse)').matches || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent||'')));
+ return !!(window._mobileQRFlowActive || (window.matchMedia?.('(max-width: 820px)').matches && (window.matchMedia?.('(pointer: coarse)').matches || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent||''))));
 }
 function showMobileQRFinished(opts={}){
  stopDeliveryQRScanner();
@@ -10589,12 +10589,15 @@ async function cancelDeliveryConfirmation(){
  if(!m){return}
  const qr=m._entrySource==='qr';
  if(qr && isMobileQRWorkflow()){
+   window._mobileQRFlowActive=true;
    const ok=await showConfirmAsync({icon:'⚠️',title:'Cancel Delivery Update?',message:'Your changes have not been saved.',confirmText:'Cancel Update',cancelText:'Continue Update',confirmClass:'btn-danger'});
    if(!ok)return;
+   // Put the protected QR exit screen in place BEFORE closing the editor so no
+   // underlying delivery/login/register screen can become visible on mobile.
+   showMobileQRFinished({cancelled:true});
    closeModal('dn-confirm-modal');
    window._dnDeepLinkOpened=null;window._dnDeepLinkRouting=null;
    history.replaceState({},'',location.pathname);
-   showMobileQRFinished({cancelled:true});
    return;
  }
  closeModal('dn-confirm-modal');
@@ -10743,30 +10746,25 @@ function openDNFromDeepLink(){
  const hit=allDeliveryNotes().find(x=>token ? x.d.deliveryAccessToken===token : x.d.id===legacyId);
  if(!hit) return false;
 
- // v128: the QR destination is the exact DN workspace, not merely the DN register.
- // Render the register only as the background module, then open the requested DN
- // after that render has completed. Do not mark the deep link as consumed until
- // the target modal is actually open.
+ // v235: QR confirmation is a priority route. Do not render the Delivery Note
+ // register/overview first; that work made mobile drivers wait behind unrelated UI.
+ // Open the target confirmation directly as soon as authenticated SO/DN data exists.
  window._dnDeepLinkRouting=routeKey;
- showPage('deliverynotes');
- setTimeout(()=>{
-   try{
-     if(hit.d.customerConfirmed) viewDeliveryNote(hit.so.id,hit.i);
-     else openDeliveryAcceptance(hit.so.id,hit.i,{source:'qr'});
-
-     const targetId=hit.d.customerConfirmed?'dn-print-modal':'dn-confirm-modal';
-     const target=document.getElementById(targetId);
-     if(target && target.classList.contains('open')){
-       window._dnDeepLinkOpened=routeKey;
-       _finishDNDeepLinkLoading();
-     }else{
-       // Allow the startup retry loop / Firebase listener to try again.
-       window._dnDeepLinkOpened=null;
-     }
-   }finally{
-     window._dnDeepLinkRouting=null;
+ try{
+   if(isMobileQRWorkflow())window._mobileQRFlowActive=true;
+   if(hit.d.customerConfirmed) viewDeliveryNote(hit.so.id,hit.i);
+   else openDeliveryAcceptance(hit.so.id,hit.i,{source:'qr'});
+   const targetId=hit.d.customerConfirmed?'dn-print-modal':'dn-confirm-modal';
+   const target=document.getElementById(targetId);
+   if(target && target.classList.contains('open')){
+     window._dnDeepLinkOpened=routeKey;
+     _finishDNDeepLinkLoading();
+   }else{
+     window._dnDeepLinkOpened=null;
    }
- },80);
+ }finally{
+   window._dnDeepLinkRouting=null;
+ }
  return true;
 }
 /* ── View / Print Delivery Note v142 ── */
