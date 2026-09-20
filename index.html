@@ -14,7 +14,6 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></script>
 <link href="css/main.css?v=157" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=139" rel="stylesheet"/>
 <link href="css/typography.css?v=139" rel="stylesheet"/>
@@ -1945,13 +1944,7 @@ document.addEventListener('error', function(e) {
   <button class="btn btn-secondary" onclick="closeModal('dn-print-modal')"><i class="ti ti-x"></i><span>Close</span></button>
   <button class="btn btn-secondary" id="dn-open-so-btn" onclick="openSOFromDNView()"><i class="ti ti-file-description"></i><span>Sales Order</span></button>
   <button class="btn btn-success" id="dn-open-confirm-btn" onclick="openDeliveryConfirmationFromDNView()"><i class="ti ti-device-mobile-check"></i><span>Delivery Confirmation</span></button>
-  <div class="dn-output-menu-wrap">
-    <button class="btn btn-primary" id="dn-output-menu-btn" onclick="toggleDNOutputMenu(event)" aria-haspopup="menu" aria-expanded="false"><i class="ti ti-printer"></i><span>Print / PDF</span><i class="ti ti-chevron-up dn-output-chevron"></i></button>
-    <div class="dn-output-menu" id="dn-output-menu" role="menu">
-      <button type="button" role="menuitem" onclick="chooseDNOutput('download')"><i class="ti ti-file-type-pdf"></i><span><strong>Download PDF</strong><small>Save directly without print preview</small></span></button>
-      <button type="button" role="menuitem" onclick="chooseDNOutput('print')"><i class="ti ti-printer"></i><span><strong>Print</strong><small>Open your device print dialog</small></span></button>
-    </div>
-  </div>
+  <button class="btn btn-primary" id="dn-output-menu-btn" onclick="openDNFormatDialog('print')"><i class="ti ti-printer"></i><span>Print / PDF</span></button>
 </div>
 </div>
 </div>

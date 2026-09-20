@@ -10573,95 +10573,35 @@ function openDNFormatDialog(action='print'){
 function continueDNFormat(){
   const dlg=document.getElementById('dn-format-modal'),format=document.querySelector('input[name="dn-print-format"]:checked')?.value||'standard';
   const so=salesOrders.find(x=>x.id===dlg?._soId),d=so?.deliveries?.[dlg?._deliveryIdx];if(!so||!d){showToast('Unable to prepare Delivery Note','error');return}
-  const action=dlg?._action||'print';
   closeModal('dn-format-modal');
-  if(action==='download')downloadDeliveryNotePDF(format,so,d,dlg._deliveryIdx);else printDeliveryNote(format,so,d,dlg._deliveryIdx);
+  printDeliveryNote(format,so,d,dlg._deliveryIdx);
 }
-function closeDNOutputMenu(){
-  const wrap=document.querySelector('#dn-print-modal .dn-output-menu-wrap'),btn=document.getElementById('dn-output-menu-btn');
-  wrap?.classList.remove('open');if(btn)btn.setAttribute('aria-expanded','false');
-}
-function toggleDNOutputMenu(ev){
-  ev?.stopPropagation();const wrap=document.querySelector('#dn-print-modal .dn-output-menu-wrap'),btn=document.getElementById('dn-output-menu-btn');if(!wrap)return;
-  const open=!wrap.classList.contains('open');wrap.classList.toggle('open',open);if(btn)btn.setAttribute('aria-expanded',open?'true':'false');
-}
-function chooseDNOutput(action){closeDNOutputMenu();openDNFormatDialog(action)}
-if(!window._dnOutputMenuOutsideBound){document.addEventListener('click',function(e){if(!e.target.closest?.('.dn-output-menu-wrap'))closeDNOutputMenu()});window._dnOutputMenuOutsideBound=true}
-function deliveryNoteFileName(so,d){
-  const customer=dnCustomerProfile(so).name||'Customer';
-  const clean=v=>String(v||'').replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim().replace(/[. ]+$/,'');
-  return `${clean(d.dnNo)||'Delivery Note'} - ${clean(customer)||'Customer'}.pdf`;
-}
-function deliveryNoteOutputHtml(format,so,d,idx){
+function deliveryNotePrintHtml(format,so,d,idx){
+  // Native print only. Reuse the same document builder and the logo already held
+  // by BizCore; there is no canvas/PDF conversion or external PDF library.
   let html=buildDeliveryNoteDocument(so,d,idx,format,false);
   const qrCanvas=document.querySelector('#dn-qr-code canvas'),qrImg=document.querySelector('#dn-qr-code img');
   const qrSrc=qrCanvas?qrCanvas.toDataURL('image/png'):(qrImg?.src||'');
   if(qrSrc)html=html.replace('<div class="dn-doc-qr-slot"></div>',`<div class="dn-doc-qr-slot"><img src="${qrSrc}" alt="Delivery QR" style="width:108px;height:108px"></div>`);
   return html;
 }
-async function dnWaitForImages(root,timeout=5000){
-  const imgs=[...root.querySelectorAll('img')];
-  if(!imgs.length)return;
-  await Promise.all(imgs.map(img=>new Promise(resolve=>{
-    if(img.complete&&img.naturalWidth){resolve();return}
-    let done=false;const finish=()=>{if(done)return;done=true;clearTimeout(timer);resolve()};
-    const timer=setTimeout(finish,timeout);img.addEventListener('load',finish,{once:true});img.addEventListener('error',finish,{once:true});
-  })));
-}
-async function dnInlinePdfImages(root){
-  const imgs=[...root.querySelectorAll('img')];
-  await Promise.all(imgs.map(async img=>{
-    const src=img.currentSrc||img.src;if(!src||src.startsWith('data:')||src.startsWith('blob:'))return;
-    try{const res=await fetch(src,{mode:'cors',credentials:'omit'});if(!res.ok)return;const blob=await res.blob();const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob)});img.src=data}catch(e){console.warn('Could not inline DN PDF image',e)}
-  }));
-  await dnWaitForImages(root);
-}
-async function downloadDeliveryNotePDF(format='standard',soArg=null,dArg=null,idxArg=null){
-  const vm=document.getElementById('dn-print-modal'),so=soArg||salesOrders.find(x=>x.id===vm?._soId),idx=(idxArg!==null&&idxArg!==undefined)?idxArg:vm?._deliveryIdx,d=dArg||so?.deliveries?.[idx];if(!so||!d)return;
-  if(typeof html2pdf!=='function'){showToast('PDF generator is not available. Check your internet connection and try again.','error');return}
-  const filename=deliveryNoteFileName(so,d),host=document.createElement('div');
-  host.className='dn-pdf-render-host';host.style.cssText='position:fixed;left:0;top:0;width:210mm;background:#fff;z-index:-9999;pointer-events:none;';host.innerHTML=deliveryNoteOutputHtml(format,so,d,idx);document.body.appendChild(host);
-  const el=host.querySelector('.dn-a4')||host;
-  // PDF-only A4 geometry. 296mm avoids html2canvas rounding onto a blank second page.
-  el.style.width='210mm';el.style.height='296mm';el.style.minHeight='296mm';el.style.margin='0';el.style.padding='12mm 11mm 10mm';el.style.display='flex';el.style.flexDirection='column';el.style.overflow='hidden';
-  const foot=el.querySelector('.dn-foot');if(foot){foot.style.marginTop='auto';foot.style.flexShrink='0'}
-  const note=el.querySelector('.dn-format-note');if(note)note.style.flexShrink='0';
-  try{
-    showToast('Generating PDF…','info');
-    await dnInlinePdfImages(el);await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-    await html2pdf().set({margin:0,filename,image:{type:'jpeg',quality:.96},html2canvas:{scale:window.devicePixelRatio>2?1.6:1.8,useCORS:true,allowTaint:false,backgroundColor:'#ffffff',logging:false,scrollX:0,scrollY:0},jsPDF:{unit:'mm',format:'a4',orientation:'portrait',compress:true},pagebreak:{mode:['css','legacy'],avoid:['tr','.dn-remarks','.dn-internal','.dn-bottom','.dn-foot']}}).from(el).save();
-    showToast('PDF ready: '+filename,'success');
-  }catch(err){console.error('DN PDF download failed',err);showToast('Could not generate the Delivery Note PDF','error')}finally{host.remove()}
-}
-function openSOFromDNView(){
-  const viewModal=document.getElementById('dn-print-modal');
-  const soId=viewModal?._soId;
-  if(!soId){showToast('Unable to identify the linked Sales Order','error');return}
-  closeModal('dn-print-modal');
-  viewSO(soId);
-}
-function openDeliveryConfirmationFromDNView(){
-  const viewModal=document.getElementById('dn-print-modal');const soId=viewModal?._soId,deliveryIdx=viewModal?._deliveryIdx;if(soId==null||deliveryIdx==null){showToast('Unable to identify this Delivery Note','error');return}
-  const so=salesOrders.find(x=>x.id===soId),d=so?.deliveries?.[deliveryIdx];
-  if(d?.customerConfirmed){
-    const panel=document.querySelector('#dn-print-body .dn-confirm-result');
-    const toggle=panel?.querySelector('.dn-confirm-toggle');
-    if(toggle&&toggle.getAttribute('aria-expanded')!=='true')toggle.click();
-    panel?.scrollIntoView({behavior:'smooth',block:'start'});
-    return;
-  }
-  try{const opened=openDeliveryAcceptance(soId,deliveryIdx),confirmModal=document.getElementById('dn-confirm-modal');if(opened&&confirmModal?.classList.contains('open')){viewModal?.classList.remove('open','modal-fs-overlay');updateFullscreenShellState();confirmModal.style.zIndex='6200';return}showToast('Could not open Delivery Confirmation','error')}catch(err){console.error('Delivery Confirmation open failed',err);showToast('Could not open Delivery Confirmation: '+(err?.message||'Unknown error'),'error')}
-}
 function printDeliveryNote(format='standard',soArg=null,dArg=null,idxArg=null) {
   const vm=document.getElementById('dn-print-modal');
   const so=soArg||salesOrders.find(x=>x.id===vm?._soId);
   const idx=(idxArg!==null&&idxArg!==undefined)?idxArg:vm?._deliveryIdx;
   const d=dArg||so?.deliveries?.[idx];if(!so||!d)return;
-  const html=deliveryNoteOutputHtml(format,so,d,idx);
-  showToast('Opening print dialog…','info');
-  const w=window.open('','_blank');if(!w){showToast('Please allow pop-ups to print the Delivery Note','warning');return}
-  const title=deliveryNoteFileName(so,d).replace(/\.pdf$/i,'');
-  w.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>${html}<scr`+`ipt>(function(){var closed=false;function finish(){if(closed)return;closed=true;setTimeout(function(){try{window.close()}catch(e){}},80)}function ready(){var imgs=[].slice.call(document.images);if(!imgs.length)return Promise.resolve();return Promise.all(imgs.map(function(i){return i.complete?Promise.resolve():new Promise(function(r){i.onload=i.onerror=r;setTimeout(r,2500)})}))}window.addEventListener('afterprint',finish);window.onload=function(){ready().then(function(){requestAnimationFrame(function(){window.print();setTimeout(finish,1800)})})};})();</scr`+`ipt></body></html>`);w.document.close();
+  // Print inside the current page. This avoids a popup/new tab and avoids all
+  // html2canvas/jsPDF work, which is substantially lighter on mobile devices.
+  document.getElementById('dn-native-print-host')?.remove();
+  const host=document.createElement('div');host.id='dn-native-print-host';host.setAttribute('aria-hidden','true');
+  host.innerHTML=deliveryNotePrintHtml(format,so,d,idx);document.body.appendChild(host);
+  const cleanup=()=>{document.body.classList.remove('dn-native-printing');host.remove();window.removeEventListener('afterprint',cleanup)};
+  document.body.classList.add('dn-native-printing');
+  window.addEventListener('afterprint',cleanup,{once:true});
+  // Let the DOM paint once, then invoke the native browser/OS print UI directly.
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{try{window.focus();window.print()}catch(err){console.error('DN print failed',err);cleanup();showToast('Could not open the print dialog','error')}}));
+  // Safety cleanup for browsers that do not reliably fire afterprint after cancel.
+  setTimeout(()=>{if(document.body.classList.contains('dn-native-printing')&&!window.matchMedia?.('print').matches)cleanup()},120000);
 }
 
 /* ── Create Invoice ── */
