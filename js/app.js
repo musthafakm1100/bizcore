@@ -10599,14 +10599,37 @@ function deliveryNoteOutputHtml(format,so,d,idx){
   if(qrSrc)html=html.replace('<div class="dn-doc-qr-slot"></div>',`<div class="dn-doc-qr-slot"><img src="${qrSrc}" alt="Delivery QR" style="width:108px;height:108px"></div>`);
   return html;
 }
+async function dnWaitForImages(root,timeout=5000){
+  const imgs=[...root.querySelectorAll('img')];
+  if(!imgs.length)return;
+  await Promise.all(imgs.map(img=>new Promise(resolve=>{
+    if(img.complete&&img.naturalWidth){resolve();return}
+    let done=false;const finish=()=>{if(done)return;done=true;clearTimeout(timer);resolve()};
+    const timer=setTimeout(finish,timeout);img.addEventListener('load',finish,{once:true});img.addEventListener('error',finish,{once:true});
+  })));
+}
+async function dnInlinePdfImages(root){
+  const imgs=[...root.querySelectorAll('img')];
+  await Promise.all(imgs.map(async img=>{
+    const src=img.currentSrc||img.src;if(!src||src.startsWith('data:')||src.startsWith('blob:'))return;
+    try{const res=await fetch(src,{mode:'cors',credentials:'omit'});if(!res.ok)return;const blob=await res.blob();const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob)});img.src=data}catch(e){console.warn('Could not inline DN PDF image',e)}
+  }));
+  await dnWaitForImages(root);
+}
 async function downloadDeliveryNotePDF(format='standard',soArg=null,dArg=null,idxArg=null){
   const vm=document.getElementById('dn-print-modal'),so=soArg||salesOrders.find(x=>x.id===vm?._soId),idx=(idxArg!==null&&idxArg!==undefined)?idxArg:vm?._deliveryIdx,d=dArg||so?.deliveries?.[idx];if(!so||!d)return;
   if(typeof html2pdf!=='function'){showToast('PDF generator is not available. Check your internet connection and try again.','error');return}
-  const host=document.createElement('div');host.className='dn-pdf-render-host';host.style.cssText='position:fixed;left:-100000px;top:0;width:210mm;background:#fff;z-index:-1;';host.innerHTML=deliveryNoteOutputHtml(format,so,d,idx);document.body.appendChild(host);
-  const el=host.querySelector('.dn-a4')||host;const filename=deliveryNoteFileName(so,d);
+  const filename=deliveryNoteFileName(so,d),host=document.createElement('div');
+  host.className='dn-pdf-render-host';host.style.cssText='position:fixed;left:0;top:0;width:210mm;background:#fff;z-index:-9999;pointer-events:none;';host.innerHTML=deliveryNoteOutputHtml(format,so,d,idx);document.body.appendChild(host);
+  const el=host.querySelector('.dn-a4')||host;
+  // PDF-only A4 geometry. 296mm avoids html2canvas rounding onto a blank second page.
+  el.style.width='210mm';el.style.height='296mm';el.style.minHeight='296mm';el.style.margin='0';el.style.padding='12mm 11mm 10mm';el.style.display='flex';el.style.flexDirection='column';el.style.overflow='hidden';
+  const foot=el.querySelector('.dn-foot');if(foot){foot.style.marginTop='auto';foot.style.flexShrink='0'}
+  const note=el.querySelector('.dn-format-note');if(note)note.style.flexShrink='0';
   try{
-    showToast('Preparing '+filename,'info');
-    await html2pdf().set({margin:0,filename,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy'],avoid:['tr','.dn-remarks','.dn-internal','.dn-bottom']}}).from(el).save();
+    showToast('Generating PDF…','info');
+    await dnInlinePdfImages(el);await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    await html2pdf().set({margin:0,filename,image:{type:'jpeg',quality:.96},html2canvas:{scale:window.devicePixelRatio>2?1.6:1.8,useCORS:true,allowTaint:false,backgroundColor:'#ffffff',logging:false,scrollX:0,scrollY:0},jsPDF:{unit:'mm',format:'a4',orientation:'portrait',compress:true},pagebreak:{mode:['css','legacy'],avoid:['tr','.dn-remarks','.dn-internal','.dn-bottom','.dn-foot']}}).from(el).save();
     showToast('PDF ready: '+filename,'success');
   }catch(err){console.error('DN PDF download failed',err);showToast('Could not generate the Delivery Note PDF','error')}finally{host.remove()}
 }
@@ -10635,9 +10658,10 @@ function printDeliveryNote(format='standard',soArg=null,dArg=null,idxArg=null) {
   const idx=(idxArg!==null&&idxArg!==undefined)?idxArg:vm?._deliveryIdx;
   const d=dArg||so?.deliveries?.[idx];if(!so||!d)return;
   const html=deliveryNoteOutputHtml(format,so,d,idx);
+  showToast('Opening print dialog…','info');
   const w=window.open('','_blank');if(!w){showToast('Please allow pop-ups to print the Delivery Note','warning');return}
   const title=deliveryNoteFileName(so,d).replace(/\.pdf$/i,'');
-  w.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>${html}<scr`+`ipt>(function(){var closed=false;function finish(){if(closed)return;closed=true;setTimeout(function(){try{window.close()}catch(e){}},80)}window.addEventListener('afterprint',finish);window.onload=function(){setTimeout(function(){window.print();setTimeout(finish,1500)},150)};})();</scr`+`ipt></body></html>`);w.document.close();
+  w.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>${html}<scr`+`ipt>(function(){var closed=false;function finish(){if(closed)return;closed=true;setTimeout(function(){try{window.close()}catch(e){}},80)}function ready(){var imgs=[].slice.call(document.images);if(!imgs.length)return Promise.resolve();return Promise.all(imgs.map(function(i){return i.complete?Promise.resolve():new Promise(function(r){i.onload=i.onerror=r;setTimeout(r,2500)})}))}window.addEventListener('afterprint',finish);window.onload=function(){ready().then(function(){requestAnimationFrame(function(){window.print();setTimeout(finish,1800)})})};})();</scr`+`ipt></body></html>`);w.document.close();
 }
 
 /* ── Create Invoice ── */
