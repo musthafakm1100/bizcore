@@ -175,3 +175,10 @@ V214 DN print return + Save-as-PDF filename
 - Print document title/default Save-as-PDF filename now uses: DN Number - Customer Name.
 - Filename characters invalid on Windows/macOS are sanitized.
 - No direct PDF generator, html2canvas, or print-layout redesign added.
+
+
+V215 deployment consistency fix:
+- Cache-busts app.js and core CSS for hosted/GitHub deployments.
+- Bumps the PWA service-worker cache and disables service-worker update caching.
+- Reasserts the DN print title immediately before printing so Save as PDF uses DN No. - Customer Name.
+- Keeps the approved V214/V209 DN print template unchanged.
