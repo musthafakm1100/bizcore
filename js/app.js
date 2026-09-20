@@ -10549,7 +10549,35 @@ function showQRDeliverySuccess(so,d,deliveryIdx){
  ensureQRWorkflowUI();let a=0,r=0;(d.items||[]).forEach(it=>{a+=deliveryAcceptedQty(d,it);r+=deliveryRejectedQty(d,it)});document.getElementById('dn-qr-success-text').textContent=`${d.dnNo} has been successfully recorded.`;document.getElementById('dn-qr-success-accepted').textContent=formatQuantity(a);document.getElementById('dn-qr-success-rejected').textContent=formatQuantity(r);const o=document.getElementById('dn-qr-success-overlay');o.dataset.soId=so.id;o.dataset.deliveryIdx=deliveryIdx;o.classList.add('open');
 }
 function finishQRDeliveryWorkflow(){stopDeliveryQRScanner();document.getElementById('dn-qr-success-overlay')?.classList.remove('open');history.replaceState({},'',location.pathname);showPage('deliverynotes');renderDNPage();}
-let _dnQRStream=null,_dnQRScanTimer=null,_dnQRScanGeneration=0,_dnQRStarting=false;
+let _dnQRStream=null,_dnQRScanTimer=null,_dnQRScanGeneration=0,_dnQRStarting=false,_dnQRDecoderPromise=null;
+function _loadDNQRDecoder(){
+ if(typeof window.jsQR==='function') return Promise.resolve(window.jsQR);
+ if(_dnQRDecoderPromise) return _dnQRDecoderPromise;
+ const sources=[
+  'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
+  'https://unpkg.com/jsqr@1.4.0/dist/jsQR.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js'
+ ];
+ _dnQRDecoderPromise=new Promise((resolve,reject)=>{
+  let i=0;
+  const next=()=>{
+   if(typeof window.jsQR==='function'){resolve(window.jsQR);return}
+   if(i>=sources.length){reject(new Error('QR decoder unavailable'));return}
+   const src=sources[i++],sc=document.createElement('script');
+   sc.src=src;sc.async=true;sc.crossOrigin='anonymous';
+   sc.onload=()=>{if(typeof window.jsQR==='function')resolve(window.jsQR);else next()};
+   sc.onerror=()=>{sc.remove();next()};
+   document.head.appendChild(sc);
+  };next();
+ }).catch(err=>{_dnQRDecoderPromise=null;throw err});
+ return _dnQRDecoderPromise;
+}
+function _finishDNDeepLinkLoading(){
+ document.documentElement.classList.remove('bc-dn-deeplink-loading');
+ document.getElementById('bc-dn-deeplink-loader')?.remove();
+ document.getElementById('bc-dn-deeplink-style')?.remove();
+}
+
 function stopDeliveryQRScanner(){
  _dnQRScanGeneration++;
  if(_dnQRScanTimer){clearInterval(_dnQRScanTimer);_dnQRScanTimer=null}
@@ -10583,7 +10611,10 @@ async function startDeliveryQRScanner(){
    if('BarcodeDetector' in window){try{detector=new BarcodeDetector({formats:['qr_code']})}catch(e){detector=null}}
    const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d',{willReadFrequently:true});
    if(!detector && typeof window.jsQR!=='function'){
-     msg.textContent='QR scanner could not be loaded. Check your connection, or use the phone Camera app to scan the Delivery Note QR.';_dnQRStarting=false;return;
+     msg.textContent='Starting QR scanner…';
+     try{await _loadDNQRDecoder()}catch(e){
+       msg.textContent='QR scanner could not be loaded. Check your connection, or use the phone Camera app to scan the Delivery Note QR.';_dnQRStarting=false;return;
+     }
    }
    msg.textContent='Ready — scan the next Delivery Note QR.';_dnQRStarting=false;
    let busy=false;
@@ -10599,7 +10630,10 @@ async function startDeliveryQRScanner(){
          const max=720,scale=Math.min(1,max/video.videoWidth);canvas.width=Math.max(1,Math.round(video.videoWidth*scale));canvas.height=Math.max(1,Math.round(video.videoHeight*scale));ctx.drawImage(video,0,0,canvas.width,canvas.height);const image=ctx.getImageData(0,0,canvas.width,canvas.height);const code=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'dontInvert'});raw=code?.data||'';
        }
        const token=_extractDeliveryQRToken(raw);if(!token)return;
-       stopDeliveryQRScanner();location.href='index.html?delivery='+encodeURIComponent(token);
+       stopDeliveryQRScanner();
+       history.replaceState({},'',location.pathname+'?delivery='+encodeURIComponent(token));
+       window._dnDeepLinkOpened=null;window._dnDeepLinkRouting=null;
+       if(!openDNFromDeepLink()) setTimeout(()=>openDNFromDeepLink(),120);
      }catch(e){}finally{busy=false}
    },300);
  }catch(e){
@@ -10660,6 +10694,7 @@ function openDNFromDeepLink(){
      const target=document.getElementById(targetId);
      if(target && target.classList.contains('open')){
        window._dnDeepLinkOpened=routeKey;
+       _finishDNDeepLinkLoading();
      }else{
        // Allow the startup retry loop / Firebase listener to try again.
        window._dnDeepLinkOpened=null;

@@ -13,9 +13,12 @@
 <link rel="apple-touch-icon" href="icons/bizcore-icon-180.png"/>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+// v232: jsQR is loaded on demand by the scanner with multiple CDN fallbacks.
+// Avoid blocking BizCore startup when one CDN is unavailable on iPhone/Safari.
+</script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=231" rel="stylesheet"/>
+<link href="css/main.css?v=232" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=215" rel="stylesheet"/>
 <link href="css/typography.css?v=215" rel="stylesheet"/>
 <link href="css/masters.css?v=215" rel="stylesheet"/>
@@ -42,6 +45,22 @@ button,.btn{font-size:14px!important;font-weight:600!important;}
 </style>
 </head>
 <body>
+<script>
+(function(){
+  try{
+    const p=new URLSearchParams(location.search);
+    if(p.get('delivery')||p.get('dn')){
+      document.documentElement.classList.add('bc-dn-deeplink-loading');
+      const st=document.createElement('style');
+      st.id='bc-dn-deeplink-style';
+      st.textContent='.bc-dn-deeplink-loading body>*:not(#bc-dn-deeplink-loader):not(script){visibility:hidden!important}#bc-dn-deeplink-loader{visibility:visible!important;position:fixed;inset:0;z-index:2147483000;background:#f6f8fb;display:flex;align-items:center;justify-content:center;font-family:Inter,Segoe UI,sans-serif;color:#17324d}#bc-dn-deeplink-loader>div{background:#fff;border:1px solid #dce5ee;border-radius:14px;padding:22px 26px;box-shadow:0 14px 38px rgba(15,23,42,.12);text-align:center;font-size:13px;font-weight:650}#bc-dn-deeplink-loader i{display:block;font-size:25px;margin-bottom:8px;color:#2e75b6}';
+      document.head.appendChild(st);
+      const el=document.createElement('div');el.id='bc-dn-deeplink-loader';el.innerHTML='<div><i class="ti ti-truck-delivery"></i>Opening Delivery Confirmation…</div>';
+      document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(el),{once:true});
+    }
+  }catch(e){}
+})();
+</script>
 <script>
 // Prevent broken image 404 errors from null/undefined src values
 document.addEventListener('error', function(e) {
@@ -2644,7 +2663,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=231';
+    s.src = 'js/app.js?v=232';
     document.body.appendChild(s);
   }
 });
@@ -2693,7 +2712,7 @@ console.log('BizCore Firebase ready ✅');
   // Runs after the main app; failure here should never block the app itself.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=231', { updateViaCache: 'none' }).catch(err => {
+      navigator.serviceWorker.register('sw.js?v=232', { updateViaCache: 'none' }).catch(err => {
         console.warn('Service worker registration failed:', err);
       });
     });

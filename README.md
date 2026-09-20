@@ -272,3 +272,11 @@ V229: Simplified Customer Invoice entry and added accepted-quantity partial invo
 - iPhone/Safari compatible repeated Delivery Note QR scanning.
 - Uses native BarcodeDetector when available and jsQR camera-frame decoding fallback on Safari/iPhone.
 - Fully releases video tracks/srcObject between scans and guards scanner restart state.
+
+
+## v232
+- Prevents Dashboard flash when a Delivery Note QR deep link is opened; a neutral Opening Delivery Confirmation overlay remains until the target workflow is ready.
+- Scan Another QR routes inside the SPA instead of reloading index.html, avoiding Dashboard exposure between scans.
+- iPhone/Safari QR fallback now attempts multiple decoder CDNs when native BarcodeDetector is unavailable.
+- Scanner stays in Starting QR scanner state until a decoder is actually ready.
+- PWA cache/version bumped to v232.
