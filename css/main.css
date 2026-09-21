@@ -9063,3 +9063,13 @@ img,svg,canvas{max-width:100%}
 @media(max-width:1050px){
   .pricing-notes-costs-row .internal-costs-table{min-width:0}
 }
+
+/* v239 — Pricing Additional Costs compact columns + action visibility */
+.pricing-notes-costs-row .internal-costs-table th:nth-child(1){width:30%}
+.pricing-notes-costs-row .internal-costs-table th:nth-child(2){width:25% !important}
+.pricing-notes-costs-row .internal-costs-table th:nth-child(3){width:14% !important}
+.pricing-notes-costs-row .internal-costs-table th:nth-child(4){width:25% !important;text-align:right}
+.pricing-notes-costs-row .internal-costs-table th:nth-child(5){width:6% !important;min-width:38px}
+.pricing-notes-costs-row .internal-costs-table td:nth-child(4){text-align:right;white-space:nowrap;padding-right:8px}
+.pricing-notes-costs-row .internal-costs-table td:nth-child(5){text-align:center;white-space:nowrap;padding-left:2px;padding-right:6px}
+.pricing-notes-costs-row .internal-costs-table td:nth-child(5) .row-del{display:inline-flex!important;align-items:center;justify-content:center;margin:0 auto}

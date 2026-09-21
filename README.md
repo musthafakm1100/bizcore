@@ -316,3 +316,12 @@ V229: Simplified Customer Invoice entry and added accepted-quantity partial invo
 - Kept Pricing's main data-dense line-item area as a Wide Workspace; this change only prevents unnecessary scrolling inside the Additional Costs card.
 - Allowed the Additional Costs toolbar help text to wrap instead of widening the card.
 - PWA shell/CSS cache references bumped to v238.
+
+
+## v239 — Pricing Additional Costs compact action layout
+- Restored the Additional Costs row delete/action column.
+- Reduced Cost Type, Calculation Method and Value widths for a denser desktop layout.
+- Kept Calculated Cost right-aligned and closer to the related cost fields.
+- Preserved locked master cost rows and their lock indicator.
+- Kept the card fluid without reintroducing its horizontal scrollbar.
+- PWA shell/CSS cache references bumped to v239.
