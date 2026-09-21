@@ -4198,6 +4198,8 @@ function exportPricingRegisterExcel(includeLines=false,prefetchedRows=null){
 function goPricingDocPage(p){ pricingDocPage=p; renderPricingDocuments(); }
 
 function showPage(page, el) {
+  // v237: cancelled/completed mobile QR workflow is terminal; background callbacks cannot expose ERP screens.
+  if(window._mobileQRTerminal && isMobileQRWorkflow?.() && document.getElementById('dn-qr-finished-overlay')?.classList.contains('open')) return;
   const masterAliases=['customers','suppliers','products','employees','units'];
   const requestedMasterTab=masterAliases.includes(page)?page:null;
   const targetPage=requestedMasterTab?'masters':page;
@@ -10552,6 +10554,8 @@ function isMobileQRWorkflow(){
  return !!(window._mobileQRFlowActive || (window.matchMedia?.('(max-width: 820px)').matches && (window.matchMedia?.('(pointer: coarse)').matches || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent||''))));
 }
 function showMobileQRFinished(opts={}){
+ window._mobileQRFlowActive=true;
+ window._mobileQRTerminal=true;
  stopDeliveryQRScanner();
  document.getElementById('dn-qr-success-overlay')?.classList.remove('open');
  history.replaceState({},'',location.pathname);
@@ -10592,12 +10596,14 @@ async function cancelDeliveryConfirmation(){
    window._mobileQRFlowActive=true;
    const ok=await showConfirmAsync({icon:'⚠️',title:'Cancel Delivery Update?',message:'Your changes have not been saved.',confirmText:'Cancel Update',cancelText:'Continue Update',confirmClass:'btn-danger'});
    if(!ok)return;
-   // Put the protected QR exit screen in place BEFORE closing the editor so no
-   // underlying delivery/login/register screen can become visible on mobile.
+   // Make cancellation terminal BEFORE hiding the editor. Avoid generic modal navigation cleanup.
+   window._mobileQRTerminal=true;
    showMobileQRFinished({cancelled:true});
-   closeModal('dn-confirm-modal');
+   m.classList.remove('open');
    window._dnDeepLinkOpened=null;window._dnDeepLinkRouting=null;
    history.replaceState({},'',location.pathname);
+   setTimeout(()=>{if(window._mobileQRTerminal)showMobileQRFinished({cancelled:true})},0);
+   setTimeout(()=>{if(window._mobileQRTerminal)showMobileQRFinished({cancelled:true})},250);
    return;
  }
  closeModal('dn-confirm-modal');
@@ -10653,6 +10659,7 @@ function _extractDeliveryQRToken(raw){
 }
 async function startDeliveryQRScanner(){
  if(_dnQRStarting)return;
+ window._mobileQRTerminal=false;
  _dnQRStarting=true;
  const sessionId=++_dnQRSessionId;
  // A new scan is a fresh workflow session. Clear the previous deep-link route first so

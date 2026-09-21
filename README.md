@@ -300,3 +300,10 @@ V229: Simplified Customer Invoice entry and added accepted-quantity partial invo
 - Mobile QR flow state is retained explicitly so Cancel cannot fall through to Delivery Access/Login when responsive/device state changes.
 - Cancel Update places the protected QR exit screen before closing the confirmation modal, preventing underlying ERP/login screens from flashing or becoming the destination.
 - PWA app/SW cache references bumped to v235.
+
+
+## v237 — Mobile QR terminal cancellation
+- Rebased the V236 mobile QR terminal cancellation fix onto the latest GitHub main branch.
+- Mobile QR Cancel/Back/Close remains in the protected QR exit flow and cannot fall through to Dashboard.
+- Desktop navigation remains unchanged.
+- PWA shell cache bumped to v237.

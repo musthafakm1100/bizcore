@@ -1889,7 +1889,7 @@ document.addEventListener('error', function(e) {
 
 <!-- MOBILE-FIRST DELIVERY CONFIRMATION -->
 <div class="modal-overlay" id="dn-confirm-modal"><div class="modal modal-normal dn-mobile-confirm">
-<div class="modal-header dn-confirm-header"><div class="dn-confirm-heading"><button class="dn-back-btn" type="button" onclick="closeModal('dn-confirm-modal')"><i class="ti ti-arrow-left"></i><span>Back</span></button><div><h2 id="dn-confirm-title">Delivery Confirmation</h2><div id="dn-confirm-sub" class="dn-confirm-sub"></div></div></div><button class="close-btn" onclick="closeModal('dn-confirm-modal')">✕</button></div>
+<div class="modal-header dn-confirm-header"><div class="dn-confirm-heading"><button class="dn-back-btn" type="button" onclick="cancelDeliveryConfirmation()"><i class="ti ti-arrow-left"></i><span>Back</span></button><div><h2 id="dn-confirm-title">Delivery Confirmation</h2><div id="dn-confirm-sub" class="dn-confirm-sub"></div></div></div><button class="close-btn" onclick="cancelDeliveryConfirmation()">✕</button></div>
 <div class="modal-body dn-confirm-body">
 <div class="dn-auth-banner"><div class="dn-auth-icon"><i class="ti ti-shield-check"></i></div><div><strong>Authenticated delivery update</strong><span id="dn-auth-user">Signed in user</span></div><span class="dn-secure-pill"><i class="ti ti-lock"></i> Secure</span></div>
 <div class="dn-confirm-intro"><div><strong>Confirm customer acceptance</strong><span>Rejected quantities automatically return to the Sales Order remaining quantity.</span></div><div id="dn-confirm-summary" class="dn-confirm-summary"></div></div>
@@ -2663,7 +2663,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=235';
+    s.src = 'js/app.js?v=237';
     document.body.appendChild(s);
   }
 });
