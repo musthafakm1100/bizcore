@@ -9022,3 +9022,44 @@ img,svg,canvas{max-width:100%}
 .inv-summary-card{background:var(--blue-pale);border:1px solid var(--blue-light);border-radius:8px;padding:10px 14px}.inv-summary-card>div{display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px}.inv-summary-card .inv-summary-total{font-size:15px;font-weight:700;color:var(--blue);border-top:1px solid var(--blue-light);padding-top:8px;margin:7px 0 0}
 .inv-create-footer{justify-content:space-between!important}.inv-create-footer>div{display:flex;gap:8px}.inv-number-note{font-size:11px;color:var(--gray);display:flex;align-items:center;gap:5px}
 @media(max-width:760px){#so-invoice-modal .inv-create-modal{width:96vw!important;max-height:92dvh!important}.inv-head-grid{grid-template-columns:1fr 1fr}.inv-zoho-field{grid-column:1/-1}.inv-items-head{align-items:flex-start;flex-direction:column}.inv-bottom-grid{grid-template-columns:1fr}.inv-create-footer{align-items:stretch!important;gap:8px}.inv-number-note{display:none}.inv-create-footer>div{width:100%}.inv-create-footer .btn{flex:1}.inv-modal-subtitle{display:none}}
+
+/* v238 — Pricing nested-card width correction
+   Additional Costs shares the pricing row with Internal Notes. Keep this card
+   fluid on desktop and avoid a second horizontal scroller inside the wide
+   Pricing workspace. */
+.pricing-notes-costs-row .internal-costs-body{
+  overflow-x:hidden;
+  min-width:0;
+}
+.pricing-notes-costs-row .internal-costs-toolbar{
+  flex-wrap:wrap;
+  min-width:0;
+}
+.pricing-notes-costs-row .internal-costs-note{
+  flex:1 1 280px;
+  min-width:0;
+}
+.pricing-notes-costs-row .internal-costs-table{
+  width:100%;
+  min-width:0;
+  table-layout:fixed;
+}
+.pricing-notes-costs-row .internal-costs-table th:nth-child(1){width:34%}
+.pricing-notes-costs-row .internal-costs-table th:nth-child(2){width:28% !important}
+.pricing-notes-costs-row .internal-costs-table th:nth-child(3){width:15% !important}
+.pricing-notes-costs-row .internal-costs-table th:nth-child(4){width:18% !important}
+.pricing-notes-costs-row .internal-costs-table th:nth-child(5){width:5% !important}
+.pricing-notes-costs-row .internal-costs-table th,
+.pricing-notes-costs-row .internal-costs-table td{
+  min-width:0;
+  box-sizing:border-box;
+}
+.pricing-notes-costs-row .internal-costs-table input,
+.pricing-notes-costs-row .internal-costs-table select{
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+}
+@media(max-width:1050px){
+  .pricing-notes-costs-row .internal-costs-table{min-width:0}
+}

@@ -307,3 +307,12 @@ V229: Simplified Customer Invoice entry and added accepted-quantity partial invo
 - Mobile QR Cancel/Back/Close remains in the protected QR exit flow and cannot fall through to Dashboard.
 - Desktop navigation remains unchanged.
 - PWA shell cache bumped to v237.
+
+
+## v238 — Pricing Additional Costs width correction
+- Removed the unintended nested horizontal scrollbar from Additional Costs.
+- Rebalanced Cost Type, Calculation Method, Value, Calculated Cost and action widths.
+- Removed the responsive 700px/620px minimum table width that forced the card to overflow.
+- Kept Pricing's main data-dense line-item area as a Wide Workspace; this change only prevents unnecessary scrolling inside the Additional Costs card.
+- Allowed the Additional Costs toolbar help text to wrap instead of widening the card.
+- PWA shell/CSS cache references bumped to v238.

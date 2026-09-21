@@ -9,7 +9,7 @@
   cleared and users get the latest version.
 */
 
-const CACHE_NAME = 'bizcore-shell-v237';
+const CACHE_NAME = 'bizcore-shell-v238';
 
 const APP_SHELL = [
   './login.html',
