@@ -268,60 +268,10 @@ V215 deployment consistency fix:
 V229: Simplified Customer Invoice entry and added accepted-quantity partial invoicing. Available invoice quantity is customer accepted minus previously invoiced; invoice items and partial totals are stored per invoice.
 
 
-## V231
-- iPhone/Safari compatible repeated Delivery Note QR scanning.
-- Uses native BarcodeDetector when available and jsQR camera-frame decoding fallback on Safari/iPhone.
-- Fully releases video tracks/srcObject between scans and guards scanner restart state.
-
-
-## v233
-- Prevents Dashboard flash when a Delivery Note QR deep link is opened; a neutral Opening Delivery Confirmation overlay remains until the target workflow is ready.
-- Scan Another QR routes inside the SPA instead of reloading index.html, avoiding Dashboard exposure between scans.
-- iPhone/Safari QR fallback now attempts multiple decoder CDNs when native BarcodeDetector is unavailable.
-- Scanner stays in Starting QR scanner state until a decoder is actually ready.
-- PWA cache/version bumped to v233.
-
-
-## v233
-- Fixed repeated QR scanning session lifecycle on mobile: old deep-link/navigation state can no longer close a newly opened scanner.
-- Mobile QR Finish now ends on a controlled completion screen and attempts to close the QR-opened window when the browser permits; it never exposes the ERP screens.
-- Desktop QR Finish keeps BizCore open and returns to the completed Delivery Note.
-
-
-### v234 – Mobile QR Cancel & Close controls
-- Mobile QR Delivery Confirmation Cancel now asks for confirmation and never leaks into Dashboard/DN/ERP screens.
-- Cancel Update ends on a controlled mobile screen with Scan Another QR and Close.
-- Successful mobile QR completion now provides actual Scan Another QR and Close controls.
-- Close attempts browser/tab close; when iOS Safari blocks scripted closing, BizCore remains on a protected exit screen with a Close Window control/instruction.
-- Desktop/PC cancellation and completion retain normal BizCore behavior.
-
-### v235 – Mobile QR Fast Open & Cancel Exit Fix
-- QR deep links now open Delivery Confirmation directly once authenticated delivery data is ready, without first rendering the Delivery Note register/overview.
-- Mobile QR flow state is retained explicitly so Cancel cannot fall through to Delivery Access/Login when responsive/device state changes.
-- Cancel Update places the protected QR exit screen before closing the confirmation modal, preventing underlying ERP/login screens from flashing or becoming the destination.
-- PWA app/SW cache references bumped to v235.
-
-
-## v237 — Mobile QR terminal cancellation
-- Rebased the V236 mobile QR terminal cancellation fix onto the latest GitHub main branch.
-- Mobile QR Cancel/Back/Close remains in the protected QR exit flow and cannot fall through to Dashboard.
-- Desktop navigation remains unchanged.
-- PWA shell cache bumped to v237.
-
-
-## v238 — Pricing Additional Costs width correction
-- Removed the unintended nested horizontal scrollbar from Additional Costs.
-- Rebalanced Cost Type, Calculation Method, Value, Calculated Cost and action widths.
-- Removed the responsive 700px/620px minimum table width that forced the card to overflow.
-- Kept Pricing's main data-dense line-item area as a Wide Workspace; this change only prevents unnecessary scrolling inside the Additional Costs card.
-- Allowed the Additional Costs toolbar help text to wrap instead of widening the card.
-- PWA shell/CSS cache references bumped to v238.
-
-
-## v239 — Pricing Additional Costs compact action layout
-- Restored the Additional Costs row delete/action column.
-- Reduced Cost Type, Calculation Method and Value widths for a denser desktop layout.
-- Kept Calculated Cost right-aligned and closer to the related cost fields.
-- Preserved locked master cost rows and their lock indicator.
-- Kept the card fluid without reintroducing its horizontal scrollbar.
-- PWA shell/CSS cache references bumped to v239.
+## V244 — RFQ Overview In Pricing
+- Added a dedicated **In Pricing** row to RFQ Overview.
+- Awaiting Pricing counts only RFQs with workflow stage `New` (no saved Pricing record).
+- In Pricing counts RFQs with workflow stage `Pricing` (saved Pricing exists, not yet quoted).
+- Clicking In Pricing filters the RFQ register to the same Pricing population.
+- Awaiting Pricing uses amber, In Pricing uses blue, and Quoted / Sales Order uses green for clearer workflow progression.
+- Existing Pricing workflow/status logic is unchanged.

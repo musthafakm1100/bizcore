@@ -13,12 +13,8 @@
 <link rel="apple-touch-icon" href="icons/bizcore-icon-180.png"/>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-<script>
-// v234: jsQR is loaded on demand by the scanner with multiple CDN fallbacks.
-// Avoid blocking BizCore startup when one CDN is unavailable on iPhone/Safari.
-</script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=239" rel="stylesheet"/>
+<link href="css/main.css?v=244" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=215" rel="stylesheet"/>
 <link href="css/typography.css?v=215" rel="stylesheet"/>
 <link href="css/masters.css?v=215" rel="stylesheet"/>
@@ -45,22 +41,6 @@ button,.btn{font-size:14px!important;font-weight:600!important;}
 </style>
 </head>
 <body>
-<script>
-(function(){
-  try{
-    const p=new URLSearchParams(location.search);
-    if(p.get('delivery')||p.get('dn')){
-      document.documentElement.classList.add('bc-dn-deeplink-loading');
-      const st=document.createElement('style');
-      st.id='bc-dn-deeplink-style';
-      st.textContent='.bc-dn-deeplink-loading body>*:not(#bc-dn-deeplink-loader):not(script){visibility:hidden!important}#bc-dn-deeplink-loader{visibility:visible!important;position:fixed;inset:0;z-index:2147483000;background:#f6f8fb;display:flex;align-items:center;justify-content:center;font-family:Inter,Segoe UI,sans-serif;color:#17324d}#bc-dn-deeplink-loader>div{background:#fff;border:1px solid #dce5ee;border-radius:14px;padding:22px 26px;box-shadow:0 14px 38px rgba(15,23,42,.12);text-align:center;font-size:13px;font-weight:650}#bc-dn-deeplink-loader i{display:block;font-size:25px;margin-bottom:8px;color:#2e75b6}';
-      document.head.appendChild(st);
-      const el=document.createElement('div');el.id='bc-dn-deeplink-loader';el.innerHTML='<div><i class="ti ti-truck-delivery"></i>Opening Delivery Confirmation…</div>';
-      document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(el),{once:true});
-    }
-  }catch(e){}
-})();
-</script>
 <script>
 // Prevent broken image 404 errors from null/undefined src values
 document.addEventListener('error', function(e) {
@@ -381,6 +361,7 @@ document.addEventListener('error', function(e) {
 <div class="rfq-monitor-pro-list">
 <div class="rfq-monitor-section-label rfq-monitor-status-label">Status</div>
 <button class="rfq-main-monitor-item pricing rfq-monitor-pro-row" data-rfq-monitor-filter="New" onclick="applyRFQMonitorFilter('New',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-pricing"></i>Awaiting Pricing</span><strong id="rfq-k-pricing">0</strong></button>
+<button class="rfq-main-monitor-item inpricing rfq-monitor-pro-row" data-rfq-monitor-filter="Pricing" onclick="applyRFQMonitorFilter('Pricing',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-inpricing"></i>In Pricing</span><strong id="rfq-k-inpricing">0</strong></button>
 <button class="rfq-main-monitor-item quoted rfq-monitor-pro-row" data-rfq-monitor-filter="Quoted" onclick="applyRFQMonitorFilter('Quoted',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-quoted"></i>Quoted / Sales Order</span><strong id="rfq-k-quoted">0</strong></button>
 <button class="rfq-main-monitor-item nobid rfq-monitor-pro-row" data-rfq-monitor-filter="No Bid" onclick="applyRFQMonitorFilter('No Bid',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-nobid"></i>No Bid</span><strong id="rfq-k-nobid">0</strong></button>
 <button class="rfq-main-monitor-item overdue rfq-monitor-pro-row" data-rfq-monitor-filter="Overdue" onclick="applyRFQMonitorFilter('Overdue',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-overdue"></i>Overdue</span><strong id="rfq-k-overdue">0</strong></button>
@@ -1684,15 +1665,15 @@ document.addEventListener('error', function(e) {
 </table>
 </div>
 <!-- Document-level notes and additional costs in one balanced row -->
-<div class="pricing-notes-costs-row">
-<section class="pricing-internal-notes-section">
+<div class="pricing-notes-costs-row pricing-bottom-rebuilt">
+<section class="pricing-internal-notes-section pricing-bottom-card pricing-note-card">
 <div class="pricing-internal-notes-head">
 <div><strong>Internal Notes</strong><span>Internal use only — not copied to customer documents</span></div>
 <span id="pricing-internal-notes-count">0 / 2000</span>
 </div>
 <textarea id="pricing-internal-notes" maxlength="2000" rows="4" placeholder="Add pricing-level notes, supplier conditions, negotiation details or internal instructions…" oninput="document.getElementById('pricing-internal-notes-count').textContent=this.value.length+' / 2000'"></textarea>
 </section>
-<section class="internal-costs internal-costs-below" id="internal-costs-section">
+<section class="internal-costs internal-costs-below pricing-bottom-card pricing-cost-card" id="internal-costs-section">
 <div class="internal-costs-summary">
 <span class="internal-costs-summary-title">Additional Costs</span>
 <span class="internal-costs-summary-meta" id="internal-costs-count">None added</span>
@@ -1705,7 +1686,7 @@ document.addEventListener('error', function(e) {
 <button class="btn btn-secondary btn-sm" onclick="addAdditionalCostRow({},true)" type="button"><i class="ti ti-plus"></i>Add cost</button>
 </div>
 <table class="internal-costs-table">
-<thead><tr><th>Cost type</th><th style="width:180px">Calculation method</th><th style="width:120px">Value</th><th style="width:130px;text-align:right">Calculated cost</th><th style="width:34px"></th></tr></thead>
+<thead><tr><th>Cost type</th><th>Calculation method</th><th>Value</th><th>Calculated cost</th><th class="cost-action-head" title="Action" aria-label="Action"><i class="ti ti-dots-vertical" aria-hidden="true"></i></th></tr></thead>
 <tbody id="internal-costs-tbody"></tbody>
 </table>
 </div>
@@ -1889,13 +1870,13 @@ document.addEventListener('error', function(e) {
 
 <!-- MOBILE-FIRST DELIVERY CONFIRMATION -->
 <div class="modal-overlay" id="dn-confirm-modal"><div class="modal modal-normal dn-mobile-confirm">
-<div class="modal-header dn-confirm-header"><div class="dn-confirm-heading"><button class="dn-back-btn" type="button" onclick="cancelDeliveryConfirmation()"><i class="ti ti-arrow-left"></i><span>Back</span></button><div><h2 id="dn-confirm-title">Delivery Confirmation</h2><div id="dn-confirm-sub" class="dn-confirm-sub"></div></div></div><button class="close-btn" onclick="cancelDeliveryConfirmation()">✕</button></div>
+<div class="modal-header dn-confirm-header"><div class="dn-confirm-heading"><button class="dn-back-btn" type="button" onclick="closeModal('dn-confirm-modal')"><i class="ti ti-arrow-left"></i><span>Back</span></button><div><h2 id="dn-confirm-title">Delivery Confirmation</h2><div id="dn-confirm-sub" class="dn-confirm-sub"></div></div></div><button class="close-btn" onclick="closeModal('dn-confirm-modal')">✕</button></div>
 <div class="modal-body dn-confirm-body">
 <div class="dn-auth-banner"><div class="dn-auth-icon"><i class="ti ti-shield-check"></i></div><div><strong>Authenticated delivery update</strong><span id="dn-auth-user">Signed in user</span></div><span class="dn-secure-pill"><i class="ti ti-lock"></i> Secure</span></div>
 <div class="dn-confirm-intro"><div><strong>Confirm customer acceptance</strong><span>Rejected quantities automatically return to the Sales Order remaining quantity.</span></div><div id="dn-confirm-summary" class="dn-confirm-summary"></div></div>
 <div id="dn-confirm-items" class="dn-confirm-items"></div>
 <section class="dn-receiver-card"><div class="dn-section-title"><span class="dn-section-icon"><i class="ti ti-user-check"></i></span><div><strong>Customer Receipt</strong><span>Record who accepted this delivery.</span></div></div><div class="dn-receiver-grid"><div class="form-group"><label>Received By <em>*</em></label><input id="dn-received-by" autocomplete="name" placeholder="Customer representative name"/></div><div class="form-group"><label>Customer / Delivery Remarks</label><textarea id="dn-customer-remarks" rows="2" placeholder="Add remarks if required…"></textarea></div></div></section>
-</div><div class="modal-footer dn-confirm-footer"><div class="dn-footer-note"><i class="ti ti-info-circle"></i><span>Review quantities before confirming.</span></div><div class="dn-footer-actions"><button class="btn btn-secondary" onclick="cancelDeliveryConfirmation()">Cancel</button><button class="btn btn-success dn-confirm-primary" id="dn-confirm-save-btn" onclick="saveDeliveryAcceptance()"><i class="ti ti-circle-check"></i><span id="dn-confirm-save-btn-text">Confirm Delivery</span></button></div></div></div></div>
+</div><div class="modal-footer dn-confirm-footer"><div class="dn-footer-note"><i class="ti ti-info-circle"></i><span>Review quantities before confirming.</span></div><div class="dn-footer-actions"><button class="btn btn-secondary" onclick="closeModal('dn-confirm-modal')">Cancel</button><button class="btn btn-success dn-confirm-primary" id="dn-confirm-save-btn" onclick="saveDeliveryAcceptance()"><i class="ti ti-circle-check"></i><span id="dn-confirm-save-btn-text">Confirm Delivery</span></button></div></div></div></div>
 <!-- CREATE INVOICE MODAL -->
 <div class="modal-overlay" id="so-invoice-modal">
 <div class="modal inv-create-modal">
@@ -2663,7 +2644,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=237';
+    s.src = 'js/app.js?v=244';
     document.body.appendChild(s);
   }
 });
@@ -2712,7 +2693,7 @@ console.log('BizCore Firebase ready ✅');
   // Runs after the main app; failure here should never block the app itself.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=235', { updateViaCache: 'none' }).catch(err => {
+      navigator.serviceWorker.register('sw.js?v=228', { updateViaCache: 'none' }).catch(err => {
         console.warn('Service worker registration failed:', err);
       });
     });

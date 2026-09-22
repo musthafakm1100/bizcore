@@ -4198,8 +4198,6 @@ function exportPricingRegisterExcel(includeLines=false,prefetchedRows=null){
 function goPricingDocPage(p){ pricingDocPage=p; renderPricingDocuments(); }
 
 function showPage(page, el) {
-  // v237: cancelled/completed mobile QR workflow is terminal; background callbacks cannot expose ERP screens.
-  if(window._mobileQRTerminal && isMobileQRWorkflow?.() && document.getElementById('dn-qr-finished-overlay')?.classList.contains('open')) return;
   const masterAliases=['customers','suppliers','products','employees','units'];
   const requestedMasterTab=masterAliases.includes(page)?page:null;
   const targetPage=requestedMasterTab?'masters':page;
@@ -6851,6 +6849,8 @@ function renderRFQPage() {
   // Awaiting Pricing = all RFQs that have not yet produced a saved Pricing record.
   // Overdue unpriced RFQs remain part of this count; Overdue is an overlapping urgency indicator.
   document.getElementById('rfq-k-pricing').textContent = rfqs.filter(r=>getRFQWorkflowStage(r)==='New').length;
+  const inPricingKpi = document.getElementById('rfq-k-inpricing');
+  if (inPricingKpi) inPricingKpi.textContent = rfqs.filter(r=>getRFQWorkflowStage(r)==='Pricing').length;
   document.getElementById('rfq-k-quoted').textContent  = quoted.length;
   document.getElementById('rfq-k-nobid').textContent   = noBid.length;
   updateRFQMonitorSelection();
@@ -6938,8 +6938,9 @@ function updateRFQMonitorSelection(){
   const styles={
     all:{bg:'#eef6ff',accent:'#2e75b6'},
     Open:{bg:'#eef9f2',accent:'#43a66b'},
-    Pricing:{bg:'#fff8e5',accent:'#d7a323'},
-    Quoted:{bg:'#eef6ff',accent:'#3b82c4'},
+    New:{bg:'#fff8e5',accent:'#d7a323'},
+    Pricing:{bg:'#eef6ff',accent:'#3b82c4'},
+    Quoted:{bg:'#eef9f2',accent:'#28a36a'},
     'No Bid':{bg:'#f2f4f6',accent:'#7b8794'},
     Overdue:{bg:'#fff0f0',accent:'#d85b5b'}
   };
@@ -7979,7 +7980,7 @@ function addPricingRow(item={}) {
     <td><input data-role="supref" placeholder="Quote ref." value="${rowSupRef||''}" style="font-size:12px"></td>
     <td><input data-role="buy" type="text" inputmode="decimal" value="${item.buy!==undefined&&item.buy!==''?formatNumber(item.buy,pricingDecimals()):''}" onfocus="beginPriceEdit(this)" oninput="calcPricingRow(this)" onblur="endPriceEdit(this)" placeholder="${(0).toFixed(pricingDecimals())}" style="text-align:right"></td>
     <td><input data-role="markup" type="number" min="0" step="0.1" value="${item.markup!==undefined&&item.markup!==''?item.markup:Number(activePricingSettings().targetMargin||0).toFixed(1)}" oninput="calcFromMarkup(this)" placeholder="%" style="text-align:right;background:#fffbf0"></td>
-    <td><input data-role="sell" type="text" inputmode="decimal" value="${item.sell!==undefined&&item.sell!==''?formatNumber(item.sell,pricingDecimals()):''}" onfocus="beginPriceEdit(this)" oninput="calcFromSell(this)" onblur="endPriceEdit(this)" placeholder="${(0).toFixed(pricingDecimals())}" style="text-align:right;font-weight:650"></td>
+    <td><div class="pricing-sell-lock-wrap"><input data-role="sell" class="${item.sellLocked?'is-price-locked':''}" type="text" inputmode="decimal" value="${item.sell!==undefined&&item.sell!==''?formatNumber(item.sell,pricingDecimals()):''}" onfocus="beginPriceEdit(this)" oninput="calcFromSell(this)" onblur="endPriceEdit(this)" placeholder="${(0).toFixed(pricingDecimals())}" style="text-align:right;font-weight:650"><button type="button" tabindex="-1" class="pricing-price-lock${item.sellLocked?' is-locked':''}" data-role="sell-lock" aria-pressed="${item.sellLocked?'true':'false'}" title="${item.sellLocked?'Unlock selling price — margin gauge will adjust this line':'Lock selling price — margin gauge will leave this line unchanged'}" onclick="togglePricingSellLock(this)"><i class="ti ${item.sellLocked?'ti-lock':'ti-lock-open'}"></i></button></div></td>
     <td class="margin-cell">—</td>
     <td class="margin-cell">—</td>
     <td><div class="pricing-row-actions">
@@ -8087,7 +8088,8 @@ function readPricingItemsFromDOM() {
     const sell=parsePricingNumber(tr.querySelector('[data-role="sell"]')?.value);
     const sortOrder=index+1;
     tr.dataset.sortOrder=String(sortOrder);
-    if(desc||buy||code){const lineSupplier=findUniqueMasterByName(suppliers,supplierName);items.push({lineId:tr.dataset.lineId,productId:tr.dataset.productId||'',sortOrder,code,desc,qty,uom,supplierName,supplierId:lineSupplier?.id||'',supRef,buy,markup,sell});}
+    const sellLocked=tr.querySelector('[data-role="sell-lock"]')?.classList.contains('is-locked')||false;
+    if(desc||buy||code){const lineSupplier=findUniqueMasterByName(suppliers,supplierName);items.push({lineId:tr.dataset.lineId,productId:tr.dataset.productId||'',sortOrder,code,desc,qty,uom,supplierName,supplierId:lineSupplier?.id||'',supRef,buy,markup,sell,sellLocked});}
   });
   return items;
 }
@@ -8483,6 +8485,19 @@ function calcFromSell(input) {
   updateMarginCells(tr,(sell-buy)*qty,pct);calcPricingSummary();
 }
 
+function togglePricingSellLock(button) {
+  const locked=!button.classList.contains('is-locked');
+  button.classList.toggle('is-locked',locked);
+  button.setAttribute('aria-pressed',locked?'true':'false');
+  button.title=locked?'Unlock selling price — margin gauge will adjust this line':'Lock selling price — margin gauge will leave this line unchanged';
+  const icon=button.querySelector('i');
+  if(icon) icon.className='ti '+(locked?'ti-lock':'ti-lock-open');
+  const sell=button.closest('td')?.querySelector('[data-role="sell"]');
+  if(sell) sell.classList.toggle('is-price-locked',locked);
+  markPricingDirty();
+  showToast(locked?'Selling price locked. Margin gauge will leave this line unchanged.':'Selling price unlocked. Margin gauge can adjust this line.','success');
+}
+
 function updateMarginCells(tr,margin,pct) {
   const cells=tr.querySelectorAll('.margin-cell'),status=getMarginStatusForPercent(pct),cls=pct<0?'neg':pct<Number(activePricingSettings().minMargin||0)?'low':'good';
   if(cells[0]){cells[0].textContent=pricingFmt(margin);cells[0].className='margin-cell '+cls;if(status)cells[0].style.color=status.color;}
@@ -8588,9 +8603,19 @@ function readInternalCosts(materialCost,totalSell) {
 
 function setTargetPricingMargin(targetPct) {
   targetPct=Number.isFinite(Number(targetPct))?Number(targetPct):Number(activePricingSettings().targetMargin||0);
-  let materialCost=0; const rows=[...document.querySelectorAll('#pricing-tbody tr:not(.pricing-quick-add-row)')];
-  rows.forEach(tr=>{materialCost+=parsePricingNumber(tr.querySelector('[data-role="qty"]')?.value)*parsePricingNumber(tr.querySelector('[data-role="buy"]')?.value);});
+  const rows=[...document.querySelectorAll('#pricing-tbody tr:not(.pricing-quick-add-row)')];
+  let materialCost=0,lockedSellTotal=0,unlockedMaterialCost=0,unlockedCount=0;
+  rows.forEach(tr=>{
+    const qty=parsePricingNumber(tr.querySelector('[data-role="qty"]')?.value);
+    const buy=parsePricingNumber(tr.querySelector('[data-role="buy"]')?.value);
+    const sell=parsePricingNumber(tr.querySelector('[data-role="sell"]')?.value);
+    const locked=tr.querySelector('[data-role="sell-lock"]')?.classList.contains('is-locked');
+    materialCost+=qty*buy;
+    if(locked) lockedSellTotal+=qty*sell;
+    else if(buy>0&&qty>0){unlockedMaterialCost+=qty*buy;unlockedCount++;}
+  });
   if(!materialCost){showToast('Enter buy prices before setting a target margin','error');return;}
+  if(!unlockedCount||unlockedMaterialCost<=0){showToast('All priced lines are locked. Unlock at least one selling price to use the margin gauge.','error');return;}
   let fixed=0,materialPct=0,salesPct=0,totalCostFactor=1;
   document.querySelectorAll('#internal-costs-tbody tr').forEach(tr=>{const m=tr.querySelector('[data-cost-role="method"]')?.value||'fixed',v=parseFloat(tr.querySelector('[data-cost-role="value"]')?.value)||0;if(m==='fixed')fixed+=v;else if(m==='material_pct')materialPct+=v;else if(m==='total_cost_pct')totalCostFactor*=1+v/100;else if(m==='sales_pct')salesPct+=v;});
   const baseCost=(materialCost*(1+materialPct/100)+fixed)*totalCostFactor;
@@ -8600,8 +8625,19 @@ function setTargetPricingMargin(targetPct) {
   }else{
     const factor=1+targetPct/100,denom=1-factor*salesPct/100;if(denom<=0){showToast('Sales-based internal cost is too high for this target.','error');return;}targetSell=baseCost*factor/denom;
   }
-  targetSell=pricingRound(targetSell); const factor=targetSell/materialCost;
-  rows.forEach(tr=>{const buy=parsePricingNumber(tr.querySelector('[data-role="buy"]')?.value);if(!buy)return;const sell=pricingRound(buy*factor),si=tr.querySelector('[data-role="sell"]'),pi=tr.querySelector('[data-role="markup"]');if(si)si.value=formatNumber(sell,pricingDecimals());if(pi)pi.value=pricingPercent(buy,sell).toFixed(1);calcPricingRow(si||tr);});
+  targetSell=pricingRound(targetSell);
+  const remainingSell=targetSell-lockedSellTotal;
+  if(remainingSell<0){showToast('Locked selling prices already exceed the selling total for this target margin. Unlock a line or choose a higher target.','error');return;}
+  const factor=remainingSell/unlockedMaterialCost;
+  rows.forEach(tr=>{
+    if(tr.querySelector('[data-role="sell-lock"]')?.classList.contains('is-locked'))return;
+    const buy=parsePricingNumber(tr.querySelector('[data-role="buy"]')?.value),qty=parsePricingNumber(tr.querySelector('[data-role="qty"]')?.value);
+    if(!buy||!qty)return;
+    const sell=pricingRound(buy*factor),si=tr.querySelector('[data-role="sell"]'),pi=tr.querySelector('[data-role="markup"]');
+    if(si)si.value=formatNumber(sell,pricingDecimals());
+    if(pi)pi.value=pricingPercent(buy,sell).toFixed(1);
+    calcPricingRow(si||tr);
+  });
   markPricingDirty();calcPricingSummary();
 }
 
@@ -10417,7 +10453,7 @@ function openDeliveryAcceptance(soId,deliveryIdx,opts={}){
  // Correction/Revision can be launched from the open Delivery Note viewer.
  // Keep the editor above the DN modal; otherwise it opens successfully but is hidden behind the viewer.
  modal.style.zIndex='6600';
- modal._soId=soId;modal._deliveryIdx=deliveryIdx;modal._confirmOperationId='';modal._acceptanceMode=editMode?opts.mode:'confirm';modal._entrySource=opts.source||'bizcore';if(modal._entrySource==='qr'&&isMobileQRWorkflow())window._mobileQRFlowActive=true;document.getElementById('dn-confirm-save-btn-text').textContent=editMode?(opts.mode==='correction'?'Save Correction':'Save Revision'):'Confirm Delivery';
+ modal._soId=soId;modal._deliveryIdx=deliveryIdx;modal._confirmOperationId='';modal._acceptanceMode=editMode?opts.mode:'confirm';document.getElementById('dn-confirm-save-btn-text').textContent=editMode?(opts.mode==='correction'?'Save Correction':'Save Revision'):'Confirm Delivery';
  openModalWithSize('dn-confirm-modal');
  return modal.classList.contains('open');
 }
@@ -10506,217 +10542,18 @@ async function _saveDeliveryAcceptanceCore(operationId){
  if(window.FB?.fbPublishOperationalEvent){
    try{await window.FB.fbPublishOperationalEvent({id:`dn-confirmed-${d.id}-${operationId.replace(/[^a-zA-Z0-9_-]/g,'')}`,type:'dn-confirmed',dnId:d.id,dnNo:d.dnNo,soId:so.id,status:d.status,actor:deliveryActor(),sourceSession:getBizCoreSessionId(),createdAt:new Date().toISOString(),acceptanceMode:mode})}catch(e){console.warn('Delivery saved; operational notification publish failed',e)}
  }
- const entrySource=m._entrySource||'bizcore';const deliveryIdx=m._deliveryIdx;
- closeModal('dn-confirm-modal');renderSOPage();renderDNPage();
- if(mode==='confirm'&&entrySource==='qr') showQRDeliverySuccess(so,d,deliveryIdx);
- else viewDeliveryNote(so.id,deliveryIdx);
- showToast(mode==='confirm'?`${d.dnNo} confirmed — ${d.status}`:`${d.dnNo} ${mode==='correction'?'correction saved':'acceptance revised'}`,'success');return d;
-}
-function collectDNConfirmationReview(){
- const m=document.getElementById('dn-confirm-modal'),so=salesOrders.find(x=>x.id===m?._soId),d=so?.deliveries?.[m?._deliveryIdx];if(!d)return null;
- const receivedBy=document.getElementById('dn-received-by')?.value.trim()||'';if(!receivedBy){const el=document.getElementById('dn-received-by');el?.focus();el?.scrollIntoView({behavior:'smooth',block:'center'});showDNActionMessage('Received By is required.','error');return null}
- const check=validateAllDNLines({requireReason:true});if(!check.ok){const bad=document.getElementById('dn-card-'+check.first);bad?.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>document.querySelector(`#dn-card-${check.first} input.invalid, #dn-card-${check.first} select`)?.focus(),250);showDNActionMessage('Please correct the highlighted delivery quantities before confirming.','error');return null}
- let accepted=0,rejected=0,total=0;
- for(let i=0;i<d.items.length;i++){const it=d.items[i],q=Number(it.qty)||0,a=roundQtyForUom(document.getElementById('dn-acc-'+i)?.value,it.uom),r=roundQtyForUom(document.getElementById('dn-rej-'+i)?.value,it.uom);if(Math.abs((a+r)-q)>0.001){showDNActionMessage(`Line ${i+1}: Accepted + Rejected must equal delivery quantity`,'error');return null}if(r>0&&!document.getElementById('dn-reason-'+i)?.value){showDNActionMessage(`Line ${i+1}: Select a rejection reason`,'error');return null}accepted+=a;rejected+=r;total+=q}
- return {so,d,accepted, rejected,total,receivedBy};
+ closeModal('dn-confirm-modal');renderSOPage();renderDNPage();viewDeliveryNote(so.id,m._deliveryIdx);showToast(mode==='confirm'?`${d.dnNo} confirmed — ${d.status}`:`${d.dnNo} ${mode==='correction'?'correction saved':'acceptance revised'}`,'success');return d;
 }
 async function saveDeliveryAcceptance(){
  const m=document.getElementById('dn-confirm-modal');if(!m)return null;
  const so=salesOrders.find(x=>x.id===m._soId),d=so?.deliveries?.[m._deliveryIdx];if(!d)return null;
- const mode=m._acceptanceMode||'confirm';
- // Initial confirmation gets an explicit second review. Correction/revision already have their own audit reason workflow.
- if(mode==='confirm'){
-   const review=collectDNConfirmationReview();if(!review)return null;
-   const rejected=review.rejected>0;
-   const ok=await showConfirmAsync({icon:rejected?'⚠️':'✅',title:'Confirm Delivery Acceptance',message:rejected?'Rejected quantity will return to the Sales Order for redelivery. Please review before confirming.':'Please review the quantities before confirming this delivery acceptance.',details:{'Delivery Note':review.d.dnNo,'Accepted':formatQuantity(review.accepted),'Rejected':formatQuantity(review.rejected),'Total':formatQuantity(review.total),'Received By':escapeHtml(review.receivedBy)},confirmText:'Confirm Acceptance',cancelText:'Back to Review',confirmClass:rejected?'btn-danger':'btn-success'});
-   if(!ok)return null;
- }
- const operationId=m._confirmOperationId||(m._confirmOperationId=mode+':'+d.id+':'+Date.now()+':'+Math.random().toString(36).slice(2));
+ const mode=m._acceptanceMode||'confirm';const operationId=m._confirmOperationId||(m._confirmOperationId=mode+':'+d.id+':'+Date.now()+':'+Math.random().toString(36).slice(2));
  return runProtectedDocumentSave({
    key:'deliveryConfirm:'+operationId,
    message:mode==='confirm'?'Confirming Delivery…':(mode==='correction'?'Saving Correction…':'Saving Revision…'),buttonId:'dn-confirm-save-btn',buttonTextId:'dn-confirm-save-btn-text',busyText:'Confirming Delivery…',
    action:()=>_saveDeliveryAcceptanceCore(operationId),ready:(saved)=>!saved||!isModalOpen('dn-confirm-modal')
  });
 }
-
-function ensureQRWorkflowUI(){
- if(document.getElementById('dn-qr-success-overlay'))return;
- const style=document.createElement('style');style.textContent=`
- #dn-qr-success-overlay,#dn-qr-scanner-overlay,#dn-qr-finished-overlay{position:fixed;inset:0;z-index:120000;background:rgba(15,23,42,.58);display:none;align-items:center;justify-content:center;padding:18px}
- #dn-qr-success-overlay.open,#dn-qr-scanner-overlay.open,#dn-qr-finished-overlay.open{display:flex}.dn-qr-flow-card{width:min(460px,100%);background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(15,23,42,.28);overflow:hidden}.dn-qr-flow-body{padding:28px 24px;text-align:center}.dn-qr-exit-icon{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;background:#eff6ff;color:#1d4ed8;font-size:30px}.dn-qr-success-icon{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;background:#dcfce7;color:#15803d;font-size:30px}.dn-qr-flow-body h2{margin:0 0 6px;font-size:21px;color:#0f2740}.dn-qr-flow-body p{margin:0;color:#64748b;font-size:13px}.dn-qr-result{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}.dn-qr-result div{border:1px solid #e2e8f0;border-radius:10px;padding:10px}.dn-qr-result span{display:block;font-size:11px;color:#64748b}.dn-qr-result strong{display:block;font-size:18px;margin-top:3px}.dn-qr-result .ok strong{color:#15803d}.dn-qr-result .bad strong{color:#b42318}.dn-qr-flow-actions{display:flex;gap:10px;justify-content:flex-end;padding:14px 18px;border-top:1px solid #e5e7eb;background:#f8fafc}.dn-qr-flow-actions .btn{min-width:130px}.dn-qr-video-wrap{position:relative;background:#0f172a;aspect-ratio:1/1;overflow:hidden}.dn-qr-video-wrap video{width:100%;height:100%;object-fit:cover}.dn-qr-scan-guide{position:absolute;inset:18%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.18)}.dn-qr-scan-msg{padding:12px 18px;font-size:12px;color:#64748b;text-align:center}@media(max-width:520px){.dn-qr-flow-actions{flex-direction:column-reverse}.dn-qr-flow-actions .btn{width:100%}}`;
- document.head.appendChild(style);
- document.body.insertAdjacentHTML('beforeend',`<div id="dn-qr-success-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body"><div class="dn-qr-success-icon"><i class="ti ti-check"></i></div><h2>Delivery Confirmed</h2><p id="dn-qr-success-text"></p><div class="dn-qr-result"><div class="ok"><span>Accepted</span><strong id="dn-qr-success-accepted">0</strong></div><div class="bad"><span>Rejected</span><strong id="dn-qr-success-rejected">0</strong></div></div></div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="finishQRDeliveryWorkflow()"><i class="ti ti-x"></i> <span id="dn-qr-finish-label">Done</span></button><button class="btn btn-primary" onclick="startDeliveryQRScanner()"><i class="ti ti-scan"></i> Scan Another QR</button></div></div></div><div id="dn-qr-scanner-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body" style="padding-bottom:14px"><h2>Scan Delivery QR</h2><p>Point the camera at the QR code on the next Delivery Note.</p></div><div class="dn-qr-video-wrap"><video id="dn-qr-video" playsinline muted></video><div class="dn-qr-scan-guide"></div></div><div class="dn-qr-scan-msg" id="dn-qr-scan-msg">Starting camera…</div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="stopDeliveryQRScanner()">Cancel</button></div></div></div>`);
-}
-function showQRDeliverySuccess(so,d,deliveryIdx){
- ensureQRWorkflowUI();let a=0,r=0;(d.items||[]).forEach(it=>{a+=deliveryAcceptedQty(d,it);r+=deliveryRejectedQty(d,it)});document.getElementById('dn-qr-success-text').textContent=`${d.dnNo} has been successfully recorded.`;document.getElementById('dn-qr-success-accepted').textContent=formatQuantity(a);document.getElementById('dn-qr-success-rejected').textContent=formatQuantity(r);const finishLabel=document.getElementById('dn-qr-finish-label');if(finishLabel)finishLabel.textContent=isMobileQRWorkflow()?'Close':'Done';const o=document.getElementById('dn-qr-success-overlay');o.dataset.soId=so.id;o.dataset.deliveryIdx=deliveryIdx;o.classList.add('open');
-}
-function isMobileQRWorkflow(){
- return !!(window._mobileQRFlowActive || (window.matchMedia?.('(max-width: 820px)').matches && (window.matchMedia?.('(pointer: coarse)').matches || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent||''))));
-}
-function showMobileQRFinished(opts={}){
- window._mobileQRFlowActive=true;
- window._mobileQRTerminal=true;
- stopDeliveryQRScanner();
- document.getElementById('dn-qr-success-overlay')?.classList.remove('open');
- history.replaceState({},'',location.pathname);
- let o=document.getElementById('dn-qr-finished-overlay');
- if(!o){
-   document.body.insertAdjacentHTML('beforeend',`<div id="dn-qr-finished-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body"><div id="dn-qr-finished-icon" class="dn-qr-success-icon"><i class="ti ti-check"></i></div><h2 id="dn-qr-finished-title">Delivery Update Completed</h2><p id="dn-qr-finished-text">The delivery update has been saved.</p></div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="closeMobileQRWorkflow()"><i class="ti ti-x"></i> Close</button><button class="btn btn-primary" onclick="startDeliveryQRScanner()"><i class="ti ti-scan"></i> Scan Another QR</button></div></div></div>`);
-   o=document.getElementById('dn-qr-finished-overlay');
- }
- const cancelled=opts.cancelled===true;
- const icon=document.getElementById('dn-qr-finished-icon'),title=document.getElementById('dn-qr-finished-title'),text=document.getElementById('dn-qr-finished-text');
- if(icon){icon.className=cancelled?'dn-qr-exit-icon':'dn-qr-success-icon';icon.innerHTML=cancelled?'<i class="ti ti-arrow-back-up"></i>':'<i class="ti ti-check"></i>'}
- if(title)title.textContent=cancelled?'Delivery Update Cancelled':'Delivery Update Completed';
- if(text)text.textContent=cancelled?'No delivery changes were saved.':'The delivery update has been saved successfully.';
- o.classList.add('open');
-}
-function closeMobileQRWorkflow(){
- stopDeliveryQRScanner();
- document.getElementById('dn-qr-success-overlay')?.classList.remove('open');
- document.getElementById('dn-qr-scanner-overlay')?.classList.remove('open');
- history.replaceState({},'',location.pathname);
- // A tab opened by the phone Camera app usually cannot be closed by script on iOS.
- // Try once; if Safari blocks it, keep the driver on the controlled exit screen.
- try{window.close()}catch(e){}
- const o=document.getElementById('dn-qr-finished-overlay');
- if(o){
-   const title=document.getElementById('dn-qr-finished-title'),text=document.getElementById('dn-qr-finished-text');
-   if(title)title.textContent='You Can Close This Window';
-   if(text)text.textContent='The QR delivery workflow has ended. Use your browser Close/Done control to close this window.';
-   const actions=o.querySelector('.dn-qr-flow-actions');if(actions)actions.innerHTML='<button class="btn btn-primary" onclick="closeMobileQRWorkflow()"><i class="ti ti-x"></i> Close Window</button>';
-   o.classList.add('open');
- }
-}
-async function cancelDeliveryConfirmation(){
- const m=document.getElementById('dn-confirm-modal');
- if(!m){return}
- const qr=m._entrySource==='qr';
- if(qr && isMobileQRWorkflow()){
-   window._mobileQRFlowActive=true;
-   const ok=await showConfirmAsync({icon:'⚠️',title:'Cancel Delivery Update?',message:'Your changes have not been saved.',confirmText:'Cancel Update',cancelText:'Continue Update',confirmClass:'btn-danger'});
-   if(!ok)return;
-   // Make cancellation terminal BEFORE hiding the editor. Avoid generic modal navigation cleanup.
-   window._mobileQRTerminal=true;
-   showMobileQRFinished({cancelled:true});
-   m.classList.remove('open');
-   window._dnDeepLinkOpened=null;window._dnDeepLinkRouting=null;
-   history.replaceState({},'',location.pathname);
-   setTimeout(()=>{if(window._mobileQRTerminal)showMobileQRFinished({cancelled:true})},0);
-   setTimeout(()=>{if(window._mobileQRTerminal)showMobileQRFinished({cancelled:true})},250);
-   return;
- }
- closeModal('dn-confirm-modal');
-}
-function finishQRDeliveryWorkflow(){
- const success=document.getElementById('dn-qr-success-overlay');
- const soId=success?.dataset.soId,deliveryIdx=Number(success?.dataset.deliveryIdx);
- if(isMobileQRWorkflow()){showMobileQRFinished();return}
- stopDeliveryQRScanner();success?.classList.remove('open');history.replaceState({},'',location.pathname);
- if(soId && Number.isFinite(deliveryIdx)){viewDeliveryNote(soId,deliveryIdx);return}
- showPage('deliverynotes');renderDNPage();
-}
-let _dnQRStream=null,_dnQRScanTimer=null,_dnQRScanGeneration=0,_dnQRStarting=false,_dnQRDecoderPromise=null,_dnQRSessionId=0;
-function _loadDNQRDecoder(){
- if(typeof window.jsQR==='function') return Promise.resolve(window.jsQR);
- if(_dnQRDecoderPromise) return _dnQRDecoderPromise;
- const sources=[
-  'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
-  'https://unpkg.com/jsqr@1.4.0/dist/jsQR.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js'
- ];
- _dnQRDecoderPromise=new Promise((resolve,reject)=>{
-  let i=0;
-  const next=()=>{
-   if(typeof window.jsQR==='function'){resolve(window.jsQR);return}
-   if(i>=sources.length){reject(new Error('QR decoder unavailable'));return}
-   const src=sources[i++],sc=document.createElement('script');
-   sc.src=src;sc.async=true;sc.crossOrigin='anonymous';
-   sc.onload=()=>{if(typeof window.jsQR==='function')resolve(window.jsQR);else next()};
-   sc.onerror=()=>{sc.remove();next()};
-   document.head.appendChild(sc);
-  };next();
- }).catch(err=>{_dnQRDecoderPromise=null;throw err});
- return _dnQRDecoderPromise;
-}
-function _finishDNDeepLinkLoading(){
- document.documentElement.classList.remove('bc-dn-deeplink-loading');
- document.getElementById('bc-dn-deeplink-loader')?.remove();
- document.getElementById('bc-dn-deeplink-style')?.remove();
-}
-
-function stopDeliveryQRScanner(){
- _dnQRScanGeneration++;
- if(_dnQRScanTimer){clearInterval(_dnQRScanTimer);_dnQRScanTimer=null}
- const video=document.getElementById('dn-qr-video');
- if(video){try{video.pause()}catch(e){};try{video.srcObject=null}catch(e){}}
- if(_dnQRStream){_dnQRStream.getTracks().forEach(t=>{try{t.stop()}catch(e){}});_dnQRStream=null}
- _dnQRStarting=false;
- document.getElementById('dn-qr-scanner-overlay')?.classList.remove('open');
-}
-function _extractDeliveryQRToken(raw){
- try{const u=new URL(raw,location.href);return u.searchParams.get('t')||u.searchParams.get('delivery')||''}catch(e){return ''}
-}
-async function startDeliveryQRScanner(){
- if(_dnQRStarting)return;
- window._mobileQRTerminal=false;
- _dnQRStarting=true;
- const sessionId=++_dnQRSessionId;
- // A new scan is a fresh workflow session. Clear the previous deep-link route first so
- // Firebase/render retries cannot reopen the just-completed DN and close the new scanner.
- history.replaceState({},'',location.pathname);
- window._dnDeepLinkOpened=null;window._dnDeepLinkRouting=null;
- // Always release a previous iOS camera session before requesting the next one.
- if(_dnQRScanTimer){clearInterval(_dnQRScanTimer);_dnQRScanTimer=null}
- if(_dnQRStream){_dnQRStream.getTracks().forEach(t=>{try{t.stop()}catch(e){}});_dnQRStream=null}
- ensureQRWorkflowUI();
- document.getElementById('dn-qr-success-overlay')?.classList.remove('open');
- document.getElementById('dn-qr-finished-overlay')?.classList.remove('open');
- const overlay=document.getElementById('dn-qr-scanner-overlay'),video=document.getElementById('dn-qr-video'),msg=document.getElementById('dn-qr-scan-msg');
- try{video.pause()}catch(e){};video.srcObject=null;
- overlay.classList.add('open');msg.textContent='Starting camera…';
- const generation=++_dnQRScanGeneration;
- if(!navigator.mediaDevices?.getUserMedia){msg.textContent='Camera Scanner Unavailable. Use your phone Camera app to scan the Delivery Note QR and open the BizCore link.';_dnQRStarting=false;return}
- try{
-   _dnQRStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
-   if(generation!==_dnQRScanGeneration||sessionId!==_dnQRSessionId){_dnQRStream.getTracks().forEach(t=>t.stop());_dnQRStream=null;_dnQRStarting=false;return}
-   video.srcObject=_dnQRStream;await video.play();
-   let detector=null;
-   if('BarcodeDetector' in window){try{detector=new BarcodeDetector({formats:['qr_code']})}catch(e){detector=null}}
-   const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d',{willReadFrequently:true});
-   if(!detector && typeof window.jsQR!=='function'){
-     msg.textContent='Starting QR scanner…';
-     try{await _loadDNQRDecoder()}catch(e){
-       msg.textContent='QR scanner could not be loaded. Check your connection, or use the phone Camera app to scan the Delivery Note QR.';_dnQRStarting=false;return;
-     }
-   }
-   msg.textContent='Ready — scan the next Delivery Note QR.';_dnQRStarting=false;
-   let busy=false;
-   _dnQRScanTimer=setInterval(async()=>{
-     if(busy||generation!==_dnQRScanGeneration||sessionId!==_dnQRSessionId||video.readyState<2||!video.videoWidth)return;
-     busy=true;
-     try{
-       let raw='';
-       if(detector){
-         const codes=await detector.detect(video);raw=codes?.[0]?.rawValue||'';
-       }else{
-         // Safari/iPhone fallback: decode the live camera frame with jsQR.
-         const max=720,scale=Math.min(1,max/video.videoWidth);canvas.width=Math.max(1,Math.round(video.videoWidth*scale));canvas.height=Math.max(1,Math.round(video.videoHeight*scale));ctx.drawImage(video,0,0,canvas.width,canvas.height);const image=ctx.getImageData(0,0,canvas.width,canvas.height);const code=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'dontInvert'});raw=code?.data||'';
-       }
-       const token=_extractDeliveryQRToken(raw);if(!token)return;
-       stopDeliveryQRScanner();
-       history.replaceState({},'',location.pathname+'?delivery='+encodeURIComponent(token));
-       window._dnDeepLinkOpened=null;window._dnDeepLinkRouting=null;
-       if(!openDNFromDeepLink()) setTimeout(()=>openDNFromDeepLink(),120);
-     }catch(e){}finally{busy=false}
-   },300);
- }catch(e){
-   _dnQRStarting=false;
-   const denied=e?.name==='NotAllowedError'||e?.name==='PermissionDeniedError';
-   msg.textContent=denied?'Camera permission is blocked. Allow camera access in Safari settings and try again.':'Camera could not be opened. Close other camera apps and try again.';
- }
-}
-
 async function confirmDelivery(soId,deliveryIdx){openDeliveryAcceptance(soId,deliveryIdx)}
 function createDeliveryAccessToken(){
  const bytes=new Uint8Array(24);
@@ -10753,25 +10590,29 @@ function openDNFromDeepLink(){
  const hit=allDeliveryNotes().find(x=>token ? x.d.deliveryAccessToken===token : x.d.id===legacyId);
  if(!hit) return false;
 
- // v235: QR confirmation is a priority route. Do not render the Delivery Note
- // register/overview first; that work made mobile drivers wait behind unrelated UI.
- // Open the target confirmation directly as soon as authenticated SO/DN data exists.
+ // v128: the QR destination is the exact DN workspace, not merely the DN register.
+ // Render the register only as the background module, then open the requested DN
+ // after that render has completed. Do not mark the deep link as consumed until
+ // the target modal is actually open.
  window._dnDeepLinkRouting=routeKey;
- try{
-   if(isMobileQRWorkflow())window._mobileQRFlowActive=true;
-   if(hit.d.customerConfirmed) viewDeliveryNote(hit.so.id,hit.i);
-   else openDeliveryAcceptance(hit.so.id,hit.i,{source:'qr'});
-   const targetId=hit.d.customerConfirmed?'dn-print-modal':'dn-confirm-modal';
-   const target=document.getElementById(targetId);
-   if(target && target.classList.contains('open')){
-     window._dnDeepLinkOpened=routeKey;
-     _finishDNDeepLinkLoading();
-   }else{
-     window._dnDeepLinkOpened=null;
+ showPage('deliverynotes');
+ setTimeout(()=>{
+   try{
+     if(hit.d.customerConfirmed) viewDeliveryNote(hit.so.id,hit.i);
+     else openDeliveryAcceptance(hit.so.id,hit.i);
+
+     const targetId=hit.d.customerConfirmed?'dn-print-modal':'dn-confirm-modal';
+     const target=document.getElementById(targetId);
+     if(target && target.classList.contains('open')){
+       window._dnDeepLinkOpened=routeKey;
+     }else{
+       // Allow the startup retry loop / Firebase listener to try again.
+       window._dnDeepLinkOpened=null;
+     }
+   }finally{
+     window._dnDeepLinkRouting=null;
    }
- }finally{
-   window._dnDeepLinkRouting=null;
- }
+ },80);
  return true;
 }
 /* ── View / Print Delivery Note v142 ── */

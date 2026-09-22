@@ -759,7 +759,7 @@ td.center,th.center{text-align:center}
 .margin-gauge-marker::after{content:'';position:absolute;left:50%;top:14px;transform:translateX(-50%);width:2px;height:7px;background:#1f2937}
 .margin-gauge-scale{display:flex;justify-content:space-between;margin-top:8px;font-size:9px;color:#64748b}
 .margin-gauge.is-draggable{cursor:ew-resize;touch-action:none}.margin-gauge.is-draggable .margin-gauge-marker{cursor:grab}.margin-gauge.is-dragging .margin-gauge-marker{cursor:grabbing;transition:none}
-.internal-costs{width:min(100%,760px);margin:10px 0 0;border:1px solid #dce3ea;border-radius:7px;background:#fff;overflow:hidden}.internal-costs-summary{min-height:40px;display:flex;align-items:center;gap:10px;padding:6px 10px;background:#f8fafc}.internal-costs-summary-title{font-size:13px;font-weight:750;color:#334155;white-space:nowrap}.internal-costs-summary-meta{font-size:13px;font-weight:600;color:#475569;white-space:nowrap}.internal-costs-summary-total{margin-left:auto;font-size:13px;font-weight:750;color:#1f2937;white-space:nowrap}.internal-costs-summary .btn{height:28px;padding:0 10px}.internal-costs-body{display:none;border-top:1px solid #e2e8f0}.internal-costs.is-open .internal-costs-body{display:block}.internal-costs-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 9px;background:#fff}.internal-costs-note{font-size:13px;font-weight:550;color:#475569}.internal-costs-table{width:100%;border-collapse:collapse;font-size:12px}.internal-costs-table th{background:#f1f5f9;color:#475569;text-align:left;padding:5px 6px;font-weight:650}.internal-costs-table td{padding:4px 5px;border-top:1px solid #edf1f5}.internal-costs-table input,.internal-costs-table select{width:100%;height:31px;border:1px solid #cbd5e1;border-radius:4px;padding:0 5px;font-size:12px}.internal-cost-amount{text-align:right;font-weight:700;color:#334155;white-space:nowrap}.pricing-save-note{font-size:10px;color:#64748b;margin-right:auto}.btn:disabled{filter:none}
+.internal-costs{width:min(100%,800px);margin:10px 0 0;border:1px solid #dce3ea;border-radius:7px;background:#fff;overflow:hidden}.internal-costs-summary{min-height:40px;display:flex;align-items:center;gap:10px;padding:6px 10px;background:#f8fafc}.internal-costs-summary-title{font-size:13px;font-weight:750;color:#334155;white-space:nowrap}.internal-costs-summary-meta{font-size:13px;font-weight:600;color:#475569;white-space:nowrap}.internal-costs-summary-total{margin-left:auto;font-size:13px;font-weight:750;color:#1f2937;white-space:nowrap}.internal-costs-summary .btn{height:28px;padding:0 10px}.internal-costs-body{display:none;border-top:1px solid #e2e8f0}.internal-costs.is-open .internal-costs-body{display:block}.internal-costs-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 9px;background:#fff}.internal-costs-toolbar .btn{flex-shrink:0}.internal-costs-note{font-size:13px;font-weight:550;color:#475569;min-width:0;flex:1 1 auto}.internal-costs-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:11px}.internal-costs-table th{background:#f1f5f9;color:#475569;text-align:left;padding:5px 4px;font-weight:650}.internal-costs-table td{padding:4px 3px;border-top:1px solid #edf1f5;overflow:hidden}.internal-costs-table input,.internal-costs-table select{width:100%;height:29px;border:1px solid #cbd5e1;border-radius:4px;padding:0 3px;font-size:11px;text-overflow:ellipsis}.internal-costs-table td:first-child select,.internal-costs-table th:first-child{text-overflow:ellipsis;overflow:hidden;white-space:nowrap}.internal-cost-amount{text-align:right;font-weight:700;color:#334155;white-space:nowrap}.pricing-save-note{font-size:10px;color:#64748b;margin-right:auto}.btn:disabled{filter:none}
 .pricing-table select{height:32px!important;font-size:13px!important;padding:0 7px!important}
 .pricing-table input[data-role="qty"],.pricing-table input[data-role="buy"],.pricing-table input[data-role="sell"],.pricing-table input[data-role="markup"]{font-variant-numeric:tabular-nums}
 .pricing-table input[data-role="qty"],.pricing-table input[data-role="buy"],.pricing-table input[data-role="sell"],.pricing-table input[data-role="markup"]{font-weight:400!important}
@@ -2755,7 +2755,6 @@ body.employee-view-open{overflow:hidden}
 .pricing-notes-costs-row .pricing-internal-notes-section{height:100%}
 .pricing-notes-costs-row #pricing-internal-notes{min-height:110px}
 .pricing-notes-costs-row .internal-costs-body{overflow-x:auto}
-.pricing-notes-costs-row .internal-costs-table{min-width:620px}
 
 .pricing-view-notes-costs-row{
   display:grid;
@@ -2776,7 +2775,6 @@ body.employee-view-open{overflow:hidden}
 @media(max-width:1050px){
   .pricing-notes-costs-row,
   .pricing-view-notes-costs-row{grid-template-columns:1fr}
-  .pricing-notes-costs-row .internal-costs-table{min-width:700px}
 }
 
 
@@ -4035,6 +4033,7 @@ body.employee-view-open{overflow:hidden}
 #page-rfq .rfq-monitor-dot{width:7px;height:7px;border-radius:50%;display:block;flex:0 0 auto;background:#94a3b8}
 #page-rfq .rfq-monitor-dot.dot-open{background:#2e75b6}
 #page-rfq .rfq-monitor-dot.dot-pricing{background:#d28a17}
+#page-rfq .rfq-monitor-dot.dot-inpricing{background:#3b82c4}
 #page-rfq .rfq-monitor-dot.dot-quoted{background:#28a36a}
 #page-rfq .rfq-monitor-dot.dot-nobid{background:#8a96a3}
 #page-rfq .rfq-monitor-dot.dot-overdue{background:#d04444}
@@ -6096,16 +6095,22 @@ button,
   box-shadow:inset 3px 0 0 #43a66b!important;
 }
 
-/* Waiting Pricing — soft amber/yellow */
-#page-rfq [data-rfq-monitor-filter="Pricing"].active{
+/* Awaiting Pricing — soft amber/yellow */
+#page-rfq [data-rfq-monitor-filter="New"].active{
   background:#fff8e5!important;
   box-shadow:inset 3px 0 0 #d7a323!important;
 }
 
-/* Quoted / Sales Order — soft blue */
-#page-rfq [data-rfq-monitor-filter="Quoted"].active{
+/* In Pricing — active workflow blue */
+#page-rfq [data-rfq-monitor-filter="Pricing"].active{
   background:#eef6ff!important;
   box-shadow:inset 3px 0 0 #3b82c4!important;
+}
+
+/* Quoted / Sales Order — completed green */
+#page-rfq [data-rfq-monitor-filter="Quoted"].active{
+  background:#eef9f2!important;
+  box-shadow:inset 3px 0 0 #28a36a!important;
 }
 
 /* No Bid — restrained neutral grey */
@@ -9023,53 +9028,195 @@ img,svg,canvas{max-width:100%}
 .inv-create-footer{justify-content:space-between!important}.inv-create-footer>div{display:flex;gap:8px}.inv-number-note{font-size:11px;color:var(--gray);display:flex;align-items:center;gap:5px}
 @media(max-width:760px){#so-invoice-modal .inv-create-modal{width:96vw!important;max-height:92dvh!important}.inv-head-grid{grid-template-columns:1fr 1fr}.inv-zoho-field{grid-column:1/-1}.inv-items-head{align-items:flex-start;flex-direction:column}.inv-bottom-grid{grid-template-columns:1fr}.inv-create-footer{align-items:stretch!important;gap:8px}.inv-number-note{display:none}.inv-create-footer>div{width:100%}.inv-create-footer .btn{flex:1}.inv-modal-subtitle{display:none}}
 
-/* v238 — Pricing nested-card width correction
-   Additional Costs shares the pricing row with Internal Notes. Keep this card
-   fluid on desktop and avoid a second horizontal scroller inside the wide
-   Pricing workspace. */
-.pricing-notes-costs-row .internal-costs-body{
-  overflow-x:hidden;
-  min-width:0;
+/* V240 — rebuilt Pricing bottom workspace (Internal Notes + Additional Costs) */
+.pricing-bottom-rebuilt{
+  display:grid;
+  grid-template-columns:minmax(300px,40%) minmax(0,60%);
+  gap:12px;
+  align-items:stretch;
+  width:100%;
+  margin-top:10px;
 }
-.pricing-notes-costs-row .internal-costs-toolbar{
-  flex-wrap:wrap;
-  min-width:0;
-}
-.pricing-notes-costs-row .internal-costs-note{
-  flex:1 1 280px;
-  min-width:0;
-}
-.pricing-notes-costs-row .internal-costs-table{
+.pricing-bottom-rebuilt .pricing-bottom-card{
   width:100%;
   min-width:0;
-  table-layout:fixed;
+  margin:0;
+  box-sizing:border-box;
+  border:1px solid #d8e1ea;
+  border-radius:9px;
+  background:#fff;
+  box-shadow:0 1px 3px rgba(15,23,42,.05);
+  overflow:hidden;
 }
-.pricing-notes-costs-row .internal-costs-table th:nth-child(1){width:34%}
-.pricing-notes-costs-row .internal-costs-table th:nth-child(2){width:28% !important}
-.pricing-notes-costs-row .internal-costs-table th:nth-child(3){width:15% !important}
-.pricing-notes-costs-row .internal-costs-table th:nth-child(4){width:18% !important}
-.pricing-notes-costs-row .internal-costs-table th:nth-child(5){width:5% !important}
-.pricing-notes-costs-row .internal-costs-table th,
-.pricing-notes-costs-row .internal-costs-table td{
+.pricing-bottom-rebuilt .pricing-internal-notes-head{
+  min-height:42px;
+  padding:7px 10px;
+  background:#f8fafc;
+  border-bottom:1px solid #e2e8f0;
+  box-sizing:border-box;
+}
+.pricing-bottom-rebuilt #pricing-internal-notes{
+  display:block;
+  width:100%;
+  min-height:128px;
+  height:calc(100% - 42px);
+  margin:0;
+  padding:10px;
+  border:0;
+  border-radius:0;
+  resize:vertical;
+  box-sizing:border-box;
+  outline:none;
+}
+.pricing-bottom-rebuilt #pricing-internal-notes:focus{box-shadow:inset 0 0 0 1px var(--blue-mid)}
+.pricing-bottom-rebuilt .internal-costs-summary{
+  min-height:42px;
+  padding:6px 10px;
+  border:0;
+  border-radius:0;
+  background:#f8fafc;
+  box-sizing:border-box;
+}
+.pricing-bottom-rebuilt .internal-costs-body{
+  width:100%;
+  min-width:0;
+  overflow:visible;
+  border-top:1px solid #e2e8f0;
+}
+.pricing-bottom-rebuilt .internal-costs-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:7px 9px;
   min-width:0;
   box-sizing:border-box;
 }
-.pricing-notes-costs-row .internal-costs-table input,
-.pricing-notes-costs-row .internal-costs-table select{
+.pricing-bottom-rebuilt .internal-costs-note{min-width:0}
+.pricing-bottom-rebuilt .internal-costs-table{
+  display:block;
+  width:100%;
   min-width:0;
-  max-width:100%;
+  border-collapse:separate;
+  table-layout:auto;
+  font-size:11px;
+}
+.pricing-bottom-rebuilt .internal-costs-table thead,
+.pricing-bottom-rebuilt .internal-costs-table tbody{display:block;width:100%;min-width:0}
+.pricing-bottom-rebuilt .internal-costs-table tr{
+  display:grid;
+  grid-template-columns:minmax(0,1.2fr) minmax(0,1.3fr) minmax(72px,.65fr) minmax(105px,.8fr) 44px;
+  width:100%;
+  min-width:0;
+  align-items:center;
   box-sizing:border-box;
 }
+.pricing-bottom-rebuilt .internal-costs-table th,
+.pricing-bottom-rebuilt .internal-costs-table td{
+  display:block;
+  width:auto!important;
+  min-width:0!important;
+  max-width:none!important;
+  box-sizing:border-box;
+  overflow:hidden;
+}
+.pricing-bottom-rebuilt .internal-costs-table th{padding:6px 5px}
+.pricing-bottom-rebuilt .internal-costs-table td{padding:4px 3px;border-top:1px solid #edf1f5}
+.pricing-bottom-rebuilt .internal-costs-table th:nth-child(4),
+.pricing-bottom-rebuilt .internal-costs-table td:nth-child(4){text-align:right}
+.pricing-bottom-rebuilt .internal-costs-table th:nth-child(5),
+.pricing-bottom-rebuilt .internal-costs-table td:nth-child(5){
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding-left:2px;
+  padding-right:2px;
+  overflow:visible;
+}
+.pricing-bottom-rebuilt .internal-costs-table input,
+.pricing-bottom-rebuilt .internal-costs-table select{
+  display:block;
+  width:100%!important;
+  min-width:0!important;
+  max-width:100%!important;
+  box-sizing:border-box;
+}
+.pricing-bottom-rebuilt .internal-costs-table .row-del{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:28px;
+  height:28px;
+  min-width:28px;
+  margin:0;
+  padding:0;
+}
+.pricing-bottom-rebuilt .cost-action-head{text-align:center!important;font-size:10px}
 @media(max-width:1050px){
-  .pricing-notes-costs-row .internal-costs-table{min-width:0}
+  .pricing-bottom-rebuilt{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  .pricing-bottom-rebuilt .internal-costs-table tr{
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) 76px 100px 40px;
+  }
+  .pricing-bottom-rebuilt .internal-costs-table th{font-size:9px;padding:5px 3px}
 }
 
-/* v239 — Pricing Additional Costs compact columns + action visibility */
-.pricing-notes-costs-row .internal-costs-table th:nth-child(1){width:30%}
-.pricing-notes-costs-row .internal-costs-table th:nth-child(2){width:25% !important}
-.pricing-notes-costs-row .internal-costs-table th:nth-child(3){width:14% !important}
-.pricing-notes-costs-row .internal-costs-table th:nth-child(4){width:25% !important;text-align:right}
-.pricing-notes-costs-row .internal-costs-table th:nth-child(5){width:6% !important;min-width:38px}
-.pricing-notes-costs-row .internal-costs-table td:nth-child(4){text-align:right;white-space:nowrap;padding-right:8px}
-.pricing-notes-costs-row .internal-costs-table td:nth-child(5){text-align:center;white-space:nowrap;padding-left:2px;padding-right:6px}
-.pricing-notes-costs-row .internal-costs-table td:nth-child(5) .row-del{display:inline-flex!important;align-items:center;justify-content:center;margin:0 auto}
+/* V240 — Additional Costs final column alignment: continuous table, full Action label */
+.pricing-bottom-rebuilt .internal-costs-table tr{
+  grid-template-columns:minmax(0,1.12fr) minmax(0,1.22fr) minmax(72px,.58fr) minmax(112px,.82fr) 58px;
+  column-gap:0;
+  padding-right:4px;
+}
+.pricing-bottom-rebuilt .internal-costs-table th:nth-child(4),
+.pricing-bottom-rebuilt .internal-costs-table td:nth-child(4){
+  padding-right:10px;
+}
+.pricing-bottom-rebuilt .internal-costs-table th:nth-child(5),
+.pricing-bottom-rebuilt .internal-costs-table td:nth-child(5){
+  padding-left:6px;
+  padding-right:4px;
+  overflow:hidden;
+}
+.pricing-bottom-rebuilt .cost-action-head{
+  font-size:10px;
+  white-space:nowrap;
+  text-align:center!important;
+}
+@media(max-width:620px){
+  .pricing-bottom-rebuilt .internal-costs-table tr{
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) 72px 104px 54px;
+    padding-right:3px;
+  }
+}
+
+
+/* V241 — compact action header + right-aligned Additional Cost value */
+.pricing-bottom-rebuilt .internal-costs-table input[data-cost-role="value"]{
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+.pricing-bottom-rebuilt .cost-action-head{
+  display:flex!important;
+  align-items:center;
+  justify-content:center;
+  font-size:14px;
+}
+.pricing-bottom-rebuilt .cost-action-head i{
+  display:block;
+  line-height:1;
+}
+
+/* V242 — align VALUE header with right-aligned value inputs */
+.pricing-bottom-rebuilt .internal-costs-table th:nth-child(3){
+  text-align:right!important;
+}
+
+/* V243 — per-line selling price lock for Margin Status gauge */
+.pricing-sell-lock-wrap{display:flex;align-items:center;gap:3px;min-width:0}
+.pricing-sell-lock-wrap>input[data-role="sell"]{min-width:0;flex:1 1 auto;padding-right:5px}
+.pricing-price-lock{width:24px;height:30px;flex:0 0 24px;border:0;background:transparent;color:#94a3b8;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.pricing-price-lock:hover{background:#f1f5f9;color:#475569}
+.pricing-price-lock.is-locked{background:#fff7ed;color:#c2410c}
+.pricing-sell-lock-wrap>input.is-price-locked{background:#fffaf3;border-color:#fdba74}
+.pricing-price-lock:focus-visible{outline:2px solid var(--blue-mid);outline-offset:1px}
