@@ -19,14 +19,26 @@
 </main>
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getAuth, onAuthStateChanged, connectAuthEmulator } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 const cfg={apiKey:'AIzaSyCsgVVIU_AZpWgTrZo_jrlCQVgZusCI_zY',authDomain:'bizcore-downtown.firebaseapp.com',projectId:'bizcore-downtown',storageBucket:'bizcore-downtown.firebasestorage.app',messagingSenderId:'864406054158',appId:'1:864406054158:web:190929f0cc60e12e77e35f'};
+// ── V260 LOCAL TESTING: Firebase Emulator switch ──
+// Only on localhost, only when explicitly enabled with ?emulator=1 (disable with ?emulator=0).
+// The project ID becomes 'demo-bizcore', so the app can never touch the live project in this mode.
+const BIZCORE_EMULATOR = (() => {
+  const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const q = new URLSearchParams(location.search).get('emulator');
+  try { if (q === '1') localStorage.setItem('bizcore_emulator', '1'); if (q === '0') localStorage.removeItem('bizcore_emulator'); } catch (e) {}
+  let on = false; try { on = local && localStorage.getItem('bizcore_emulator') === '1'; } catch (e) {}
+  return on;
+})();
+if (BIZCORE_EMULATOR) cfg.projectId = 'demo-bizcore';
 const token=new URLSearchParams(location.search).get('t')||'';
 const title=document.getElementById('access-title'),text=document.getElementById('access-text'),action=document.getElementById('access-action'),card=document.getElementById('card');
 function unavailable(){card.classList.add('error');document.getElementById('access-icon').textContent='!';title.textContent='Delivery link unavailable';text.textContent='This delivery access link is invalid or unavailable.';action.innerHTML='';}
 if(!/^[a-f0-9]{48}$/i.test(token)){unavailable();}
 else{
  const auth=getAuth(initializeApp(cfg));
+ if (BIZCORE_EMULATOR) connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
  onAuthStateChanged(auth,user=>{
    if(user){location.replace('index.html?delivery='+encodeURIComponent(token));return;}
    title.textContent='Delivery Access';text.textContent='Authorized personnel only. Sign in with your employee account to continue.';

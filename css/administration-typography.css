@@ -1,0 +1,57 @@
+/* V246 — Administration register typography, aligned to approved V245 Master Data standard.
+   Scoped to Administration list rows; does not affect form labels, status badges,
+   action buttons, section headings, navigation, or business logic. */
+#setup-tab-users #users-tbody > tr > td,
+#setup-tab-roles #permission-tbody > tr > td,
+#setup-tab-cost-components #cost-components-tbody > tr > td,
+#setup-tab-margin-status #margin-status-tbody > tr > td,
+#setup-tab-tax-settings #tax-master-tbody > tr > td,
+#setup-tab-defaults #document-numbering-tbody > tr > td {
+  font-family:var(--bc-font,Inter,"Segoe UI",Roboto,Arial,sans-serif);
+  font-size:14px;
+  font-weight:400;
+  color:#111827;
+}
+/* Neutralize strong markup in primary record values and codes only. */
+#setup-tab-users #users-tbody > tr > td strong,
+#setup-tab-roles #permission-tbody > tr > td:first-child strong,
+#setup-tab-cost-components #cost-components-tbody > tr > td strong,
+#setup-tab-margin-status #margin-status-tbody > tr > td strong,
+#setup-tab-tax-settings #tax-master-tbody > tr > td strong,
+#setup-tab-defaults #document-numbering-tbody > tr > td strong {
+  font-size:14px;
+  font-weight:400;
+  color:#111827;
+}
+/* Selected role keeps its blue selection marker without becoming bold. */
+#setup-tab-roles #role-list .role-item,
+#setup-tab-roles #role-list .role-item.active {
+  font-size:14px;
+  font-weight:400;
+}
+/* Consistent list headers. Existing column alignment is preserved. */
+#setup-tab-users .setup-data-table thead th,
+#setup-tab-roles .permission-table thead th,
+#setup-tab-cost-components .cost-components-table thead th,
+#setup-tab-margin-status .margin-status-table thead th,
+#setup-tab-tax-settings .margin-status-table thead th,
+#setup-tab-defaults .numbering-table thead th {
+  font-size:13px;
+  font-weight:600;
+  color:#475569;
+}
+/* Supporting user email remains subordinate. */
+#setup-tab-users #users-tbody > tr > td:first-child div[style*="font-size:10px"] {
+  font-size:12px !important;
+  font-weight:400;
+  color:#64748b !important;
+}
+
+/* V247 — Margin Status colour hex values follow universal register typography.
+   Keep the colour indicator dot, layout and all other fields unchanged. */
+#setup-tab-margin-status #margin-status-tbody .margin-color-preview {
+  font-family:var(--bc-font,Inter,"Segoe UI",Roboto,Arial,sans-serif);
+  font-size:14px;
+  font-weight:400;
+  color:#111827;
+}

@@ -39,3 +39,51 @@
 .party-address-facts label{display:block;font-size:10px;font-weight:650;text-transform:uppercase;letter-spacing:.04em;color:#7b8794;margin-bottom:3px}
 .party-address-facts strong{font-size:12.5px;color:#1f2937;overflow-wrap:anywhere}
 @media(max-width:760px){.party-form-grid,.party-address-layout{grid-template-columns:1fr}.master-party-form{padding:12px}.party-address-facts{grid-template-columns:1fr 1fr}}
+
+
+/* V245 — Universal Master Data register typography.
+   Scope deliberately limited to list tables; forms, detail profiles,
+   action buttons, status pills, and other ERP modules are unchanged. */
+#customers-tbody > tr > td,
+#suppliers-tbody > tr > td,
+#products-tbody > tr > td,
+#employees-tbody > tr > td,
+#uom-tbody > tr > td {
+  font-family:var(--bc-font,Inter,"Segoe UI",Roboto,Arial,sans-serif);
+  font-size:14px;
+  font-weight:400;
+  color:#111827;
+}
+/* Primary labels/codes were rendered with <strong> (700 by default). */
+#customers-tbody > tr > td strong,
+#suppliers-tbody > tr > td strong,
+#products-tbody > tr > td strong,
+#employees-tbody .employee-name-cell strong,
+#employees-tbody > tr > td:nth-child(2) > strong,
+#uom-tbody > tr > td:first-child strong {
+  font-size:14px;
+  font-weight:400;
+  color:#111827;
+}
+/* Product codes previously used inline font-weight:500. */
+#products-tbody > tr > td:nth-child(3) {
+  font-weight:400 !important;
+  color:#111827 !important;
+}
+/* Employee secondary details remain visually subordinate. */
+#employees-tbody .employee-name-cell small,
+#employees-tbody .employee-muted {
+  font-size:12px;
+  font-weight:400;
+  color:#64748b;
+}
+/* Column headings consistent with approved register style. */
+#masters-tab-customers table thead th,
+#masters-tab-suppliers table thead th,
+#masters-tab-products table thead th,
+.employee-table thead th,
+.uom-table thead th {
+  font-size:13px;
+  font-weight:600;
+  color:#475569;
+}

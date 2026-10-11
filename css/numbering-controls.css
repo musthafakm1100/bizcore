@@ -1,0 +1,41 @@
+/* V248 — scoped modern controls for Administration > Numbering & Defaults.
+   Presentation only: preserve numbering logic, table structure and column sizing. */
+#setup-tab-defaults .numbering-table .docnum-prefix,
+#setup-tab-defaults .numbering-table .docnum-reset {
+  box-sizing:border-box;
+  height:34px;
+  min-height:34px;
+  padding:0 10px;
+  border:1px solid #cbd5e1;
+  border-radius:6px;
+  background-color:#fff;
+  color:#111827;
+  font-family:var(--bc-font,Inter,"Segoe UI",Roboto,Arial,sans-serif);
+  font-size:13px;
+  font-weight:400;
+  line-height:normal;
+  vertical-align:middle;
+  transition:border-color .15s ease,box-shadow .15s ease;
+}
+#setup-tab-defaults .numbering-table .docnum-prefix {width:90px;}
+#setup-tab-defaults .numbering-table .docnum-reset {
+  width:112px;
+  padding-right:26px;
+  appearance:none;
+  -webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364758b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 9px center;
+  background-size:12px 12px;
+  cursor:pointer;
+}
+#setup-tab-defaults .numbering-table .docnum-prefix:hover,
+#setup-tab-defaults .numbering-table .docnum-reset:hover {border-color:#94a3b8;}
+#setup-tab-defaults .numbering-table .docnum-prefix:focus,
+#setup-tab-defaults .numbering-table .docnum-reset:focus {
+  outline:none;
+  border-color:#2563eb;
+  box-shadow:0 0 0 3px rgba(37,99,235,.13);
+}
+#setup-tab-defaults .numbering-table .docnum-prefix:focus-visible,
+#setup-tab-defaults .numbering-table .docnum-reset:focus-visible {outline:2px solid transparent;}

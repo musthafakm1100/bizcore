@@ -110,9 +110,9 @@ body{font-family:Arial,Helvetica,sans-serif;background:linear-gradient(135deg,#0
 <script type="module">
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged }
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, connectAuthEmulator }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, getDoc }
+import { getFirestore, doc, getDoc, connectFirestoreEmulator }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const cfg = {
@@ -123,10 +123,26 @@ const cfg = {
   messagingSenderId: '864406054158',
   appId:             '1:864406054158:web:190929f0cc60e12e77e35f'
 };
+// ── V260 LOCAL TESTING: Firebase Emulator switch ──
+// Only on localhost, only when explicitly enabled with ?emulator=1 (disable with ?emulator=0).
+// The project ID becomes 'demo-bizcore', so the app can never touch the live project in this mode.
+const BIZCORE_EMULATOR = (() => {
+  const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const q = new URLSearchParams(location.search).get('emulator');
+  try { if (q === '1') localStorage.setItem('bizcore_emulator', '1'); if (q === '0') localStorage.removeItem('bizcore_emulator'); } catch (e) {}
+  let on = false; try { on = local && localStorage.getItem('bizcore_emulator') === '1'; } catch (e) {}
+  return on;
+})();
+if (BIZCORE_EMULATOR) {
+  cfg.projectId = 'demo-bizcore';
+  document.addEventListener('DOMContentLoaded', () => { const b = document.createElement('div'); b.textContent = 'EMULATOR — local test data'; b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);background:#b45309;color:#fff;font:600 11px Arial;padding:3px 12px;border-radius:0 0 8px 8px;z-index:2147483647;pointer-events:none'; document.body.appendChild(b); });
+}
+
 
 const app  = initializeApp(cfg);
 const auth = getAuth(app);
 const db   = getFirestore(app);
+if (BIZCORE_EMULATOR) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 
 // If already logged in go straight to app
 onAuthStateChanged(auth, function(user) {

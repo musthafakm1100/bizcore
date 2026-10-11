@@ -13,15 +13,13 @@
 <link rel="apple-touch-icon" href="icons/bizcore-icon-180.png"/>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-<script>
-// v234: jsQR is loaded on demand by the scanner with multiple CDN fallbacks.
-// Avoid blocking BizCore startup when one CDN is unavailable on iPhone/Safari.
-</script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=232" rel="stylesheet"/>
+<link href="css/main.css?v=250" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=215" rel="stylesheet"/>
 <link href="css/typography.css?v=215" rel="stylesheet"/>
-<link href="css/masters.css?v=215" rel="stylesheet"/>
+<link href="css/masters.css?v=245" rel="stylesheet"/>
+<link href="css/administration-typography.css?v=247" rel="stylesheet"/>
+<link href="css/numbering-controls.css?v=248" rel="stylesheet"/>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
 .quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
@@ -45,22 +43,6 @@ button,.btn{font-size:14px!important;font-weight:600!important;}
 </style>
 </head>
 <body>
-<script>
-(function(){
-  try{
-    const p=new URLSearchParams(location.search);
-    if(p.get('delivery')||p.get('dn')){
-      document.documentElement.classList.add('bc-dn-deeplink-loading');
-      const st=document.createElement('style');
-      st.id='bc-dn-deeplink-style';
-      st.textContent='.bc-dn-deeplink-loading body>*:not(#bc-dn-deeplink-loader):not(script){visibility:hidden!important}#bc-dn-deeplink-loader{visibility:visible!important;position:fixed;inset:0;z-index:2147483000;background:#f6f8fb;display:flex;align-items:center;justify-content:center;font-family:Inter,Segoe UI,sans-serif;color:#17324d}#bc-dn-deeplink-loader>div{background:#fff;border:1px solid #dce5ee;border-radius:14px;padding:22px 26px;box-shadow:0 14px 38px rgba(15,23,42,.12);text-align:center;font-size:13px;font-weight:650}#bc-dn-deeplink-loader i{display:block;font-size:25px;margin-bottom:8px;color:#2e75b6}';
-      document.head.appendChild(st);
-      const el=document.createElement('div');el.id='bc-dn-deeplink-loader';el.innerHTML='<div><i class="ti ti-truck-delivery"></i>Opening Delivery Confirmation…</div>';
-      document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(el),{once:true});
-    }
-  }catch(e){}
-})();
-</script>
 <script>
 // Prevent broken image 404 errors from null/undefined src values
 document.addEventListener('error', function(e) {
@@ -381,6 +363,7 @@ document.addEventListener('error', function(e) {
 <div class="rfq-monitor-pro-list">
 <div class="rfq-monitor-section-label rfq-monitor-status-label">Status</div>
 <button class="rfq-main-monitor-item pricing rfq-monitor-pro-row" data-rfq-monitor-filter="New" onclick="applyRFQMonitorFilter('New',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-pricing"></i>Awaiting Pricing</span><strong id="rfq-k-pricing">0</strong></button>
+<button class="rfq-main-monitor-item inpricing rfq-monitor-pro-row" data-rfq-monitor-filter="Pricing" onclick="applyRFQMonitorFilter('Pricing',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-inpricing"></i>In Pricing</span><strong id="rfq-k-inpricing">0</strong></button>
 <button class="rfq-main-monitor-item quoted rfq-monitor-pro-row" data-rfq-monitor-filter="Quoted" onclick="applyRFQMonitorFilter('Quoted',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-quoted"></i>Quoted / Sales Order</span><strong id="rfq-k-quoted">0</strong></button>
 <button class="rfq-main-monitor-item nobid rfq-monitor-pro-row" data-rfq-monitor-filter="No Bid" onclick="applyRFQMonitorFilter('No Bid',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-nobid"></i>No Bid</span><strong id="rfq-k-nobid">0</strong></button>
 <button class="rfq-main-monitor-item overdue rfq-monitor-pro-row" data-rfq-monitor-filter="Overdue" onclick="applyRFQMonitorFilter('Overdue',this)" type="button"><span class="rfq-monitor-pro-label"><i class="rfq-monitor-dot dot-overdue"></i>Overdue</span><strong id="rfq-k-overdue">0</strong></button>
@@ -1684,15 +1667,15 @@ document.addEventListener('error', function(e) {
 </table>
 </div>
 <!-- Document-level notes and additional costs in one balanced row -->
-<div class="pricing-notes-costs-row">
-<section class="pricing-internal-notes-section">
+<div class="pricing-notes-costs-row pricing-bottom-rebuilt">
+<section class="pricing-internal-notes-section pricing-bottom-card pricing-note-card">
 <div class="pricing-internal-notes-head">
 <div><strong>Internal Notes</strong><span>Internal use only — not copied to customer documents</span></div>
 <span id="pricing-internal-notes-count">0 / 2000</span>
 </div>
 <textarea id="pricing-internal-notes" maxlength="2000" rows="4" placeholder="Add pricing-level notes, supplier conditions, negotiation details or internal instructions…" oninput="document.getElementById('pricing-internal-notes-count').textContent=this.value.length+' / 2000'"></textarea>
 </section>
-<section class="internal-costs internal-costs-below" id="internal-costs-section">
+<section class="internal-costs internal-costs-below pricing-bottom-card pricing-cost-card" id="internal-costs-section">
 <div class="internal-costs-summary">
 <span class="internal-costs-summary-title">Additional Costs</span>
 <span class="internal-costs-summary-meta" id="internal-costs-count">None added</span>
@@ -1705,7 +1688,7 @@ document.addEventListener('error', function(e) {
 <button class="btn btn-secondary btn-sm" onclick="addAdditionalCostRow({},true)" type="button"><i class="ti ti-plus"></i>Add cost</button>
 </div>
 <table class="internal-costs-table">
-<thead><tr><th>Cost type</th><th style="width:180px">Calculation method</th><th style="width:120px">Value</th><th style="width:130px;text-align:right">Calculated cost</th><th style="width:34px"></th></tr></thead>
+<thead><tr><th>Cost type</th><th>Calculation method</th><th>Value</th><th>Calculated cost</th><th class="cost-action-head" title="Action" aria-label="Action"><i class="ti ti-dots-vertical" aria-hidden="true"></i></th></tr></thead>
 <tbody id="internal-costs-tbody"></tbody>
 </table>
 </div>
@@ -1889,13 +1872,13 @@ document.addEventListener('error', function(e) {
 
 <!-- MOBILE-FIRST DELIVERY CONFIRMATION -->
 <div class="modal-overlay" id="dn-confirm-modal"><div class="modal modal-normal dn-mobile-confirm">
-<div class="modal-header dn-confirm-header"><div class="dn-confirm-heading"><button class="dn-back-btn" type="button" onclick="cancelDeliveryConfirmation()"><i class="ti ti-arrow-left"></i><span>Back</span></button><div><h2 id="dn-confirm-title">Delivery Confirmation</h2><div id="dn-confirm-sub" class="dn-confirm-sub"></div></div></div><button class="close-btn" onclick="cancelDeliveryConfirmation()">✕</button></div>
+<div class="modal-header dn-confirm-header"><div class="dn-confirm-heading"><button class="dn-back-btn" type="button" onclick="closeModal('dn-confirm-modal')"><i class="ti ti-arrow-left"></i><span>Back</span></button><div><h2 id="dn-confirm-title">Delivery Confirmation</h2><div id="dn-confirm-sub" class="dn-confirm-sub"></div></div></div><button class="close-btn" onclick="closeModal('dn-confirm-modal')">✕</button></div>
 <div class="modal-body dn-confirm-body">
 <div class="dn-auth-banner"><div class="dn-auth-icon"><i class="ti ti-shield-check"></i></div><div><strong>Authenticated delivery update</strong><span id="dn-auth-user">Signed in user</span></div><span class="dn-secure-pill"><i class="ti ti-lock"></i> Secure</span></div>
 <div class="dn-confirm-intro"><div><strong>Confirm customer acceptance</strong><span>Rejected quantities automatically return to the Sales Order remaining quantity.</span></div><div id="dn-confirm-summary" class="dn-confirm-summary"></div></div>
 <div id="dn-confirm-items" class="dn-confirm-items"></div>
 <section class="dn-receiver-card"><div class="dn-section-title"><span class="dn-section-icon"><i class="ti ti-user-check"></i></span><div><strong>Customer Receipt</strong><span>Record who accepted this delivery.</span></div></div><div class="dn-receiver-grid"><div class="form-group"><label>Received By <em>*</em></label><input id="dn-received-by" autocomplete="name" placeholder="Customer representative name"/></div><div class="form-group"><label>Customer / Delivery Remarks</label><textarea id="dn-customer-remarks" rows="2" placeholder="Add remarks if required…"></textarea></div></div></section>
-</div><div class="modal-footer dn-confirm-footer"><div class="dn-footer-note"><i class="ti ti-info-circle"></i><span>Review quantities before confirming.</span></div><div class="dn-footer-actions"><button class="btn btn-secondary" onclick="cancelDeliveryConfirmation()">Cancel</button><button class="btn btn-success dn-confirm-primary" id="dn-confirm-save-btn" onclick="saveDeliveryAcceptance()"><i class="ti ti-circle-check"></i><span id="dn-confirm-save-btn-text">Confirm Delivery</span></button></div></div></div></div>
+</div><div class="modal-footer dn-confirm-footer"><div class="dn-footer-note"><i class="ti ti-info-circle"></i><span>Review quantities before confirming.</span></div><div class="dn-footer-actions"><button class="btn btn-secondary" onclick="closeModal('dn-confirm-modal')">Cancel</button><button class="btn btn-success dn-confirm-primary" id="dn-confirm-save-btn" onclick="saveDeliveryAcceptance()"><i class="ti ti-circle-check"></i><span id="dn-confirm-save-btn-text">Confirm Delivery</span></button></div></div></div></div>
 <!-- CREATE INVOICE MODAL -->
 <div class="modal-overlay" id="so-invoice-modal">
 <div class="modal inv-create-modal">
@@ -1969,20 +1952,29 @@ document.addEventListener('error', function(e) {
   <div class="dn-view-actionbar-spacer"></div>
   <button class="btn btn-secondary" onclick="closeViewWithReturn('dn-print-modal')"><i class="ti ti-x"></i><span>Close</span></button>
   <button class="btn btn-secondary" id="dn-open-so-btn" onclick="openSOFromDNView()"><i class="ti ti-file-description"></i><span>Sales Order</span></button>
+  <span id="dn-dispatch-tools" style="display:none;gap:6px;align-items:center"><button class="btn btn-secondary" onclick="openDNDispatchAction('correct')"><i class="ti ti-edit"></i><span>Correct Dispatch</span></button><button class="btn btn-danger" onclick="openDNDispatchAction('void')"><i class="ti ti-ban"></i><span>Void</span></button></span><button class="btn btn-secondary" id="dn-dispatch-history-btn" style="display:none" onclick="openDNDispatchHistory()"><i class="ti ti-history"></i>Dispatch History</button>
   <button class="btn btn-success" id="dn-open-confirm-btn" onclick="openDeliveryConfirmationFromDNView()"><i class="ti ti-device-mobile-check"></i><span>Delivery Confirmation</span></button>
   <button class="btn btn-primary" onclick="openDNFormatDialog('print')"><i class="ti ti-printer"></i><span>Print / PDF</span></button>
 </div>
 </div>
 </div>
+<!-- DISPATCH CORRECTION / VOID MODALS -->
+<div class="modal-overlay" id="dn-dispatch-action-modal"><div class="modal modal-normal dn-dispatch-dialog"><div class="modal-header"><h2 id="dn-dispatch-action-title">Correct Dispatch</h2><button class="close-btn" onclick="closeModal('dn-dispatch-action-modal')" aria-label="Close">✕</button></div><div class="modal-body dn-dispatch-body"><p class="dn-dispatch-info"><i class="ti ti-info-circle"></i> Available only before customer acceptance. Original dispatch details are retained in the audit history.</p><div id="dn-dispatch-action-editor"><div class="dn-dispatch-fields"><div class="dn-dispatch-field"><label for="dn-dispatch-edit-date">Dispatch Date</label><input type="date" id="dn-dispatch-edit-date"></div><div class="dn-dispatch-field"><label for="dn-dispatch-edit-vehicle">Vehicle / AWB</label><input id="dn-dispatch-edit-vehicle" placeholder="Optional reference"></div></div><div class="dn-dispatch-field"><label for="dn-dispatch-edit-remarks">Remarks</label><textarea id="dn-dispatch-edit-remarks" rows="2" placeholder="Optional dispatch remarks"></textarea></div><div class="dn-dispatch-section-title">Dispatch Items <span>Update quantities against the Sales Order</span></div><div class="dn-dispatch-table-wrap"><table class="table dn-dispatch-table"><thead><tr><th>Sales Order Item</th><th>Available</th><th>Dispatch Qty</th></tr></thead><tbody id="dn-dispatch-edit-lines"></tbody></table></div></div><div class="dn-dispatch-field dn-dispatch-reason-field form-group"><label for="dn-dispatch-action-reason">Reason for correction / void <span class="dn-required">*</span></label><textarea id="dn-dispatch-action-reason" rows="3" placeholder="Explain why this dispatch must be changed"></textarea></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('dn-dispatch-action-modal')">Cancel</button><button class="btn btn-primary" onclick="saveDNDispatchAction()">Confirm &amp; Save</button></div></div></div>
+<div class="modal-overlay" id="dn-dispatch-history-modal"><div class="modal modal-normal" style="max-width:740px"><div class="modal-header"><h2>Dispatch History</h2><button class="close-btn" onclick="closeModal('dn-dispatch-history-modal')">✕</button></div><div class="modal-body" id="dn-dispatch-history-body" style="padding:18px;max-height:65vh;overflow:auto"></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('dn-dispatch-history-modal')">Close</button></div></div></div>
 <!-- DELIVERY NOTE FORMAT MODAL -->
 <div class="modal-overlay dn-format-overlay" id="dn-format-modal">
 <div class="modal modal-compact dn-format-dialog">
 <div class="modal-header"><div class="dn-format-heading"><h2>Delivery Note Format</h2><div class="dn-format-subtitle">Choose the format you want to print.</div></div><button class="close-btn" onclick="closeModal('dn-format-modal')">✕</button></div>
 <div class="modal-body">
 <div class="dn-format-options">
-<label class="dn-format-option"><input type="radio" name="dn-print-format" id="dn-format-standard" value="standard" checked><span class="dn-format-icon"><i class="ti ti-file-description"></i></span><span class="dn-format-copy"><strong>Standard Delivery Note</strong><small>Customer-facing document with this delivery quantity.</small></span><span class="dn-format-check"><i class="ti ti-check"></i></span></label>
-<label class="dn-format-option"><input type="radio" name="dn-print-format" value="progress"><span class="dn-format-icon"><i class="ti ti-chart-bar"></i></span><span class="dn-format-copy"><strong>Delivery Progress Note</strong><small>Ordered, previous accepted, this delivery and remaining quantities.</small></span><span class="dn-format-check"><i class="ti ti-check"></i></span></label>
-<label class="dn-format-option"><input type="radio" name="dn-print-format" value="internal"><span class="dn-format-icon"><i class="ti ti-lock"></i></span><span class="dn-format-copy"><strong>Internal Delivery Copy</strong><small>Adds operational status, users, timestamps and line acceptance status.</small></span><span class="dn-format-check"><i class="ti ti-check"></i></span></label>
+<div class="dn-format-section-title"><i class="ti ti-truck-delivery"></i> Original Delivery Note <small>Dispatched quantities</small></div>
+<label class="dn-format-option"><input type="radio" name="dn-print-format" id="dn-format-standard" value="standard" checked><span class="dn-format-icon"><i class="ti ti-file-description"></i></span><span class="dn-format-copy"><strong>Standard Format</strong><small>Original dispatched items and quantities.</small></span><span class="dn-format-check"><i class="ti ti-check"></i></span></label>
+<label class="dn-format-option"><input type="radio" name="dn-print-format" value="progress"><span class="dn-format-icon"><i class="ti ti-chart-bar"></i></span><span class="dn-format-copy"><strong>Progress Format</strong><small>Ordered, previous accepted, dispatched and remaining quantities.</small></span><span class="dn-format-check"><i class="ti ti-check"></i></span></label>
+<div class="dn-format-section-title dn-format-section-accepted"><i class="ti ti-circle-check"></i> Accepted Delivery Note <small>Confirmed accepted quantities only</small></div>
+<label class="dn-format-option" id="dn-format-accepted-standard-option"><input type="radio" name="dn-print-format" id="dn-format-accepted-standard" value="accepted-standard"><span class="dn-format-icon"><i class="ti ti-file-check"></i></span><span class="dn-format-copy"><strong>Standard Format</strong><small>Only accepted items, with accepted quantities.</small></span><span class="dn-format-check"><i class="ti ti-check"></i></span></label>
+<label class="dn-format-option" id="dn-format-accepted-progress-option"><input type="radio" name="dn-print-format" id="dn-format-accepted-progress" value="accepted-progress"><span class="dn-format-icon"><i class="ti ti-chart-bar"></i></span><span class="dn-format-copy"><strong>Progress Format</strong><small>Ordered, previous accepted, this acceptance and balance.</small></span><span class="dn-format-check"><i class="ti ti-check"></i></span></label>
+<div class="dn-format-section-title"><i class="ti ti-lock"></i> Internal Use</div>
+<label class="dn-format-option"><input type="radio" name="dn-print-format" value="internal"><span class="dn-format-icon"><i class="ti ti-lock"></i></span><span class="dn-format-copy"><strong>Internal Delivery Copy</strong><small>Operational status, timestamps and line acceptance status.</small></span><span class="dn-format-check"><i class="ti ti-check"></i></span></label>
 </div></div>
 <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('dn-format-modal')">Cancel</button><button class="btn btn-primary" onclick="continueDNFormat()"><i class="ti ti-printer"></i>Continue</button></div>
 </div></div>
@@ -2063,16 +2055,18 @@ document.addEventListener('error', function(e) {
 <div class="toast" id="toast"></div>
 <!-- Firebase: loaded as module, exposes window.FB then loads app.js -->
 <script type="module">
+import { createDeliveryService, loadDeliveryEvents } from './js/delivery-service.mjs?v=260';
+import * as DNCore from './js/delivery-core.mjs?v=260';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, signOut, onAuthStateChanged }
+import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, setDoc, onSnapshot, deleteDoc,
-         collection, getDocs, writeBatch,
+         collection, getDocs, query, where, writeBatch,
          initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-         runTransaction }
+         runTransaction, serverTimestamp, connectFirestoreEmulator }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { getStorage, ref as storageRef, uploadString, uploadBytes, getDownloadURL, deleteObject }
+import { getStorage, ref as storageRef, uploadString, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 const cfg = {
@@ -2083,6 +2077,21 @@ const cfg = {
   messagingSenderId: '864406054158',
   appId:             '1:864406054158:web:190929f0cc60e12e77e35f'
 };
+// ── V260 LOCAL TESTING: Firebase Emulator switch ──
+// Only on localhost, only when explicitly enabled with ?emulator=1 (disable with ?emulator=0).
+// The project ID becomes 'demo-bizcore', so the app can never touch the live project in this mode.
+const BIZCORE_EMULATOR = (() => {
+  const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const q = new URLSearchParams(location.search).get('emulator');
+  try { if (q === '1') localStorage.setItem('bizcore_emulator', '1'); if (q === '0') localStorage.removeItem('bizcore_emulator'); } catch (e) {}
+  let on = false; try { on = local && localStorage.getItem('bizcore_emulator') === '1'; } catch (e) {}
+  return on;
+})();
+if (BIZCORE_EMULATOR) {
+  cfg.projectId = 'demo-bizcore';
+  document.addEventListener('DOMContentLoaded', () => { const b = document.createElement('div'); b.textContent = 'EMULATOR — local test data'; b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);background:#b45309;color:#fff;font:600 11px Arial;padding:3px 12px;border-radius:0 0 8px 8px;z-index:2147483647;pointer-events:none'; document.body.appendChild(b); });
+}
+
 
 const fbApp = initializeApp(cfg);
 const auth  = getAuth(fbApp);
@@ -2103,6 +2112,12 @@ try {
 }
 
 const storage = getStorage(fbApp);
+if (BIZCORE_EMULATOR) {
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  connectStorageEmulator(storage, '127.0.0.1', 9199);
+  console.warn('[BizCore] FIREBASE EMULATOR MODE — project demo-bizcore, no live data.');
+}
 
 /* ═══════════════════════════════════════════════════
    FILE STORAGE — images & attachments go to Cloud Storage,
@@ -2269,9 +2284,50 @@ async function _migrateCollectionIfNeeded(col) {
   }
 }
 
+/* ── V260: Sales Order persistence guard ──
+   In independent Delivery Note mode, DNs live in their own collection. Sales Order
+   documents must never again receive embedded `deliveries`, and must keep the
+   immutable line IDs that the DN ledger references. This guard is the last line
+   of defence in the browser; Firestore security rules enforce the first part too. */
+async function _guardSalesOrderPersistence(arr) {
+  const mode = await _dnModeReady;
+  if (mode === DNCore.STORAGE_MODES.migrating || mode === 'unavailable' || mode === 'unknown') {
+    const err = new Error(mode !== DNCore.STORAGE_MODES.migrating ? 'Database storage mode could not be verified; Sales Orders were not saved.' : 'Database maintenance (Delivery Note migration) is in progress. Sales Orders are read-only until it completes.');
+    err.code = 'bizcore/storage-frozen';
+    throw err;
+  }
+  if (mode !== DNCore.STORAGE_MODES.independent) return arr;
+  return (arr || []).map(record => {
+    if (!record || record.id == null) return record;
+    const clean = DNCore.stripProjection(record);
+    const missing = (clean.items || []).some(it => !DNCore.isSafeId(it && it.lineId));
+    if (missing) {
+      const err = new Error('Sales Order ' + (clean.soNo || clean.id) + ' has lines without stable IDs; save blocked to protect Delivery Note links. Reload the application.');
+      err.code = 'bizcore/so-line-ids-missing';
+      throw err;
+    }
+    return clean;
+  });
+}
+
 /* ── Save: writes/deletes only the records that changed ── */
+// V260 Phase A: non-destructive persistence diagnostics. These JSON UTF-8 sizes
+// are estimates, NOT Firestore's exact document size calculation.
+const BIZCORE_RECORD_WARN_BYTES = 512 * 1024;
+const BIZCORE_RECORD_CRITICAL_BYTES = 768 * 1024;
+const _bizcoreEncoder = new TextEncoder();
+window.BizCoreStorageDiagnostics = {
+  lastSaveError: null,
+  estimateBytes: record => _bizcoreEncoder.encode(JSON.stringify(record)).length,
+  inspect: (col, records) => (records || []).filter(r => r && r.id != null).map(r => ({
+    collection: col, id: String(r.id),
+    estimatedBytes: _bizcoreEncoder.encode(JSON.stringify(r)).length
+  })).sort((a,b) => b.estimatedBytes - a.estimatedBytes)
+};
 async function fbSave(col, arr) {
   try {
+    window.BizCoreStorageDiagnostics.lastSaveError = null;
+    if (col === 'salesOrders') arr = await _guardSalesOrderPersistence(arr);
     await _migrateCollectionIfNeeded(col);
     const cache = _lastSynced[col] || (_lastSynced[col] = {});
     const currentIds = new Set();
@@ -2281,7 +2337,17 @@ async function fbSave(col, arr) {
       const docId = _docIdFor(col, record);
       currentIds.add(docId);
       const json = JSON.stringify(record);
-      if (cache[docId] !== json) writes.push({ docId, data: record, json });
+      if (cache[docId] !== json) {
+        const estimatedBytes = _bizcoreEncoder.encode(json).length;
+        if (estimatedBytes >= BIZCORE_RECORD_WARN_BYTES) {
+          console.warn('[BizCore storage size warning]', {
+            collection: col, recordId: docId, estimatedBytes,
+            level: estimatedBytes >= BIZCORE_RECORD_CRITICAL_BYTES ? 'critical' : 'warning',
+            note: 'Estimated JSON bytes; Firestore size differs. Migrate large nested records.'
+          });
+        }
+        writes.push({ docId, data: record, json });
+      }
     }
     const deletes = Object.keys(cache).filter(id => !currentIds.has(id));
     if (!writes.length && !deletes.length) return true; // nothing changed — skip the network entirely
@@ -2298,7 +2364,14 @@ async function fbSave(col, arr) {
     writes.forEach(w => cache[w.docId] = w.json);
     deletes.forEach(id => delete cache[id]);
     return true;
-  } catch(e) { console.warn('FB save failed:', col, e.message); return false; }
+  } catch(e) {
+    window.BizCoreStorageDiagnostics.lastSaveError = {
+      collection: col, code: e?.code || 'unknown',
+      message: String(e?.message || e), timestamp: new Date().toISOString()
+    };
+    console.error('[BizCore storage save failed]', window.BizCoreStorageDiagnostics.lastSaveError);
+    return false;
+  }
 }
 
 async function fbLoad(col) {
@@ -2445,6 +2518,80 @@ async function getNextDocNumber(counterKey, prefix) {
   }
 }
 
+/* ═══════════════════════════════════════════════════
+   V260 INDEPENDENT DELIVERY NOTES
+   The storage mode is DATABASE-WIDE (system/deliveryNoteStorage), set only by the
+   administrative migration tool — never by a browser. Until it reads 'independent'
+   the application behaves exactly like V259 (legacy embedded DNs).
+═══════════════════════════════════════════════════ */
+const BIZCORE_CLIENT_VERSION = 260;
+let _dnMode = 'unknown', _resolveDnMode, _dnReadyResolved = false;
+const _dnModeReady = new Promise(r => { _resolveDnMode = r; });
+const _dnModeListeners = new Set();
+let _dnModeUnsub = null;
+// Started after sign-in (security rules require an authenticated user).
+function startDeliveryNoteModeListener() {
+ if (_dnModeUnsub) return;
+ // If the server cannot be reached the app opens READ-ONLY for SO/DN data ('unknown') instead of
+ // guessing; when the real mode arrives later, the mode-change listeners reload the application.
+ setTimeout(() => { if (_dnMode === 'unknown' && !_dnReadyResolved) { _dnReadyResolved = true; _resolveDnMode('unknown'); console.warn('[BizCore] Delivery Note storage mode not confirmed by the server yet; Sales Orders and Delivery Notes are read-only.'); } }, 10000);
+ _dnModeUnsub = onSnapshot(doc(db, DNCore.COLLECTIONS.system, DNCore.STORAGE_MODE_DOC_ID), { includeMetadataChanges: true }, snap => {
+  // A "missing" answer from the offline cache is not proof that the database is in legacy mode.
+  if (!snap.exists() && snap.metadata && snap.metadata.fromCache) return;
+  const data = snap.exists() ? snap.data() : {};
+  const next = Object.values(DNCore.STORAGE_MODES).includes(data.mode) ? data.mode : DNCore.STORAGE_MODES.legacy;
+  if (Number(data.minClientVersion || 0) > BIZCORE_CLIENT_VERSION) {
+    window.BizCoreDN.outdated = true;
+    console.error('[BizCore] This application version is too old for the database (requires ' + data.minClientVersion + ').');
+  }
+  const previous = _dnMode;
+  _dnMode = next;
+  if (!_dnReadyResolved) { _dnReadyResolved = true; _resolveDnMode(next); }
+  else if (previous !== next) _dnModeListeners.forEach(fn => { try { fn(next, previous); } catch (e) { console.error(e); } });
+}, err => {
+  // Without the mode we cannot know which persistence model is authoritative.
+  console.error('[BizCore] Delivery Note storage mode unavailable:', err.message);
+  if (!_dnReadyResolved) { _dnMode = 'unavailable'; _dnReadyResolved = true; _resolveDnMode('unavailable'); }
+ });
+}
+
+const dnService = createDeliveryService({ db, doc, runTransaction, serverTimestamp }, {
+  actor: () => {
+    const u = auth.currentUser, cu = window.currentUser || {};
+    return u ? { uid: u.uid, name: cu.name || u.displayName || u.email || u.uid } : {};
+  },
+  formatNumber: (prefix, n) => (typeof window.formatDocSequence === 'function' ? window.formatDocSequence(prefix, n) : prefix + String(n).padStart(4, '0')),
+});
+
+window.BizCoreDN = {
+  get mode() { return _dnMode; },
+  ready: _dnModeReady,
+  outdated: false,
+  core: DNCore,
+  service: dnService,
+  onModeChange(fn) { _dnModeListeners.add(fn); return () => _dnModeListeners.delete(fn); },
+  /** Real-time listener for ALL Delivery Notes (one collection listener, not one query per SO). */
+  listenDeliveryNotes(onUpdate, onError) {
+    return onSnapshot(collection(db, DNCore.COLLECTIONS.deliveryNotes), snap => {
+      const records = [];
+      snap.forEach(d => records.push(d.data()));
+      onUpdate(records, snap);
+    }, err => { console.error('[BizCore] Delivery Note listener error:', err.message); onError && onError(err); });
+  },
+  async loadDeliveryNotes() {
+    const snap = await getDocs(collection(db, DNCore.COLLECTIONS.deliveryNotes));
+    return snap.docs.map(d => d.data());
+  },
+  loadEvents: dnId => loadDeliveryEvents({ db, collection, getDocs }, dnId),
+  /** Server check used before editing/deleting a Sales Order: any fulfillment activity? */
+  async fulfillmentActivity(soId) {
+    const snap = await getDoc(doc(db, DNCore.COLLECTIONS.fulfillment, String(soId)));
+    if (!snap.exists()) return { exists: false, active: false };
+    const lines = snap.data().lines || {};
+    const active = Object.values(lines).some(l => (Number(l.inTransit) || 0) > 0 || (Number(l.accepted) || 0) > 0 || (Number(l.rejected) || 0) > 0);
+    return { exists: true, active, ledger: snap.data() };
+  },
+};
 /* Expose to app.js */
 window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
   getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
@@ -2565,6 +2712,7 @@ window.fbAuthInstance = auth;
 onAuthStateChanged(auth, user => {
   if (!user) { const target=location.pathname.split('/').pop()+(location.search||''); window.location.href='login.html?return='+encodeURIComponent(target); return; }
 
+  startDeliveryNoteModeListener();
   window.currentUser = {
     uid:   user.uid,
     email: user.email,
@@ -2663,7 +2811,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=237';
+    s.src = 'js/app.js?v=260';
     document.body.appendChild(s);
   }
 });
@@ -2712,7 +2860,7 @@ console.log('BizCore Firebase ready ✅');
   // Runs after the main app; failure here should never block the app itself.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=235', { updateViaCache: 'none' }).catch(err => {
+      navigator.serviceWorker.register('sw.js?v=228', { updateViaCache: 'none' }).catch(err => {
         console.warn('Service worker registration failed:', err);
       });
     });

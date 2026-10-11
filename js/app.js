@@ -317,6 +317,14 @@ async function loadData() {
       if (fbR   && fbR.length)    rfqs          = fbR;
       if (fbE   && fbE.length)    employees     = fbE;
       if (fbSO  && fbSO.length)   salesOrders   = fbSO;
+      // V260: resolve the database-wide Delivery Note storage mode before anything renders or saves.
+      const dnMode = window.BizCoreDN ? await window.BizCoreDN.ready : 'legacy';
+      if (dnMode === 'independent') {
+        setRawSalesOrders(Array.isArray(fbSO) ? fbSO : salesOrders);
+        try { deliveryNotesCache = await window.BizCoreDN.loadDeliveryNotes(); dnCacheLoaded = true; }
+        catch (e) { console.error('[BizCore] Delivery Notes could not be loaded', e); deliveryNotesCache = []; dnCacheLoaded = false; }
+        rebuildSalesOrderView();
+      }
       if (fbSet && fbSet.coname)  settings      = fbSet;
       console.log('Data loaded from Firebase ✅');
 
@@ -432,11 +440,17 @@ async function loadData() {
           // Keep the previous in-memory state long enough to detect business events
           // (for example a driver confirming a DN on another device).
           const previousSalesOrders = Array.isArray(salesOrders) ? salesOrders : [];
-          const dnEvents = (typeof detectRemoteDNEvents === 'function')
-            ? detectRemoteDNEvents(previousSalesOrders, data || []) : [];
-
-          salesOrders = data;
-          try { localStorage.setItem('dtq_salesorders', JSON.stringify(salesOrders)); } catch(e) {}
+          let dnEvents = [];
+          if (dnIndependentMode()) {
+            // V260: SO documents carry no Delivery Notes; DNs come from their own listener.
+            setRawSalesOrders(data || []);
+            rebuildSalesOrderView();
+          } else {
+            dnEvents = (typeof detectRemoteDNEvents === 'function')
+              ? detectRemoteDNEvents(previousSalesOrders, data || []) : [];
+            salesOrders = data;
+          }
+          cacheSalesOrdersLocally();
 
           smartRender('salesorders', function() {
             if (typeof renderSOPage === 'function') renderSOPage();
@@ -466,6 +480,38 @@ async function loadData() {
           if (typeof openDNFromDeepLink === 'function') setTimeout(openDNFromDeepLink, 0);
         });
 
+        // V260: independent Delivery Notes — ONE collection listener feeds the read model.
+        if (dnIndependentMode() && window.BizCoreDN) {
+          window._dnListenerUnsub = window.BizCoreDN.listenDeliveryNotes(function(records) {
+            window._dnListenerFailed = false;
+            const previousSalesOrders = Array.isArray(salesOrders) ? salesOrders : [];
+            deliveryNotesCache = records || [];
+            dnCacheLoaded = true;
+            rebuildSalesOrderView();
+            const dnEvents = (typeof detectRemoteDNEvents === 'function')
+              ? detectRemoteDNEvents(previousSalesOrders, salesOrders) : [];
+            smartRender('salesorders', function() {
+              if (typeof renderSOPage === 'function') renderSOPage();
+              renderDashboard();
+            }, 'Delivery Notes');
+            if (getActivePage()==='deliverynotes' && typeof renderDNPage==='function') renderDNPage();
+            if (dnEvents.length && typeof refreshOpenDNViewFromRealtime==='function') refreshOpenDNViewFromRealtime(dnEvents);
+            if (dnEvents.length && typeof handleRemoteDNEvents==='function') handleRemoteDNEvents(dnEvents);
+            if (typeof openDNFromDeepLink === 'function') setTimeout(openDNFromDeepLink, 0);
+          }, function(err) {
+            window._dnListenerFailed = true;
+            showToast('Delivery Notes could not be synchronised (' + (err && err.code || 'error') + '). The list may be incomplete — please reload.', 'error', 'Delivery Notes');
+          });
+        }
+        if (window.BizCoreDN && typeof window.BizCoreDN.onModeChange === 'function') {
+          // The storage mode is changed only by the administrator's migration tool.
+          // Reload so this session can never mix the two persistence models.
+          window.BizCoreDN.onModeChange(function(next) {
+            showToast('Delivery Note storage was upgraded by the administrator (' + next + '). BizCore will reload.', 'warning', 'Reloading');
+            setTimeout(function(){ location.reload(); }, 2500);
+          });
+        }
+
 
         // Dedicated business-event channel. A DN confirmation publishes a tiny
         // event document after the Sales Order write succeeds. Every other
@@ -478,10 +524,11 @@ async function loadData() {
             const sessionId = getBizCoreSessionId();
             const remote = (events||[]).filter(e => e && e.type==='dn-confirmed' && e.sourceSession !== sessionId);
             if (!remote.length) return;
+            if (dnIndependentMode()) return; // V260: the Delivery Note listener already delivers these changes in real time
             const fresh = await window.FB.fbLoad('salesOrders');
             if (Array.isArray(fresh)) {
               salesOrders = fresh;
-              try { localStorage.setItem('dtq_salesorders', JSON.stringify(salesOrders)); } catch(e) {}
+              cacheSalesOrdersLocally();
               if (getActivePage()==='deliverynotes' && typeof renderDNPage==='function') renderDNPage();
               if (getActivePage()==='salesorders' && typeof renderSOPage==='function') renderSOPage();
               if (typeof renderDashboard==='function') renderDashboard();
@@ -618,7 +665,97 @@ async function saveTerms() {
   try { localStorage.setItem('dtq_delivery_terms', JSON.stringify(deliveryTerms)); } catch(e) {}
   try { localStorage.setItem('dtq_payment_terms',  JSON.stringify(paymentTerms));  } catch(e) {}
 }
+/* ── V260: independent Delivery Note read model ──────────────────────────────
+   rawSalesOrders      Sales Orders exactly as stored (no Delivery Notes)
+   deliveryNotesCache  authoritative DN documents (deliveryNotes collection)
+   salesOrders         UI view: raw SO + `deliveries` projected from DNs, in creation order.
+   The projected `deliveries` are VIEW-ONLY and are stripped before any save. */
+let rawSalesOrders = [];
+let deliveryNotesCache = [];
+let dnCacheLoaded = false;
+function dnIndependentMode(){ return !!window.BizCoreDN && window.BizCoreDN.mode === 'independent'; }
+function dnCore(){ return window.BizCoreDN && window.BizCoreDN.core; }
+function setRawSalesOrders(records){ rawSalesOrders = (records || []).map(r => dnCore().stripProjection(r)); }
+function rebuildSalesOrderView(){
+  const r = dnCore().projectSalesOrders(rawSalesOrders, deliveryNotesCache);
+  salesOrders = r.salesOrders;
+  window.BizCoreDN.lastProjectionIssues = r.issues;
+  const serious = r.issues.filter(i => i.code !== 'EMBEDDED_DELIVERIES_PRESENT');
+  if (serious.length) console.error('[BizCore DN read model] records excluded from view', serious);
+  return salesOrders;
+}
+/** Applies a DN returned by a committed transaction immediately (the listener confirms it shortly after). */
+function upsertDeliveryNoteCache(dn){
+  if (!dn || !dn.id) return;
+  const i = deliveryNotesCache.findIndex(x => x.id === dn.id);
+  if (i >= 0) { if ((Number(deliveryNotesCache[i].revision) || 0) > (Number(dn.revision) || 0)) return; deliveryNotesCache[i] = dn; }
+  else deliveryNotesCache = deliveryNotesCache.concat([dn]);
+  rebuildSalesOrderView();
+}
+function cacheSalesOrdersLocally(){
+  const data = dnIndependentMode() ? salesOrders.map(so => dnCore().stripProjection(so)) : salesOrders;
+  try { localStorage.setItem('dtq_salesorders', JSON.stringify(data)); } catch(e) {}
+}
+/** Resolves the DN a modal is working on by its stable ID (never only by list position). */
+function dnForModal(m){
+  if (!m) return null;
+  const so = salesOrders.find(x => x.id === m._soId); if (!so) return null;
+  const list = so.deliveries || [];
+  if (m._dnId) {
+    const i = list.findIndex(d => d.id === m._dnId);
+    if (i < 0) return null;
+    m._deliveryIdx = i;
+    return list[i];
+  }
+  return list[m._deliveryIdx] || null;
+}
+function newDeliveryOperationId(kind, ref){
+  const rnd = (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g,'').slice(0,12) : Math.random().toString(36).slice(2,14);
+  return kind + ':' + ref + ':' + Date.now().toString(36) + ':' + rnd;
+}
+/** User-facing message for a failed Delivery Note transaction. Nothing is changed locally on failure. */
+function deliveryErrorMessage(e){
+  const code = e && e.code || '';
+  if (e && e.name === 'DeliveryError') return e.message;
+  if (code === 'permission-denied') return 'The database refused this change (permission denied). Nothing was changed.';
+  if (code === 'unavailable' || code === 'deadline-exceeded' || code === 'failed-precondition' || !navigator.onLine)
+    return 'The database could not be reached or did not confirm the change. If you retry from this same screen it will not be applied twice. Check the Delivery Note register first.';
+  return (e && e.message) || String(e);
+}
+/** During the administrator's migration freeze every SO/DN write is refused up-front
+ *  (before any document number is allocated, so no numbers are consumed). */
+function deliveryWritesFrozen(){
+  const mode = window.BizCoreDN && window.BizCoreDN.mode;
+  if (mode === 'migrating' || mode === 'unavailable' || mode === 'unknown') {
+    showToast(mode === 'migrating' ? 'Database maintenance (Delivery Note migration) is in progress. Sales Orders and Delivery Notes are read-only until it completes.' : 'Database storage mode could not be verified. Please reload BizCore.', 'warning', 'Read-only');
+    return true;
+  }
+  if (window.BizCoreDN && window.BizCoreDN.outdated) { showToast('This BizCore version is outdated for the database. Please reload the page.', 'error', 'Update Required'); return true; }
+  return false;
+}
+function requireOnlineForDeliveryNotes(){
+  if (navigator.onLine) return true;
+  showToast('Delivery Notes are saved directly to the cloud database. Please reconnect and try again.', 'error', 'Offline');
+  return false;
+}
 async function saveSalesOrders() {
+  const mode = window.BizCoreDN ? await window.BizCoreDN.ready : 'legacy';
+  if (mode === 'unavailable' || mode === 'unknown') {
+    showToast('Database storage mode could not be verified. Sales Orders were not saved. Please reconnect and reload.', 'error', 'Not Saved');
+    return false;
+  }
+  if (mode === 'migrating') {
+    showToast('Database maintenance (Delivery Note migration) is in progress. Sales Orders and Delivery Notes are read-only until it completes.', 'warning', 'Read-only');
+    return false;
+  }
+  if (mode === 'independent') {
+    // V260: persist SO headers/lines only; Delivery Notes are separate documents.
+    const persisted = salesOrders.map(so => dnCore().stripProjection(so));
+    rawSalesOrders = persisted;
+    cacheSalesOrdersLocally();
+    if (window.FB) return await window.FB.fbSave('salesOrders', persisted);
+    return true;
+  }
   try { localStorage.setItem('dtq_salesorders', JSON.stringify(salesOrders)); } catch(e) {}
   if (window.FB) return await window.FB.fbSave('salesOrders', salesOrders);
   return true;
@@ -3063,7 +3200,7 @@ function renderDashboard() {
   document.getElementById('recent-tbody').innerHTML=recent.length?recent.map(so=>`<tr class="dashboard-order-row" role="link" tabindex="0" aria-label="Open sales order ${so.soNo||''}" onclick="openDashboardSalesOrder('${so.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDashboardSalesOrder('${so.id}')}"><td><span class="dashboard-order-link">${so.soNo||'—'}</span></td><td>${fmtDate(so.date)}</td><td>${so.customer||'—'}</td><td class="right" style="font-weight:500">${fmtShort(parseFloat(so.total)||0)}</td><td><span class="badge ${getSOBadgeClass(so._status)}">${so._status}</span></td></tr>`).join(''):`<tr><td colspan="5" style="text-align:center;color:var(--gray);padding:24px">No sales orders in this period</td></tr>`;
 
   const statuses=['Confirmed','Out for Delivery','Partially Delivered','Delivered','Invoiced','Partially Paid','Paid'];
-  const colors={'Confirmed':'#185FA5','Out for Delivery':'#6f42c1','Partially Delivered':'#e67e22','Delivered':'#117a8b','Invoiced':'#6c757d','Partially Paid':'#d39e00','Paid':'#1e7e34'};
+  const colors={'Confirmed':'#245780','Out for Delivery':'#6f42c1','Partially Delivered':'#92400E','Delivered':'#0F766E','Invoiced':'#6c757d','Partially Paid':'#d39e00','Paid':'#166534'};
   document.getElementById('status-chart').innerHTML=statuses.map(st=>{const count=list.filter(so=>so._status===st).length;const pct=total?Math.round(count/total*100):0;return `<div style="display:flex;align-items:center;gap:8px"><div style="width:105px;font-size:11px;color:var(--gray)">${st}</div><div style="flex:1;background:#f0f0f0;border-radius:3px;height:12px"><div style="width:${pct}%;height:100%;background:${colors[st]};border-radius:3px"></div></div><div style="width:40px;font-size:11px;text-align:right;color:${colors[st]};font-weight:600">${count}</div></div>`;}).join('');
 
   const months=[];for(let i=5;i>=0;i--){const d=new Date();d.setMonth(d.getMonth()-i);months.push({label:d.toLocaleString('default',{month:'short'}),key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`});}
@@ -4198,8 +4335,6 @@ function exportPricingRegisterExcel(includeLines=false,prefetchedRows=null){
 function goPricingDocPage(p){ pricingDocPage=p; renderPricingDocuments(); }
 
 function showPage(page, el) {
-  // v237: cancelled/completed mobile QR workflow is terminal; background callbacks cannot expose ERP screens.
-  if(window._mobileQRTerminal && isMobileQRWorkflow?.() && document.getElementById('dn-qr-finished-overlay')?.classList.contains('open')) return;
   const masterAliases=['customers','suppliers','products','employees','units'];
   const requestedMasterTab=masterAliases.includes(page)?page:null;
   const targetPage=requestedMasterTab?'masters':page;
@@ -6286,6 +6421,7 @@ async function deleteCustomer(id, sourceModalId='') {
 }
 
 function closeModal(id) {
+  if(id==='dn-dispatch-action-modal' && document.getElementById(id)?._saving)return;
   const overlay = document.getElementById(id);
   if(overlay?.classList.contains('open') && !modalNavExcluded.has(id)){lastClosedModal=id;lastClosedModalAt=Date.now();}
   overlay?.classList.remove('open','modal-fs-overlay');
@@ -6851,6 +6987,8 @@ function renderRFQPage() {
   // Awaiting Pricing = all RFQs that have not yet produced a saved Pricing record.
   // Overdue unpriced RFQs remain part of this count; Overdue is an overlapping urgency indicator.
   document.getElementById('rfq-k-pricing').textContent = rfqs.filter(r=>getRFQWorkflowStage(r)==='New').length;
+  const inPricingKpi = document.getElementById('rfq-k-inpricing');
+  if (inPricingKpi) inPricingKpi.textContent = rfqs.filter(r=>getRFQWorkflowStage(r)==='Pricing').length;
   document.getElementById('rfq-k-quoted').textContent  = quoted.length;
   document.getElementById('rfq-k-nobid').textContent   = noBid.length;
   updateRFQMonitorSelection();
@@ -6938,8 +7076,9 @@ function updateRFQMonitorSelection(){
   const styles={
     all:{bg:'#eef6ff',accent:'#2e75b6'},
     Open:{bg:'#eef9f2',accent:'#43a66b'},
-    Pricing:{bg:'#fff8e5',accent:'#d7a323'},
-    Quoted:{bg:'#eef6ff',accent:'#3b82c4'},
+    New:{bg:'#fff8e5',accent:'#d7a323'},
+    Pricing:{bg:'#eef6ff',accent:'#3b82c4'},
+    Quoted:{bg:'#eef9f2',accent:'#28a36a'},
     'No Bid':{bg:'#f2f4f6',accent:'#7b8794'},
     Overdue:{bg:'#fff0f0',accent:'#d85b5b'}
   };
@@ -7979,7 +8118,7 @@ function addPricingRow(item={}) {
     <td><input data-role="supref" placeholder="Quote ref." value="${rowSupRef||''}" style="font-size:12px"></td>
     <td><input data-role="buy" type="text" inputmode="decimal" value="${item.buy!==undefined&&item.buy!==''?formatNumber(item.buy,pricingDecimals()):''}" onfocus="beginPriceEdit(this)" oninput="calcPricingRow(this)" onblur="endPriceEdit(this)" placeholder="${(0).toFixed(pricingDecimals())}" style="text-align:right"></td>
     <td><input data-role="markup" type="number" min="0" step="0.1" value="${item.markup!==undefined&&item.markup!==''?item.markup:Number(activePricingSettings().targetMargin||0).toFixed(1)}" oninput="calcFromMarkup(this)" placeholder="%" style="text-align:right;background:#fffbf0"></td>
-    <td><input data-role="sell" type="text" inputmode="decimal" value="${item.sell!==undefined&&item.sell!==''?formatNumber(item.sell,pricingDecimals()):''}" onfocus="beginPriceEdit(this)" oninput="calcFromSell(this)" onblur="endPriceEdit(this)" placeholder="${(0).toFixed(pricingDecimals())}" style="text-align:right;font-weight:650"></td>
+    <td><div class="pricing-sell-lock-wrap"><input data-role="sell" class="${item.sellLocked?'is-price-locked':''}" type="text" inputmode="decimal" value="${item.sell!==undefined&&item.sell!==''?formatNumber(item.sell,pricingDecimals()):''}" onfocus="beginPriceEdit(this)" oninput="calcFromSell(this)" onblur="endPriceEdit(this)" placeholder="${(0).toFixed(pricingDecimals())}" style="text-align:right;font-weight:650"><button type="button" tabindex="-1" class="pricing-price-lock${item.sellLocked?' is-locked':''}" data-role="sell-lock" aria-pressed="${item.sellLocked?'true':'false'}" title="${item.sellLocked?'Unlock selling price — margin gauge will adjust this line':'Lock selling price — margin gauge will leave this line unchanged'}" onclick="togglePricingSellLock(this)"><i class="ti ${item.sellLocked?'ti-lock':'ti-lock-open'}"></i></button></div></td>
     <td class="margin-cell">—</td>
     <td class="margin-cell">—</td>
     <td><div class="pricing-row-actions">
@@ -8087,7 +8226,8 @@ function readPricingItemsFromDOM() {
     const sell=parsePricingNumber(tr.querySelector('[data-role="sell"]')?.value);
     const sortOrder=index+1;
     tr.dataset.sortOrder=String(sortOrder);
-    if(desc||buy||code){const lineSupplier=findUniqueMasterByName(suppliers,supplierName);items.push({lineId:tr.dataset.lineId,productId:tr.dataset.productId||'',sortOrder,code,desc,qty,uom,supplierName,supplierId:lineSupplier?.id||'',supRef,buy,markup,sell});}
+    const sellLocked=tr.querySelector('[data-role="sell-lock"]')?.classList.contains('is-locked')||false;
+    if(desc||buy||code){const lineSupplier=findUniqueMasterByName(suppliers,supplierName);items.push({lineId:tr.dataset.lineId,productId:tr.dataset.productId||'',sortOrder,code,desc,qty,uom,supplierName,supplierId:lineSupplier?.id||'',supRef,buy,markup,sell,sellLocked});}
   });
   return items;
 }
@@ -8483,6 +8623,19 @@ function calcFromSell(input) {
   updateMarginCells(tr,(sell-buy)*qty,pct);calcPricingSummary();
 }
 
+function togglePricingSellLock(button) {
+  const locked=!button.classList.contains('is-locked');
+  button.classList.toggle('is-locked',locked);
+  button.setAttribute('aria-pressed',locked?'true':'false');
+  button.title=locked?'Unlock selling price — margin gauge will adjust this line':'Lock selling price — margin gauge will leave this line unchanged';
+  const icon=button.querySelector('i');
+  if(icon) icon.className='ti '+(locked?'ti-lock':'ti-lock-open');
+  const sell=button.closest('td')?.querySelector('[data-role="sell"]');
+  if(sell) sell.classList.toggle('is-price-locked',locked);
+  markPricingDirty();
+  showToast(locked?'Selling price locked. Margin gauge will leave this line unchanged.':'Selling price unlocked. Margin gauge can adjust this line.','success');
+}
+
 function updateMarginCells(tr,margin,pct) {
   const cells=tr.querySelectorAll('.margin-cell'),status=getMarginStatusForPercent(pct),cls=pct<0?'neg':pct<Number(activePricingSettings().minMargin||0)?'low':'good';
   if(cells[0]){cells[0].textContent=pricingFmt(margin);cells[0].className='margin-cell '+cls;if(status)cells[0].style.color=status.color;}
@@ -8588,9 +8741,19 @@ function readInternalCosts(materialCost,totalSell) {
 
 function setTargetPricingMargin(targetPct) {
   targetPct=Number.isFinite(Number(targetPct))?Number(targetPct):Number(activePricingSettings().targetMargin||0);
-  let materialCost=0; const rows=[...document.querySelectorAll('#pricing-tbody tr:not(.pricing-quick-add-row)')];
-  rows.forEach(tr=>{materialCost+=parsePricingNumber(tr.querySelector('[data-role="qty"]')?.value)*parsePricingNumber(tr.querySelector('[data-role="buy"]')?.value);});
+  const rows=[...document.querySelectorAll('#pricing-tbody tr:not(.pricing-quick-add-row)')];
+  let materialCost=0,lockedSellTotal=0,unlockedMaterialCost=0,unlockedCount=0;
+  rows.forEach(tr=>{
+    const qty=parsePricingNumber(tr.querySelector('[data-role="qty"]')?.value);
+    const buy=parsePricingNumber(tr.querySelector('[data-role="buy"]')?.value);
+    const sell=parsePricingNumber(tr.querySelector('[data-role="sell"]')?.value);
+    const locked=tr.querySelector('[data-role="sell-lock"]')?.classList.contains('is-locked');
+    materialCost+=qty*buy;
+    if(locked) lockedSellTotal+=qty*sell;
+    else if(buy>0&&qty>0){unlockedMaterialCost+=qty*buy;unlockedCount++;}
+  });
   if(!materialCost){showToast('Enter buy prices before setting a target margin','error');return;}
+  if(!unlockedCount||unlockedMaterialCost<=0){showToast('All priced lines are locked. Unlock at least one selling price to use the margin gauge.','error');return;}
   let fixed=0,materialPct=0,salesPct=0,totalCostFactor=1;
   document.querySelectorAll('#internal-costs-tbody tr').forEach(tr=>{const m=tr.querySelector('[data-cost-role="method"]')?.value||'fixed',v=parseFloat(tr.querySelector('[data-cost-role="value"]')?.value)||0;if(m==='fixed')fixed+=v;else if(m==='material_pct')materialPct+=v;else if(m==='total_cost_pct')totalCostFactor*=1+v/100;else if(m==='sales_pct')salesPct+=v;});
   const baseCost=(materialCost*(1+materialPct/100)+fixed)*totalCostFactor;
@@ -8600,8 +8763,19 @@ function setTargetPricingMargin(targetPct) {
   }else{
     const factor=1+targetPct/100,denom=1-factor*salesPct/100;if(denom<=0){showToast('Sales-based internal cost is too high for this target.','error');return;}targetSell=baseCost*factor/denom;
   }
-  targetSell=pricingRound(targetSell); const factor=targetSell/materialCost;
-  rows.forEach(tr=>{const buy=parsePricingNumber(tr.querySelector('[data-role="buy"]')?.value);if(!buy)return;const sell=pricingRound(buy*factor),si=tr.querySelector('[data-role="sell"]'),pi=tr.querySelector('[data-role="markup"]');if(si)si.value=formatNumber(sell,pricingDecimals());if(pi)pi.value=pricingPercent(buy,sell).toFixed(1);calcPricingRow(si||tr);});
+  targetSell=pricingRound(targetSell);
+  const remainingSell=targetSell-lockedSellTotal;
+  if(remainingSell<0){showToast('Locked selling prices already exceed the selling total for this target margin. Unlock a line or choose a higher target.','error');return;}
+  const factor=remainingSell/unlockedMaterialCost;
+  rows.forEach(tr=>{
+    if(tr.querySelector('[data-role="sell-lock"]')?.classList.contains('is-locked'))return;
+    const buy=parsePricingNumber(tr.querySelector('[data-role="buy"]')?.value),qty=parsePricingNumber(tr.querySelector('[data-role="qty"]')?.value);
+    if(!buy||!qty)return;
+    const sell=pricingRound(buy*factor),si=tr.querySelector('[data-role="sell"]'),pi=tr.querySelector('[data-role="markup"]');
+    if(si)si.value=formatNumber(sell,pricingDecimals());
+    if(pi)pi.value=pricingPercent(buy,sell).toFixed(1);
+    calcPricingRow(si||tr);
+  });
   markPricingDirty();calcPricingSummary();
 }
 
@@ -9099,7 +9273,16 @@ async function convertToQuotation() {
   const pricingRef='PR-'+String(r.rfqNo||pricingRFQId||'').replace(/^RFQ-?/i,'')+'-V'+Number(activePricingVersion?.version||r.currentPricingVersion||1);
   const pricingCost=r.pricingItems.reduce((s,it)=>s+(Number(it.buy)||0)*(Number(it.qty)||0),0);
   r.pricingItems.forEach(it=>{
-    addItemRow({desc:it.desc, qty:it.qty, uom:it.uom||'Pcs', up:it.sell, pricingSell:it.sell, pricingBuy:it.buy, code:'', brand:'', model:'', specs:''});
+    // Product Master is the authoritative source for item specifications.
+    // Prefer stable product ID; use an unambiguous code/name only for legacy pricing lines.
+    const byId=it.productId ? products.find(p=>String(p.id)===String(it.productId)) : null;
+    const byCode=!byId && it.code ? products.filter(p=>String(p.code||'').trim().toLowerCase()===String(it.code).trim().toLowerCase()) : [];
+    const byName=!byId && byCode.length!==1 && it.desc ? products.filter(p=>String(p.name||'').trim().toLowerCase()===String(it.desc).trim().toLowerCase()) : [];
+    const product=byId || (byCode.length===1 ? byCode[0] : (byCode.length===0 && byName.length===1 ? byName[0] : null));
+    addItemRow({desc:it.desc, qty:it.qty, uom:it.uom||product?.uom||'Pcs', up:it.sell, pricingSell:it.sell, pricingBuy:it.buy,
+      code:product?.code||it.code||'', brand:product?.brand||'', model:product?.model||'',
+      specs:(product?.specs||[]).filter(s=>s.k&&s.v).map(s=>`${s.k}: ${s.v}`).join(' | '),
+      prodId:product?.id||it.productId||''});
   });
   setQuotationPricingContext({rfqNo:r.rfqNo,pricingRef,cost:pricingCost,version:Number(activePricingVersion?.version||r.currentPricingVersion||1)});
   calcTotals();
@@ -9169,13 +9352,25 @@ function showValidationDialog(title, message, targetFieldId, fieldMessage='Requi
   if (titleEl) titleEl.textContent = title || 'Validation Required';
   if (messageEl) messageEl.textContent = message || 'Please complete the required field.';
   if (validationTargetField) markFieldInvalid(validationTargetField, fieldMessage);
-  if (dialog) dialog.classList.add('open');
+  if (dialog) {
+    // Stack validation above the active modal (including nested DN dispatch editor).
+    // A fixed z-index of 1000 puts the dialog behind the editor's z-index of 6700.
+    const layers = [...document.querySelectorAll('.modal-overlay.open, .confirm-overlay, .safe-exit-dialog, .no-bid-overlay')]
+      .filter(el => el !== dialog && window.getComputedStyle(el).display !== 'none')
+      .map(el => Number.parseInt(window.getComputedStyle(el).zIndex, 10))
+      .filter(Number.isFinite);
+    dialog.style.zIndex = String(Math.max(10000, ...layers) + 10);
+    dialog.classList.add('open');
+  }
   setTimeout(()=>document.getElementById('validation-dialog-ok')?.focus(), 30);
 }
 
 function closeValidationDialog() {
   const dialog = document.getElementById('validation-dialog');
-  if (dialog) dialog.classList.remove('open');
+  if (dialog) {
+    dialog.classList.remove('open');
+    dialog.style.removeProperty('z-index');
+  }
   const field = validationTargetField;
   validationTargetField = null;
   if (field) {
@@ -9303,7 +9498,9 @@ function exportAllData() {
     settings,
     deliveryTerms,
     paymentTerms,
-    salesOrders,
+    salesOrders: dnIndependentMode() ? salesOrders.map(so => dnCore().stripProjection(so)) : salesOrders,
+    // V260: independent Delivery Notes (current state). Audit events are backed up by the admin tool.
+    ...(dnIndependentMode() ? { deliveryNotes: deliveryNotesCache, _deliveryNoteStorage: 'independent' } : {}),
     appUsers,
     appRoles,
   };
@@ -9323,6 +9520,13 @@ function exportAllData() {
 function importAllData(event) {
   const file = event.target.files[0];
   if (!file) return;
+  if (dnIndependentMode()) {
+    // A browser restore replaces whole collections and cannot restore Delivery Notes, their
+    // audit events or the fulfillment ledger consistently. Use the administrator tool instead.
+    event.target.value = '';
+    showValidationDialog('Restore Not Available', 'Delivery Notes are stored independently in this database. Restoring from a browser backup could orphan Delivery Notes or corrupt quantities.\n\nUse the administrator backup/restore tool (tools/dn-migration) instead.', '', '');
+    return;
+  }
   // Reset the file input so the same file can be re-selected if needed
   event.target.value = '';
 
@@ -9463,8 +9667,8 @@ function getSOStatus(so) {
   if (!so) return 'Confirmed';
   const totalPaid = (so.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
   const hasInvoice = (so.invoices||[]).length > 0;
-  const deliveries = so.deliveries||[];
-  const hasAnyDelivery = deliveries.length > 0;
+  const deliveries = (so.deliveries||[]).filter(d=>!d.voided);
+  const hasAnyDelivery = deliveries.some(d=>!d.voided);
 
   // Calculate confirmed-delivered qty per item
   const confirmedQty = {};
@@ -9479,7 +9683,7 @@ function getSOStatus(so) {
   const allDelivered   = totalConfirmed >= totalOrdered - 0.001 && totalOrdered > 0;
   const partDelivered  = totalConfirmed > 0 && !allDelivered;
 
-  const anyDispatched  = hasAnyDelivery && deliveries.some(d=>!d.customerConfirmed);
+  const anyDispatched  = hasAnyDelivery && deliveries.some(d=>!d.customerConfirmed&&!d.voided);
 
   if (totalPaid >= so.total && so.total > 0) return 'Paid';
   if (totalPaid > 0 && totalPaid < so.total) return 'Partially Paid';
@@ -9659,7 +9863,7 @@ function renderSOPage() {
   const open=scope.filter(s=>['Confirmed','Out for Delivery','Partially Delivered'].includes(s._status));
   const ready=scope.filter(s=>s._status==='Confirmed');
   const partial=scope.filter(s=>s._status==='Partially Delivered');
-  const pendingInvoice=scope.filter(s=>(s.deliveries||[]).some(d=>d.customerConfirmed)&&!(s.invoices||[]).length);
+  const pendingInvoice=scope.filter(s=>soHasInvoiceableQty(s));
   const totalOrderValue=scope.reduce((sum,s)=>sum+(parseFloat(s.total)||0),0);
   const outstandingReceivables=scope.reduce((sum,s)=>{
     if(!(s.invoices||[]).length)return sum;
@@ -9702,7 +9906,7 @@ function renderSOPage() {
   else if(soKpiFilter==='status-partpaid') list=list.filter(s=>s._status==='Partially Paid');
   else if(soKpiFilter==='status-paid') list=list.filter(s=>s._status==='Paid');
   else if(soKpiFilter==='open') list=list.filter(s=>['Confirmed','Out for Delivery','Partially Delivered'].includes(s._status));
-  else if(soKpiFilter==='pending-invoice') list=list.filter(s=>(s.deliveries||[]).some(d=>d.customerConfirmed)&&!(s.invoices||[]).length);
+  else if(soKpiFilter==='pending-invoice') list=list.filter(s=>soHasInvoiceableQty(s));
   else if(soKpiFilter==='receivables') list=list.filter(s=>{
     if(!(s.invoices||[]).length)return false;
     const paid=(s.payments||[]).reduce((p,x)=>p+(parseFloat(x.amount)||0),0);
@@ -9830,6 +10034,7 @@ function soCalcSummary() {
   const note=document.getElementById('so-remaining-note');if(note){note.style.display=partial?'block':'none';note.innerHTML=partial?'<strong>Partial order</strong> — quantities remaining after this PO can be converted to another Sales Order later.':'';}
 }
 async function _saveSalesOrderCore() {
+  if (deliveryWritesFrozen()) return;
   const modal = document.getElementById('so-create-modal');
   const poNo = document.getElementById('so-po-no').value.trim();
   if (!poNo) {
@@ -9866,6 +10071,20 @@ async function _saveSalesOrderCore() {
 
   const editingId = modal._editingSOId;
   const existingSO = editingId ? salesOrders.find(x=>x.id===editingId) : null;
+  // V260: every SO line receives an immutable lineId. Edits keep the ID of the same
+  // quotation line; it is never derived from the visible row position.
+  if (editingId && await salesOrderHasServerDeliveryActivity(editingId)) {
+    showValidationDialog('Editing Restricted','Delivery activity was recorded for this Sales Order while it was open. It can no longer be edited.','','');
+    return;
+  }
+  const priorLineIds = new Map((existingSO?.items||[]).filter(it=>it&&it.lineId).map(it=>[String(it.origIdx),it.lineId]));
+  const usedLineIds = new Set();
+  selectedItems.forEach(it => {
+    let id = priorLineIds.get(String(it.origIdx));
+    if (!id || usedLineIds.has(id)) id = dnCore() ? dnCore().newLineId() : ('L-' + Date.now().toString(36) + Math.random().toString(36).slice(2,10));
+    usedLineIds.add(id);
+    it.lineId = id;
+  });
   const soNumber = existingSO?.soNo || await allocateDocumentNumber('salesOrder',new Date((document.getElementById('so-date').value||new Date().toISOString().slice(0,10))+'T00:00:00'));
   let poAttachment=modal._poAttachmentRemoved?null:(modal._poAttachment||existingSO?.poAttachment||null);
   const poFile=document.getElementById('so-po-file')?.files?.[0];
@@ -9979,8 +10198,14 @@ async function saveSalesOrder(){
 function soHasDownstreamActivity(so){
   return !!((so.deliveries||[]).length || (so.invoices||[]).length || (so.payments||[]).length);
 }
-function openEditSO(soId){
-  const so=salesOrders.find(x=>x.id===soId);if(!so)return;if(soHasDownstreamActivity(so)){showValidationDialog('Editing Restricted','This Sales Order already has delivery, invoice, or payment activity. To protect document history, it cannot be edited.','','');return;}
+/** V260: authoritative server check (the local view may not have loaded every DN yet). */
+async function salesOrderHasServerDeliveryActivity(soId){
+  if (!dnIndependentMode()) return false;
+  try { return (await window.BizCoreDN.fulfillmentActivity(soId)).exists; }
+  catch (e) { console.error('[BizCore] fulfillment check failed', e); showToast('Delivery activity could not be verified. Please check your connection.', 'error'); return true; }
+}
+async function openEditSO(soId){
+  const so=salesOrders.find(x=>x.id===soId);if(!so)return;if(soHasDownstreamActivity(so)||await salesOrderHasServerDeliveryActivity(soId)){showValidationDialog('Editing Restricted','This Sales Order already has delivery, invoice, or payment activity. To protect document history, it cannot be edited.','','');return;}
   const q=quotations.find(x=>x.id===so.quotationId);if(!q){showToast('The linked quotation could not be found.','error');return;}
   const currentByOrig={};(so.items||[]).forEach(it=>currentByOrig[it.origIdx]=(currentByOrig[it.origIdx]||0)+(parseFloat(it.qty)||0));
   const progress=getQuotationSOProgress(so.quotationId,so.id),available=progress.remaining;
@@ -9989,9 +10214,9 @@ function openEditSO(soId){
   const vals={'so-no':so.soNo,'so-date':so.date,'so-po-no':so.poNo||'','so-po-date':so.poDate||'','so-project':so.project||'','so-contact':so.contact||'','so-customer':so.customer,'so-quote-ref':q.qno+' — '+fmtDate(q.date),'so-payment':so.payment||q.payment||'','so-delivery':so.delivery||q.delivery||'','so-expected-delivery':so.expectedDelivery||'','so-notes':so.notes||'','so-internal-note':so.internalNote||''};Object.entries(vals).forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.value=v;});
   const fi=document.getElementById('so-po-file');if(fi)fi.value='';modal._poAttachment=so.poAttachment||null;modal._poAttachmentRemoved=false;soRenderPOAttachment(null,modal._poAttachment);clearFieldValidation(document.getElementById('so-po-no'));renderSOCreateItems(available,currentByOrig);closeModal('so-view-modal');soCalcSummary();openModalWithSize('so-create-modal');
 }
-function deleteSalesOrder(soId){
+async function deleteSalesOrder(soId){
   const so=salesOrders.find(x=>x.id===soId); if(!so) return;
-  if(soHasDownstreamActivity(so)){
+  if(soHasDownstreamActivity(so)||await salesOrderHasServerDeliveryActivity(soId)){
     showValidationDialog('Deletion Restricted','This Sales Order has related delivery, invoice, or payment records and cannot be deleted. This protects the audit trail.','','');
     return;
   }
@@ -10043,7 +10268,7 @@ function viewSO(soId) {
   // Integrated order-item + delivery progress data
   const confirmedQtyMap = {};
   const transitQtyMap = {};
-  (so.deliveries||[]).forEach(d => {
+  (so.deliveries||[]).filter(d=>!d.voided).forEach(d => {
     (d.items||[]).forEach(it => {
       const idx = it.origIdx !== undefined ? it.origIdx : it.soIdx;
       if (d.customerConfirmed) confirmedQtyMap[idx] = roundQty((confirmedQtyMap[idx]||0) + deliveryAcceptedQty(d,it));
@@ -10117,7 +10342,7 @@ function viewSO(soId) {
     ? (so.deliveries||[]).map((d,i)=>{
         const confirmed = d.customerConfirmed;
         const dnStatus=getDNStatus(d);
-        const statusPill = confirmed
+        const statusPill = d.voided ? `<span style="background:#fee2e2;color:#991b1b;padding:3px 8px;border-radius:10px">Voided</span>` : confirmed
           ? `<span style="background:var(--green-bg);color:var(--green-txt);border:1px solid #b8dacc;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:600">✓ ${dnStatus}</span>`
           : `<span style="background:#fff0e6;color:#b45309;border:1px solid #fcd4a8;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:600">⏳ Out for delivery</span>`;
         return `<div class="inv-card" style="background:${confirmed?'#f0fff4':'#fff8f0'};border-color:${confirmed?'#b8dacc':'#fcd4a8'}">
@@ -10132,7 +10357,7 @@ function viewSO(soId) {
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
             <button class="abtn abtn-view" onclick="viewDeliveryNote('${so.id}',${i})"><i class="ti ti-printer"></i>Print DN</button>
-            ${!confirmed?`<button class="abtn abtn-edit" style="background:var(--green-bg);color:var(--green-txt);border-color:#b8dacc" onclick="confirmDelivery('${so.id}',${i})"><i class="ti ti-circle-check"></i>Confirm acceptance</button>`:''}
+            ${!confirmed&&!d.voided?`<button class="abtn abtn-edit" style="background:var(--green-bg);color:var(--green-txt);border-color:#b8dacc" onclick="confirmDelivery('${so.id}',${i})"><i class="ti ti-circle-check"></i>Confirm acceptance</button>`:''}
           </div>
         </div>`;
       }).join('')
@@ -10243,7 +10468,7 @@ function viewSO(soId) {
   // dispatched twice.
   const acceptedForDispatch = {};
   const transitForDispatch = {};
-  (so.deliveries||[]).forEach(d => {
+  (so.deliveries||[]).filter(d=>!d.voided).forEach(d => {
     (d.items||[]).forEach(it => {
       const idx = it.origIdx !== undefined ? it.origIdx : it.soIdx;
       if (d.customerConfirmed) {
@@ -10271,8 +10496,8 @@ function viewSO(soId) {
   if (hasUndelivered) {
     fBtns.push(`<button class="btn btn-secondary" data-sid="${so.id}" onclick="openRecordDelivery(this.dataset.sid)"><i class="ti ti-truck"></i>Dispatch delivery</button>`);
   }
-  if ((so.deliveries||[]).some(d=>d.customerConfirmed) && !(so.invoices||[]).length) {
-    fBtns.push(`<button class="btn btn-secondary" data-sid="${so.id}" onclick="openCreateInvoice(this.dataset.sid)"><i class="ti ti-file-invoice"></i>Create invoice</button>`);
+  if (soHasInvoiceableQty(so)) { // V260: also after a partial invoice, while accepted quantity remains un-invoiced
+    fBtns.push(`<button class="btn btn-secondary" data-sid="${so.id}" onclick="openCreateInvoice(this.dataset.sid)"><i class="ti ti-file-invoice"></i>${(so.invoices||[]).length?'Invoice remaining':'Create invoice'}</button>`);
   }
   if ((so.invoices||[]).length > 0 && outstanding > 0.01) {
     fBtns.push(`<button class="btn btn-success" data-sid="${so.id}" onclick="openRecordPayment(this.dataset.sid)"><i class="ti ti-cash"></i>Record payment</button>`);
@@ -10283,9 +10508,10 @@ function viewSO(soId) {
 
 /* ── Delivery Notes v125 ── */
 function deliveryActor(){return (window.currentUser&&(window.currentUser.name||window.currentUser.email))||'Authenticated user';}
-function deliveryAcceptedQty(d,it){return d.customerConfirmed ? (it.acceptedQty!=null?Number(it.acceptedQty):Number(it.qty)||0) : 0;}
+function deliveryAcceptedQty(d,it){if(d.voided||!d.customerConfirmed)return 0;const qty=Number(it.qty)||0;if(it.acceptedQty!=null&&Number.isFinite(Number(it.acceptedQty)))return Math.max(0,Math.min(qty,Number(it.acceptedQty)));if(it.rejectedQty!=null&&Number.isFinite(Number(it.rejectedQty)))return Math.max(0,qty-Math.max(0,Number(it.rejectedQty)));return qty;}
 function deliveryRejectedQty(d,it){return d.customerConfirmed ? (Number(it.rejectedQty)||0) : 0;}
 function getDNStatus(d){
+  if(d.voided)return 'Voided';
   if(!d.customerConfirmed) return 'Out for Delivery';
   let a=0,r=0; (d.items||[]).forEach(it=>{a+=deliveryAcceptedQty(d,it);r+=deliveryRejectedQty(d,it)});
   if(r<=0) return 'Delivered'; if(a<=0) return 'Rejected'; return 'Partially Accepted';
@@ -10297,7 +10523,8 @@ function getDNBadgeClass(status){
     'Awaiting Confirmation':'badge-dn-confirmation',
     'Delivered':'badge-dn-delivered',
     'Partially Accepted':'badge-dn-partial',
-    'Rejected':'badge-dn-rejected'
+    'Rejected':'badge-dn-rejected',
+    'Voided':'badge-dn-rejected'
   }[status]||'badge-so-confirmed';
 }
 function allDeliveryNotes(){const rows=[];salesOrders.forEach(so=>(so.deliveries||[]).forEach((d,i)=>rows.push({so,d,i,status:getDNStatus(d)})));return rows;}
@@ -10366,8 +10593,8 @@ function renderDNPage(){
 function openRecordDelivery(soId) {
   const so=salesOrders.find(x=>x.id===soId);if(!so)return;currentSOId=soId;
   document.getElementById('dn-title').textContent='Create Delivery Note — '+so.soNo;document.getElementById('dn-no').value='Auto on Save';document.getElementById('dn-date').value=new Date().toISOString().split('T')[0];document.getElementById('dn-vehicle').value='';document.getElementById('dn-remarks').value='';document.getElementById('dn-po').value=so.poNo||'—';document.getElementById('dn-so-ref').value=so.soNo||'—';
-  const accepted={};(so.deliveries||[]).forEach(d=>(d.items||[]).forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;accepted[idx]=roundQtyForUom((accepted[idx]||0)+deliveryAcceptedQty(d,it),it.uom)}));
-  const transit={};(so.deliveries||[]).filter(d=>!d.customerConfirmed).forEach(d=>(d.items||[]).forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;transit[idx]=roundQtyForUom((transit[idx]||0)+(Number(it.qty)||0),it.uom)}));
+  const accepted={};(so.deliveries||[]).filter(d=>!d.voided).forEach(d=>(d.items||[]).forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;accepted[idx]=roundQtyForUom((accepted[idx]||0)+deliveryAcceptedQty(d,it),it.uom)}));
+  const transit={};(so.deliveries||[]).filter(d=>!d.customerConfirmed&&!d.voided).forEach(d=>(d.items||[]).forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;transit[idx]=roundQtyForUom((transit[idx]||0)+(Number(it.qty)||0),it.uom)}));
   const remaining=(so.items||[]).map((it,i)=>{const idx=it.origIdx!==undefined?it.origIdx:i;const rem=roundQtyForUom(Math.max(0,(Number(it.qty)||0)-(accepted[idx]||0)-(transit[idx]||0)),it.uom);return {...it,soIdx:i,origIdx:idx,acceptedQty:accepted[idx]||0,remainingQty:rem}}).filter(it=>it.remainingQty>0);
   if(!remaining.length){showToast('No quantity is available for dispatch','warning');return;}
   const modal=document.getElementById('so-delivery-modal');modal._soId=soId;modal._remainingItems=remaining;modal._saveOperationId='';
@@ -10376,12 +10603,14 @@ function openRecordDelivery(soId) {
 }
 function updateDNRemaining(i){const m=document.getElementById('so-delivery-modal'),it=(m._remainingItems||[])[i];if(!it)return;let q=roundQtyForUom(document.getElementById('dn-qty-'+i)?.value,it.uom);q=Math.max(0,Math.min(q,it.remainingQty));document.getElementById('dn-rem-'+i).textContent=roundQtyForUom(it.remainingQty-q,it.uom);}
 async function _saveDeliveryCore(operationId){
+ if(deliveryWritesFrozen())return null;
  const m=document.getElementById('so-delivery-modal'),so=salesOrders.find(x=>x.id===m?._soId);if(!so)return null;
  const date=document.getElementById('dn-date').value;if(!date){showToast('Please enter DN date','error');return null}
  const items=[];(m._remainingItems||[]).forEach((it,i)=>{let qty=roundQtyForUom(document.getElementById('dn-qty-'+i)?.value,it.uom);if(qty>it.remainingQty)qty=it.remainingQty;if(qty>0)items.push({...it,qty,acceptedQty:null,rejectedQty:null})});if(!items.length){showToast('Enter at least one delivery quantity','error');return null}
  // Idempotency: this browser operation can create only one DN, even if the user taps again.
  const existing=(so.deliveries||[]).find(d=>d.creationOperationId===operationId);
  if(existing){closeModal('so-delivery-modal');viewDeliveryNote(so.id,(so.deliveries||[]).indexOf(existing));showToast(`${existing.dnNo} was already saved and dispatched.`,'info','Already Saved');return existing}
+ if(dnIndependentMode())return _saveIndependentDispatch(m,so,date,items,operationId);
  const dnNo=await allocateDocumentNumber('deliveryNote',new Date(date+'T00:00:00'));
  const d={id:'DN-'+Date.now(),dnNo,date,status:'Out for Delivery',creationOperationId:operationId,deliveryAccessToken:createDeliveryAccessToken(),deliveryAccessCreatedAt:new Date().toISOString(),vehicle:document.getElementById('dn-vehicle').value.trim(),remarks:document.getElementById('dn-remarks').value.trim(),items,dispatchedAt:new Date().toISOString(),dispatchedBy:deliveryActor(),created:new Date().toISOString()};
  so.deliveries=so.deliveries||[];so.deliveries.push(d);
@@ -10389,10 +10618,35 @@ async function _saveDeliveryCore(operationId){
  if(saved===false){so.deliveries=so.deliveries.filter(x=>x!==d);throw new Error('Delivery Note could not be synchronized')}
  closeModal('so-delivery-modal');showToast(dnNo+' saved and dispatched','success');renderSOPage();renderDNPage();viewDeliveryNote(so.id,(so.deliveries||[]).indexOf(d));return d;
 }
+/* V260: dispatch is ONE transaction — DN number, DN document, audit event and SO ledger.
+   The browser sends only {SO line ID, quantity}; balances are re-checked on the server copy. */
+async function _saveIndependentDispatch(m,so,date,items,operationId){
+ if(!requireOnlineForDeliveryNotes())return null;
+ const lines=[];
+ for(const it of items){
+  const lineId=so.items?.[it.soIdx]?.lineId;
+  if(!lineId){showToast('This Sales Order has no stable line IDs. The administrator must complete the V260 migration.','error','Cannot Dispatch');return null;}
+  lines.push({lineId,qty:it.qty});
+ }
+ const x=docNumberParts('deliveryNote',new Date(date+'T00:00:00'));
+ try{
+  const r=await window.BizCoreDN.service.dispatch({operationId,salesOrderId:so.id,date,vehicle:document.getElementById('dn-vehicle').value.trim(),remarks:document.getElementById('dn-remarks').value.trim(),lines,numbering:{counterKey:x.counterKey,displayPrefix:x.displayPrefix},accessToken:createDeliveryAccessToken()});
+  upsertDeliveryNoteCache(r.dn);
+  const latest=salesOrders.find(s=>s.id===so.id);const position=(latest?.deliveries||[]).findIndex(d=>d.id===r.dn.id);
+  closeModal('so-delivery-modal');
+  showToast(r.alreadyApplied?`${r.dn.dnNo} was already saved and dispatched.`:`${r.dn.dnNo} saved and dispatched`,r.alreadyApplied?'info':'success');
+  renderSOPage();renderDNPage();if(position>=0)viewDeliveryNote(so.id,position);
+  return r.dn;
+ }catch(e){
+  console.error('[BizCore DN dispatch]',e);
+  showToast(deliveryErrorMessage(e),'error','Delivery Note Not Saved');
+  return null;
+ }
+}
 async function saveDelivery(){
  const m=document.getElementById('so-delivery-modal');if(!m)return null;
  // Keep one stable operation id for this open Dispatch workspace.
- const operationId=m._saveOperationId||(m._saveOperationId='dispatch:'+m._soId+':'+Date.now()+':'+Math.random().toString(36).slice(2));
+ const operationId=m._saveOperationId||(m._saveOperationId=newDeliveryOperationId('dispatch',m._soId));
  return runProtectedDocumentSave({
    key:'deliveryNote:'+operationId,
    message:'Saving Delivery Note…',buttonId:'dn-dispatch-save-btn',buttonTextId:'dn-dispatch-save-btn-text',busyText:'Saving & Dispatching…',
@@ -10400,11 +10654,12 @@ async function saveDelivery(){
  });
 }
 function canConfirmDelivery(d){
+  if(d?.voided)return {ok:false,msg:'This Delivery Note is voided.'};
   if(!window.currentUser) return {ok:false,msg:'Please sign in to BizCore.'};
   return {ok:true};
 }
 function openDeliveryAcceptance(soId,deliveryIdx,opts={}){
- const so=salesOrders.find(x=>x.id===soId),d=so?.deliveries?.[deliveryIdx];if(!d)return;const editMode=opts.mode==='correction'||opts.mode==='revision';if(d.customerConfirmed&&!editMode){showToast('This delivery is already confirmed','info');return}if(editMode&&!d.customerConfirmed){showToast('Confirm the delivery first.','info');return}
+ const so=salesOrders.find(x=>x.id===soId),d=so?.deliveries?.[deliveryIdx];if(!d)return;const editMode=opts.mode==='correction'||opts.mode==='revision';if(d.voided){showToast('Voided Delivery Notes cannot be confirmed','warning');return}if(d.customerConfirmed&&!editMode){showToast('This delivery is already confirmed','info');return}if(editMode&&!d.customerConfirmed){showToast('Confirm the delivery first.','info');return}
  const authz=canConfirmDelivery(d);if(!authz.ok){showToast(authz.msg,'error');return}
  document.getElementById('dn-confirm-title').textContent=d.dnNo+' — '+(editMode?(opts.mode==='correction'?'Correct Confirmation':'Revise Customer Acceptance'):'Confirm Delivery');document.getElementById('dn-confirm-sub').textContent=`${so.customer} · ${so.soNo}`;document.getElementById('dn-auth-user').textContent='Signed in as '+deliveryActor();document.getElementById('dn-received-by').value=editMode?(d.receivedBy||''):'';document.getElementById('dn-customer-remarks').value=editMode?(d.customerRemarks||''):'';
  const box=document.getElementById('dn-confirm-items');box.innerHTML=(d.items||[]).map((it,i)=>`<div class="dn-accept-card is-ok" id="dn-card-${i}"><div class="dn-accept-head"><div class="dn-item-title"><span class="dn-line-no">${i+1}</span><div class="dn-item-copy"><strong>${escapeHtml(it.desc||'—')}</strong><small>Delivery quantity: <b>${it.qty} ${escapeHtml(it.uom||'')}</b></small></div></div><div class="dn-item-qty"><strong>${it.qty} ${escapeHtml(it.uom||'')}</strong><span class="dn-line-status" id="dn-status-${i}">Fully accepted</span></div></div><div class="dn-accept-grid"><label class="dn-qty-field dn-accepted-field"><span class="dn-qty-label"><i class="ti ti-circle-check-filled"></i> Accepted</span><div class="dn-qty-control"><button type="button" aria-label="Decrease accepted quantity" onclick="adjustDNQty(${i},'acc',-1)">−</button><input inputmode="decimal" type="number" id="dn-acc-${i}" value="${editMode?(it.acceptedQty??it.qty):it.qty}" min="0" step="${qtyStep(it.uom)}" oninput="balanceDNQty(${i},'acc')"><button type="button" aria-label="Increase accepted quantity" onclick="adjustDNQty(${i},'acc',1)">+</button></div></label><label class="dn-qty-field dn-rejected-field"><span class="dn-qty-label"><i class="ti ti-circle-x-filled"></i> Rejected</span><div class="dn-qty-control"><button type="button" aria-label="Decrease rejected quantity" onclick="adjustDNQty(${i},'rej',-1)">−</button><input inputmode="decimal" type="number" id="dn-rej-${i}" value="${editMode?(it.rejectedQty??0):0}" min="0" step="${qtyStep(it.uom)}" oninput="balanceDNQty(${i},'rej')"><button type="button" aria-label="Increase rejected quantity" onclick="adjustDNQty(${i},'rej',1)">+</button></div></label><label class="dn-reject-extra" id="dn-reason-wrap-${i}" style="display:none">Rejection Reason<select id="dn-reason-${i}" onchange="validateDNLine(${i})"><option value="">Select reason…</option><option>Damaged</option><option>Specification mismatch</option><option>Wrong item</option><option>Excess quantity</option><option>Quality issue</option><option>Customer requested return</option><option>Packaging damaged</option><option>Other</option></select></label><label class="dn-reject-extra" id="dn-disposition-wrap-${i}" style="display:none">Disposition<select id="dn-disposition-${i}"><option>Returned with Driver</option><option>Left at Customer Site</option><option>Replacement Required</option><option>Under Review</option></select></label></div><div class="dn-line-error" id="dn-error-${i}" role="alert"></div><input id="dn-line-remarks-${i}" class="dn-line-remarks" placeholder="Rejection / line remarks (optional)" style="display:none"></div>`).join('');
@@ -10417,7 +10672,7 @@ function openDeliveryAcceptance(soId,deliveryIdx,opts={}){
  // Correction/Revision can be launched from the open Delivery Note viewer.
  // Keep the editor above the DN modal; otherwise it opens successfully but is hidden behind the viewer.
  modal.style.zIndex='6600';
- modal._soId=soId;modal._deliveryIdx=deliveryIdx;modal._confirmOperationId='';modal._acceptanceMode=editMode?opts.mode:'confirm';modal._entrySource=opts.source||'bizcore';if(modal._entrySource==='qr'&&isMobileQRWorkflow())window._mobileQRFlowActive=true;document.getElementById('dn-confirm-save-btn-text').textContent=editMode?(opts.mode==='correction'?'Save Correction':'Save Revision'):'Confirm Delivery';
+ modal._soId=soId;modal._deliveryIdx=deliveryIdx;modal._dnId=d.id;modal._dnRevision=d.revision;modal._confirmOperationId='';modal._acceptanceMode=editMode?opts.mode:'confirm';document.getElementById('dn-confirm-save-btn-text').textContent=editMode?(opts.mode==='correction'?'Save Correction':'Save Revision'):'Confirm Delivery';
  openModalWithSize('dn-confirm-modal');
  return modal.classList.contains('open');
 }
@@ -10427,7 +10682,7 @@ function dnClampQty(value,qty,uom){
  return roundQtyForUom(n,uom);
 }
 function balanceDNQty(i,changedType){
- const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m?._soId)?.deliveries?.[m?._deliveryIdx],it=d?.items?.[i];if(!it)return;
+ const m=document.getElementById('dn-confirm-modal'),d=dnForModal(m),it=d?.items?.[i];if(!it)return;
  const ae=document.getElementById('dn-acc-'+i),re=document.getElementById('dn-rej-'+i);if(!ae||!re)return;
  const qty=Number(it.qty)||0,changed=changedType==='rej'?re:ae,other=changedType==='rej'?ae:re;
  const value=dnClampQty(changed.value,qty,it.uom);
@@ -10437,7 +10692,7 @@ function balanceDNQty(i,changedType){
 function syncDNReject(i){balanceDNQty(i,'rej')}
 function syncDNAccept(i){balanceDNQty(i,'acc')}
 function adjustDNQty(i,type,direction){
- const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m?._soId)?.deliveries?.[m?._deliveryIdx],it=d?.items?.[i];if(!it)return;
+ const m=document.getElementById('dn-confirm-modal'),d=dnForModal(m),it=d?.items?.[i];if(!it)return;
  const id=type==='rej'?'dn-rej-':'dn-acc-',el=document.getElementById(id+i);if(!el)return;
  const step=Number(qtyStep(it.uom))||1,current=Number(el.value)||0,qty=Number(it.qty)||0;
  el.value=dnClampQty(current+(direction*step),qty,it.uom);balanceDNQty(i,type);
@@ -10449,7 +10704,7 @@ function showDNActionMessage(message,type='error'){
  clearTimeout(el._timer);el._timer=setTimeout(()=>el.classList.remove('show'),5000);
 }
 function validateDNLine(i,opts={}){
- const m=document.getElementById('dn-confirm-modal'),it=salesOrders.find(x=>x.id===m?._soId)?.deliveries?.[m?._deliveryIdx]?.items?.[i];if(!it)return true;
+ const m=document.getElementById('dn-confirm-modal'),it=dnForModal(m)?.items?.[i];if(!it)return true;
  const ae=document.getElementById('dn-acc-'+i),re=document.getElementById('dn-rej-'+i),card=document.getElementById('dn-card-'+i),status=document.getElementById('dn-status-'+i),err=document.getElementById('dn-error-'+i);
  let a=Number(ae?.value),r=Number(re?.value),qty=Number(it.qty)||0; if(!Number.isFinite(a))a=0;if(!Number.isFinite(r))r=0;
  let msg='';
@@ -10462,19 +10717,56 @@ function validateDNLine(i,opts={}){
  if(err){err.textContent=msg;err.classList.toggle('show',!!msg)};if(ae)ae.classList.toggle('invalid',!!msg);if(re)re.classList.toggle('invalid',!!msg);
  updateDNConfirmSummary();updateDNConfirmButton();return !msg;
 }
-function validateAllDNLines(opts={}){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m?._soId)?.deliveries?.[m?._deliveryIdx];if(!d)return {ok:false,first:0};let first=-1;(d.items||[]).forEach((_,i)=>{if(!validateDNLine(i,opts)&&first<0)first=i});return {ok:first<0,first}}
-function updateDNConfirmButton(){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m?._soId)?.deliveries?.[m?._deliveryIdx],btn=document.getElementById('dn-confirm-save-btn');if(!d||!btn)return;let invalid=false;(d.items||[]).forEach((it,i)=>{const a=Number(document.getElementById('dn-acc-'+i)?.value),r=Number(document.getElementById('dn-rej-'+i)?.value),q=Number(it.qty)||0;if(!Number.isFinite(a)||!Number.isFinite(r)||a<0||r<0||Math.abs((a+r)-q)>0.001)invalid=true});btn.classList.toggle('has-invalid',invalid);btn.setAttribute('aria-disabled',invalid?'true':'false')}
+function validateAllDNLines(opts={}){const m=document.getElementById('dn-confirm-modal'),d=dnForModal(m);if(!d)return {ok:false,first:0};let first=-1;(d.items||[]).forEach((_,i)=>{if(!validateDNLine(i,opts)&&first<0)first=i});return {ok:first<0,first}}
+function updateDNConfirmButton(){const m=document.getElementById('dn-confirm-modal'),d=dnForModal(m),btn=document.getElementById('dn-confirm-save-btn');if(!d||!btn)return;let invalid=false;(d.items||[]).forEach((it,i)=>{const a=Number(document.getElementById('dn-acc-'+i)?.value),r=Number(document.getElementById('dn-rej-'+i)?.value),q=Number(it.qty)||0;if(!Number.isFinite(a)||!Number.isFinite(r)||a<0||r<0||Math.abs((a+r)-q)>0.001)invalid=true});btn.classList.toggle('has-invalid',invalid);btn.setAttribute('aria-disabled',invalid?'true':'false')}
 function toggleDNRejectFields(i){validateDNLine(i)}
-function updateDNConfirmSummary(){const m=document.getElementById('dn-confirm-modal'),d=salesOrders.find(x=>x.id===m?._soId)?.deliveries?.[m?._deliveryIdx],sum=document.getElementById('dn-confirm-summary');if(!d||!sum)return;let full=0,partial=0,rejected=0,invalid=0;(d.items||[]).forEach((it,i)=>{const a=Number(document.getElementById('dn-acc-'+i)?.value),r=Number(document.getElementById('dn-rej-'+i)?.value),q=Number(it.qty)||0;if(!Number.isFinite(a)||!Number.isFinite(r)||a<0||r<0||Math.abs((a+r)-q)>0.001){invalid++;return}if(r<=0)full++;else if(r>=q)rejected++;else partial++});sum.innerHTML=`<span class="dn-summary-chip">${d.items.length} Item${d.items.length===1?'':'s'}</span>${full?`<span class="dn-summary-chip ok">${full} Accepted</span>`:''}${partial?`<span class="dn-summary-chip warn">${partial} Partial</span>`:''}${rejected?`<span class="dn-summary-chip bad">${rejected} Rejected</span>`:''}${invalid?`<span class="dn-summary-chip invalid">${invalid} Invalid</span>`:''}`}
+function updateDNConfirmSummary(){const m=document.getElementById('dn-confirm-modal'),d=dnForModal(m),sum=document.getElementById('dn-confirm-summary');if(!d||!sum)return;let full=0,partial=0,rejected=0,invalid=0;(d.items||[]).forEach((it,i)=>{const a=Number(document.getElementById('dn-acc-'+i)?.value),r=Number(document.getElementById('dn-rej-'+i)?.value),q=Number(it.qty)||0;if(!Number.isFinite(a)||!Number.isFinite(r)||a<0||r<0||Math.abs((a+r)-q)>0.001){invalid++;return}if(r<=0)full++;else if(r>=q)rejected++;else partial++});sum.innerHTML=`<span class="dn-summary-chip">${d.items.length} Item${d.items.length===1?'':'s'}</span>${full?`<span class="dn-summary-chip ok">${full} Accepted</span>`:''}${partial?`<span class="dn-summary-chip warn">${partial} Partial</span>`:''}${rejected?`<span class="dn-summary-chip bad">${rejected} Rejected</span>`:''}${invalid?`<span class="dn-summary-chip invalid">${invalid} Invalid</span>`:''}`}
 
 function dnAcceptanceSnapshot(d){return {status:getDNStatus(d),receivedBy:d.receivedBy||'',customerRemarks:d.customerRemarks||'',confirmedAt:d.confirmedAt||'',confirmedBy:d.confirmedBy||'',items:(d.items||[]).map(it=>({desc:it.desc||'',uom:it.uom||'',qty:Number(it.qty)||0,acceptedQty:deliveryAcceptedQty(d,it),rejectedQty:deliveryRejectedQty(d,it),rejectionReason:it.rejectionReason||'',rejectionDisposition:it.rejectionDisposition||'',acceptanceRemarks:it.acceptanceRemarks||''}))}}
 function ensureDNAcceptanceHistory(d){d.acceptanceHistory=d.acceptanceHistory||[];if(!d.acceptanceHistory.length&&d.customerConfirmed)d.acceptanceHistory.push({id:'original-'+(d.confirmationOperationId||d.id),type:'confirmation',label:'Original confirmation',reason:'Initial customer delivery confirmation',actor:d.confirmedBy||'—',at:d.confirmedAt||d.customerConfirmedDate||new Date().toISOString(),snapshot:dnAcceptanceSnapshot(d)});return d.acceptanceHistory}
 function openDNAcceptanceChange(soId,deliveryIdx,mode){if(!soId||deliveryIdx===undefined||deliveryIdx===null){showToast('Unable to identify this Delivery Note. Please reopen it and try again.','error');return false;}return openDeliveryAcceptance(soId,Number(deliveryIdx),{mode});}
+// V260: independent-mode audit records are immutable documents in
+// deliveryNotes/{id}/dispatchEvents and /acceptanceEvents. They are loaded for display only.
+function mapAcceptanceEvent(e){return {...e,at:e.at,actor:e.actor,snapshot:e.after,before:e.before,label:e.label||(e.type==='revision'?'Customer acceptance revised':e.type==='correction'?'Confirmation corrected':'Original confirmation')};}
+async function loadIndependentDNAudit(soId, dnId){
+ if(!dnIndependentMode()||!dnId)return;
+ const viewer=document.getElementById('dn-print-modal');
+ try{
+  const ev=await window.BizCoreDN.loadEvents(dnId);
+  if(viewer?._soId!==soId||viewer?._dnId!==dnId)return; // the user has moved on
+  viewer._independentAudit={dnId,dispatch:ev.dispatch,acceptance:ev.acceptance};
+  const historyButton=document.getElementById('dn-dispatch-history-btn');
+  if(historyButton)historyButton.style.display=ev.dispatch.length?'inline-flex':'none';
+  const historyBox=viewer.querySelector('.dn-acceptance-history');
+  if(historyBox)historyBox.innerHTML=buildDNAcceptanceHistory({acceptanceHistory:ev.acceptance.map(mapAcceptanceEvent)});
+ }catch(error){
+  console.warn('Unable to load Delivery Note audit events',error);
+  if(viewer?._soId===soId&&viewer?._dnId===dnId){
+   const historyBox=viewer.querySelector('.dn-acceptance-history');
+   if(historyBox)historyBox.innerHTML='<div class="dn-history-empty">Audit history could not be loaded. Please retry opening this Delivery Note.</div>';
+  }
+ }
+}
 function toggleDNAcceptanceHistory(btn){const panel=btn?.closest('.dn-confirm-result'),box=panel?.querySelector('.dn-acceptance-history');if(!box)return;const open=box.hidden;box.hidden=!open;btn.classList.toggle('active',open);btn.innerHTML=open?'<i class="ti ti-history"></i> Hide History':'<i class="ti ti-history"></i> History'}
 function buildDNAcceptanceHistory(d){const h=d.acceptanceHistory||[];if(!h.length)return '<div class="dn-history-empty">No changes have been recorded after the original confirmation.</div>';return h.slice().reverse().map((e,idx)=>{const snap=e.snapshot||{},tot=(snap.items||[]).reduce((a,it)=>({a:a.a+(Number(it.acceptedQty)||0),r:a.r+(Number(it.rejectedQty)||0)}),{a:0,r:0}),when=e.at?new Date(e.at).toLocaleString():'—';return `<div class="dn-history-event ${escapeHtml(e.type||'')}"><div class="dn-history-dot"><i class="ti ${e.type==='correction'?'ti-edit-circle':e.type==='revision'?'ti-refresh':'ti-circle-check'}"></i></div><div class="dn-history-body"><div class="dn-history-title"><strong>${escapeHtml(e.label||'Acceptance update')}</strong><span>${escapeHtml(when)}</span></div><div class="dn-history-counts"><span class="ok">Accepted <b>${formatQuantity(tot.a)}</b></span><span class="bad">Rejected <b>${formatQuantity(tot.r)}</b></span></div><p>${escapeHtml(e.reason||'—')}</p><small>By ${escapeHtml(e.actor||'—')}</small></div></div>`}).join('')}
-
+/** Re-opens a DN by its stable ID with the latest data (used after a stale-revision refusal). */
+function reopenDeliveryNoteById(soId,dnId){
+ const so=salesOrders.find(x=>x.id===soId);const index=(so?.deliveries||[]).findIndex(d=>d.id===dnId);
+ if(index>=0)viewDeliveryNote(soId,index);
+}
+/** After a committed transaction: apply it to the view and reopen the same DN by ID. */
+function showCommittedDeliveryNote(soId,dn){
+ upsertDeliveryNoteCache(dn);
+ renderSOPage();renderDNPage();
+ const so=salesOrders.find(x=>x.id===soId);
+ const index=(so?.deliveries||[]).findIndex(d=>d.id===dn.id);
+ if(index>=0)viewDeliveryNote(soId,index);
+ return index;
+}
 async function _saveDeliveryAcceptanceCore(operationId){
- const m=document.getElementById('dn-confirm-modal'),so=salesOrders.find(x=>x.id===m?._soId),d=so?.deliveries?.[m?._deliveryIdx];if(!d)return null;
+ if(deliveryWritesFrozen())return null;
+ const m=document.getElementById('dn-confirm-modal'),so=salesOrders.find(x=>x.id===m?._soId),d=dnForModal(m);if(!d)return null;
+ if(d.voided){showDNActionMessage('This Delivery Note has been voided.','error');return null;}
  const mode=m._acceptanceMode||'confirm';if(d.customerConfirmed&&mode==='confirm'){showToast('This delivery is already confirmed','info','Already Confirmed');return d}
  const changeReason=mode==='confirm'?'':(document.getElementById('dn-change-reason')?.value.trim()||'');if(mode!=='confirm'&&!changeReason){document.getElementById('dn-change-reason')?.focus();showDNActionMessage('Please enter the reason for this '+mode+'.','error');return null}
  const receivedBy=document.getElementById('dn-received-by').value.trim();if(!receivedBy){const el=document.getElementById('dn-received-by');el?.focus();el?.scrollIntoView({behavior:'smooth',block:'center'});showDNActionMessage('Received By is required.','error');return null}
@@ -10482,6 +10774,40 @@ async function _saveDeliveryAcceptanceCore(operationId){
  // Validate first; do not mutate the persisted model until every line passes.
  const lineUpdates=[];
  for(let i=0;i<d.items.length;i++){const it=d.items[i],qty=Number(it.qty)||0,a=roundQtyForUom(document.getElementById('dn-acc-'+i).value,it.uom),r=roundQtyForUom(document.getElementById('dn-rej-'+i).value,it.uom);if(Math.abs((a+r)-qty)>0.001){showDNActionMessage(`Line ${i+1}: Accepted + Rejected must equal delivery quantity`,'error');return null}const reason=document.getElementById('dn-reason-'+i)?.value||'';if(r>0&&!reason){showDNActionMessage(`Line ${i+1}: Select a rejection reason`,'error');return null}lineUpdates.push({a,r,reason,disposition:r>0?(document.getElementById('dn-disposition-'+i)?.value||''):'',remarks:document.getElementById('dn-line-remarks-'+i)?.value.trim()||''})}
+ if(dnIndependentMode()){
+  if(!requireOnlineForDeliveryNotes())return null;
+  // Register before the transaction: the real-time listener may deliver this change before the call returns.
+  window._dnLocalConfirmationIds=window._dnLocalConfirmationIds||new Set();
+  const wasLocal=window._dnLocalConfirmationIds.has(d.id);window._dnLocalConfirmationIds.add(d.id);
+  try{
+   const r=await window.BizCoreDN.service.recordAcceptance({
+    operationId,dnId:d.id,salesOrderId:so.id,expectedRevision:Number.isInteger(m._dnRevision)?m._dnRevision:d.revision,mode,reason:changeReason,receivedBy,
+    customerRemarks:document.getElementById('dn-customer-remarks').value.trim(),
+    lines:d.items.map((it,i)=>({lineId:it.soLineId,acceptedQty:lineUpdates[i].a,rejectedQty:lineUpdates[i].r,rejectionReason:lineUpdates[i].reason,rejectionDisposition:lineUpdates[i].disposition,acceptanceRemarks:lineUpdates[i].remarks}))
+   });
+   const saved=r.dn;
+   if(mode!=='confirm'&&!wasLocal)window._dnLocalConfirmationIds.delete(saved.id); // only confirmations produce a realtime event
+   closeModal('dn-confirm-modal');
+   showCommittedDeliveryNote(so.id,saved);
+   if(!r.alreadyApplied){
+    try{
+     const rejected=(saved.items||[]).reduce((n,it)=>n+(Number(it.rejectedQty)||0),0);
+     const status=getDNStatus(saved);
+     const title=mode==='confirm'?(status==='Delivered'?'Delivery Confirmed':status==='Rejected'?'Delivery Rejected':'Delivery Partially Accepted'):(mode==='correction'?'Delivery Correction':'Acceptance Revision');
+     addBizCoreNotification({id:`dn-action:${saved.id}:${operationId}`,type:'delivery',title,message:`${saved.dnNo} · ${so.customer}${rejected>0?` · Rejected qty: ${roundQtyForUom(rejected,'')}`:''}`,status,severity:status==='Rejected'?'critical':status==='Delivered'?'success':'attention',soId:so.id,dnId:saved.id,actor:deliveryActor(),createdAt:new Date().toISOString()});
+    }catch(e){console.warn('Delivery saved; local notification creation failed',e)}
+   }
+   showToast(r.alreadyApplied?`${saved.dnNo} was already saved.`:mode==='confirm'?`${saved.dnNo} confirmed — ${saved.status}`:`${saved.dnNo} ${mode==='correction'?'correction saved':'acceptance revised'}`,r.alreadyApplied?'info':'success');
+   return saved;
+  }catch(e){
+   console.error('[BizCore DN acceptance]',e);
+   if(!wasLocal)window._dnLocalConfirmationIds.delete(d.id);
+   showToast(deliveryErrorMessage(e),'error','Not Saved');
+   if(e&&e.code==='stale-revision'){closeModal('dn-confirm-modal');reopenDeliveryNoteById(so.id,d.id);}
+   else showDNActionMessage(deliveryErrorMessage(e),'error');
+   return null;
+  }
+ }
  const backup=JSON.parse(JSON.stringify(d));const previousSnapshot=d.customerConfirmed?dnAcceptanceSnapshot(d):null;if(mode!=='confirm')ensureDNAcceptanceHistory(d);
  lineUpdates.forEach((u,i)=>{const it=d.items[i];it.acceptedQty=u.a;it.rejectedQty=u.r;it.rejectionReason=u.r>0?u.reason:'';it.rejectionDisposition=u.disposition;it.acceptanceRemarks=u.remarks});
  d.customerConfirmed=true;d.customerConfirmedDate=d.customerConfirmedDate||new Date().toISOString().split('T')[0];if(mode==='confirm'){d.confirmedAt=new Date().toISOString();d.confirmedBy=deliveryActor();}d.receivedBy=receivedBy;d.customerRemarks=document.getElementById('dn-customer-remarks').value.trim();d.confirmationOperationId=mode==='confirm'?operationId:(d.confirmationOperationId||operationId);d.status=getDNStatus(d);if(mode!=='confirm'){const now=new Date().toISOString();d.acceptanceHistory.push({id:mode+'-'+Date.now(),type:mode,label:mode==='correction'?'Confirmation corrected':'Customer acceptance revised',reason:changeReason,actor:deliveryActor(),at:now,before:previousSnapshot,snapshot:dnAcceptanceSnapshot(d)});d.lastAcceptanceChangeAt=now;d.lastAcceptanceChangeBy=deliveryActor();}
@@ -10506,217 +10832,18 @@ async function _saveDeliveryAcceptanceCore(operationId){
  if(window.FB?.fbPublishOperationalEvent){
    try{await window.FB.fbPublishOperationalEvent({id:`dn-confirmed-${d.id}-${operationId.replace(/[^a-zA-Z0-9_-]/g,'')}`,type:'dn-confirmed',dnId:d.id,dnNo:d.dnNo,soId:so.id,status:d.status,actor:deliveryActor(),sourceSession:getBizCoreSessionId(),createdAt:new Date().toISOString(),acceptanceMode:mode})}catch(e){console.warn('Delivery saved; operational notification publish failed',e)}
  }
- const entrySource=m._entrySource||'bizcore';const deliveryIdx=m._deliveryIdx;
- closeModal('dn-confirm-modal');renderSOPage();renderDNPage();
- if(mode==='confirm'&&entrySource==='qr') showQRDeliverySuccess(so,d,deliveryIdx);
- else viewDeliveryNote(so.id,deliveryIdx);
- showToast(mode==='confirm'?`${d.dnNo} confirmed — ${d.status}`:`${d.dnNo} ${mode==='correction'?'correction saved':'acceptance revised'}`,'success');return d;
-}
-function collectDNConfirmationReview(){
- const m=document.getElementById('dn-confirm-modal'),so=salesOrders.find(x=>x.id===m?._soId),d=so?.deliveries?.[m?._deliveryIdx];if(!d)return null;
- const receivedBy=document.getElementById('dn-received-by')?.value.trim()||'';if(!receivedBy){const el=document.getElementById('dn-received-by');el?.focus();el?.scrollIntoView({behavior:'smooth',block:'center'});showDNActionMessage('Received By is required.','error');return null}
- const check=validateAllDNLines({requireReason:true});if(!check.ok){const bad=document.getElementById('dn-card-'+check.first);bad?.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>document.querySelector(`#dn-card-${check.first} input.invalid, #dn-card-${check.first} select`)?.focus(),250);showDNActionMessage('Please correct the highlighted delivery quantities before confirming.','error');return null}
- let accepted=0,rejected=0,total=0;
- for(let i=0;i<d.items.length;i++){const it=d.items[i],q=Number(it.qty)||0,a=roundQtyForUom(document.getElementById('dn-acc-'+i)?.value,it.uom),r=roundQtyForUom(document.getElementById('dn-rej-'+i)?.value,it.uom);if(Math.abs((a+r)-q)>0.001){showDNActionMessage(`Line ${i+1}: Accepted + Rejected must equal delivery quantity`,'error');return null}if(r>0&&!document.getElementById('dn-reason-'+i)?.value){showDNActionMessage(`Line ${i+1}: Select a rejection reason`,'error');return null}accepted+=a;rejected+=r;total+=q}
- return {so,d,accepted, rejected,total,receivedBy};
+ closeModal('dn-confirm-modal');renderSOPage();renderDNPage();viewDeliveryNote(so.id,m._deliveryIdx);showToast(mode==='confirm'?`${d.dnNo} confirmed — ${d.status}`:`${d.dnNo} ${mode==='correction'?'correction saved':'acceptance revised'}`,'success');return d;
 }
 async function saveDeliveryAcceptance(){
  const m=document.getElementById('dn-confirm-modal');if(!m)return null;
- const so=salesOrders.find(x=>x.id===m._soId),d=so?.deliveries?.[m._deliveryIdx];if(!d)return null;
- const mode=m._acceptanceMode||'confirm';
- // Initial confirmation gets an explicit second review. Correction/revision already have their own audit reason workflow.
- if(mode==='confirm'){
-   const review=collectDNConfirmationReview();if(!review)return null;
-   const rejected=review.rejected>0;
-   const ok=await showConfirmAsync({icon:rejected?'⚠️':'✅',title:'Confirm Delivery Acceptance',message:rejected?'Rejected quantity will return to the Sales Order for redelivery. Please review before confirming.':'Please review the quantities before confirming this delivery acceptance.',details:{'Delivery Note':review.d.dnNo,'Accepted':formatQuantity(review.accepted),'Rejected':formatQuantity(review.rejected),'Total':formatQuantity(review.total),'Received By':escapeHtml(review.receivedBy)},confirmText:'Confirm Acceptance',cancelText:'Back to Review',confirmClass:rejected?'btn-danger':'btn-success'});
-   if(!ok)return null;
- }
- const operationId=m._confirmOperationId||(m._confirmOperationId=mode+':'+d.id+':'+Date.now()+':'+Math.random().toString(36).slice(2));
+ const so=salesOrders.find(x=>x.id===m._soId),d=dnForModal(m);if(!d)return null;
+ const mode=m._acceptanceMode||'confirm';const operationId=m._confirmOperationId||(m._confirmOperationId=newDeliveryOperationId(mode,d.id));
  return runProtectedDocumentSave({
    key:'deliveryConfirm:'+operationId,
    message:mode==='confirm'?'Confirming Delivery…':(mode==='correction'?'Saving Correction…':'Saving Revision…'),buttonId:'dn-confirm-save-btn',buttonTextId:'dn-confirm-save-btn-text',busyText:'Confirming Delivery…',
    action:()=>_saveDeliveryAcceptanceCore(operationId),ready:(saved)=>!saved||!isModalOpen('dn-confirm-modal')
  });
 }
-
-function ensureQRWorkflowUI(){
- if(document.getElementById('dn-qr-success-overlay'))return;
- const style=document.createElement('style');style.textContent=`
- #dn-qr-success-overlay,#dn-qr-scanner-overlay,#dn-qr-finished-overlay{position:fixed;inset:0;z-index:120000;background:rgba(15,23,42,.58);display:none;align-items:center;justify-content:center;padding:18px}
- #dn-qr-success-overlay.open,#dn-qr-scanner-overlay.open,#dn-qr-finished-overlay.open{display:flex}.dn-qr-flow-card{width:min(460px,100%);background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(15,23,42,.28);overflow:hidden}.dn-qr-flow-body{padding:28px 24px;text-align:center}.dn-qr-exit-icon{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;background:#eff6ff;color:#1d4ed8;font-size:30px}.dn-qr-success-icon{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;background:#dcfce7;color:#15803d;font-size:30px}.dn-qr-flow-body h2{margin:0 0 6px;font-size:21px;color:#0f2740}.dn-qr-flow-body p{margin:0;color:#64748b;font-size:13px}.dn-qr-result{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}.dn-qr-result div{border:1px solid #e2e8f0;border-radius:10px;padding:10px}.dn-qr-result span{display:block;font-size:11px;color:#64748b}.dn-qr-result strong{display:block;font-size:18px;margin-top:3px}.dn-qr-result .ok strong{color:#15803d}.dn-qr-result .bad strong{color:#b42318}.dn-qr-flow-actions{display:flex;gap:10px;justify-content:flex-end;padding:14px 18px;border-top:1px solid #e5e7eb;background:#f8fafc}.dn-qr-flow-actions .btn{min-width:130px}.dn-qr-video-wrap{position:relative;background:#0f172a;aspect-ratio:1/1;overflow:hidden}.dn-qr-video-wrap video{width:100%;height:100%;object-fit:cover}.dn-qr-scan-guide{position:absolute;inset:18%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.18)}.dn-qr-scan-msg{padding:12px 18px;font-size:12px;color:#64748b;text-align:center}@media(max-width:520px){.dn-qr-flow-actions{flex-direction:column-reverse}.dn-qr-flow-actions .btn{width:100%}}`;
- document.head.appendChild(style);
- document.body.insertAdjacentHTML('beforeend',`<div id="dn-qr-success-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body"><div class="dn-qr-success-icon"><i class="ti ti-check"></i></div><h2>Delivery Confirmed</h2><p id="dn-qr-success-text"></p><div class="dn-qr-result"><div class="ok"><span>Accepted</span><strong id="dn-qr-success-accepted">0</strong></div><div class="bad"><span>Rejected</span><strong id="dn-qr-success-rejected">0</strong></div></div></div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="finishQRDeliveryWorkflow()"><i class="ti ti-x"></i> <span id="dn-qr-finish-label">Done</span></button><button class="btn btn-primary" onclick="startDeliveryQRScanner()"><i class="ti ti-scan"></i> Scan Another QR</button></div></div></div><div id="dn-qr-scanner-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body" style="padding-bottom:14px"><h2>Scan Delivery QR</h2><p>Point the camera at the QR code on the next Delivery Note.</p></div><div class="dn-qr-video-wrap"><video id="dn-qr-video" playsinline muted></video><div class="dn-qr-scan-guide"></div></div><div class="dn-qr-scan-msg" id="dn-qr-scan-msg">Starting camera…</div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="stopDeliveryQRScanner()">Cancel</button></div></div></div>`);
-}
-function showQRDeliverySuccess(so,d,deliveryIdx){
- ensureQRWorkflowUI();let a=0,r=0;(d.items||[]).forEach(it=>{a+=deliveryAcceptedQty(d,it);r+=deliveryRejectedQty(d,it)});document.getElementById('dn-qr-success-text').textContent=`${d.dnNo} has been successfully recorded.`;document.getElementById('dn-qr-success-accepted').textContent=formatQuantity(a);document.getElementById('dn-qr-success-rejected').textContent=formatQuantity(r);const finishLabel=document.getElementById('dn-qr-finish-label');if(finishLabel)finishLabel.textContent=isMobileQRWorkflow()?'Close':'Done';const o=document.getElementById('dn-qr-success-overlay');o.dataset.soId=so.id;o.dataset.deliveryIdx=deliveryIdx;o.classList.add('open');
-}
-function isMobileQRWorkflow(){
- return !!(window._mobileQRFlowActive || (window.matchMedia?.('(max-width: 820px)').matches && (window.matchMedia?.('(pointer: coarse)').matches || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent||''))));
-}
-function showMobileQRFinished(opts={}){
- window._mobileQRFlowActive=true;
- window._mobileQRTerminal=true;
- stopDeliveryQRScanner();
- document.getElementById('dn-qr-success-overlay')?.classList.remove('open');
- history.replaceState({},'',location.pathname);
- let o=document.getElementById('dn-qr-finished-overlay');
- if(!o){
-   document.body.insertAdjacentHTML('beforeend',`<div id="dn-qr-finished-overlay"><div class="dn-qr-flow-card"><div class="dn-qr-flow-body"><div id="dn-qr-finished-icon" class="dn-qr-success-icon"><i class="ti ti-check"></i></div><h2 id="dn-qr-finished-title">Delivery Update Completed</h2><p id="dn-qr-finished-text">The delivery update has been saved.</p></div><div class="dn-qr-flow-actions"><button class="btn btn-secondary" onclick="closeMobileQRWorkflow()"><i class="ti ti-x"></i> Close</button><button class="btn btn-primary" onclick="startDeliveryQRScanner()"><i class="ti ti-scan"></i> Scan Another QR</button></div></div></div>`);
-   o=document.getElementById('dn-qr-finished-overlay');
- }
- const cancelled=opts.cancelled===true;
- const icon=document.getElementById('dn-qr-finished-icon'),title=document.getElementById('dn-qr-finished-title'),text=document.getElementById('dn-qr-finished-text');
- if(icon){icon.className=cancelled?'dn-qr-exit-icon':'dn-qr-success-icon';icon.innerHTML=cancelled?'<i class="ti ti-arrow-back-up"></i>':'<i class="ti ti-check"></i>'}
- if(title)title.textContent=cancelled?'Delivery Update Cancelled':'Delivery Update Completed';
- if(text)text.textContent=cancelled?'No delivery changes were saved.':'The delivery update has been saved successfully.';
- o.classList.add('open');
-}
-function closeMobileQRWorkflow(){
- stopDeliveryQRScanner();
- document.getElementById('dn-qr-success-overlay')?.classList.remove('open');
- document.getElementById('dn-qr-scanner-overlay')?.classList.remove('open');
- history.replaceState({},'',location.pathname);
- // A tab opened by the phone Camera app usually cannot be closed by script on iOS.
- // Try once; if Safari blocks it, keep the driver on the controlled exit screen.
- try{window.close()}catch(e){}
- const o=document.getElementById('dn-qr-finished-overlay');
- if(o){
-   const title=document.getElementById('dn-qr-finished-title'),text=document.getElementById('dn-qr-finished-text');
-   if(title)title.textContent='You Can Close This Window';
-   if(text)text.textContent='The QR delivery workflow has ended. Use your browser Close/Done control to close this window.';
-   const actions=o.querySelector('.dn-qr-flow-actions');if(actions)actions.innerHTML='<button class="btn btn-primary" onclick="closeMobileQRWorkflow()"><i class="ti ti-x"></i> Close Window</button>';
-   o.classList.add('open');
- }
-}
-async function cancelDeliveryConfirmation(){
- const m=document.getElementById('dn-confirm-modal');
- if(!m){return}
- const qr=m._entrySource==='qr';
- if(qr && isMobileQRWorkflow()){
-   window._mobileQRFlowActive=true;
-   const ok=await showConfirmAsync({icon:'⚠️',title:'Cancel Delivery Update?',message:'Your changes have not been saved.',confirmText:'Cancel Update',cancelText:'Continue Update',confirmClass:'btn-danger'});
-   if(!ok)return;
-   // Make cancellation terminal BEFORE hiding the editor. Avoid generic modal navigation cleanup.
-   window._mobileQRTerminal=true;
-   showMobileQRFinished({cancelled:true});
-   m.classList.remove('open');
-   window._dnDeepLinkOpened=null;window._dnDeepLinkRouting=null;
-   history.replaceState({},'',location.pathname);
-   setTimeout(()=>{if(window._mobileQRTerminal)showMobileQRFinished({cancelled:true})},0);
-   setTimeout(()=>{if(window._mobileQRTerminal)showMobileQRFinished({cancelled:true})},250);
-   return;
- }
- closeModal('dn-confirm-modal');
-}
-function finishQRDeliveryWorkflow(){
- const success=document.getElementById('dn-qr-success-overlay');
- const soId=success?.dataset.soId,deliveryIdx=Number(success?.dataset.deliveryIdx);
- if(isMobileQRWorkflow()){showMobileQRFinished();return}
- stopDeliveryQRScanner();success?.classList.remove('open');history.replaceState({},'',location.pathname);
- if(soId && Number.isFinite(deliveryIdx)){viewDeliveryNote(soId,deliveryIdx);return}
- showPage('deliverynotes');renderDNPage();
-}
-let _dnQRStream=null,_dnQRScanTimer=null,_dnQRScanGeneration=0,_dnQRStarting=false,_dnQRDecoderPromise=null,_dnQRSessionId=0;
-function _loadDNQRDecoder(){
- if(typeof window.jsQR==='function') return Promise.resolve(window.jsQR);
- if(_dnQRDecoderPromise) return _dnQRDecoderPromise;
- const sources=[
-  'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
-  'https://unpkg.com/jsqr@1.4.0/dist/jsQR.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js'
- ];
- _dnQRDecoderPromise=new Promise((resolve,reject)=>{
-  let i=0;
-  const next=()=>{
-   if(typeof window.jsQR==='function'){resolve(window.jsQR);return}
-   if(i>=sources.length){reject(new Error('QR decoder unavailable'));return}
-   const src=sources[i++],sc=document.createElement('script');
-   sc.src=src;sc.async=true;sc.crossOrigin='anonymous';
-   sc.onload=()=>{if(typeof window.jsQR==='function')resolve(window.jsQR);else next()};
-   sc.onerror=()=>{sc.remove();next()};
-   document.head.appendChild(sc);
-  };next();
- }).catch(err=>{_dnQRDecoderPromise=null;throw err});
- return _dnQRDecoderPromise;
-}
-function _finishDNDeepLinkLoading(){
- document.documentElement.classList.remove('bc-dn-deeplink-loading');
- document.getElementById('bc-dn-deeplink-loader')?.remove();
- document.getElementById('bc-dn-deeplink-style')?.remove();
-}
-
-function stopDeliveryQRScanner(){
- _dnQRScanGeneration++;
- if(_dnQRScanTimer){clearInterval(_dnQRScanTimer);_dnQRScanTimer=null}
- const video=document.getElementById('dn-qr-video');
- if(video){try{video.pause()}catch(e){};try{video.srcObject=null}catch(e){}}
- if(_dnQRStream){_dnQRStream.getTracks().forEach(t=>{try{t.stop()}catch(e){}});_dnQRStream=null}
- _dnQRStarting=false;
- document.getElementById('dn-qr-scanner-overlay')?.classList.remove('open');
-}
-function _extractDeliveryQRToken(raw){
- try{const u=new URL(raw,location.href);return u.searchParams.get('t')||u.searchParams.get('delivery')||''}catch(e){return ''}
-}
-async function startDeliveryQRScanner(){
- if(_dnQRStarting)return;
- window._mobileQRTerminal=false;
- _dnQRStarting=true;
- const sessionId=++_dnQRSessionId;
- // A new scan is a fresh workflow session. Clear the previous deep-link route first so
- // Firebase/render retries cannot reopen the just-completed DN and close the new scanner.
- history.replaceState({},'',location.pathname);
- window._dnDeepLinkOpened=null;window._dnDeepLinkRouting=null;
- // Always release a previous iOS camera session before requesting the next one.
- if(_dnQRScanTimer){clearInterval(_dnQRScanTimer);_dnQRScanTimer=null}
- if(_dnQRStream){_dnQRStream.getTracks().forEach(t=>{try{t.stop()}catch(e){}});_dnQRStream=null}
- ensureQRWorkflowUI();
- document.getElementById('dn-qr-success-overlay')?.classList.remove('open');
- document.getElementById('dn-qr-finished-overlay')?.classList.remove('open');
- const overlay=document.getElementById('dn-qr-scanner-overlay'),video=document.getElementById('dn-qr-video'),msg=document.getElementById('dn-qr-scan-msg');
- try{video.pause()}catch(e){};video.srcObject=null;
- overlay.classList.add('open');msg.textContent='Starting camera…';
- const generation=++_dnQRScanGeneration;
- if(!navigator.mediaDevices?.getUserMedia){msg.textContent='Camera Scanner Unavailable. Use your phone Camera app to scan the Delivery Note QR and open the BizCore link.';_dnQRStarting=false;return}
- try{
-   _dnQRStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
-   if(generation!==_dnQRScanGeneration||sessionId!==_dnQRSessionId){_dnQRStream.getTracks().forEach(t=>t.stop());_dnQRStream=null;_dnQRStarting=false;return}
-   video.srcObject=_dnQRStream;await video.play();
-   let detector=null;
-   if('BarcodeDetector' in window){try{detector=new BarcodeDetector({formats:['qr_code']})}catch(e){detector=null}}
-   const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d',{willReadFrequently:true});
-   if(!detector && typeof window.jsQR!=='function'){
-     msg.textContent='Starting QR scanner…';
-     try{await _loadDNQRDecoder()}catch(e){
-       msg.textContent='QR scanner could not be loaded. Check your connection, or use the phone Camera app to scan the Delivery Note QR.';_dnQRStarting=false;return;
-     }
-   }
-   msg.textContent='Ready — scan the next Delivery Note QR.';_dnQRStarting=false;
-   let busy=false;
-   _dnQRScanTimer=setInterval(async()=>{
-     if(busy||generation!==_dnQRScanGeneration||sessionId!==_dnQRSessionId||video.readyState<2||!video.videoWidth)return;
-     busy=true;
-     try{
-       let raw='';
-       if(detector){
-         const codes=await detector.detect(video);raw=codes?.[0]?.rawValue||'';
-       }else{
-         // Safari/iPhone fallback: decode the live camera frame with jsQR.
-         const max=720,scale=Math.min(1,max/video.videoWidth);canvas.width=Math.max(1,Math.round(video.videoWidth*scale));canvas.height=Math.max(1,Math.round(video.videoHeight*scale));ctx.drawImage(video,0,0,canvas.width,canvas.height);const image=ctx.getImageData(0,0,canvas.width,canvas.height);const code=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'dontInvert'});raw=code?.data||'';
-       }
-       const token=_extractDeliveryQRToken(raw);if(!token)return;
-       stopDeliveryQRScanner();
-       history.replaceState({},'',location.pathname+'?delivery='+encodeURIComponent(token));
-       window._dnDeepLinkOpened=null;window._dnDeepLinkRouting=null;
-       if(!openDNFromDeepLink()) setTimeout(()=>openDNFromDeepLink(),120);
-     }catch(e){}finally{busy=false}
-   },300);
- }catch(e){
-   _dnQRStarting=false;
-   const denied=e?.name==='NotAllowedError'||e?.name==='PermissionDeniedError';
-   msg.textContent=denied?'Camera permission is blocked. Allow camera access in Safari settings and try again.':'Camera could not be opened. Close other camera apps and try again.';
- }
-}
-
 async function confirmDelivery(soId,deliveryIdx){openDeliveryAcceptance(soId,deliveryIdx)}
 function createDeliveryAccessToken(){
  const bytes=new Uint8Array(24);
@@ -10725,13 +10852,21 @@ function createDeliveryAccessToken(){
  return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
 }
 function ensureDeliveryAccessToken(d){
- if(!d) return '';
+ if(!d||d.voided) return '';
  if(!d.deliveryAccessToken){
    d.deliveryAccessToken=createDeliveryAccessToken();
    d.deliveryAccessCreatedAt=new Date().toISOString();
    // Existing DNs receive a token lazily the first time their QR is rendered.
    // Persist it through the existing Firebase salesOrders collection.
-   Promise.resolve(saveSalesOrders()).catch(e=>console.warn('Could not persist delivery access token',e));
+   if(!dnIndependentMode())Promise.resolve(saveSalesOrders()).catch(e=>console.warn('Could not persist delivery access token',e));
+   else{
+    // V260: persist only the token fields; if another session stored one first, use theirs.
+    const local=d.deliveryAccessToken;
+    window.BizCoreDN.service.ensureAccessToken({dnId:d.id,token:local}).then(r=>{
+     if(r.token!==local){d.deliveryAccessToken=r.token;const vm=document.getElementById('dn-print-modal');if(vm?._dnId===d.id)renderDNQRCode(d);}
+     const cached=deliveryNotesCache.find(x=>x.id===d.id);if(cached&&!cached.deliveryAccessToken)cached.deliveryAccessToken=r.token;
+    }).catch(e=>console.warn('Could not persist delivery access token',e));
+   }
  }
  return d.deliveryAccessToken;
 }
@@ -10741,7 +10876,7 @@ function getDNDeepLink(d){
  const base=here.href.substring(0,here.href.lastIndexOf('/')+1);
  return base+'delivery.html?t='+encodeURIComponent(token);
 }
-function renderDNQRCode(d){setTimeout(()=>{const el=document.getElementById('dn-qr-code');if(!el)return;el.innerHTML='';if(window.QRCode){new QRCode(el,{text:getDNDeepLink(d),width:112,height:112,correctLevel:QRCode.CorrectLevel.M})}else{el.innerHTML='<div style="font-size:10px;color:#777;width:112px">QR library unavailable. Use the delivery link from BizCore.</div>'}},0)}
+function renderDNQRCode(d){setTimeout(()=>{const el=document.getElementById('dn-qr-code');if(!el)return;el.innerHTML='';if(d?.voided){el.textContent='VOIDED — QR disabled';return;}if(window.QRCode){new QRCode(el,{text:getDNDeepLink(d),width:112,height:112,correctLevel:QRCode.CorrectLevel.M})}else{el.innerHTML='<div style="font-size:10px;color:#777;width:112px">QR library unavailable. Use the delivery link from BizCore.</div>'}},0)}
 function openDNFromDeepLink(){
  const params=new URLSearchParams(location.search);
  const token=params.get('delivery');
@@ -10751,27 +10886,31 @@ function openDNFromDeepLink(){
  // Authentication and authoritative Firebase SO/DN data must both be ready.
  if(!window.currentUser || !Array.isArray(salesOrders)) return false;
  const hit=allDeliveryNotes().find(x=>token ? x.d.deliveryAccessToken===token : x.d.id===legacyId);
- if(!hit) return false;
+ if(!hit||hit.d.voided) return false;
 
- // v235: QR confirmation is a priority route. Do not render the Delivery Note
- // register/overview first; that work made mobile drivers wait behind unrelated UI.
- // Open the target confirmation directly as soon as authenticated SO/DN data exists.
+ // v128: the QR destination is the exact DN workspace, not merely the DN register.
+ // Render the register only as the background module, then open the requested DN
+ // after that render has completed. Do not mark the deep link as consumed until
+ // the target modal is actually open.
  window._dnDeepLinkRouting=routeKey;
- try{
-   if(isMobileQRWorkflow())window._mobileQRFlowActive=true;
-   if(hit.d.customerConfirmed) viewDeliveryNote(hit.so.id,hit.i);
-   else openDeliveryAcceptance(hit.so.id,hit.i,{source:'qr'});
-   const targetId=hit.d.customerConfirmed?'dn-print-modal':'dn-confirm-modal';
-   const target=document.getElementById(targetId);
-   if(target && target.classList.contains('open')){
-     window._dnDeepLinkOpened=routeKey;
-     _finishDNDeepLinkLoading();
-   }else{
-     window._dnDeepLinkOpened=null;
+ showPage('deliverynotes');
+ setTimeout(()=>{
+   try{
+     if(hit.d.customerConfirmed) viewDeliveryNote(hit.so.id,hit.i);
+     else openDeliveryAcceptance(hit.so.id,hit.i);
+
+     const targetId=hit.d.customerConfirmed?'dn-print-modal':'dn-confirm-modal';
+     const target=document.getElementById(targetId);
+     if(target && target.classList.contains('open')){
+       window._dnDeepLinkOpened=routeKey;
+     }else{
+       // Allow the startup retry loop / Firebase listener to try again.
+       window._dnDeepLinkOpened=null;
+     }
+   }finally{
+     window._dnDeepLinkRouting=null;
    }
- }finally{
-   window._dnDeepLinkRouting=null;
- }
+ },80);
  return true;
 }
 /* ── View / Print Delivery Note v142 ── */
@@ -10819,6 +10958,7 @@ function filterDNConfirmationItems(btn,filter){
   const empty=panel.querySelector('.dn-confirm-empty-filter'); if(empty)empty.classList.toggle('show',visible===0);
 }
 function buildDNConfirmationPanel(d){
+  if(d.voided)return `<section class="dn-confirm-result pending"><div class="dn-confirm-result-head"><h3>Voided Dispatch</h3></div><p class="dn-confirm-result-note">${escapeHtml(d.voidReason||'Dispatch voided')} · ${escapeHtml(d.voidedBy||'')} · ${escapeHtml(d.voidedAt||'')}</p></section>`;
   if(!d.customerConfirmed)return `<section class="dn-confirm-result pending"><div class="dn-confirm-result-head"><div><span class="dn-confirm-result-kicker">Customer acceptance</span><h3><i class="ti ti-clock"></i> Awaiting Delivery Confirmation</h3></div><span class="dn-confirm-result-badge pending">Pending</span></div><p class="dn-confirm-result-note">Customer acceptance and rejection details will appear here after the delivery is confirmed.</p></section>`;
   const sm=dnConfirmationSummary(d), status=getDNStatus(d), cls=status==='Delivered'?'accepted':status==='Rejected'?'rejected':'partial';
   const rows=(d.items||[]).map((it,i)=>{const q=Number(it.qty)||0,a=deliveryAcceptedQty(d,it),r=deliveryRejectedQty(d,it),state=r<=0?'accepted':a<=0||r>=q?'rejected':'partial',label=state==='accepted'?'Accepted':state==='rejected'?'Rejected':'Partial';return `<div class="dn-confirm-line ${state}" data-acceptance-state="${state}"><div class="dn-confirm-line-main"><span class="dn-confirm-line-no">${i+1}</span><div class="dn-confirm-line-desc"><strong>${escapeHtml(it.desc||'—')}</strong><small>${formatQuantity(q)} ${escapeHtml(it.uom||'')}</small></div><div class="dn-confirm-qty accepted ${a<=0?'is-zero':''}"><span>Accepted</span><strong>${formatQuantity(a)}</strong></div><div class="dn-confirm-qty rejected ${r<=0?'is-zero':''}"><span>Rejected</span><strong>${formatQuantity(r)}</strong></div><span class="dn-confirm-line-badge ${state}">${label}</span></div>${r>0?`<div class="dn-confirm-rejection-detail"><span><b>Reason</b>${escapeHtml(it.rejectionReason||'—')}</span><span><b>Disposition</b>${escapeHtml(it.rejectionDisposition||'—')}</span>${it.acceptanceRemarks?`<span class="remarks"><b>Line remarks</b>${escapeHtml(it.acceptanceRemarks)}</span>`:''}</div>`:''}</div>`}).join('');
@@ -10826,14 +10966,16 @@ function buildDNConfirmationPanel(d){
   const acceptedCount=sm.accepted, exceptionCount=sm.partial+sm.rejected;
   return `<section class="dn-confirm-result ${cls}"><div class="dn-confirm-result-head"><div><span class="dn-confirm-result-kicker">Delivery confirmation</span><h3><i class="ti ti-clipboard-check"></i> Customer Acceptance</h3></div><span class="dn-confirm-result-badge ${cls}">${escapeHtml(status)}</span></div><div class="dn-confirm-summary-row dn-confirm-summary-primary"><span class="all"><b>${(d.items||[]).length}</b> Items</span><span class="accepted"><i class="ti ti-circle-check-filled"></i><b>${acceptedCount}</b> Accepted</span>${sm.partial?`<span class="partial"><i class="ti ti-alert-circle-filled"></i><b>${sm.partial}</b> Partial</span>`:''}<span class="rejected"><i class="ti ti-circle-x-filled"></i><b>${sm.rejected}</b> Rejected</span></div><div class="dn-confirm-quick-meta"><div><span>Received by</span><strong>${escapeHtml(d.receivedBy||'—')}</strong></div><div><span>Confirmed</span><strong>${escapeHtml(when)}</strong></div></div><button type="button" class="dn-confirm-toggle" aria-expanded="false" onclick="toggleDNConfirmationDetails(this)"><span>View Details</span><i class="ti ti-chevron-down"></i></button><div class="dn-confirm-details" hidden><div class="dn-confirm-detail-heading"><strong>Item acceptance details</strong><span>${exceptionCount?`${exceptionCount} item${exceptionCount===1?'':'s'} need attention`:'All items accepted'}</span></div><div class="dn-confirm-filterbar"><button type="button" class="dn-confirm-filter active" data-filter="all" onclick="filterDNConfirmationItems(this,'all')">All <b>${(d.items||[]).length}</b></button><button type="button" class="dn-confirm-filter" data-filter="accepted" onclick="filterDNConfirmationItems(this,'accepted')">Accepted <b>${sm.accepted}</b></button><button type="button" class="dn-confirm-filter" data-filter="rejected" onclick="filterDNConfirmationItems(this,'rejected')">Rejected <b>${sm.rejected+sm.partial}</b></button></div><div class="dn-confirm-lines">${rows}</div><div class="dn-confirm-empty-filter">No items in this view.</div><div class="dn-confirm-meta"><div><span>Received By</span><strong>${escapeHtml(d.receivedBy||'—')}</strong></div><div><span>Confirmed By</span><strong>${escapeHtml(d.confirmedBy||'—')}</strong></div><div><span>Confirmed At</span><strong>${escapeHtml(when)}</strong></div>${d.customerRemarks?`<div class="wide"><span>Customer / Delivery Remarks</span><strong>${escapeHtml(d.customerRemarks)}</strong></div>`:''}</div><div class="dn-confirm-return-note"><i class="ti ti-info-circle"></i><span>Rejected quantities are returned to the Sales Order remaining quantity.</span></div></div><div class="dn-acceptance-actions"><button type="button" onclick="openDNAcceptanceChange(window._activeDNView?.soId,window._activeDNView?.deliveryIdx,'correction')"><i class="ti ti-edit-circle"></i> Correct</button><button type="button" onclick="openDNAcceptanceChange(window._activeDNView?.soId,window._activeDNView?.deliveryIdx,'revision')"><i class="ti ti-refresh"></i> Revise</button><button type="button" onclick="toggleDNAcceptanceHistory(this)"><i class="ti ti-history"></i> History</button></div><div class="dn-acceptance-history" hidden>${buildDNAcceptanceHistory(d)}</div></section>`;
 }
-function dnFormatLabel(format){return format==='progress'?'Delivery Progress Note':format==='internal'?'Internal Delivery Copy':'Standard Delivery Note'}
+function dnFormatLabel(format){return format==='accepted-standard'?'Accepted Delivery Note — Standard':format==='accepted-progress'?'Accepted Delivery Note — Progress':format==='progress'?'Original Delivery Note — Progress':format==='internal'?'Internal Delivery Copy':'Original Delivery Note — Standard'}
 function buildDeliveryNoteDocument(so,d,deliveryIdx,format='standard',screenMode=false){
   const cp=dnCompanyProfile(), cust=dnCustomerProfile(so), q=quotations.find(x=>x.id===so.quotationId);
   const logo=cp.logo?`<img src="${cp.logo}" alt="${escapeHtml(cp.name)}" style="max-width:260px;max-height:78px;width:auto;height:auto;object-fit:contain">`:`<div style="font-size:23px;font-weight:900;color:#174b7a">${escapeHtml(cp.name)}</div>${cp.nameAr?`<div dir="rtl" style="font-size:15px;font-weight:700;color:#174b7a;margin-top:3px">${escapeHtml(cp.nameAr)}</div>`:''}`;
   const contact=[cp.pobox?`P.O. Box ${escapeHtml(cp.pobox)}`:'',cp.address?escapeHtml(cp.address):'',cp.phone?`Tel: ${escapeHtml(cp.phone)}`:'',cp.email?escapeHtml(cp.email):'',cp.website?escapeHtml(cp.website):''].filter(Boolean).join('<br>');
-  const progress=format!=='standard';
+  const acceptedCopy=format==='accepted-standard'||format==='accepted-progress';
+  const progress=format==='progress'||format==='accepted-progress'||format==='internal';
   const internal=format==='internal';
-  const rows=(d.items||[]).map((it,i)=>{const pr=dnQtyProgress(so,d,deliveryIdx,it),code=dnItemCode(it,pr.soItem);return `<tr><td>${i+1}</td><td>${escapeHtml(code||'—')}</td><td class="desc">${escapeHtml(it.desc||pr.soItem?.desc||'—')}</td>${progress?`<td class="num">${formatQuantity(pr.ordered)}</td><td class="num">${formatQuantity(pr.previous)}</td>`:''}<td class="num">${formatQuantity(pr.current)}</td>${progress?`<td class="num">${formatQuantity(pr.remaining)}</td>`:''}<td class="num">${escapeHtml(it.uom||pr.soItem?.uom||'—')}</td>${internal?`<td>${escapeHtml(d.customerConfirmed?(Number(it.rejectedQty)>0?(Number(it.acceptedQty)>0?'Partial':'Rejected'):'Accepted'):'In Transit')}</td>`:''}</tr>`}).join('');
+  const printableItems=acceptedCopy?(d.items||[]).filter(it=>deliveryAcceptedQty(d,it)>0):(d.items||[]);
+  const rows=printableItems.map((it,i)=>{const pr=dnQtyProgress(so,d,deliveryIdx,it),code=dnItemCode(it,pr.soItem),acceptedQty=deliveryAcceptedQty(d,it),remaining=roundQtyForUom(Math.max(0,pr.ordered-pr.previous-(acceptedCopy?acceptedQty:pr.current)),it.uom);return `<tr><td>${i+1}</td><td>${escapeHtml(code||'—')}</td><td class="desc">${escapeHtml(it.desc||pr.soItem?.desc||'—')}</td>${progress?`<td class="num">${formatQuantity(pr.ordered)}</td><td class="num">${formatQuantity(pr.previous)}</td>`:''}<td class="num">${formatQuantity(acceptedCopy?deliveryAcceptedQty(d,it):pr.current)}</td>${progress?`<td class="num">${formatQuantity(remaining)}</td>`:''}<td class="num">${escapeHtml(it.uom||pr.soItem?.uom||'—')}</td>${internal?`<td>${escapeHtml(d.customerConfirmed?(deliveryRejectedQty(d,it)>0?(deliveryAcceptedQty(d,it)>0?'Partial':'Rejected'):'Accepted'):'In Transit')}</td>`:''}</tr>`}).join('');
   const th=progress?`<th>#</th><th>Item Code</th><th>Description</th><th class="num">Ordered</th><th class="num">Previous</th><th class="num">This Delivery</th><th class="num">Remaining</th><th class="num">UOM</th>${internal?'<th>Status</th>':''}`:`<th>#</th><th>Item Code</th><th>Description</th><th class="num">Qty</th><th class="num">UOM</th>`;
   const qr=screenMode?'<div id="dn-qr-code" class="dn-doc-qr"></div>':'<div class="dn-doc-qr-slot"></div>';
   const dnScreenStatus=getDNStatus(d);
@@ -10848,27 +10990,183 @@ function buildDeliveryNoteDocument(so,d,deliveryIdx,format='standard',screenMode
   const screenStatus=screenMode?`<div class="dn-screen-status-row"><span class="dn-screen-status ${dnScreenStatusClass}"><span class="dn-screen-status-dot"></span>${escapeHtml(dnScreenStatus)}</span></div>`:'';
   const internalBlock=internal?`<div class="dn-internal"><div><b>Delivery Status</b><span>${escapeHtml(d.status||'—')}</span></div><div><b>Dispatched By</b><span>${escapeHtml(d.dispatchedBy||'—')}</span></div><div><b>Dispatched At</b><span>${d.dispatchedAt?new Date(d.dispatchedAt).toLocaleString():'—'}</span></div><div><b>Confirmed By</b><span>${escapeHtml(d.confirmedBy||'—')}</span></div><div><b>Confirmed At</b><span>${d.confirmedAt?new Date(d.confirmedAt).toLocaleString():'—'}</span></div></div>`:'';
   return `<div class="dn-a4${screenMode?' dn-a4-screen':''}" data-dn-format="${format}"><style>
-  .dn-a4{width:210mm;min-height:297mm;margin:0 auto;background:#fff;padding:12mm 11mm 10mm;font-family:Arial,sans-serif;color:#17324d;font-size:10.5px;box-sizing:border-box}.dn-a4-screen{border:1px solid #8f9aa6;box-shadow:0 4px 18px rgba(15,23,42,.10)}.dn-a4 *{box-sizing:border-box}.dn-head{display:grid;grid-template-columns:1.22fr .95fr 1.05fr;gap:8px;align-items:start;padding-bottom:10px;border-bottom:2px solid #174b7a}.dn-contact{font-size:9.5px;line-height:1.5;color:#50657a;border-left:1px solid #cbd8e5;padding-left:10px}.dn-title-stack{min-width:0;position:relative}.dn-screen-status-row{position:absolute;right:0;top:-29px;height:auto;display:flex;align-items:center;justify-content:flex-end;z-index:2;pointer-events:none}.dn-screen-status{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:9.5px;font-weight:800;line-height:1.35;white-space:nowrap}.dn-screen-status-dot{width:7px;height:7px;border-radius:50%;background:currentColor}.dn-screen-status--awaiting{color:#53657a;background:#edf2f7}.dn-screen-status--confirmation{color:#9a6700;background:#fff2cc}.dn-screen-status--delivered{color:#147a43;background:#dcfce7}.dn-screen-status--partial{color:#6941c6;background:#eee7ff}.dn-screen-status--rejected{color:#b42318;background:#fee4e2}.dn-titlebox{border:1px solid #b9cce0;min-width:0}.dn-titlebox h1{margin:0;padding:8px 10px;font-size:19px;letter-spacing:.35px;color:#174b7a;background:#f7fafc;white-space:nowrap}.dn-titlebox div{padding:7px 10px;border-top:1px solid #d7e1eb}.dn-titlebox small{display:block;text-transform:uppercase;font-weight:800;color:#5f7489;font-size:8px}.dn-titlebox strong{font-size:13px;color:#17324d}.dn-subtitle{margin:5px 0 10px;text-align:right;font-size:8px;letter-spacing:3px;color:#64788c}.dn-two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}.dn-box{border:1px solid #cbd8e5}.dn-box h3{margin:0;background:#f3f7fa;padding:6px 9px;font-size:9px;text-transform:uppercase;color:#174b7a;border-bottom:1px solid #cbd8e5}.dn-box .content{padding:8px 9px;min-height:55px;line-height:1.45}.dn-box.dn-deliver-to{display:flex;flex-direction:column}.dn-box.dn-deliver-to .content{background:#f3f7fa;flex:1;width:100%}.dn-box .content strong{display:block;font-size:11.5px;margin-bottom:2px}.dn-ref{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:9px 0}.dn-ref>div{border:1px solid #cbd8e5;background:#f3f7fa;padding:7px 8px;min-height:43px}.dn-ref small{display:block;font-size:7.5px;font-weight:800;text-transform:uppercase;color:#5e7488;margin-bottom:4px}.dn-ref strong{font-size:10px}.dn-items{width:100%;border-collapse:collapse;margin-top:6px}.dn-items th{background:#174b7a;color:#fff;padding:6px 5px;border:1px solid #174b7a;font-size:8px;text-align:left}.dn-items td{padding:6px 5px;border:1px solid #d6e0e9;color:#263f56;font-size:9px}.dn-items tbody tr:last-child td{border-bottom:1px solid #cbd8e5}.dn-items .desc{min-width:190px}.dn-items .num{text-align:center;white-space:nowrap}.dn-remarks{border:1px solid #cbd8e5;margin-top:10px;padding:8px 9px;min-height:50px}.dn-remarks b{display:block;color:#174b7a;font-size:8px;text-transform:uppercase;margin-bottom:5px}.dn-bottom{display:grid;grid-template-columns:1fr 1fr 118px;gap:10px;margin-top:12px}.dn-sign{border:1px solid #cbd8e5;min-height:118px}.dn-sign h4{margin:0;background:#f3f7fa;padding:6px 8px;font-size:8px;color:#174b7a;text-transform:uppercase;border-bottom:1px solid #cbd8e5}.dn-sign div{padding:8px;line-height:1.8}.dn-line{display:inline-block;border-bottom:1px solid #567;width:130px;height:14px}.dn-doc-qr,.dn-doc-qr-slot{border:1px solid #cbd8e5;width:118px;height:118px;display:flex;align-items:center;justify-content:center;padding:3px}.dn-doc-qr canvas,.dn-doc-qr img{max-width:108px!important;max-height:108px!important}.dn-internal{margin-top:10px;border:1px solid #e1e7ed;display:grid;grid-template-columns:repeat(5,1fr)}.dn-internal>div{padding:6px;border-right:1px solid #e1e7ed}.dn-internal>div:last-child{border-right:0}.dn-internal b{display:block;font-size:7px;color:#6b7e90;text-transform:uppercase;margin-bottom:3px}.dn-internal span{font-size:8px}.dn-foot{margin-top:12px;padding-top:7px;border-top:2px solid #174b7a;display:block;color:#52687b;font-size:8px;line-height:1.45}.dn-foot strong{color:#174b7a;font-size:9px}.dn-format-note{font-size:8px;color:#789;text-align:right;margin-top:3px}.dn-confirm-result{margin-top:12px;border:1px solid #d7e2ec;border-radius:10px;overflow:hidden;background:#fff}.dn-confirm-result-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f7fafc;border-bottom:1px solid #e1e8ef}.dn-confirm-result-kicker{display:block;font-size:7px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:#6b7e90;margin-bottom:2px}.dn-confirm-result h3{margin:0;font-size:11px;color:#174b7a;display:flex;gap:6px;align-items:center}.dn-confirm-result-badge,.dn-confirm-line-badge{display:inline-flex;align-items:center;border-radius:999px;font-weight:800;white-space:nowrap}.dn-confirm-result-badge{padding:5px 9px;font-size:8px}.dn-confirm-result-badge.accepted,.dn-confirm-line-badge.accepted{background:#dcfce7;color:#147a43}.dn-confirm-result-badge.partial,.dn-confirm-line-badge.partial{background:#fff3d6;color:#a15c00}.dn-confirm-result-badge.rejected,.dn-confirm-line-badge.rejected{background:#fee4e2;color:#b42318}.dn-confirm-result-badge.pending{background:#eef2f6;color:#53657a}.dn-confirm-result-note{margin:0;padding:12px;color:#64748b;font-size:9px}.dn-confirm-summary-row{display:flex;gap:6px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid #edf1f5}.dn-confirm-summary-row span{display:inline-flex;gap:4px;align-items:center;padding:4px 7px;border-radius:7px;background:#f1f5f9;font-size:8px}.dn-confirm-summary-row .accepted{background:#e9f9ef;color:#147a43}.dn-confirm-summary-row .partial{background:#fff5df;color:#a15c00}.dn-confirm-summary-row .rejected{background:#fff0ef;color:#b42318}.dn-confirm-lines{padding:4px 12px}.dn-confirm-line{padding:7px 0;border-bottom:1px solid #edf1f5}.dn-confirm-line:last-child{border-bottom:0}.dn-confirm-line-main{display:grid;grid-template-columns:22px minmax(0,1fr) 62px 62px 64px;gap:7px;align-items:center}.dn-confirm-line-no{width:22px;height:22px;display:grid;place-items:center;border-radius:6px;background:#edf4fa;color:#174b7a;font-weight:800}.dn-confirm-line-desc strong{display:block;font-size:8.5px;color:#263f56;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dn-confirm-line-desc small{display:block;font-size:7.5px;color:#789;margin-top:2px}.dn-confirm-qty{padding:4px 6px;border-radius:6px;text-align:center}.dn-confirm-qty span{display:block;font-size:6.5px;text-transform:uppercase;font-weight:800}.dn-confirm-qty strong{font-size:9px}.dn-confirm-qty.accepted{background:#e9f9ef;color:#147a43}.dn-confirm-qty.rejected{background:#fff0ef;color:#b42318}.dn-confirm-line-badge{justify-content:center;padding:4px 6px;font-size:7px}.dn-confirm-rejection-detail{margin:6px 0 0 29px;padding:7px 8px;background:#fff9f2;border-left:3px solid #f59e0b;display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:7.5px}.dn-confirm-rejection-detail span b{display:block;text-transform:uppercase;font-size:6.5px;color:#8a6d1d;margin-bottom:2px}.dn-confirm-rejection-detail .remarks{grid-column:1/-1}.dn-confirm-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#dfe7ee;border-top:1px solid #dfe7ee}.dn-confirm-meta>div{background:#f8fafc;padding:7px 9px}.dn-confirm-meta .wide{grid-column:1/-1}.dn-confirm-meta span{display:block;font-size:6.5px;text-transform:uppercase;font-weight:800;color:#6b7e90;margin-bottom:2px}.dn-confirm-meta strong{font-size:8px;color:#263f56}.dn-confirm-return-note{display:flex;gap:6px;align-items:center;padding:7px 10px;background:#eff6ff;color:#315b7d;font-size:7.5px}.dn-format-note{font-size:8px;color:#789;text-align:right;margin-top:3px}@media print{@page{size:A4 portrait;margin:10mm 11mm 18mm 11mm}
-.ar{font-family:Tahoma,Arial,sans-serif;direction:rtl;unicode-bidi:isolate}.dn-a4{margin:0!important;width:auto!important;height:auto!important;min-height:0!important;padding:0!important;display:block!important;overflow:visible!important;page-break-after:auto!important}.dn-a4-screen{border:0!important;box-shadow:none!important}.dn-box.dn-deliver-to .content{background:#fff}.dn-items{page-break-inside:auto}.dn-items thead{display:table-header-group}.dn-items tfoot{display:table-footer-group}.dn-items tr{break-inside:avoid;page-break-inside:avoid}.dn-items th,.dn-items td{break-inside:avoid;page-break-inside:avoid}.dn-remarks,.dn-internal,.dn-bottom{break-inside:avoid;page-break-inside:avoid}.dn-foot{position:fixed;left:0;right:0;bottom:0;margin:0;padding-top:5px;background:#fff;border-top:1.5px solid #174b7a;z-index:10}.dn-format-note{position:fixed;right:0;bottom:-5mm;margin:0;background:#fff;z-index:10}.dn-screen-status-row{display:none!important}}
-  </style><div class="dn-head"><div>${logo}</div><div class="dn-contact">${contact||'&nbsp;'}</div><div class="dn-title-stack">${screenStatus}<div class="dn-titlebox"><h1>DELIVERY NOTE</h1><div><small>DN No.</small><strong>${escapeHtml(d.dnNo||'—')}</strong></div><div><small>Date</small><strong>${fmtDate(d.date)}</strong></div></div></div></div><div class="dn-subtitle">GOODS DISPATCHED</div>
+  .dn-a4{width:210mm;min-height:297mm;margin:0 auto;background:#fff;padding:12mm 11mm 10mm;font-family:Arial,sans-serif;color:#17324d;font-size:10.5px;box-sizing:border-box}.dn-a4-screen{border:1px solid #8f9aa6;box-shadow:0 4px 18px rgba(15,23,42,.10)}.dn-a4 *{box-sizing:border-box}.dn-head{display:grid;grid-template-columns:1.22fr .95fr 1.05fr;gap:8px;align-items:start;padding-bottom:10px;border-bottom:2px solid #174b7a}.dn-contact{font-size:9.5px;line-height:1.5;color:#50657a;border-left:1px solid #cbd8e5;padding-left:10px}.dn-title-stack{min-width:0;position:relative}.dn-screen-status-row{position:absolute;right:0;top:-29px;height:auto;display:flex;align-items:center;justify-content:flex-end;z-index:2;pointer-events:none}.dn-screen-status{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:9.5px;font-weight:800;line-height:1.35;white-space:nowrap}.dn-screen-status-dot{width:7px;height:7px;border-radius:50%;background:currentColor}.dn-screen-status--awaiting{color:#53657a;background:#edf2f7}.dn-screen-status--confirmation{color:#9a6700;background:#fff2cc}.dn-screen-status--delivered{color:#147a43;background:#dcfce7}.dn-screen-status--partial{color:#6941c6;background:#eee7ff}.dn-screen-status--rejected{color:#b42318;background:#fee4e2}.dn-titlebox{border:1px solid #b9cce0;min-width:0}.dn-titlebox h1{margin:0;padding:8px 10px;font-size:19px;letter-spacing:.35px;color:#174b7a;background:#f7fafc;white-space:nowrap}.dn-titlebox div{padding:7px 10px;border-top:1px solid #d7e1eb}.dn-titlebox small{display:block;text-transform:uppercase;font-weight:800;color:#5f7489;font-size:8px}.dn-titlebox strong{font-size:13px;color:#17324d}.dn-subtitle{margin:5px 0 10px;text-align:right;font-size:8px;letter-spacing:3px;color:#64788c}.dn-two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}.dn-box{border:1px solid #cbd8e5}.dn-box h3{margin:0;background:#f3f7fa;padding:6px 9px;font-size:9px;text-transform:uppercase;color:#174b7a;border-bottom:1px solid #cbd8e5}.dn-box .content{padding:8px 9px;min-height:55px;line-height:1.45}.dn-box.dn-deliver-to{display:flex;flex-direction:column}.dn-box.dn-deliver-to .content{background:#f3f7fa;flex:1;width:100%}.dn-box .content strong{display:block;font-size:11.5px;margin-bottom:2px}.dn-ref{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:9px 0}.dn-ref>div{border:1px solid #cbd8e5;background:#f3f7fa;padding:7px 8px;min-height:43px}.dn-ref small{display:block;font-size:7.5px;font-weight:800;text-transform:uppercase;color:#5e7488;margin-bottom:4px}.dn-ref strong{font-size:10px}.dn-items{width:100%;border-collapse:collapse;margin-top:6px}.dn-items th{background:#174b7a;color:#fff;padding:6px 5px;border:1px solid #174b7a;font-size:8px;text-align:left}.dn-items td{padding:6px 5px;border:1px solid #d6e0e9;color:#263f56;font-size:9px}.dn-items tbody tr:last-child td{border-bottom:1px solid #cbd8e5}.dn-items .desc{min-width:190px}.dn-items .num{text-align:center;white-space:nowrap}.dn-remarks{border:1px solid #cbd8e5;margin-top:10px;padding:8px 9px;min-height:50px}.dn-remarks b{display:block;color:#174b7a;font-size:8px;text-transform:uppercase;margin-bottom:5px}.dn-bottom{display:grid;grid-template-columns:1fr 1fr 118px;gap:10px;margin-top:12px}.dn-sign{border:1px solid #cbd8e5;min-height:118px}.dn-sign h4{margin:0;background:#f3f7fa;padding:6px 8px;font-size:8px;color:#174b7a;text-transform:uppercase;border-bottom:1px solid #cbd8e5}.dn-sign div{padding:8px;line-height:1.8}.dn-line{display:inline-block;border-bottom:1px solid #567;width:130px;height:14px}.dn-doc-qr,.dn-doc-qr-slot{border:1px solid #cbd8e5;width:118px;height:118px;display:flex;align-items:center;justify-content:center;padding:3px}.dn-doc-qr canvas,.dn-doc-qr img{max-width:108px!important;max-height:108px!important}.dn-internal{margin-top:10px;border:1px solid #e1e7ed;display:grid;grid-template-columns:repeat(5,1fr)}.dn-internal>div{padding:6px;border-right:1px solid #e1e7ed}.dn-internal>div:last-child{border-right:0}.dn-internal b{display:block;font-size:7px;color:#6b7e90;text-transform:uppercase;margin-bottom:3px}.dn-internal span{font-size:8px}.dn-foot{margin-top:12px;padding-top:7px;border-top:2px solid #174b7a;display:block;color:#52687b;font-size:8px;line-height:1.45}.dn-foot strong{color:#174b7a;font-size:9px}.dn-confirm-result{margin-top:12px;border:1px solid #d7e2ec;border-radius:10px;overflow:hidden;background:#fff}.dn-confirm-result-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f7fafc;border-bottom:1px solid #e1e8ef}.dn-confirm-result-kicker{display:block;font-size:7px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:#6b7e90;margin-bottom:2px}.dn-confirm-result h3{margin:0;font-size:11px;color:#174b7a;display:flex;gap:6px;align-items:center}.dn-confirm-result-badge,.dn-confirm-line-badge{display:inline-flex;align-items:center;border-radius:999px;font-weight:800;white-space:nowrap}.dn-confirm-result-badge{padding:5px 9px;font-size:8px}.dn-confirm-result-badge.accepted,.dn-confirm-line-badge.accepted{background:#dcfce7;color:#147a43}.dn-confirm-result-badge.partial,.dn-confirm-line-badge.partial{background:#fff3d6;color:#a15c00}.dn-confirm-result-badge.rejected,.dn-confirm-line-badge.rejected{background:#fee4e2;color:#b42318}.dn-confirm-result-badge.pending{background:#eef2f6;color:#53657a}.dn-confirm-result-note{margin:0;padding:12px;color:#64748b;font-size:9px}.dn-confirm-summary-row{display:flex;gap:6px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid #edf1f5}.dn-confirm-summary-row span{display:inline-flex;gap:4px;align-items:center;padding:4px 7px;border-radius:7px;background:#f1f5f9;font-size:8px}.dn-confirm-summary-row .accepted{background:#e9f9ef;color:#147a43}.dn-confirm-summary-row .partial{background:#fff5df;color:#a15c00}.dn-confirm-summary-row .rejected{background:#fff0ef;color:#b42318}.dn-confirm-lines{padding:4px 12px}.dn-confirm-line{padding:7px 0;border-bottom:1px solid #edf1f5}.dn-confirm-line:last-child{border-bottom:0}.dn-confirm-line-main{display:grid;grid-template-columns:22px minmax(0,1fr) 62px 62px 64px;gap:7px;align-items:center}.dn-confirm-line-no{width:22px;height:22px;display:grid;place-items:center;border-radius:6px;background:#edf4fa;color:#174b7a;font-weight:800}.dn-confirm-line-desc strong{display:block;font-size:8.5px;color:#263f56;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dn-confirm-line-desc small{display:block;font-size:7.5px;color:#789;margin-top:2px}.dn-confirm-qty{padding:4px 6px;border-radius:6px;text-align:center}.dn-confirm-qty span{display:block;font-size:6.5px;text-transform:uppercase;font-weight:800}.dn-confirm-qty strong{font-size:9px}.dn-confirm-qty.accepted{background:#e9f9ef;color:#147a43}.dn-confirm-qty.rejected{background:#fff0ef;color:#b42318}.dn-confirm-line-badge{justify-content:center;padding:4px 6px;font-size:7px}.dn-confirm-rejection-detail{margin:6px 0 0 29px;padding:7px 8px;background:#fff9f2;border-left:3px solid #f59e0b;display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:7.5px}.dn-confirm-rejection-detail span b{display:block;text-transform:uppercase;font-size:6.5px;color:#8a6d1d;margin-bottom:2px}.dn-confirm-rejection-detail .remarks{grid-column:1/-1}.dn-confirm-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#dfe7ee;border-top:1px solid #dfe7ee}.dn-confirm-meta>div{background:#f8fafc;padding:7px 9px}.dn-confirm-meta .wide{grid-column:1/-1}.dn-confirm-meta span{display:block;font-size:6.5px;text-transform:uppercase;font-weight:800;color:#6b7e90;margin-bottom:2px}.dn-confirm-meta strong{font-size:8px;color:#263f56}.dn-confirm-return-note{display:flex;gap:6px;align-items:center;padding:7px 10px;background:#eff6ff;color:#315b7d;font-size:7.5px}@media print{@page{size:A4 portrait;margin:10mm 11mm 18mm 11mm}
+.ar{font-family:Tahoma,Arial,sans-serif;direction:rtl;unicode-bidi:isolate}.dn-a4{margin:0!important;width:auto!important;height:auto!important;min-height:0!important;padding:0!important;display:block!important;overflow:visible!important;page-break-after:auto!important}.dn-a4-screen{border:0!important;box-shadow:none!important}.dn-box.dn-deliver-to .content{background:#fff}.dn-items{page-break-inside:auto}.dn-items thead{display:table-header-group}.dn-items tfoot{display:table-footer-group}.dn-items tr{break-inside:avoid;page-break-inside:avoid}.dn-items th,.dn-items td{break-inside:avoid;page-break-inside:avoid}.dn-remarks,.dn-internal,.dn-bottom{break-inside:avoid;page-break-inside:avoid}.dn-foot{position:fixed;left:0;right:0;bottom:0;margin:0;padding-top:5px;background:#fff;border-top:1.5px solid #174b7a;z-index:10}.dn-screen-status-row{display:none!important}}
+  </style><div class="dn-head"><div>${logo}</div><div class="dn-contact">${contact||'&nbsp;'}</div><div class="dn-title-stack">${screenStatus}<div class="dn-titlebox"><h1>DELIVERY NOTE</h1>${acceptedCopy?`<div style="font-size:9px;font-weight:700;color:#147a43">ACCEPTED / CUSTOMER COPY${(d.acceptanceHistory||[]).length>1?` · REVISION ${(d.acceptanceHistory||[]).length-1}`:''}</div>`:''}<div><small>DN No.</small><strong>${escapeHtml(d.dnNo||'—')}</strong></div><div><small>Date</small><strong>${fmtDate(d.date)}</strong></div></div></div></div><div class="dn-subtitle">${acceptedCopy?'CUSTOMER ACCEPTED ITEMS ONLY':'GOODS DISPATCHED'}</div>
   <div class="dn-two"><div class="dn-box"><h3>Customer</h3><div class="content"><strong>${escapeHtml(cust.name)}</strong>${cust.address?escapeHtml(cust.address):''}${cust.contact?`<br>Attn: ${escapeHtml(cust.contact)}`:''}${cust.phone?`<br>Tel: ${escapeHtml(cust.phone)}`:''}</div></div><div class="dn-box dn-deliver-to"><h3>Deliver To</h3><div class="content"><strong>${escapeHtml(cust.name)}</strong>${cust.address?escapeHtml(cust.address):''}</div></div></div>
   <div class="dn-ref"><div><small>Sales Order No.</small><strong>${escapeHtml(so.soNo||'—')}</strong></div><div><small>Customer PO No.</small><strong>${escapeHtml(so.poNo||'—')}</strong></div><div><small>Quotation</small><strong>${escapeHtml(q?.qno||'—')}</strong></div><div><small>Vehicle / AWB</small><strong>${escapeHtml(d.vehicle||'—')}</strong></div></div>
   <table class="dn-items"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>
   <div class="dn-remarks"><b>Remarks</b>${escapeHtml(d.remarks||'—')}</div>${internalBlock}
   <div class="dn-bottom"><div class="dn-sign"><h4>Prepared / Dispatched By</h4><div>Name: ${escapeHtml(d.dispatchedBy||'________________')}<br>Date: ${fmtDate(d.date)}<br>Signature: <span class="dn-line"></span></div></div><div class="dn-sign"><h4>Received By (Customer)</h4><div>Name: ${escapeHtml(d.receivedBy||'________________')}<br>Date: ${d.confirmedAt?new Date(d.confirmedAt).toLocaleDateString('en-GB'):'________________'}<br>Signature: <span class="dn-line"></span></div></div>${qr}</div>
-  <div class="dn-foot"><div>${[cp.pobox?`P.O. Box ${escapeHtml(cp.pobox)}`:'',cp.address?escapeHtml(cp.address):'',cp.phone?`Tel: ${escapeHtml(cp.phone)}`:'',cp.email?escapeHtml(cp.email):'',cp.website?escapeHtml(cp.website):''].filter(Boolean).join(' &nbsp; | &nbsp; ')}</div></div>${format==='standard'?'':`<div class="dn-format-note">${dnFormatLabel(format)}</div>`}</div>`;
+  <div class="dn-foot"><div>${[cp.pobox?`P.O. Box ${escapeHtml(cp.pobox)}`:'',cp.address?escapeHtml(cp.address):'',cp.phone?`Tel: ${escapeHtml(cp.phone)}`:'',cp.email?escapeHtml(cp.email):'',cp.website?escapeHtml(cp.website):''].filter(Boolean).join(' &nbsp; | &nbsp; ')}</div></div></div>`;
+}
+/* V255 — controlled dispatch correction / void, only before acceptance. */
+function dnDispatchEditable(d){return !!d&&!d.customerConfirmed&&!d.voided;}
+function dnDispatchSnapshot(d){return {date:d.date,vehicle:d.vehicle||'',remarks:d.remarks||'',items:JSON.parse(JSON.stringify(d.items||[]))};}
+function openDNDispatchAction(mode){
+ const vm=document.getElementById('dn-print-modal'),so=salesOrders.find(x=>x.id===vm?._soId),d=dnForModal(vm);
+ if(!dnDispatchEditable(d)){showToast('Dispatch can only be changed before customer acceptance.','warning');return;}
+ const modal=document.getElementById('dn-dispatch-action-modal');if(!modal)return;
+ modal._soId=so.id;modal._deliveryIdx=vm._deliveryIdx;modal._dnId=d.id;modal._dnRevision=d.revision;modal._mode=mode;modal._transactionOperationId='';
+ document.getElementById('dn-dispatch-action-title').textContent=(mode==='void'?'Void Dispatch':'Correct Dispatch')+' — '+d.dnNo;
+ document.getElementById('dn-dispatch-action-reason').value='';clearFieldValidation(document.getElementById('dn-dispatch-action-reason'));
+ const editor=document.getElementById('dn-dispatch-action-editor');editor.style.display=mode==='correct'?'block':'none';
+ if(mode==='correct'){
+  document.getElementById('dn-dispatch-edit-date').value=d.date||'';
+  document.getElementById('dn-dispatch-edit-vehicle').value=d.vehicle||'';
+  document.getElementById('dn-dispatch-edit-remarks').value=d.remarks||'';
+  const body=document.getElementById('dn-dispatch-edit-lines');
+  body.innerHTML=(so.items||[]).map((it,i)=>{
+   const idx=it.origIdx!==undefined?it.origIdx:i;
+   const existing=(d.items||[]).find(x=>(x.origIdx!==undefined?x.origIdx:x.soIdx)===idx);
+   const acceptedOther=(so.deliveries||[]).filter(x=>x!==d&&!x.voided&&x.customerConfirmed).reduce((v,x)=>v+(x.items||[]).filter(y=>(y.origIdx!==undefined?y.origIdx:y.soIdx)===idx).reduce((n,y)=>n+deliveryAcceptedQty(x,y),0),0);
+   const transitOther=(so.deliveries||[]).filter(x=>x!==d&&!x.voided&&!x.customerConfirmed).reduce((v,x)=>v+(x.items||[]).filter(y=>(y.origIdx!==undefined?y.origIdx:y.soIdx)===idx).reduce((n,y)=>n+(Number(y.qty)||0),0),0);
+   const available=roundQtyForUom(Math.max(0,(Number(it.qty)||0)-acceptedOther-transitOther),it.uom);
+   return `<tr><td>${escapeHtml(it.desc||'—')}</td><td>${formatQuantity(available)} ${escapeHtml(it.uom||'')}</td><td><input type="number" data-so-idx="${i}" data-orig-idx="${idx}" min="0" max="${available}" step="${qtyStep(it.uom)}" value="${existing?existing.qty:0}" style="width:95px;padding:7px;border:1px solid #cbd5e1;border-radius:6px"></td></tr>`;
+  }).join('');
+ }
+ modal.style.zIndex='6700';openModalWithSize('dn-dispatch-action-modal');
+}
+async function saveDNDispatchAction(){
+ if(deliveryWritesFrozen())return;
+ const modal=document.getElementById('dn-dispatch-action-modal'),so=salesOrders.find(x=>x.id===modal?._soId),d=dnForModal(modal);
+ if(modal?._saving)return;
+ if(!dnDispatchEditable(d)){showToast('This DN has already been accepted, voided or changed.','error');return;}
+ const reasonField=document.getElementById('dn-dispatch-action-reason');const reason=reasonField.value.trim();if(reason.length<5){showValidationDialog('Reason required','Please enter a reason for this dispatch correction or void (at least 5 characters).','dn-dispatch-action-reason','Enter at least 5 characters');return;}
+ const mode=modal._mode,old=dnDispatchSnapshot(d),now=new Date().toISOString();
+ let next=null;
+ if(mode==='correct'){
+  const date=document.getElementById('dn-dispatch-edit-date').value;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){showToast('Enter a valid dispatch date.','warning');return;}
+  const items=[];let invalid=false;
+  document.querySelectorAll('#dn-dispatch-edit-lines input[data-so-idx]').forEach(input=>{
+   const i=Number(input.dataset.soIdx),src=so.items[i],max=Number(input.max),value=Number(input.value);
+   if(!Number.isFinite(value)||value<0||value>max+0.0001||Math.abs(roundQtyForUom(value,src.uom)-value)>0.0001){invalid=true;return;}
+   if(value>0){const idx=Number(input.dataset.origIdx),existing=(d.items||[]).find(it=>(it.origIdx!==undefined?it.origIdx:it.soIdx)===idx);items.push({...src,...(existing||{}),soIdx:i,origIdx:idx,qty:roundQtyForUom(value,src.uom),acceptedQty:null,rejectedQty:null});}
+  });
+  if(invalid||!items.length){showToast('Enter valid dispatch quantities; at least one item is required.','warning');return;}
+  next={date,vehicle:document.getElementById('dn-dispatch-edit-vehicle').value.trim(),remarks:document.getElementById('dn-dispatch-edit-remarks').value.trim(),items};
+ }else if(mode!=='void')return;
+ const ok=await new Promise(resolve=>showConfirm({
+  icon:mode==='void'?'⚠️':'📝',
+  title:mode==='void'?'Void Delivery Note?':'Confirm Dispatch Correction',
+  message:mode==='void'?'This will void the dispatch without deleting its history.':'Save the corrected dispatch details? The original values will remain available in Dispatch History.',
+  details:{'Delivery Note':escapeHtml(d.dnNo),'Reason':escapeHtml(reason)},
+  confirmText:mode==='void'?'Yes, Void Dispatch':'Confirm & Save',
+  cancelText:'Cancel',
+  confirmClass:mode==='void'?'btn-danger':'btn-primary',
+  onConfirm:()=>resolve(true),onCancel:()=>resolve(false)
+ }));
+ if(!ok)return;
+ if(modal._saving)return;
+ modal._saving=true;
+ const saveButton=modal.querySelector('.modal-footer .btn-primary');
+ const controls=[...modal.querySelectorAll('button,input,textarea,select')];
+ const originalDisabled=controls.map(el=>el.disabled);
+ controls.forEach(el=>el.disabled=true);
+ if(saveButton){saveButton.dataset.originalHtml=saveButton.innerHTML;saveButton.innerHTML='<i class="ti ti-loader-2"></i> Saving…';}
+ modal.classList.add('dn-dispatch-saving');
+ if(dnIndependentMode()){
+  try{
+   if(!requireOnlineForDeliveryNotes())return;
+   const operationId=modal._transactionOperationId||(modal._transactionOperationId=newDeliveryOperationId(mode,d.id));
+   const svc=window.BizCoreDN.service;
+   let r;
+   const expectedRevision=Number.isInteger(modal._dnRevision)?modal._dnRevision:d.revision; // the version the user was looking at
+   if(mode==='void')r=await svc.voidDispatch({operationId,dnId:d.id,salesOrderId:so.id,expectedRevision,reason});
+   else{
+    const lines=[];
+    for(const it of next.items){
+     const lineId=so.items?.[it.soIdx]?.lineId;
+     if(!lineId)throw new Error('This Sales Order has no stable line IDs. The administrator must complete the V260 migration.');
+     lines.push({lineId,qty:it.qty});
+    }
+    r=await svc.correctDispatch({operationId,dnId:d.id,salesOrderId:so.id,expectedRevision,reason,date:next.date,vehicle:next.vehicle,remarks:next.remarks,lines});
+   }
+   closeModal('dn-dispatch-action-modal');
+   showCommittedDeliveryNote(so.id,r.dn);
+   showToast(r.alreadyApplied?'This change was already saved.':mode==='void'?'Delivery Note voided':'Dispatch corrected',r.alreadyApplied?'info':'success');
+  }catch(e){console.error('[BizCore DN dispatch change]',e);showToast(deliveryErrorMessage(e),'error','Not Saved');if(e&&e.code==='stale-revision'){modal._saving=false;closeModal('dn-dispatch-action-modal');reopenDeliveryNoteById(so.id,d.id);}}
+  finally{
+   modal._saving=false;controls.forEach((el,i)=>el.disabled=originalDisabled[i]);
+   if(saveButton){saveButton.innerHTML=saveButton.dataset.originalHtml||'Confirm & Save';delete saveButton.dataset.originalHtml;}
+   modal.classList.remove('dn-dispatch-saving');
+  }
+  return;
+ }
+ const previous={...d,items:JSON.parse(JSON.stringify(d.items||[])),dispatchHistory:JSON.parse(JSON.stringify(d.dispatchHistory||[]))};
+ d.dispatchHistory=d.dispatchHistory||[];
+ d.dispatchHistory.push({type:mode,actor:deliveryActor(),at:now,reason,before:old});
+ if(mode==='void'){d.voided=true;d.status='Voided';d.voidedAt=now;d.voidedBy=deliveryActor();d.voidReason=reason;d.deliveryAccessToken=null;}
+ else{Object.assign(d,next);d.lastDispatchCorrectionAt=now;d.lastDispatchCorrectionBy=deliveryActor();}
+ let savedOk=false;
+ try{
+  const saved=await saveSalesOrders();
+  if(saved!==true)throw new Error('Database did not confirm the save');
+  savedOk=true;
+ }catch(e){
+  console.error('[BizCore DN dispatch save]',{dnNo:d.dnNo,mode,error:e});
+  Object.keys(d).forEach(k=>delete d[k]);Object.assign(d,previous);
+  // Restore only local draft cache; do not start a second slow network write on failure.
+  try{localStorage.setItem('dtq_salesorders',JSON.stringify(salesOrders));}catch(_e){}
+  showToast('Dispatch change was not saved. Please check your connection and try again.','error');
+ }finally{
+  modal._saving=false;
+  controls.forEach((el,i)=>el.disabled=originalDisabled[i]);
+  if(saveButton){saveButton.innerHTML=saveButton.dataset.originalHtml||'Confirm & Save';delete saveButton.dataset.originalHtml;}
+  modal.classList.remove('dn-dispatch-saving');
+ }
+ if(!savedOk)return;
+ closeModal('dn-dispatch-action-modal');showToast(mode==='void'?'Delivery Note voided':'Dispatch corrected','success');renderSOPage();renderDNPage();viewDeliveryNote(so.id,modal._deliveryIdx);
+}
+/* V260: readable dispatch history (was raw JSON). Shows who/when/why and a before→after table. */
+function dnHistoryWhen(at){const t=at?new Date(at):null;return t&&!isNaN(t)?t.toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):(at||'—');}
+function dnHistoryLineKey(it,i){return it.soLineId||(it.origIdx!==undefined&&it.origIdx!==null?'o'+it.origIdx:'')||String(it.desc||i);}
+// Migrated V259 snapshots identify lines by origIdx, V260 snapshots by soLineId: fall back to item description + UOM.
+function dnHistoryFindRow(rows,keys,it,i){const k=dnHistoryLineKey(it,i);if(rows.has(k))return k;const alt=keys.find(x=>{const r=rows.get(x);return r.desc===it.desc&&(r.uom||'')===(it.uom||'')&&(r.a===undefined||r.b===undefined);});return alt||k;}
+function dnHistoryTable(r){
+ const before=r.before&&Array.isArray(r.before.items)?r.before.items:null,after=r.after&&Array.isArray(r.after.items)?r.after.items:null;
+ const isVoid=r.type==='void'||r.kind==='void';
+ const keys=[],rows=new Map();
+ (before||[]).forEach((it,i)=>{const k=dnHistoryFindRow(rows,keys,it,i);if(!rows.has(k)){keys.push(k);rows.set(k,{desc:it.desc,uom:it.uom});}rows.get(k).b=Number(it.qty)||0;});
+ if(!isVoid)(after||[]).forEach((it,i)=>{const k=dnHistoryFindRow(rows,keys,it,i);if(!rows.has(k)){keys.push(k);rows.set(k,{desc:it.desc,uom:it.uom});}rows.get(k).a=Number(it.qty)||0;});
+ const head=[];
+ const fld=(label,f)=>{const b=r.before?.[f]??'',a=r.after?.[f]??'';if(r.before&&r.after&&!isVoid&&String(b)!==String(a))head.push(`<div><span style="color:#64748b">${label}:</span> ${escapeHtml(String(b)||'—')} → <strong>${escapeHtml(String(a)||'—')}</strong></div>`);};
+ fld('Dispatch date','date');fld('Vehicle','vehicle');fld('Remarks','remarks');
+ if(!r.before&&r.after){if(r.after.date)head.push(`<div><span style="color:#64748b">Dispatch date:</span> ${escapeHtml(r.after.date)}</div>`);if(r.after.vehicle)head.push(`<div><span style="color:#64748b">Vehicle:</span> ${escapeHtml(r.after.vehicle)}</div>`);}
+ const cell='padding:5px 8px;border-bottom:1px solid #eef2f7';
+ const showBefore=!!before,showAfter=!isVoid&&!!after;
+ const body=keys.map(k=>{const x=rows.get(k);const changed=showBefore&&showAfter&&(x.b||0)!==(x.a||0);return `<tr${changed?' style="background:#fff7ed"':''}><td style="${cell}">${escapeHtml(x.desc||'—')}</td>${showBefore?`<td style="${cell};text-align:right">${x.b===undefined?'—':formatQuantity(x.b)}</td>`:''}${showAfter?`<td style="${cell};text-align:right;font-weight:${changed?700:400}">${x.a===undefined?'—':formatQuantity(x.a)}</td>`:''}<td style="${cell}">${escapeHtml(x.uom||'')}</td></tr>`;}).join('');
+ const th='padding:5px 8px;text-align:left;font-size:11px;color:#64748b;border-bottom:1px solid #cbd5e1';
+ const table=keys.length?`<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px"><thead><tr><th style="${th}">Item</th>${showBefore?`<th style="${th};text-align:right">${isVoid?'Qty released':'Before'}</th>`:''}${showAfter?`<th style="${th};text-align:right">${showBefore?'After':'Qty dispatched'}</th>`:''}<th style="${th}">UOM</th></tr></thead><tbody>${body}</tbody></table>`:'';
+ return (head.length?`<div style="font-size:12px;margin-top:6px">${head.join('')}</div>`:'')+table;
+}
+function openDNDispatchHistory(){
+ const vm=document.getElementById('dn-print-modal'),d=dnForModal(vm);if(!d)return;
+ const records=dnIndependentMode()?(vm._independentAudit?.dnId===d.id?vm._independentAudit.dispatch:[]):(d.dispatchHistory||[]);
+ if(!records.length){showToast('No dispatch corrections or void actions recorded.','info');return;}
+ const badge=t=>t==='void'?'#fee2e2;color:#b91c1c':t==='dispatch'?'#dcfce7;color:#166534':'#ffedd5;color:#9a3412';
+ const box=document.getElementById('dn-dispatch-history-body');box.innerHTML=records.map((r,i)=>{const t=r.type||r.kind||'correct';const label=r.label||(t==='void'?'Dispatch voided':t==='dispatch'?'Dispatched':'Dispatch corrected');return `<div style="border-bottom:1px solid #e2e8f0;padding:12px 0"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${i+1}. <span style="padding:2px 8px;border-radius:10px;font-size:12px;background:${badge(t)}">${escapeHtml(label)}</span></strong><span style="font-size:12px;color:#64748b">${escapeHtml(dnHistoryWhen(r.at))}</span></div><div style="font-size:12px;color:#475569;margin-top:4px">By ${escapeHtml(r.actor||'—')}${r.migrated?' · <em>migrated from V259</em>':''}</div><div style="font-size:12px;margin-top:2px"><span style="color:#64748b">Reason:</span> ${escapeHtml(r.reason||'—')}</div>${dnHistoryTable(r)}</div>`;}).join('');
+ const modal=document.getElementById('dn-dispatch-history-modal');modal.style.zIndex='6700';openModalWithSize('dn-dispatch-history-modal');
 }
 function viewDeliveryNote(soId, deliveryIdx) {
   const so=salesOrders.find(x=>x.id===soId);if(!so)return;const d=so.deliveries?.[deliveryIdx];if(!d)return;
-  const m=document.getElementById('dn-print-modal');if(m){m._soId=soId;m._deliveryIdx=deliveryIdx;m._printFormat='standard'}
-  const btn=document.getElementById('dn-open-confirm-btn');if(btn){btn.style.display='inline-flex';btn.disabled=false;btn.classList.toggle('btn-success',!d.customerConfirmed);btn.classList.toggle('btn-secondary',!!d.customerConfirmed);btn.innerHTML=d.customerConfirmed?'<i class="ti ti-clipboard-check"></i><span>View Acceptance</span>':'<i class="ti ti-device-mobile-check"></i><span>Delivery Confirmation</span>'}
-  document.getElementById('dn-print-title').textContent=d.dnNo;
+  const m=document.getElementById('dn-print-modal');if(m){m._soId=soId;m._deliveryIdx=deliveryIdx;m._dnId=d.id;m._printFormat='standard'}
+  const btn=document.getElementById('dn-open-confirm-btn');if(btn){btn.style.display=d.voided?'none':'inline-flex';btn.disabled=false;btn.classList.toggle('btn-success',!d.customerConfirmed);btn.classList.toggle('btn-secondary',!!d.customerConfirmed);btn.innerHTML=d.customerConfirmed?'<i class="ti ti-clipboard-check"></i><span>View Acceptance</span>':'<i class="ti ti-device-mobile-check"></i><span>Delivery Confirmation</span>'}
+  document.getElementById('dn-print-title').textContent=d.dnNo+(d.voided?' — VOID':'');
+  const tools=document.getElementById('dn-dispatch-tools');if(tools)tools.style.display=(!d.customerConfirmed&&!d.voided)?'inline-flex':'none';
+  const hist=document.getElementById('dn-dispatch-history-btn');if(hist)hist.style.display=dnIndependentMode()?'none':(d.dispatchHistory||[]).length?'inline-flex':'none';
   window._activeDNView={soId:so.id,deliveryIdx};document.getElementById('dn-print-body').innerHTML=`<div class="dn-view-workspace"><div class="dn-view-document">${buildDeliveryNoteDocument(so,d,deliveryIdx,'standard',true)}</div><aside class="dn-view-acceptance" aria-label="Delivery confirmation">${buildDNConfirmationPanel(d)}</aside></div>`;
   renderDNQRCode(d);openModalWithSize('dn-print-modal');
+  if(m)m._independentAudit=null;
+  void loadIndependentDNAudit(soId,d.id);
 }
 function openDNFormatDialog(action='print'){
   const src=document.getElementById('dn-print-modal'),dlg=document.getElementById('dn-format-modal');if(!src||!dlg)return;
-  dlg._soId=src._soId;dlg._deliveryIdx=src._deliveryIdx;dlg._action=action;
+  dlg._soId=src._soId;dlg._deliveryIdx=src._deliveryIdx;dlg._dnId=src._dnId;dlg._action=action;
+  const so=salesOrders.find(x=>x.id===dlg._soId),delivery=dnForModal(dlg);
+  const acceptedAvailable=!delivery?.voided&&!!delivery?.customerConfirmed&&(delivery.items||[]).some(it=>deliveryAcceptedQty(delivery,it)>0);
+  ['accepted-standard','accepted-progress'].forEach(format=>{const input=document.getElementById('dn-format-'+format),option=document.getElementById('dn-format-'+format+'-option');if(input)input.disabled=!acceptedAvailable;if(option){option.style.opacity=acceptedAvailable?'1':'0.55';option.title=acceptedAvailable?'':'Available after confirmation when at least one item is accepted';}});
   const std=document.getElementById('dn-format-standard');if(std)std.checked=true;
   // The format picker is a child action of the DN viewer and must always sit above it.
   // Keep the DN viewer open behind the picker so Cancel returns to the same document.
@@ -10877,7 +11175,9 @@ function openDNFormatDialog(action='print'){
 }
 function continueDNFormat(){
   const dlg=document.getElementById('dn-format-modal'),format=document.querySelector('input[name="dn-print-format"]:checked')?.value||'standard';
-  const so=salesOrders.find(x=>x.id===dlg?._soId),d=so?.deliveries?.[dlg?._deliveryIdx];if(!so||!d){showToast('Unable to prepare Delivery Note','error');return}
+  const so=salesOrders.find(x=>x.id===dlg?._soId),d=dnForModal(dlg);if(!so||!d){showToast('Unable to prepare Delivery Note','error');return}
+  if(d.voided){showToast('Voided Delivery Notes cannot be printed.','warning');return;}
+  if((format==='accepted-standard'||format==='accepted-progress')&&(!d.customerConfirmed||!(d.items||[]).some(it=>deliveryAcceptedQty(d,it)>0))){showToast('Accepted Delivery Note requires confirmed accepted items','warning');return;}
   closeModal('dn-format-modal');printDeliveryNote(format,so,d,dlg._deliveryIdx);
 }
 function openSOFromDNView(){
@@ -10890,6 +11190,7 @@ function openSOFromDNView(){
 function openDeliveryConfirmationFromDNView(){
   const viewModal=document.getElementById('dn-print-modal');const soId=viewModal?._soId,deliveryIdx=viewModal?._deliveryIdx;if(soId==null||deliveryIdx==null){showToast('Unable to identify this Delivery Note','error');return}
   const so=salesOrders.find(x=>x.id===soId),d=so?.deliveries?.[deliveryIdx];
+  if(d?.voided){showToast('This Delivery Note has been voided.','warning');return;}
   if(d?.customerConfirmed){
     const panel=document.querySelector('#dn-print-body .dn-confirm-result');
     const toggle=panel?.querySelector('.dn-confirm-toggle');
@@ -10906,29 +11207,44 @@ function printDeliveryNote(format='standard',soArg=null,dArg=null,idxArg=null) {
   const vm=document.getElementById('dn-print-modal');
   const so=soArg||salesOrders.find(x=>x.id===vm?._soId);
   const idx=(idxArg!==null&&idxArg!==undefined)?idxArg:vm?._deliveryIdx;
-  const d=dArg||so?.deliveries?.[idx];if(!so||!d)return;
+  const d=dArg||so?.deliveries?.[idx];if(!so||!d)return;if(d.voided){showToast('Voided Delivery Notes cannot be printed as active dispatches.','warning');return;}
+  if(d.voided){showToast('Voided Delivery Notes cannot be printed.','warning');return;}
+  if((format==='accepted-standard'||format==='accepted-progress')&&(!d.customerConfirmed||!(d.items||[]).some(it=>deliveryAcceptedQty(d,it)>0))){showToast('No confirmed accepted quantities available to print','warning');return;}
   let html=buildDeliveryNoteDocument(so,d,idx,format,false);
   const qrCanvas=document.querySelector('#dn-qr-code canvas'),qrImg=document.querySelector('#dn-qr-code img');
   const qrSrc=qrCanvas?qrCanvas.toDataURL('image/png'):(qrImg?.src||'');
   if(qrSrc)html=html.replace('<div class="dn-doc-qr-slot"></div>',`<div class="dn-doc-qr-slot"><img src="${qrSrc}" alt="Delivery QR" style="width:108px;height:108px"></div>`);
   const cust=dnCustomerProfile(so);
   const baseName=[dnSafeFilePart(d.dnNo||'Delivery Note'),dnSafeFilePart(cust?.name)].filter(Boolean).join(' - ');
-  const printTitle=baseName||'Delivery Note';
+  const printTitle=(baseName||'Delivery Note')+((format==='accepted-standard'||format==='accepted-progress')?' - Accepted - '+(format==='accepted-progress'?'Progress':'Standard'):'');
   const w=window.open('','_blank');if(!w){showToast('Please allow pop-ups to print the Delivery Note','warning');return}
   const safeTitle=escapeHtml(printTitle);
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeTitle}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>${html}<scr`+`ipt>(function(){var returned=false;var wantedTitle=${JSON.stringify(printTitle)};function keepTitle(){try{document.title=wantedTitle;}catch(e){}}function backToBizCore(){if(returned)return;returned=true;try{if(window.opener&&!window.opener.closed){window.opener.focus();}}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},80);}window.addEventListener('beforeprint',keepTitle);window.addEventListener('afterprint',backToBizCore);window.onload=function(){keepTitle();requestAnimationFrame(function(){requestAnimationFrame(function(){keepTitle();setTimeout(function(){keepTitle();window.print();},180);});});};})();</scr`+`ipt></body></html>`);w.document.close();
 }
 
 /* ── Create Invoice / Partial Invoicing (V229) ── */
+/** V260: the Sales Order ROW an item belongs to. DN items carry the quotation index in origIdx, which
+ *  differs from the SO row when an SO contains only some quotation lines — so link by stable line ID,
+ *  then by SO row, and only then by origIdx (for invoices created before V260, origIdx held the SO row). */
+function soRowOfItem(so,it,kind){
+  const items=so.items||[];
+  if(it&&it.soLineId){const r=items.findIndex(x=>x.lineId===it.soLineId);if(r>=0)return r;}
+  if(it&&it.soIdx!==undefined&&it.soIdx!==null&&items[Number(it.soIdx)])return Number(it.soIdx);
+  if(kind==='dn'&&it&&it.origIdx!==undefined&&it.origIdx!==null){const r=items.findIndex((x,i)=>(x.origIdx!==undefined&&x.origIdx!==null?Number(x.origIdx):i)===Number(it.origIdx));if(r>=0)return r;}
+  if(it&&it.origIdx!==undefined&&it.origIdx!==null)return Number(it.origIdx);
+  return null;
+}
+/** True while some accepted quantity on this SO has not been invoiced yet. */
+function soHasInvoiceableQty(so){return invoiceAvailableLines(so).some(x=>x.availableQty>0.001);}
 function invoiceAcceptedQtyMap(so){
   const map={};
-  (so.deliveries||[]).forEach(d=>{if(!d.customerConfirmed)return;(d.items||[]).forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;if(idx==null)return;map[idx]=roundQty((map[idx]||0)+deliveryAcceptedQty(d,it));});});
+  (so.deliveries||[]).forEach(d=>{if(!d.customerConfirmed||d.voided)return;(d.items||[]).forEach(it=>{const idx=soRowOfItem(so,it,'dn');if(idx==null)return;map[idx]=roundQty((map[idx]||0)+deliveryAcceptedQty(d,it));});});
   return map;
 }
 function invoicePreviouslyInvoicedQtyMap(so){
   const map={};
   (so.invoices||[]).forEach(inv=>{
-    if(Array.isArray(inv.items)&&inv.items.length){inv.items.forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;if(idx==null)return;map[idx]=roundQty((map[idx]||0)+(Number(it.qty)||0));});}
+    if(Array.isArray(inv.items)&&inv.items.length){inv.items.forEach(it=>{const idx=soRowOfItem(so,it,'invoice');if(idx==null)return;map[idx]=roundQty((map[idx]||0)+(Number(it.qty)||0));});}
     else { // Backward compatibility: invoices created before partial invoicing represented the full SO.
       (so.items||[]).forEach((it,i)=>{map[i]=roundQty((map[i]||0)+(Number(it.qty)||0));});
     }
@@ -10937,7 +11253,7 @@ function invoicePreviouslyInvoicedQtyMap(so){
 }
 function invoiceAvailableLines(so){
   const accepted=invoiceAcceptedQtyMap(so), invoiced=invoicePreviouslyInvoicedQtyMap(so);
-  return (so.items||[]).map((it,i)=>{const ordered=Number(it.qty)||0,a=Math.min(ordered,accepted[i]||0),iv=Math.min(ordered,invoiced[i]||0),available=roundQtyForUom(Math.max(0,a-iv),it.uom);return {...it,origIdx:i,acceptedQty:a,invoicedQty:iv,availableQty:available,invoiceQty:available};});
+  return (so.items||[]).map((it,i)=>{const ordered=Number(it.qty)||0,a=Math.min(ordered,accepted[i]||0),iv=Math.min(ordered,invoiced[i]||0),available=roundQtyForUom(Math.max(0,a-iv),it.uom);return {...it,origIdx:i,soIdx:i,soLineId:it.lineId||'',acceptedQty:a,invoicedQty:iv,availableQty:available,invoiceQty:available};});
 }
 function invoiceLineVatRate(so,it){const r=Number(it.vatRate);return Number.isFinite(r)?r:Number(so.vatRate||0.15);}
 function recalcInvoiceSummary(){
@@ -10962,7 +11278,7 @@ function openCreateInvoice(soId) {
 async function saveInvoice() {
   const modal=document.getElementById('so-invoice-modal'),soId=modal._soId,so=salesOrders.find(x=>x.id===soId);if(!so)return;
   const date=document.getElementById('inv-date').value;if(!date){showToast('Please enter invoice date','error');return;}
-  const items=[];(modal._invoiceLines||[]).forEach((it,i)=>{let qty=roundQtyForUom(document.getElementById('inv-qty-'+i)?.value,it.uom);qty=Math.max(0,Math.min(it.availableQty,qty));if(qty>0){const up=Number(it.up)||0,subtotal=Math.round(qty*up*100)/100,vatRate=invoiceLineVatRate(so,it),vat=Math.round(subtotal*vatRate*100)/100;items.push({origIdx:it.origIdx,desc:it.desc||'',uom:it.uom||'',qty,up,vatRate,subtotal,vat,total:Math.round((subtotal+vat)*100)/100});}});
+  const items=[];(modal._invoiceLines||[]).forEach((it,i)=>{let qty=roundQtyForUom(document.getElementById('inv-qty-'+i)?.value,it.uom);qty=Math.max(0,Math.min(it.availableQty,qty));if(qty>0){const up=Number(it.up)||0,subtotal=Math.round(qty*up*100)/100,vatRate=invoiceLineVatRate(so,it),vat=Math.round(subtotal*vatRate*100)/100;items.push({origIdx:it.origIdx,soIdx:it.soIdx,soLineId:it.soLineId||'',desc:it.desc||'',uom:it.uom||'',qty,up,vatRate,subtotal,vat,total:Math.round((subtotal+vat)*100)/100});}});
   if(!items.length){showToast('Enter at least one invoice quantity','error');return;}
   // Recheck availability at save time to protect against duplicate/parallel invoicing.
   const latest=invoiceAvailableLines(so);for(const row of items){const avail=latest.find(x=>x.origIdx===row.origIdx)?.availableQty||0;if(row.qty>avail+0.001){showToast('Available quantity changed. Please reopen the invoice screen and try again.','error');return;}}
@@ -11836,7 +12152,7 @@ function handleOperationalDNEvent(e){
 }
 function refreshOpenDNViewById(ids){
   const modal=document.getElementById('dn-print-modal');if(!modal?.classList.contains('open'))return;
-  const so=salesOrders.find(x=>x.id===modal._soId), d=so?.deliveries?.[modal._deliveryIdx];
+  const so=salesOrders.find(x=>x.id===modal._soId), d=dnForModal(modal);
   if(d && ids.includes(d.id)) setTimeout(()=>viewDeliveryNote(modal._soId,modal._deliveryIdx),0);
 }
 const BC_NOTIFICATION_KEY='bizcore_notifications_v2';
@@ -11883,7 +12199,7 @@ function toggleBizCoreNotificationRead(id){
 function openBizCoreNotification(id){
  const list=loadBizCoreNotifications(),n=list.find(x=>x.id===id);if(!n)return;
  n.read=true;saveBizCoreNotifications(list);refreshTopbarNotifications();renderAllBizCoreNotifications();closeTopbarMenus();closeAllBizCoreNotifications();
- if(n.type==='delivery'&&n.soId){showPage('deliverynotes');setTimeout(()=>viewDeliveryNote(n.soId,n.deliveryIdx),80)}
+ if(n.type==='delivery'&&n.soId){showPage('deliverynotes');setTimeout(()=>{const so=salesOrders.find(x=>x.id===n.soId);const idx=n.dnId?(so?.deliveries||[]).findIndex(d=>d.id===n.dnId):n.deliveryIdx;if(idx>=0)viewDeliveryNote(n.soId,idx);else showToast('This Delivery Note is no longer available.','info')},80)}
 }
 function bizCoreNotificationTime(value){
  if(!value)return '';
@@ -11943,7 +12259,7 @@ function handleRemoteDNEvents(events){
 }
 function refreshOpenDNViewFromRealtime(events){
  const modal=document.getElementById('dn-print-modal');if(!modal?.classList.contains('open'))return;
- const hit=events.find(e=>e.soId===modal._soId && e.deliveryIdx===modal._deliveryIdx);
+ const hit=events.find(e=>e.soId===modal._soId && (modal._dnId?e.d?.id===modal._dnId:e.deliveryIdx===modal._deliveryIdx));
  if(hit)setTimeout(()=>viewDeliveryNote(hit.soId,hit.deliveryIdx),0);
 }
 function refreshTopbarNotifications(){
