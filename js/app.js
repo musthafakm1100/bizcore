@@ -5286,7 +5286,9 @@ async function saveQuotation(mode='save') {
     const prodId = tr.dataset.prodId || '';
     const rowImage = tr.dataset.image || '';
     const matchedProduct = !textarea ? (products.find(p => (prodId && p.id===prodId) || (code && p.code===code) || (desc && p.name===desc)) || null) : null;
-    const image = rowImage || (matchedProduct && matchedProduct.image ? matchedProduct.image : '');
+    // Lines keep only a picture LINK; an embedded "data:" picture would bloat the document (shown from the product instead).
+    const linkOnly = v => (typeof v === 'string' && !/^data:/i.test(v)) ? v : '';
+    const image = linkOnly(rowImage) || linkOnly(matchedProduct && matchedProduct.image);
     if(desc||qty||up) items.push({lineType:'item',code,brand,model,desc,specs,qty,uom:sel?.value||'Pcs',up,type:(textarea?'contracting':currentQuoteType),rowKind,prodId,image});
   });
   const qno=finalQno;
