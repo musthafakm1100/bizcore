@@ -23,13 +23,14 @@
  *   5. Accepted quantity may never fall below the quantity invoiced by delivery invoices
  *      (enforced by the Delivery Note service).
  */
-import { ERR as DN_ERR, DeliveryError, roundQty, soLineIndex, isSafeId, operationKey } from './delivery-core.mjs?v=264';
+import { ERR as DN_ERR, DeliveryError, roundQty, soLineIndex, isSafeId, operationKey } from './delivery-core.mjs?v=264.7';
 
 export const INVOICE_COLLECTIONS = Object.freeze({
   invoices: 'customerInvoices',
   creditNotes: 'creditNotes',
   invoiceEvents: 'invoiceEvents',      // customerInvoices/{id}/invoiceEvents/{eventId}
   creditNoteEvents: 'creditNoteEvents', // creditNotes/{id}/creditNoteEvents/{eventId}
+  zohoNumbers: 'invoiceZohoNumbers',    // V264.7: one document per Zoho invoice number → no duplicates
 });
 export const INVOICE_SCHEMA_VERSION = 1;
 export const INVOICE_TYPES = Object.freeze({ delivery: 'delivery', order: 'order', advance: 'advance' });
@@ -50,7 +51,16 @@ export const ERR = Object.freeze({
   DEDUCTION: 'invalid-deduction',
   PERMISSION: 'not-permitted',
   OVER_CREDIT: 'over-credit',
+  DUPLICATE_ZOHO: 'duplicate-zoho-number',
 });
+/** V264.7: Zoho invoice number as compared for duplicates (case, spaces ignored). */
+export function normalizeZohoNo(v){ return String(v == null ? '' : v).normalize('NFKC').toUpperCase().replace(/\s+/g, ''); }
+/** Firestore document ID for a Zoho number: letters, digits and '-' kept, anything else as _xxxx (hex). */
+export function zohoNoKey(v){
+  const n = normalizeZohoNo(v);
+  if (!n) return '';
+  return 'z_' + Array.from(n).map(ch => /[A-Z0-9-]/.test(ch) ? ch : '_' + ch.codePointAt(0).toString(16).padStart(4, '0')).join('');
+}
 export const MONEY_EPSILON = 0.005;
 export const QTY_EPSILON = 1e-6;
 

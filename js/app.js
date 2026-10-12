@@ -10051,7 +10051,7 @@ function renderSOCreateItems(items,currentByOrig={}){
       <input type="checkbox" class="so-item-check" id="soc-chk-${i}" ${checked?'checked':''} onchange="soCalcSummary()">
       <div><div style="font-weight:600;color:#0f172a">${escapeHtml(it.desc||'—')}</div>${it.brand||it.model?`<div style="font-size:11px;color:var(--gray)">${escapeHtml([it.brand,it.model].filter(Boolean).join(' / '))}</div>`:''}</div>
       <div class="so-num">${formatQtyForUom(it.origQty,it.uom)}</div><div class="so-num so-muted">${formatQtyForUom(it.orderedQty||0,it.uom)}</div>
-      <div><input type="number" class="so-qty-input" id="soc-qty-${i}" value="${qty}" min="${qtyMin(it.uom)}" max="${it.remainingQty}" step="${qtyStep(it.uom)}" oninput="soCalcSummary()"></div>
+      <div><input type="number" class="so-qty-input bc-spin" id="soc-qty-${i}" value="${qty}" min="${qtyMin(it.uom)}" max="${it.remainingQty}" step="${qtyStep(it.uom)}" oninput="soCalcSummary()"></div>
       <div class="so-num so-remain" id="soc-rem-${i}">${formatQtyForUom(after,it.uom)}</div><div>${escapeHtml(it.uom||'—')}</div>
       <div class="so-num">${documentMoney('salesOrder','unitPrice',parseFloat(it.up)||0)}</div><div class="so-num" style="font-weight:600;color:var(--blue)" id="soc-tot-${i}">—</div>
     </div>`}).join('');
@@ -10673,7 +10673,7 @@ function openRecordDelivery(soId) {
   const remaining=(so.items||[]).map((it,i)=>{const idx=it.origIdx!==undefined?it.origIdx:i;const rem=roundQtyForUom(Math.max(0,(Number(it.qty)||0)-(accepted[idx]||0)-(transit[idx]||0)),it.uom);return {...it,soIdx:i,origIdx:idx,acceptedQty:accepted[idx]||0,remainingQty:rem}}).filter(it=>it.remainingQty>0);
   if(!remaining.length){showToast('No quantity is available for dispatch','warning');return;}
   const modal=document.getElementById('so-delivery-modal');modal._soId=soId;modal._remainingItems=remaining;modal._saveOperationId='';
-  document.getElementById('dn-items-list').innerHTML=remaining.map((it,i)=>`<tr><td class="center">${i+1}</td><td class="inv-item-description">${escapeHtml(it.desc||'—')}</td><td class="center">${it.qty}</td><td class="center">${it.acceptedQty}</td><td class="center"><input class="so-qty-input" id="dn-qty-${i}" type="number" value="${it.remainingQty}" min="0" max="${it.remainingQty}" step="${qtyStep(it.uom)}" oninput="updateDNRemaining(${i})"></td><td class="center"><strong id="dn-rem-${i}">0</strong></td><td class="center">${escapeHtml(it.uom||'—')}</td></tr>`).join('');
+  document.getElementById('dn-items-list').innerHTML=remaining.map((it,i)=>`<tr><td class="center">${i+1}</td><td class="inv-item-description">${escapeHtml(it.desc||'—')}</td><td class="center">${it.qty}</td><td class="center">${it.acceptedQty}</td><td class="center"><input class="so-qty-input bc-spin" id="dn-qty-${i}" type="number" value="${it.remainingQty}" min="0" max="${it.remainingQty}" step="${qtyStep(it.uom)}" oninput="updateDNRemaining(${i})"></td><td class="center"><strong id="dn-rem-${i}">0</strong></td><td class="center">${escapeHtml(it.uom||'—')}</td></tr>`).join('');
   openModalWithSize('so-delivery-modal');
 }
 function updateDNRemaining(i){const m=document.getElementById('so-delivery-modal'),it=(m._remainingItems||[])[i];if(!it)return;let q=roundQtyForUom(document.getElementById('dn-qty-'+i)?.value,it.uom);q=Math.max(0,Math.min(q,it.remainingQty));document.getElementById('dn-rem-'+i).textContent=roundQtyForUom(it.remainingQty-q,it.uom);}
@@ -11097,7 +11097,7 @@ function openDNDispatchAction(mode){
    const acceptedOther=(so.deliveries||[]).filter(x=>x!==d&&!x.voided&&x.customerConfirmed).reduce((v,x)=>v+(x.items||[]).filter(y=>(y.origIdx!==undefined?y.origIdx:y.soIdx)===idx).reduce((n,y)=>n+deliveryAcceptedQty(x,y),0),0);
    const transitOther=(so.deliveries||[]).filter(x=>x!==d&&!x.voided&&!x.customerConfirmed).reduce((v,x)=>v+(x.items||[]).filter(y=>(y.origIdx!==undefined?y.origIdx:y.soIdx)===idx).reduce((n,y)=>n+(Number(y.qty)||0),0),0);
    const available=roundQtyForUom(Math.max(0,(Number(it.qty)||0)-acceptedOther-transitOther),it.uom);
-   return `<tr><td>${escapeHtml(it.desc||'—')}</td><td>${formatQuantity(available)} ${escapeHtml(it.uom||'')}</td><td><input type="number" data-so-idx="${i}" data-orig-idx="${idx}" min="0" max="${available}" step="${qtyStep(it.uom)}" value="${existing?existing.qty:0}" style="width:95px;padding:7px;border:1px solid #cbd5e1;border-radius:6px"></td></tr>`;
+   return `<tr><td>${escapeHtml(it.desc||'—')}</td><td>${formatQuantity(available)} ${escapeHtml(it.uom||'')}</td><td><input type="number" class="bc-num-input bc-spin" data-so-idx="${i}" data-orig-idx="${idx}" min="0" max="${available}" step="${qtyStep(it.uom)}" value="${existing?existing.qty:0}" aria-label="Corrected quantity"></td></tr>`;
   }).join('');
  }
  modal.style.zIndex='6700';openModalWithSize('dn-dispatch-action-modal');
@@ -11363,7 +11363,7 @@ function openCreateInvoice(soId, opts) {
   const lines=invoiceAvailableLines(so),availableLines=lines.filter(x=>x.availableQty>0.001);
   const today=new Date().toISOString().split('T')[0],dueDate=new Date();dueDate.setDate(dueDate.getDate()+14);
   document.getElementById('inv-modal-title').textContent='Create Invoice — '+so.soNo;document.getElementById('inv-date').value=today;document.getElementById('inv-zoho').value='';document.getElementById('inv-due').value=dueDate.toISOString().split('T')[0];document.getElementById('inv-notes').value='';
-  const body=document.getElementById('inv-items-list');body.innerHTML=availableLines.map((it,i)=>`<tr><td>${i+1}</td><td class="inv-item-description">${escapeHtml(it.desc||'—')}</td><td>${formatQuantity(it.acceptedQty)}</td><td>${formatQuantity(it.invoicedQty)}</td><td class="inv-available">${formatQuantity(it.availableQty)}</td><td>${escapeHtml(it.uom||'—')}</td><td>${documentMoney('customerInvoice','unitPrice',Number(it.up)||0)}</td><td><input class="inv-qty-input" id="inv-qty-${i}" type="number" min="0" max="${it.availableQty}" step="${qtyStep(it.uom)}" value="${it.availableQty}" oninput="recalcInvoiceSummary()"></td><td class="inv-line-amount" id="inv-line-amount-${i}">—</td></tr>`).join('');
+  const body=document.getElementById('inv-items-list');body.innerHTML=availableLines.map((it,i)=>`<tr><td>${i+1}</td><td class="inv-item-description">${escapeHtml(it.desc||'—')}</td><td>${formatQuantity(it.acceptedQty)}</td><td>${formatQuantity(it.invoicedQty)}</td><td class="inv-available">${formatQuantity(it.availableQty)}</td><td>${escapeHtml(it.uom||'—')}</td><td>${documentMoney('customerInvoice','unitPrice',Number(it.up)||0)}</td><td><input class="inv-qty-input bc-spin" id="inv-qty-${i}" type="number" min="0" max="${it.availableQty}" step="${qtyStep(it.uom)}" value="${it.availableQty}" oninput="recalcInvoiceSummary()"></td><td class="inv-line-amount" id="inv-line-amount-${i}">—</td></tr>`).join('');
   document.getElementById('inv-empty-note').hidden=availableLines.length>0;document.querySelector('#so-invoice-modal .inv-items-table-wrap').style.display=availableLines.length?'block':'none';
   const modal=document.getElementById('so-invoice-modal');modal._soId=soId;modal._invoiceLines=availableLines;modal._invoiceTotals={subtotal:0,vat:0,total:0};openModalWithSize('so-invoice-modal');recalcInvoiceSummary();
 }
@@ -13987,7 +13987,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1)');
+console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS

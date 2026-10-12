@@ -18,6 +18,17 @@
 .inv-input-prefix .bc-num-input{max-width:none;padding-left:34px!important}
 .inv-input-prefix span{position:absolute;left:10px;color:#64748b;font-size:11.5px;font-weight:700;pointer-events:none}
 
+/* ── Desktop-style spinner (V264.7): small up/down arrows inside quantity fields (input.bc-spin) ── */
+.bc-spin-wrap{position:relative;display:inline-block;vertical-align:middle;width:100%;max-width:120px;min-width:76px}
+.bc-spin-wrap.bc-spin-narrow{max-width:100px;width:100px}
+.bc-spin-wrap>input{width:100%!important;max-width:none!important;min-width:0!important;padding-right:28px!important;box-sizing:border-box}
+.bc-spin-arrows{position:absolute;top:3px;bottom:3px;right:3px;width:20px;display:flex;flex-direction:column;gap:2px}
+.bc-spin-arrows button{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:0;margin:0;border:0;border-radius:4px;background:#e2ecfb;color:#1d4ed8;cursor:pointer;transition:background .12s}
+.bc-spin-arrows button:hover{background:#c7dbfb}.bc-spin-arrows button:active{background:#a9c6f7}
+.bc-spin-arrows svg{width:8px;height:5px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.bc-spin-wrap>input:disabled+.bc-spin-arrows,.bc-spin-wrap>input[readonly]+.bc-spin-arrows{display:none}
+.bc-spin-wrap>input:disabled,.bc-spin-wrap>input[readonly]{padding-right:10px!important}
+
 /* ── Invoice / credit note workspace (follows Create Sales Order) ── */
 .inv-workspace [hidden]{display:none!important}
 .inv-workspace .modal-body{display:flex;flex-direction:column}
@@ -268,3 +279,15 @@ label.inv-line-row{cursor:pointer;margin:0;text-transform:none;letter-spacing:0;
 #inv-view-modal .inv-view-cn .qv-doc-node.current strong{color:#7a1a12}
 @media(max-width:1120px){#inv-view-modal .inv-view-workspace{grid-template-columns:minmax(0,1fr) 300px}}
 @media(max-width:900px){#inv-view-modal .inv-view-workspace{display:flex;flex-direction:column}#inv-view-modal .qv-erp-panel{position:static;width:100%}#inv-view-modal .dn-view-document{overflow-x:auto;justify-content:flex-start}}
+
+/* V264.7: mandatory-field message and the "what is still needed" checklist in the entry footers */
+.inv-workspace input.is-invalid{border-color:#dc2626!important;box-shadow:0 0 0 3px rgba(220,38,38,.12)!important}
+.inv-field-msg{margin-top:4px;font-size:11.5px;font-weight:600;color:#b91c1c;display:flex;align-items:center;gap:5px}
+.inv-ready{margin-right:auto;display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;font-size:12px;color:#475569;min-width:0}
+.inv-ready-lead{font-weight:700;color:#334155}
+.inv-ready-item{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:999px;border:1px solid #fde68a;background:#fffbeb;color:#92400e;font-weight:600}
+.inv-ready-item b{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:10.5px;background:#f59e0b;color:#fff}
+.inv-ready-item.ok{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
+.inv-ready-item.ok b{background:#16a34a}
+.inv-ready-done{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:#166534}
+@media(max-width:700px){.inv-ready{flex-basis:100%;margin-right:0}}

@@ -20,7 +20,7 @@
 <link href="css/masters.css?v=245" rel="stylesheet"/>
 <link href="css/administration-typography.css?v=247" rel="stylesheet"/>
 <link href="css/numbering-controls.css?v=248" rel="stylesheet"/>
-<link href="css/invoicing.css?v=264.6" rel="stylesheet"/>
+<link href="css/invoicing.css?v=264.7" rel="stylesheet"/>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
 .quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
@@ -2153,12 +2153,12 @@ document.addEventListener('error', function(e) {
 <div class="toast" id="toast"></div>
 <!-- Firebase: loaded as module, exposes window.FB then loads app.js -->
 <script type="module">
-import { createDeliveryService, loadDeliveryEvents } from './js/delivery-service.mjs?v=264';
-import * as DNCore from './js/delivery-core.mjs?v=264';
-import * as LockCore from './js/lock-service.mjs?v=264';
-import * as InvCore from './js/invoice-core.mjs?v=264';
-import { createInvoiceService } from './js/invoice-service.mjs?v=264';
-import { createNumbering } from './js/numbering.mjs?v=264';
+import { createDeliveryService, loadDeliveryEvents } from './js/delivery-service.mjs?v=264.7';
+import * as DNCore from './js/delivery-core.mjs?v=264.7';
+import * as LockCore from './js/lock-service.mjs?v=264.7';
+import * as InvCore from './js/invoice-core.mjs?v=264.7';
+import { createInvoiceService } from './js/invoice-service.mjs?v=264.7';
+import { createNumbering } from './js/numbering.mjs?v=264.7';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator }
@@ -3044,12 +3044,12 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script') && !document.getElementById('bizcore-invoicing-script')) {
     const inv = document.createElement('script');
     inv.id  = 'bizcore-invoicing-script';
-    inv.src = 'js/invoicing.js?v=264.6';
+    inv.src = 'js/invoicing.js?v=264.7';
     const start = () => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=264.6';
+      s.src = 'js/app.js?v=264.7';
       document.body.appendChild(s);
     };
     inv.onload = start;

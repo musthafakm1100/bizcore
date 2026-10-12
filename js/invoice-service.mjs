@@ -15,11 +15,12 @@ import {
   INVOICE_COLLECTIONS, INVOICE_SCHEMA_VERSION, INVOICE_TYPES, ERR, BILLING_SETTINGS_PATH, PERMISSION_LEVELS,
   invoiceIdForOperation, creditNoteIdForOperation, effectiveBillingSettings, permitted, permissionFor,
   priceGoodsLines, deductionLimits, checkDeduction, allocateDeduction, priceAdvance, applyInvoiceToLedger, buildCreditNote, r2,
-} from './invoice-core.mjs?v=264';
+  zohoNoKey,
+} from './invoice-core.mjs?v=264.7';
 import {
   COLLECTIONS, SCHEMA_VERSION, DeliveryError, isSafeId, eventIdForOperation, emptyLedger, requireDate, requireReason, cleanText, assertSize,
-} from './delivery-core.mjs?v=264';
-import { LOCK_COLLECTION, LOCK_TYPES, lockId, lockHeldBy } from './lock-service.mjs?v=264';
+} from './delivery-core.mjs?v=264.7';
+import { LOCK_COLLECTION, LOCK_TYPES, lockId, lockHeldBy } from './lock-service.mjs?v=264.7';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
 const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, details); };
@@ -43,6 +44,7 @@ export function createInvoiceService(fs, options = {}) {
     invoice: id => doc(db, INVOICE_COLLECTIONS.invoices, id),
     invoiceEvent: (invId, id) => doc(db, INVOICE_COLLECTIONS.invoices, invId, INVOICE_COLLECTIONS.invoiceEvents, id),
     creditNote: id => doc(db, INVOICE_COLLECTIONS.creditNotes, id),
+    zohoNo: key => doc(db, INVOICE_COLLECTIONS.zohoNumbers, key),
     creditNoteEvent: (cnId, id) => doc(db, INVOICE_COLLECTIONS.creditNotes, cnId, INVOICE_COLLECTIONS.creditNoteEvents, id),
     counter: key => doc(db, COLLECTIONS.counters, key),
     lock: soId => doc(db, LOCK_COLLECTION, lockId(LOCK_TYPES.salesOrder, soId)),
@@ -113,16 +115,22 @@ export function createInvoiceService(fs, options = {}) {
     const date = requireDate(input.date);
     const dueDate = input.dueDate ? requireDate(input.dueDate) : '';
     const reason = type === INVOICE_TYPES.order ? requireReason(input.reason) : cleanText(input.reason, 1000);
+    const zohoNo = cleanText(input.zohoNo, 100), zKey = zohoNoKey(zohoNo);
+    ensure(zKey && zKey.length <= 600, ERR.INVALID_INPUT, 'Enter the Zoho invoice number (create the invoice in Zoho Books first).');
     const actor = actorOf(), at = now();
     ensure(numbering && isSafeId(numbering.counterKey), ERR.INVALID_INPUT, 'Document numbering is required');
 
     return transact(async tx => {
-      const ctx = await readContext(tx, salesOrderId, [refs.invoice(invoiceId), refs.counter(numbering.counterKey)]);
-      const [invSnap, counterSnap] = ctx.rest;
+      const ctx = await readContext(tx, salesOrderId, [refs.invoice(invoiceId), refs.counter(numbering.counterKey), refs.zohoNo(zKey)]);
+      const [invSnap, counterSnap, zohoSnap] = ctx.rest;
       if (invSnap.exists()) {
         const existing = invSnap.data();
         ensure(existing.creationOperationId === operationId && existing.salesOrderId === salesOrderId, ERR.ID_COLLISION, 'Invoice ID already used by another operation');
         return { alreadyApplied: true, invoice: existing };
+      }
+      if (zohoSnap.exists()) {
+        const z = zohoSnap.data() || {};
+        ensure(false, ERR.DUPLICATE_ZOHO, `Zoho invoice no. ${zohoNo} is already used on ${z.invNo || 'another invoice'}${z.soNo ? ' (' + z.soNo + ')' : ''}. Check the number in Zoho Books.`);
       }
       const { so, ledger, settings, isAdmin } = checkContext(ctx, salesOrderId, actor);
       const level = permissionFor(type, settings);
@@ -148,7 +156,7 @@ export function createInvoiceService(fs, options = {}) {
       const invoice = {
         id: invoiceId, schemaVersion: INVOICE_SCHEMA_VERSION, invNo: number, type, salesOrderId, soNo: so.soNo || '',
         customer: so.customer || '', custId: so.custId || '', poNo: so.poNo || '', quotationId: so.quotationId || '',
-        date, dueDate, zohoNo: cleanText(input.zohoNo, 100), notes: cleanText(input.notes, 2000), reason,
+        date, dueDate, zohoNo, zohoNoKey: zKey, notes: cleanText(input.notes, 2000), reason,
         lines, deductions, advance, totals, credited: {}, creditNotes: [], status: 'Issued',
         revision: 1, lastEventId: eventId, creationOperationId: operationId,
         created: at, createdBy: actor.name, createdByUid: actor.uid, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid,
@@ -164,6 +172,7 @@ export function createInvoiceService(fs, options = {}) {
       tx.set(refs.ledger(salesOrderId), nextLedger);
       tx.set(refs.invoice(invoiceId), invoice);
       tx.set(refs.invoiceEvent(invoiceId, eventId), event);
+      tx.set(refs.zohoNo(zKey), { id: zKey, zohoNo, invoiceId, invNo: number, salesOrderId, soNo: so.soNo || '', created: at, createdByUid: actor.uid });
       return { alreadyApplied: false, invoice };
     });
   }
