@@ -13485,7 +13485,7 @@ async function confirmImport() {
 ═══════════════════════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════════════════════
-   DOCUMENT LOCKING (V262) — ERP-style exclusive editing
+   DOCUMENT LOCKING (V263) — ERP-style exclusive editing
    • Sales Orders: one lock per order covers every action that changes the order or anything
      attached to it (edit, delete, dispatch, correct/void DN, confirm/correct acceptance,
      invoice, payment). Viewing and printing are never blocked. The database rules refuse
@@ -13882,7 +13882,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V262)');
+console.log('Document locking system active ✅ (V263)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS

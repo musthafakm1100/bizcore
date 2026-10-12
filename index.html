@@ -64,6 +64,33 @@ document.addEventListener('error', function(e) {
   </div>
   <div class="auth-loading-text">Loading</div>
 </div>
+<script>
+/* V263: startup guard — if the application modules fail to load (e.g. a stale cached file after an
+   update), show a clear message with a one-click fix instead of staying on "Loading" forever. */
+(function(){
+  var failed = null;
+  window.addEventListener('error', function(e){ if (!failed && e && e.message && /module|export|import|SyntaxError/i.test(e.message)) failed = e.message; }, true);
+  setTimeout(function(){
+    if (window.FB) return;                       // started normally
+    var box = document.getElementById('auth-loading'); if (!box) return;
+    var msg = document.createElement('div');
+    msg.style.cssText = 'margin-top:22px;max-width:440px;text-align:center;font-size:13px;line-height:1.5;background:rgba(255,255,255,.12);padding:14px 16px;border-radius:10px';
+    msg.innerHTML = '<strong>BizCore could not start.</strong><br>' + (failed ? 'Some application files in this browser are out of date.' : 'The application is taking unusually long to start.') +
+      '<br><button id="bizcore-hard-reload" style="margin-top:10px;height:34px;padding:0 16px;border:none;border-radius:7px;background:#fff;color:#0B539D;font-weight:700;cursor:pointer">Reload with latest files</button>' +
+      (failed ? '<div style="margin-top:8px;font-size:11px;opacity:.75">' + String(failed).replace(/</g,'&lt;').slice(0,200) + '</div>' : '');
+    box.appendChild(msg);
+    document.getElementById('bizcore-hard-reload').onclick = function(){
+      var done = function(){ location.reload(); };
+      try {
+        var jobs = [];
+        if (window.caches && caches.keys) jobs.push(caches.keys().then(function(k){ return Promise.all(k.map(function(n){ return caches.delete(n); })); }));
+        if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) jobs.push(navigator.serviceWorker.getRegistrations().then(function(r){ return Promise.all(r.map(function(x){ return x.unregister(); })); }));
+        Promise.all(jobs).then(done, done);
+      } catch (e) { done(); }
+    };
+  }, 20000);
+})();
+</script>
 
 <div class="app">
 <div class="sidebar" id="app-sidebar">
@@ -2069,9 +2096,9 @@ document.addEventListener('error', function(e) {
 <div class="toast" id="toast"></div>
 <!-- Firebase: loaded as module, exposes window.FB then loads app.js -->
 <script type="module">
-import { createDeliveryService, loadDeliveryEvents } from './js/delivery-service.mjs?v=262';
-import * as DNCore from './js/delivery-core.mjs?v=262';
-import * as LockCore from './js/lock-service.mjs?v=262';
+import { createDeliveryService, loadDeliveryEvents } from './js/delivery-service.mjs?v=263';
+import * as DNCore from './js/delivery-core.mjs?v=263';
+import * as LockCore from './js/lock-service.mjs?v=263';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator }
@@ -2857,7 +2884,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=262';
+    s.src = 'js/app.js?v=263';
     document.body.appendChild(s);
   }
 });
