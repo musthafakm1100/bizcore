@@ -717,7 +717,7 @@ function newDeliveryOperationId(kind, ref){
 function deliveryErrorMessage(e){
   const code = e && e.code || '';
   if (e && e.name === 'DeliveryError') return e.message;
-  if (code === 'permission-denied') return 'The database refused this change (permission denied). Nothing was changed.';
+  if (code === 'permission-denied') return 'The database refused this change. Your editing lock on this Sales Order may have expired or been released by an administrator. Nothing was changed — please open it again.';
   if (code === 'unavailable' || code === 'deadline-exceeded' || code === 'failed-precondition' || !navigator.onLine)
     return 'The database could not be reached or did not confirm the change. If you retry from this same screen it will not be applied twice. Check the Delivery Note register first.';
   return (e && e.message) || String(e);
@@ -738,7 +738,14 @@ function requireOnlineForDeliveryNotes(){
   showToast('Delivery Notes are saved directly to the cloud database. Please reconnect and try again.', 'error', 'Offline');
   return false;
 }
-async function saveSalesOrders() {
+function salesOrderSaveFailureMessage(){
+  const err = window.BizCoreStorageDiagnostics && window.BizCoreStorageDiagnostics.lastSaveError;
+  if (err && err.code === 'permission-denied') return 'The database refused the change. Your editing lock on this Sales Order may have expired or been released, or another user is working on it. Nothing was saved — please open it again.';
+  if (!navigator.onLine) return 'You are offline. Nothing was saved — reconnect and try again.';
+  return 'The database did not confirm the change' + (err && err.message ? ' (' + err.message + ')' : '') + '. Nothing was saved — please try again.';
+}
+/* opts.onlyIds: the Sales Order(s) this user action changed (written alone; others untouched). */
+async function saveSalesOrders(opts = {}) {
   const mode = window.BizCoreDN ? await window.BizCoreDN.ready : 'legacy';
   if (mode === 'unavailable' || mode === 'unknown') {
     showToast('Database storage mode could not be verified. Sales Orders were not saved. Please reconnect and reload.', 'error', 'Not Saved');
@@ -753,11 +760,11 @@ async function saveSalesOrders() {
     const persisted = salesOrders.map(so => dnCore().stripProjection(so));
     rawSalesOrders = persisted;
     cacheSalesOrdersLocally();
-    if (window.FB) return await window.FB.fbSave('salesOrders', persisted);
+    if (window.FB) return await window.FB.fbSave('salesOrders', persisted, opts);
     return true;
   }
   try { localStorage.setItem('dtq_salesorders', JSON.stringify(salesOrders)); } catch(e) {}
-  if (window.FB) return await window.FB.fbSave('salesOrders', salesOrders);
+  if (window.FB) return await window.FB.fbSave('salesOrders', salesOrders, opts);
   return true;
 }
 
@@ -2873,6 +2880,8 @@ function switchSetupTab(tab) {
   }
   if (tab === 'users') renderUsers();
   if (tab === 'roles') renderRoles();
+  if (tab === 'locking' && typeof renderLockingSettings === 'function') renderLockingSettings();
+  if (tab === 'locks' && typeof startLocksScreen === 'function') startLocksScreen();
   if (tab === 'defaults') { renderSetupTermsList('delivery'); renderSetupTermsList('payment'); }
   if (tab === 'cost-components') renderCostComponents();
   if (tab === 'margin-status') renderMarginStatuses();
@@ -10120,10 +10129,12 @@ async function _saveSalesOrderCore() {
     created:     new Date().toISOString(),
   };
 
+  let previousSO=null;
   if (editingId) {
     const idx = salesOrders.findIndex(x=>x.id===editingId);
     if (idx<0) return;
     const existing=salesOrders[idx];
+    previousSO=existing;
     so.id=existing.id;
     so.soNo=existing.soNo;
     so.created=existing.created;
@@ -10141,10 +10152,18 @@ async function _saveSalesOrderCore() {
     linkedRFQ = rfqs.find(r=>r.id===linkedQuote.rfqId);
     if (linkedRFQ) linkedRFQ.status='Sales Order';
   }
-  await Promise.all([
-    saveSalesOrders(),
+  const [soSaved] = await Promise.all([
+    saveSalesOrders({ onlyIds: [so.id] }),
     linkedRFQ ? saveRFQs() : Promise.resolve()
   ]);
+  if (soSaved === false) {
+    // Not stored: restore the previous in-memory state so the screen does not show unsaved data.
+    if (editingId) { const i = salesOrders.findIndex(x => x.id === so.id); if (i >= 0 && previousSO) salesOrders[i] = previousSO; }
+    else salesOrders = salesOrders.filter(x => x !== so);
+    if (dnIndependentMode()) { setRawSalesOrders(salesOrders); cacheSalesOrdersLocally(); }
+    showValidationDialog('Sales Order Not Saved', salesOrderSaveFailureMessage(), '', '');
+    return;
+  }
   closeModal('so-create-modal');
   renderSOPage();
   showToast(editingId ? `Sales Order ${so.soNo} has been updated successfully.` : `Sales Order ${so.soNo} has been created successfully.`, 'success', editingId?'Sales Order Updated':'Sales Order Created');
@@ -10223,10 +10242,22 @@ async function deleteSalesOrder(soId){
     return;
   }
   showConfirm({icon:'🗑️',title:'Delete Sales Order?',message:`Delete ${so.soNo} for ${so.customer}? This action cannot be undone.`,confirmText:'Delete Order',confirmClass:'btn-danger',onConfirm:async()=>{
-    salesOrders=salesOrders.filter(x=>x.id!==soId);
-    await saveSalesOrders();
-    closeModal('so-view-modal'); renderSOPage();
-    showToast(`Sales Order ${so.soNo} has been deleted.`, 'success','Sales Order Deleted');
+    // V262: deleting needs the order lock (nobody else may be working on it).
+    if (typeof acquireOrderLock === 'function' && !(await acquireOrderLock(soId, 'Deleting the Sales Order'))) return;
+    try {
+      const fresh = salesOrders.find(x=>x.id===soId);
+      if (fresh && (soHasDownstreamActivity(fresh) || await salesOrderHasServerDeliveryActivity(soId))) {
+        showValidationDialog('Deletion Restricted','This Sales Order now has related delivery, invoice, or payment records and cannot be deleted.','','');
+        return;
+      }
+      const before = salesOrders;
+      salesOrders=salesOrders.filter(x=>x.id!==soId);
+      if (dnIndependentMode()) rawSalesOrders = rawSalesOrders.filter(x=>x.id!==soId);
+      const saved = await saveSalesOrders({ onlyIds: [soId] });
+      if (saved === false) { salesOrders = before; if (dnIndependentMode()) setRawSalesOrders(before); showValidationDialog('Not Deleted', salesOrderSaveFailureMessage(), '', ''); return; }
+      closeModal('so-view-modal'); renderSOPage();
+      showToast(`Sales Order ${so.soNo} has been deleted.`, 'success','Sales Order Deleted');
+    } finally { if (typeof releaseLock === 'function' && _activeLock && _activeLock.docType === 'salesOrder' && _activeLock.docId === String(soId)) await releaseLock(); }
   }});
 }
 
@@ -11287,7 +11318,10 @@ async function saveInvoice() {
   const subtotal=Math.round(items.reduce((s,x)=>s+x.subtotal,0)*100)/100,vat=Math.round(items.reduce((s,x)=>s+x.vat,0)*100)/100,total=Math.round((subtotal+vat)*100)/100;
   const invNumber=await allocateDocumentNumber('customerInvoice',new Date(date+'T00:00:00'));
   const inv={invNo:invNumber,zohoNo:document.getElementById('inv-zoho').value.trim(),date,dueDate:document.getElementById('inv-due').value,notes:document.getElementById('inv-notes').value.trim(),items,subtotal,vat,total,isPartial:items.some(x=>(latest.find(y=>y.origIdx===x.origIdx)?.availableQty||0)>x.qty+0.001)||latest.some(x=>x.availableQty>0.001&&!items.some(y=>y.origIdx===x.origIdx)),created:new Date().toISOString()};
-  so.invoices=so.invoices||[];so.invoices.push(inv);await saveSalesOrders();closeModal('so-invoice-modal');showToast('Invoice '+inv.invNo+' created','success');renderSOPage();viewSO(soId);
+  so.invoices=so.invoices||[];so.invoices.push(inv);
+  const invSaved=await saveSalesOrders({onlyIds:[so.id]});
+  if(invSaved===false){so.invoices=so.invoices.filter(x=>x!==inv);if(dnIndependentMode()){const r=rawSalesOrders.find(x=>x.id===so.id);if(r&&Array.isArray(r.invoices))r.invoices=r.invoices.filter(x=>x.invNo!==inv.invNo);}showValidationDialog('Invoice Not Saved',salesOrderSaveFailureMessage(),'','');return;}
+  closeModal('so-invoice-modal');showToast('Invoice '+inv.invNo+' created','success');renderSOPage();viewSO(soId);
 }
 
 /* ── Record Payment ── */
@@ -11346,7 +11380,13 @@ async function savePayment() {
     created: new Date().toISOString(),
   };
   so.payments.push(payment);
-  await saveSalesOrders();
+  const paySaved = await saveSalesOrders({ onlyIds: [so.id] });
+  if (paySaved === false) {
+    so.payments = so.payments.filter(x => x !== payment);
+    if (dnIndependentMode()) { const r = rawSalesOrders.find(x => x.id === so.id); if (r && Array.isArray(r.payments)) r.payments = r.payments.filter(x => x.id !== payment.id); }
+    showValidationDialog('Payment Not Saved', salesOrderSaveFailureMessage(), '', '');
+    return;
+  }
   closeModal('so-payment-modal');
   const newStatus = getSOStatus(so);
   showToast('Payment recorded — Order is now ' + newStatus, 'success');
@@ -13445,234 +13485,243 @@ async function confirmImport() {
 ═══════════════════════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════════════════════
-   DOCUMENT PRESENCE LOCKING SYSTEM
-   Prevents two users editing the same document at the same time.
-   Uses Firebase Firestore 'locks' collection.
+   DOCUMENT LOCKING (V262) — ERP-style exclusive editing
+   • Sales Orders: one lock per order covers every action that changes the order or anything
+     attached to it (edit, delete, dispatch, correct/void DN, confirm/correct acceptance,
+     invoice, payment). Viewing and printing are never blocked. The database rules refuse
+     those changes unless the user holds a live lock, so this cannot be bypassed.
+   • Quotations / RFQs: editor lock (can be switched off in Administration → Document Locking).
+   • Heartbeat while a dialog is open; the lock expires by itself if the browser stops.
+   • Idle warning, then automatic release; administrators can force-release (logged).
+   Timings come from Administration → Document Locking (window.BizCoreLocks.settings).
 ═══════════════════════════════════════════════════════════════════ */
 
-/* Active lock state for this session */
-let _activeLock      = null;  // { docType, docId }
-let _heartbeatTimer  = null;  // setInterval handle
-let _activityTimer   = null;  // setTimeout handle for idle detection
+let _activeLock      = null;  // { docType, docId, label, activity, modalId }
+let _heartbeatTimer  = null;
+let _idleWarnTimer   = null;
+let _idleReleaseTimer= null;
+let _lockWatcher     = null;
 let _lastActivity    = Date.now();
-let _lockWatcher     = null;  // onSnapshot unsubscribe
+let _lockReleasePromise = null;
+const SO_LOCK_MODALS = new Set(['so-create-modal', 'so-delivery-modal', 'dn-confirm-modal', 'dn-dispatch-action-modal', 'so-invoice-modal', 'so-payment-modal']);
+const EDITOR_LOCK_MODALS = new Set(['quote-modal', 'rfq-modal']);
 
-const IDLE_TIMEOUT_MS   = 30 * 60 * 1000;  // 30 min idle → auto-release
-const HEARTBEAT_MS      = 60 * 1000;        // ping Firebase every 60s
+function lockSettings(){
+  return (window.BizCoreLocks && window.BizCoreLocks.settings) || { idleMinutes: 15, idleWarningMinutes: 2, crashExpiryMinutes: 2, ttlSec: 120, heartbeatMs: 40000, lockQuotations: true, lockRFQs: true };
+}
+function lockingEnabledFor(docType){
+  const s = lockSettings();
+  if (docType === 'quotation') return s.lockQuotations !== false;
+  if (docType === 'rfq') return s.lockRFQs !== false;
+  return true;
+}
+function lockTypeLabel(docType){ return ({ salesOrder: 'Sales Order', quotation: 'Quotation', rfq: 'RFQ' })[docType] || 'Document'; }
+function fmtLockTime(ms){ return ms ? new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'; }
 
-/* ── Track user activity to reset idle timer ── */
-['keydown','mousedown','touchstart','scroll'].forEach(function(evt) {
+/* ── user activity keeps the lock alive (idle timers) ── */
+['keydown', 'mousedown', 'touchstart', 'scroll', 'input'].forEach(function(evt) {
   document.addEventListener(evt, function() {
     _lastActivity = Date.now();
-    if (_activeLock) resetIdleTimer();
-  }, { passive: true });
+    if (_activeLock && !document.getElementById('lock-idle-modal')) resetIdleTimer();
+  }, { passive: true, capture: true });
 });
 
+function clearIdleTimers(){ clearTimeout(_idleWarnTimer); clearTimeout(_idleReleaseTimer); _idleWarnTimer = _idleReleaseTimer = null; }
 function resetIdleTimer() {
-  clearTimeout(_activityTimer);
-  _activityTimer = setTimeout(function() {
-    // User has been idle for 30 minutes — release lock
-    if (_activeLock) {
-      console.log('Idle 30min — auto-releasing lock');
-      releaseLock();
-      showToast('Lock released after 30 minutes of inactivity. Your work is saved.', 'error');
-    }
-  }, IDLE_TIMEOUT_MS);
+  clearIdleTimers();
+  if (!_activeLock) return;
+  const s = lockSettings();
+  const idleMs = s.idleMinutes * 60000, warnMs = Math.max(0, idleMs - s.idleWarningMinutes * 60000);
+  _idleWarnTimer = setTimeout(showIdleWarning, warnMs);
+  _idleReleaseTimer = setTimeout(releaseForIdle, idleMs);
+}
+function showIdleWarning(){
+  if (!_activeLock || document.getElementById('lock-idle-modal')) return;
+  const s = lockSettings(), lock = _activeLock;
+  const modal = document.createElement('div');
+  modal.id = 'lock-idle-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `<div style="background:#fff;border-radius:14px;padding:28px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <div style="font-size:15px;font-weight:700;margin-bottom:8px"><i class="ti ti-clock-pause" style="color:#B45309;margin-right:6px"></i>Are you still working?</div>
+    <div style="font-size:13px;color:#5A6677;margin-bottom:18px">${escapeHtml(lockTypeLabel(lock.docType) + ' ' + (lock.label || lock.docId))} will be released for other users in <strong id="lock-idle-count">${s.idleWarningMinutes}:00</strong> because there has been no activity. Unsaved entries in the open window will be lost.</div>
+    <div style="display:flex;justify-content:flex-end"><button id="lock-idle-keep" style="height:36px;padding:0 18px;border:none;border-radius:7px;background:#0B539D;color:#fff;cursor:pointer;font-size:13px;font-weight:600">Keep working</button></div></div>`;
+  document.body.appendChild(modal);
+  const end = Date.now() + s.idleWarningMinutes * 60000;
+  const tick = setInterval(() => {
+    const el = document.getElementById('lock-idle-count'); if (!el) { clearInterval(tick); return; }
+    const left = Math.max(0, end - Date.now()); el.textContent = Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0');
+  }, 1000);
+  document.getElementById('lock-idle-keep').onclick = () => { clearInterval(tick); modal.remove(); _lastActivity = Date.now(); resetIdleTimer(); if (_activeLock) lockHeartbeatNow(); };
+}
+async function releaseForIdle(){
+  document.getElementById('lock-idle-modal')?.remove();
+  const lock = _activeLock; if (!lock) return;
+  const minutes = lockSettings().idleMinutes;
+  if (lock.docType === 'salesOrder') {
+    await releaseLock();
+    if (lock.modalId) closeModal(lock.modalId);
+    showValidationDialog('Released after inactivity', `${lock.label || lock.docId} was released after ${minutes} minutes without activity so other users can work on it. Please open it again to continue.`, '', '');
+  } else {
+    await releaseLock();
+    showToast(`Editing lock released after ${minutes} minutes of inactivity. Save your changes soon — another user may now open this document.`, 'warning', 'Lock Released');
+  }
 }
 
-/* ── Acquire lock before opening a document for editing ──
-   Returns true if lock granted, false if locked by someone else.
-   Shows the lock conflict UI automatically if blocked. ── */
-async function acquireDocLock(docType, docId, docLabel) {
-  if (!window.FB || !window.FB.acquireLock) return true; // Firebase not ready
-  if (!window.currentUser) return true; // not logged in
-
-  const result = await window.FB.acquireLock(docType, docId);
-
-  if (result.granted) {
-    // Lock acquired — set up heartbeat and idle timer
-    _activeLock = { docType, docId };
-    startHeartbeat();
-    resetIdleTimer();
-
-    // Watch for takeover by another user
-    _lockWatcher = window.FB.watchLock(docType, docId, function(lockData) {
-      if (!lockData) return; // lock released
-      if (lockData.uid !== window.currentUser.uid) {
-        // Someone took over our lock
-        showToast(
-          (lockData.name || lockData.email) + ' has taken over this document.',
-          'error'
-        );
-        stopHeartbeat();
-        _activeLock = null;
-      }
-    });
+/* ── acquire / release ── */
+async function acquireDocLock(docType, docId, docLabel, activity) {
+  if (!window.FB || !window.FB.acquireLock || !window.currentUser) return true; // Firebase not ready (local-only mode)
+  if (!lockingEnabledFor(docType)) return true;
+  if (_lockReleasePromise) { try { await _lockReleasePromise; } catch(e) {} }
+  if (_activeLock && (_activeLock.docType !== docType || _activeLock.docId !== String(docId))) await releaseLock();
+  const r = await window.FB.acquireLock(docType, docId, { label: docLabel || '', activity: activity || '' });
+  if (r && r.granted) {
+    const keepModal = _activeLock && _activeLock.docType === docType && _activeLock.docId === String(docId) ? _activeLock.modalId : null;
+    _activeLock = { docType, docId: String(docId), label: docLabel || '', activity: activity || '', modalId: keepModal };
+    startHeartbeat(); resetIdleTimer(); watchActiveLock();
+    if (r.ownOtherSession) showToast('This document was open in another window of yours. It is now locked to this window; the other window can no longer save it.', 'info', 'Opened Here');
     return true;
   }
-
-  // Lock denied — show conflict dialog
-  showLockConflict(docType, docId, docLabel, result);
+  if (r && r.holder) { showLockConflict(docType, docId, docLabel, r.holder); return false; }
+  // Could not reach the database. Quotation/RFQ editing stays available (as before); order changes need the lock.
+  if (docType !== 'salesOrder') { console.warn('Lock unavailable — continuing without a lock', r && r.error); return true; }
+  showValidationDialog('Could not open for editing', `${docLabel || 'This Sales Order'} could not be locked for editing (${(r && r.error && r.error.message) || 'no connection'}). Check your connection and try again.`, '', '');
   return false;
 }
 
-/* ── Release the current lock ── */
 async function releaseLock() {
-  if (!_activeLock) return;
-  const { docType, docId } = _activeLock;
-  stopHeartbeat();
+  const lock = _activeLock;
+  if (!lock) return;
+  _activeLock = null;               // first, so our own delete is not treated as "lock lost"
+  stopHeartbeat(); clearIdleTimers();
   if (_lockWatcher) { _lockWatcher(); _lockWatcher = null; }
-  clearTimeout(_activityTimer);
-  if (window.FB && window.FB.releaseLock) {
-    await window.FB.releaseLock(docType, docId);
-  }
-  _activeLock = null;
+  document.getElementById('lock-idle-modal')?.remove();
+  if (window.FB && window.FB.releaseLock) await window.FB.releaseLock(lock.docType, lock.docId);
 }
 
-/* ── Start/stop heartbeat ── */
+/* ── heartbeat + loss detection ── */
 function startHeartbeat() {
   stopHeartbeat();
-  _heartbeatTimer = setInterval(function() {
-    if (_activeLock && window.FB && window.FB.heartbeat) {
-      window.FB.heartbeat(_activeLock.docType, _activeLock.docId);
+  _heartbeatTimer = setInterval(lockHeartbeatNow, lockSettings().heartbeatMs || 40000);
+}
+function stopHeartbeat() { if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; } }
+async function lockHeartbeatNow(){
+  const lock = _activeLock;
+  if (!lock || !window.FB || !window.FB.heartbeat) return;
+  const r = await window.FB.heartbeat(lock.docType, lock.docId, lock.activity);
+  if (_activeLock === lock && r && r.held === false) handleLockLost(lock, r.holder);
+}
+function watchActiveLock(){
+  if (_lockWatcher) { _lockWatcher(); _lockWatcher = null; }
+  const lock = _activeLock;
+  if (!lock || !window.FB || !window.FB.watchLock) return;
+  const mySession = window.BizCoreLocks && window.BizCoreLocks.sessionId;
+  _lockWatcher = window.FB.watchLock(lock.docType, lock.docId, data => {
+    if (_activeLock !== lock) return;
+    if (!data || data.uid !== window.currentUser?.uid || (mySession && data.sessionId !== mySession)) {
+      handleLockLost(lock, data ? window.BizCoreLocks.core.describeLock(data) : null);
     }
-  }, HEARTBEAT_MS);
+  });
 }
-
-function stopHeartbeat() {
-  if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
-}
-
-/* ── Release lock when user navigates away or closes tab ── */
-window.addEventListener('beforeunload', function() {
-  // Synchronous lock release via navigator.sendBeacon not possible with Firestore
-  // Best effort: stop heartbeat so lock expires on next idle check
-  stopHeartbeat();
-});
-
-document.addEventListener('visibilitychange', function() {
-  if (document.hidden) {
-    // Page hidden (tab switched) — continue heartbeat but note time
-    _lastActivity = Date.now();
+function handleLockLost(lock, holder){
+  if (_activeLock !== lock) return;
+  _activeLock = null;
+  stopHeartbeat(); clearIdleTimers();
+  if (_lockWatcher) { _lockWatcher(); _lockWatcher = null; }
+  document.getElementById('lock-idle-modal')?.remove();
+  const who = holder ? (holder.uid === window.currentUser?.uid ? 'you, in another window' : holder.name) : null;
+  const msg = who
+    ? `${lock.label || lock.docId} is now being worked on by ${who}${holder.activity ? ' (' + holder.activity + ')' : ''}.`
+    : `Your editing lock on ${lock.label || lock.docId} was released (expired or released by an administrator).`;
+  if (lock.docType === 'salesOrder') {
+    if (lock.modalId && !document.getElementById(lock.modalId)?._saving) closeModal(lock.modalId);
+    showValidationDialog('Editing lock lost', msg + ' Nothing more can be saved from that window — please open it again.', '', '');
+  } else {
+    showToast(msg + ' Save soon or reopen the document.', 'warning', 'Editing Lock Lost');
   }
+}
+
+/* ── release when the browser closes (best effort; otherwise the lock expires by itself) ── */
+window.addEventListener('pagehide', function() {
+  const lock = _activeLock; if (!lock) return;
+  _activeLock = null; stopHeartbeat();
+  try { window.FB && window.FB.releaseLock && window.FB.releaseLock(lock.docType, lock.docId); } catch(e) {}
 });
 
-/* ── Lock conflict dialog ── */
-function showLockConflict(docType, docId, docLabel, lockInfo) {
-  // Remove any existing conflict dialog
-  const existing = document.getElementById('lock-conflict-modal');
-  if (existing) existing.remove();
-
-  const since     = lockInfo.since ? new Date(lockInfo.since) : null;
-  const sinceStr  = since ? since.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }) : '—';
-  const idleStr   = lockInfo.idleMins > 0
-    ? `<span style="color:#F15A25">Idle for ${lockInfo.idleMins} min</span>`
-    : '<span style="color:#16a34a">Active just now</span>';
-
+/* ── conflict dialog ── */
+function showLockConflict(docType, docId, docLabel, holder) {
+  closeLockConflict();
+  const isAdmin = !!(window.BizCoreLocks && window.BizCoreLocks.isAdministrator);
+  const label = docLabel || (lockTypeLabel(docType) + ' ' + docId);
+  const idleMin = holder.heartbeatMs ? Math.max(0, Math.floor((Date.now() - holder.heartbeatMs) / 60000)) : 0;
   const modal = document.createElement('div');
   modal.id = 'lock-conflict-modal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px';
   modal.innerHTML = `
-    <div style="background:#fff;border-radius:14px;padding:32px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
-        <div style="width:44px;height:44px;border-radius:50%;background:#FEF3F2;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <i class="ti ti-lock" style="font-size:22px;color:#DC2626"></i>
-        </div>
-        <div>
-          <div style="font-size:15px;font-weight:700;color:#1a1a1a">Document in use</div>
-          <div style="font-size:12px;color:#8B98A8;margin-top:2px">${docLabel || docType + ' ' + docId}</div>
-        </div>
+    <div style="background:#fff;border-radius:14px;padding:30px;max-width:460px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <div style="width:44px;height:44px;border-radius:50%;background:#FEF3F2;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-lock" style="font-size:22px;color:#DC2626"></i></div>
+        <div><div style="font-size:15px;font-weight:700;color:#1a1a1a">Document in use</div><div style="font-size:12px;color:#8B98A8;margin-top:2px">${escapeHtml(label)}</div></div>
       </div>
-
-      <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:16px;margin-bottom:20px">
-        <div style="font-size:13px;color:#1a1a1a;margin-bottom:10px">
-          <i class="ti ti-user" style="color:#0B539D;margin-right:6px"></i>
-          <strong>${lockInfo.lockedBy || lockInfo.lockedByEmail}</strong> is currently editing this document.
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:10px">
-            <div style="font-size:10px;color:#8B98A8;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">Editing since</div>
-            <div style="font-size:13px;font-weight:600;color:#1a1a1a">${sinceStr}</div>
-          </div>
-          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:10px">
-            <div style="font-size:10px;color:#8B98A8;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">Status</div>
-            <div style="font-size:13px;font-weight:600">${idleStr}</div>
-          </div>
-        </div>
-        ${lockInfo.idleMins >= 5
-          ? `<div style="margin-top:10px;padding:8px 12px;background:#FFFBEA;border:1px solid #F0D77B;border-radius:6px;font-size:12px;color:#7A5A00">
-              <i class="ti ti-info-circle" style="margin-right:4px"></i>
-              This user has been idle for ${lockInfo.idleMins} minutes — they may have stepped away.
-             </div>`
-          : ''}
+      <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:14px 16px;margin-bottom:14px;font-size:13px;color:#1a1a1a;line-height:1.55">
+        <div><i class="ti ti-user" style="color:#0B539D;margin-right:6px"></i><strong>${escapeHtml(holder.name)}</strong> is working on this ${escapeHtml(lockTypeLabel(docType).toLowerCase())}${holder.activity ? ' — <em>' + escapeHtml(holder.activity) + '</em>' : ''}.</div>
+        <div style="color:#5A6677;margin-top:6px">Since ${fmtLockTime(holder.sinceMs)}${idleMin >= 1 ? ' · last active ' + idleMin + ' min ago' : ''}</div>
       </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-        <button onclick="closeLockConflict()"
-          style="height:38px;border:1.5px solid #E2E8F0;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600;color:#5A6677">
-          Cancel
-        </button>
-        <button onclick="viewDocReadOnly('${docType}','${docId}')"
-          style="height:38px;border:1.5px solid #0B539D;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600;color:#0B539D">
-          <i class="ti ti-eye" style="margin-right:4px"></i>View only
-        </button>
-        <button onclick="takeoverLock('${docType}','${docId}','${(lockInfo.lockedBy||lockInfo.lockedByEmail).replace(/'/g,"\\'")}','${docLabel||''}')"
-          style="height:38px;border:none;border-radius:8px;background:#DC2626;cursor:pointer;font-size:12px;font-weight:600;color:#fff">
-          <i class="ti ti-lock-open" style="margin-right:4px"></i>Take over
-        </button>
+      <div style="font-size:12px;color:#5A6677;margin-bottom:18px">You can view and print it. Changes are blocked until ${escapeHtml(holder.name)} finishes; the lock is released automatically when they close the window or stop responding.</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+        <button onclick="closeLockConflict()" style="height:36px;padding:0 16px;border:1.5px solid #E2E8F0;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600;color:#5A6677">Close</button>
+        <button onclick="viewDocReadOnly('${docType}','${String(docId).replace(/'/g, "\\'")}')" style="height:36px;padding:0 16px;border:1.5px solid #0B539D;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600;color:#0B539D"><i class="ti ti-eye" style="margin-right:4px"></i>View only</button>
+        ${isAdmin ? `<button onclick="forceReleaseLockFromDialog('${docType}','${String(docId).replace(/'/g, "\\'")}')" style="height:36px;padding:0 16px;border:none;border-radius:8px;background:#DC2626;cursor:pointer;font-size:12px;font-weight:600;color:#fff"><i class="ti ti-lock-open" style="margin-right:4px"></i>Release lock</button>` : ''}
       </div>
     </div>`;
   document.body.appendChild(modal);
 }
+function closeLockConflict() { document.getElementById('lock-conflict-modal')?.remove(); }
 
-function closeLockConflict() {
-  const m = document.getElementById('lock-conflict-modal');
-  if (m) m.remove();
-}
-
-/* ── View document in read-only mode ── */
 function viewDocReadOnly(docType, docId) {
   closeLockConflict();
-  // Route to the appropriate view function (read-only — no edit)
-  if (docType === 'quotation') {
-    const q = quotations.find(x => x.id === docId);
-    if (q) viewQuotation(docId);
-  } else if (docType === 'rfq') {
-    viewRFQ(docId);
-  } else if (docType === 'salesorder') {
-    viewSO(docId);
-  } else if (docType === 'customer') {
-    viewCustomer(docId);
-  } else if (docType === 'supplier') {
-    viewSupplier && viewSupplier(docId);
-  }
+  if (docType === 'quotation') { if (quotations.find(x => x.id === docId)) viewQuotation(docId); }
+  else if (docType === 'rfq') viewRFQ(docId);
+  else if (docType === 'salesOrder' || docType === 'salesorder') { if (!document.getElementById('so-view-modal')?.classList.contains('open')) viewSO(docId); }
 }
 
-/* ── Take over a lock from another user ── */
-async function takeoverLock(docType, docId, lockedByName, docLabel) {
-  const confirmed = await showConfirmAsync({
-    icon: '⚠️',
-    title: 'Take over editing?',
-    message: lockedByName + ' is editing this document. If they have unsaved changes, those will be lost when they try to save.\n\nAre you sure you want to take over?',
-    confirmText: 'Take over',
-    confirmClass: 'btn-danger'
+/* ── administrator: force release (reason required, logged) ── */
+async function promptLockReleaseReason(label, holderName){
+  return new Promise(resolve => {
+    document.getElementById('lock-release-modal')?.remove();
+    const m = document.createElement('div');
+    m.id = 'lock-release-modal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+    m.innerHTML = `<div style="background:#fff;border-radius:12px;padding:26px;max-width:420px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.2)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:6px">Release lock?</div>
+      <div style="font-size:13px;color:#5A6677;margin-bottom:12px">${escapeHtml(holderName || 'The user')} will lose ${escapeHtml(label)}; anything they have not saved yet will be lost. This is recorded.</div>
+      <label style="font-size:12px;font-weight:600">Reason</label>
+      <textarea id="lock-release-reason" rows="3" style="width:100%;margin:6px 0 14px;border:1px solid #E2E8F0;border-radius:6px;padding:8px;font:inherit" placeholder="e.g. User left the office with the order open"></textarea>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button id="lock-release-cancel" style="height:36px;padding:0 16px;border:1.5px solid #E2E8F0;border-radius:7px;background:#fff;cursor:pointer;font-size:13px;font-weight:600">Cancel</button>
+        <button id="lock-release-ok" style="height:36px;padding:0 16px;border:none;border-radius:7px;background:#DC2626;color:#fff;cursor:pointer;font-size:13px;font-weight:600">Release lock</button>
+      </div></div>`;
+    document.body.appendChild(m);
+    document.getElementById('lock-release-cancel').onclick = () => { m.remove(); resolve(null); };
+    document.getElementById('lock-release-ok').onclick = () => {
+      const v = document.getElementById('lock-release-reason').value.trim();
+      if (v.length < 5) { showToast('Enter a reason (at least 5 characters).', 'error'); return; }
+      m.remove(); resolve(v);
+    };
   });
-  if (!confirmed) return;
-
+}
+async function forceReleaseLock(docType, docId, label, holderName){
+  if (!window.BizCoreLocks || !window.BizCoreLocks.isAdministrator) { showToast('Only an administrator can release another user\'s lock.', 'error'); return false; }
+  const reason = await promptLockReleaseReason(label || (lockTypeLabel(docType) + ' ' + docId), holderName);
+  if (!reason) return false;
+  try {
+    const r = await window.FB.forceReleaseLock(docType, docId, reason);
+    showToast(r.released ? 'Lock released. The document can now be opened.' : 'The lock had already been released.', 'success');
+    return true;
+  } catch (e) { showToast('Could not release the lock: ' + (e.code === 'permission-denied' ? 'administrator rights required' : e.message), 'error'); return false; }
+}
+async function forceReleaseLockFromDialog(docType, docId){
   closeLockConflict();
-  if (window.FB && window.FB.takeover) {
-    await window.FB.takeover(docType, docId);
-  }
-  _activeLock = { docType, docId };
-  startHeartbeat();
-  resetIdleTimer();
-
-  // Now open the document for editing
-  if (docType === 'quotation')  editQuotation(docId);
-  else if (docType === 'rfq')   editRFQ(docId);
-  else if (docType === 'customer') { /* trigger edit mode in customer view */ }
-
-  showToast('You now have exclusive editing access to this document.', 'success');
+  await forceReleaseLock(docType, docId);
 }
 
 /* ── Helper: Promise-based confirm dialog ── */
@@ -13704,109 +13753,223 @@ function showConfirmAsync(opts) {
   });
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   HOOK LOCKS INTO EXISTING EDIT FUNCTIONS
-   Wrap the existing edit functions to check locks first
-═══════════════════════════════════════════════════════════════════ */
+/* ── Sales Order: latest data straight from the server once the lock is granted ── */
+async function refreshSalesOrderFromServer(soId){
+  if (!window.FB || !window.FB.fetchFromServer) return;
+  try {
+    const data = await window.FB.fetchFromServer('salesOrders', soId);
+    if (!data) return;
+    if (dnIndependentMode()) {
+      const i = rawSalesOrders.findIndex(x => x.id === soId);
+      const clean = dnCore().stripProjection(data);
+      if (i >= 0) rawSalesOrders[i] = clean; else rawSalesOrders.unshift(clean);
+      rebuildSalesOrderView();
+    } else {
+      const i = salesOrders.findIndex(x => x.id === soId);
+      if (i >= 0) salesOrders[i] = data;
+    }
+  } catch (e) { console.warn('[BizCore] Could not refresh Sales Order from server; using the real-time copy.', e.message); }
+}
 
-/* Store original functions */
+/** Acquire the order lock for an action. → true when the lock is held. */
+async function acquireOrderLock(soId, activity){
+  const so = salesOrders.find(x => x.id === soId);
+  const label = so ? (so.soNo || soId) : soId;
+  const ok = await acquireDocLock('salesOrder', soId, label, activity);
+  if (ok && _activeLock) await refreshSalesOrderFromServer(soId);
+  return ok;
+}
+function openOverlayIds(){ return [...document.querySelectorAll('.modal-overlay.open')].map(x => x.id).filter(Boolean); }
+
+/* Wrap each Sales Order action so it runs only while this user holds the order lock. */
+function wrapOrderAction(fnName, soIdOf, activityOf){
+  const orig = window[fnName];
+  if (typeof orig !== 'function') return;
+  window[fnName] = async function(...args){
+    const soId = soIdOf(...args);
+    if (!soId) return orig.apply(this, args);
+    const activity = typeof activityOf === 'function' ? activityOf(...args) : activityOf;
+    const already = _activeLock && _activeLock.docType === 'salesOrder' && _activeLock.docId === String(soId) && _activeLock.modalId && document.getElementById(_activeLock.modalId)?.classList.contains('open');
+    if (!already) {
+      const ok = await acquireOrderLock(soId, activity);
+      if (!ok) return false;
+    } else if (_activeLock) { _activeLock.activity = activity; }
+    const before = new Set(openOverlayIds());
+    let result;
+    try { result = await orig.apply(this, args); }
+    catch (e) { if (!already) await releaseLock(); throw e; }
+    const opened = openOverlayIds().filter(id => SO_LOCK_MODALS.has(id) && !before.has(id));
+    if (opened.length && _activeLock) { _activeLock.modalId = opened[opened.length - 1]; if (window.FB.heartbeat) window.FB.heartbeat('salesOrder', soId, activity); }
+    else if (!already && !(_activeLock && _activeLock.modalId && document.getElementById(_activeLock.modalId)?.classList.contains('open'))) await releaseLock();
+    return result;
+  };
+}
+const dnNoFor = (soId, idx) => { const d = salesOrders.find(x => x.id === soId)?.deliveries?.[idx]; return d ? d.dnNo : 'Delivery Note'; };
+wrapOrderAction('openEditSO', soId => soId, 'Editing the Sales Order');
+wrapOrderAction('openRecordDelivery', soId => soId, 'Dispatching a delivery');
+wrapOrderAction('openDeliveryAcceptance', soId => soId, (soId, idx, opts = {}) =>
+  (opts.mode === 'correction' ? 'Correcting acceptance, ' : opts.mode === 'revision' ? 'Revising acceptance, ' : 'Confirming acceptance, ') + dnNoFor(soId, idx));
+wrapOrderAction('openDNDispatchAction', () => document.getElementById('dn-print-modal')?._soId,
+  mode => (mode === 'void' ? 'Voiding ' : 'Correcting dispatch, ') + (dnForModal(document.getElementById('dn-print-modal'))?.dnNo || 'Delivery Note'));
+wrapOrderAction('openCreateInvoice', soId => soId, 'Creating an invoice');
+wrapOrderAction('openRecordPayment', soId => soId, 'Recording a payment');
+
+/* ═══════════════════════════════════════════════════════════════════
+   QUOTATION / RFQ EDITOR LOCKS
+═══════════════════════════════════════════════════════════════════ */
 const _origEditQuotation = typeof editQuotation === 'function' ? editQuotation : null;
 const _origEditRFQ       = typeof editRFQ       === 'function' ? editRFQ       : null;
 
-/* Wrap editQuotation */
 if (_origEditQuotation) {
   editQuotation = async function(id, skipVatCheck) {
     if (_lockReleasePromise) { try { await _lockReleasePromise; } catch(e) {} }
     const q = quotations.find(x => x.id === id);
     const label = q ? ('Quotation ' + (q.qno || id)) : ('Quotation ' + id);
-    // Release any existing lock first
-    if (_activeLock && (_activeLock.docId !== id || _activeLock.docType !== 'quotation')) {
-      await releaseLock();
-    }
-    if (_activeLock && _activeLock.docId === id) {
-      // Already have this lock
-      _origEditQuotation(id, skipVatCheck);
-      return;
-    }
-    const granted = await acquireDocLock('quotation', id, label);
-    if (granted) _origEditQuotation(id, skipVatCheck);
+    if (_activeLock && _activeLock.docType === 'quotation' && _activeLock.docId === String(id)) { _origEditQuotation(id, skipVatCheck); return; }
+    const granted = await acquireDocLock('quotation', id, label, 'Editing the quotation');
+    if (granted) { if (_activeLock) _activeLock.modalId = 'quote-modal'; _origEditQuotation(id, skipVatCheck); }
   };
 }
-
-/* Wrap editRFQ */
 if (_origEditRFQ) {
   editRFQ = async function(id) {
-    // V225: if the previous editor close is still releasing its remote lock,
-    // wait for that release before reacquiring. The loading overlay remains up.
     if (_lockReleasePromise) { try { await _lockReleasePromise; } catch(e) {} }
     const r = rfqs.find(x => x.id === id);
     const label = r ? ('RFQ ' + (r.rfqno || id)) : ('RFQ ' + id);
-    if (_activeLock && (_activeLock.docId !== id || _activeLock.docType !== 'rfq')) {
-      await releaseLock();
-    }
-    if (_activeLock && _activeLock.docId === id) {
-      _origEditRFQ(id); return;
-    }
-    const granted = await acquireDocLock('rfq', id, label);
-    if (granted) _origEditRFQ(id);
+    if (_activeLock && _activeLock.docType === 'rfq' && _activeLock.docId === String(id)) { _origEditRFQ(id); return; }
+    const granted = await acquireDocLock('rfq', id, label, 'Editing the RFQ');
+    if (granted) { if (_activeLock) _activeLock.modalId = 'rfq-modal'; _origEditRFQ(id); }
   };
 }
-
-/* Release lock when save modals close */
 const _origSaveQuotation = typeof saveQuotation === 'function' ? saveQuotation : null;
 if (_origSaveQuotation) {
   saveQuotation = async function(...args) {
     const result = await _origSaveQuotation(...args);
-    await releaseLock();
+    if (_activeLock && _activeLock.docType === 'quotation') await releaseLock();
     return result;
   };
 }
-
 const _origSaveRFQ = typeof saveRFQ === 'function' ? saveRFQ : null;
 if (_origSaveRFQ) {
   saveRFQ = async function() {
     await _origSaveRFQ();
-    await releaseLock();
+    if (_activeLock && _activeLock.docType === 'rfq') await releaseLock();
   };
 }
 
-/* Release lock when cancel buttons are clicked (modal close).
-   V225: close the visual modal synchronously, then release the remote lock.
-   Older code waited for the network lock release before actually closing the
-   modal; closeEntryWithTransition could therefore restore the RFQ Detail while
-   the editor was still technically open, creating a race on the next Edit. */
-let _lockReleasePromise = null;
+/* Release the lock when its window closes (save, cancel, Esc).
+   The visual close happens first; the remote release follows (V225 ordering). */
 (function() {
   const orig = window.closeModal;
-  if (typeof orig === 'function') {
-    window.closeModal = function(id) {
-      const needsRelease = id === 'quote-modal' || id === 'rfq-modal';
-      if(id==='quote-modal'){
-        document._pendingQuotationRevision=null;
-        document._pendingRFQId=null;
-        document._pendingPricingVersion=null;
-      }
-      // Always complete the UI close first so navigation history has one
-      // deterministic state before any asynchronous Firebase work continues.
-      orig(id);
-      if(needsRelease){
-        const pending = Promise.resolve().then(()=>releaseLock());
-        _lockReleasePromise = pending.finally(()=>{
-          if(_lockReleasePromise===pending || _lockReleasePromise===wrapped) _lockReleasePromise=null;
-        });
-        const wrapped = _lockReleasePromise;
-        return wrapped;
-      }
-      return Promise.resolve();
-    };
-  }
+  if (typeof orig !== 'function') return;
+  window.closeModal = function(id) {
+    if (id === 'quote-modal') {
+      document._pendingQuotationRevision = null;
+      document._pendingRFQId = null;
+      document._pendingPricingVersion = null;
+    }
+    const wasOpen = document.getElementById(id)?.classList.contains('open');
+    orig(id);
+    const stillOpen = document.getElementById(id)?.classList.contains('open');
+    const lock = _activeLock;
+    const owns = lock && (lock.modalId === id || (!lock.modalId && EDITOR_LOCK_MODALS.has(id) && ((id === 'quote-modal' && lock.docType === 'quotation') || (id === 'rfq-modal' && lock.docType === 'rfq'))));
+    if (owns && wasOpen && !stillOpen) {
+      const pending = Promise.resolve().then(() => releaseLock());
+      _lockReleasePromise = pending.finally(() => { if (_lockReleasePromise === wrapped) _lockReleasePromise = null; });
+      const wrapped = _lockReleasePromise;
+      return wrapped;
+    }
+    return Promise.resolve();
+  };
 })();
 
-console.log('Document locking system active ✅');
+console.log('Document locking system active ✅ (V262)');
 
 /* ═══════════════════════════════════════════════════════════════════
-   END DOCUMENT PRESENCE LOCKING SYSTEM
+   ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS
 ═══════════════════════════════════════════════════════════════════ */
+let _locksScreenUnsub = null, _locksScreenData = [], _locksScreenTimer = null;
+function renderLockingSettings(){
+  const box = document.getElementById('locking-settings-body'); if (!box) return;
+  const L = window.BizCoreLocks;
+  const s = L ? L.settings : lockSettings(), stored = L ? L.storedSettings : null, isAdmin = !!(L && L.isAdministrator);
+  const R = L ? L.core.LOCK_RANGES : { idleMinutes: [5, 120], idleWarningMinutes: [1, 5], crashExpiryMinutes: [1, 10] };
+  const dis = isAdmin ? '' : 'disabled';
+  const num = (id, key, label, help) => `<div class="form-group"><label for="${id}">${label}</label><div style="display:flex;align-items:center;gap:8px"><input id="${id}" type="number" min="${R[key][0]}" max="${R[key][1]}" step="1" value="${s[key]}" ${dis} style="max-width:110px"/><span style="color:var(--gray);font-size:12px">minutes (${R[key][0]}–${R[key][1]})</span></div><div style="font-size:11.5px;color:var(--gray);margin-top:4px">${help}</div></div>`;
+  const tog = (id, key, label, help) => `<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:${isAdmin ? 'pointer' : 'default'}"><input id="${id}" type="checkbox" ${s[key] ? 'checked' : ''} ${dis}/> ${label}</label><div style="font-size:11.5px;color:var(--gray);margin-top:4px">${help}</div></div>`;
+  box.innerHTML = `
+    ${isAdmin ? '' : `<div style="background:#FFFBEA;border:1px solid #F0D77B;border-radius:8px;padding:10px 12px;font-size:12.5px;color:#7A5A00;margin-bottom:14px"><i class="ti ti-shield-lock" style="margin-right:6px"></i>Only an administrator can change these settings. Administrators are listed in the database: Firestore → <strong>system</strong> → <strong>accessControl</strong> → <strong>adminUids</strong>. Your user ID: <code style="user-select:all;background:#fff;padding:1px 6px;border-radius:4px">${escapeHtml(window.currentUser?.uid || '')}</code></div>`}
+    <div class="form-grid">
+      ${num('lk-idle', 'idleMinutes', 'Idle time before a lock is released', 'A user who opened a document but does nothing for this long loses the lock so others can work.')}
+      ${num('lk-warn', 'idleWarningMinutes', 'Warning shown before idle release', 'The user is asked "Are you still working?" this long before the release.')}
+      ${num('lk-crash', 'crashExpiryMinutes', 'Lock expiry if the browser stops responding', 'Crash, power cut or closed browser: the lock disappears by itself after this time.')}
+    </div>
+    <div class="form-grid" style="margin-top:6px">
+      <div class="form-group"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" checked disabled/> Lock Sales Orders (with their Delivery Notes, acceptances, invoices and payments)</label><div style="font-size:11.5px;color:var(--gray);margin-top:4px">Always on — the database enforces it.</div></div>
+      ${tog('lk-quote', 'lockQuotations', 'Lock Quotations while being edited', 'Prevents two users editing the same quotation.')}
+      ${tog('lk-rfq', 'lockRFQs', 'Lock RFQs while being edited', 'Prevents two users editing the same RFQ.')}
+      <div class="form-group"><label>Who can force-release a lock</label><div style="height:36px;display:flex;align-items:center;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:#f8fafc;color:var(--gray)"><i class="ti ti-shield-check" style="margin-right:6px"></i>Administrators (role permission once User Role Management is available)</div></div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;flex-wrap:wrap">
+      <div style="font-size:12px;color:var(--gray)">${stored && stored.updatedByName ? 'Last changed by ' + escapeHtml(stored.updatedByName) + (stored.updatedAt ? ' · ' + new Date(L.core.toMillis(stored.updatedAt)).toLocaleString() : '') : 'Using the default values.'} New values apply to locks taken after saving.</div>
+      ${isAdmin ? '<button class="btn btn-primary" id="lk-save" onclick="saveLockingSettings()"><i class="ti ti-device-floppy"></i>Save settings</button>' : ''}
+    </div>
+    <div style="margin-top:18px"><button class="btn btn-secondary" onclick="showLockingHistory()"><i class="ti ti-history"></i>Change history</button></div>
+    <div id="locking-history" style="margin-top:10px"></div>`;
+}
+async function saveLockingSettings(){
+  const val = id => document.getElementById(id);
+  const input = {
+    idleMinutes: Number(val('lk-idle').value), idleWarningMinutes: Number(val('lk-warn').value), crashExpiryMinutes: Number(val('lk-crash').value),
+    lockQuotations: !!val('lk-quote').checked, lockRFQs: !!val('lk-rfq').checked,
+  };
+  const btn = val('lk-save'); if (btn) btn.disabled = true;
+  try { await window.BizCoreLocks.saveSettings(input); showToast('Document locking settings saved. They apply to locks taken from now on.', 'success', 'Settings Saved'); }
+  catch (e) { showToast(e.code === 'permission-denied' ? 'Only an administrator can change these settings.' : e.message, 'error', 'Not Saved'); }
+  finally { if (btn) btn.disabled = false; }
+}
+async function showLockingHistory(){
+  const box = document.getElementById('locking-history'); if (!box) return;
+  box.innerHTML = '<div style="color:var(--gray);font-size:12px">Loading…</div>';
+  try {
+    const rows = await window.BizCoreLocks.loadSettingsHistory();
+    const fmt = v => v ? `idle ${v.idleMinutes} / warn ${v.idleWarningMinutes} / expiry ${v.crashExpiryMinutes} min · quotations ${v.lockQuotations ? 'on' : 'off'} · RFQs ${v.lockRFQs ? 'on' : 'off'}` : 'defaults';
+    box.innerHTML = rows.length ? `<table class="uom-table"><thead><tr><th>When</th><th>By</th><th>Before</th><th>After</th></tr></thead><tbody>${rows.map(r => `<tr><td>${new Date(window.BizCoreLocks.core.toMillis(r.recordedAt)).toLocaleString()}</td><td>${escapeHtml(r.actorName || '')}</td><td>${escapeHtml(fmt(r.before))}</td><td>${escapeHtml(fmt(r.after))}</td></tr>`).join('')}</tbody></table>` : '<div style="color:var(--gray);font-size:12px">No changes recorded yet.</div>';
+  } catch (e) { box.innerHTML = '<div style="color:#DC2626;font-size:12px">' + escapeHtml(e.message) + '</div>'; }
+}
+function startLocksScreen(){
+  if (!_locksScreenUnsub && window.BizCoreLocks) _locksScreenUnsub = window.BizCoreLocks.listen(rows => { _locksScreenData = rows; renderLocksScreen(); });
+  if (!_locksScreenTimer) _locksScreenTimer = setInterval(() => { if (document.getElementById('setup-tab-locks')?.style.display !== 'none') renderLocksScreen(); }, 15000);
+  renderLocksScreen();
+}
+function renderLocksScreen(){
+  const body = document.getElementById('locks-table-body'); if (!body) return;
+  const L = window.BizCoreLocks; if (!L) { body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--gray);padding:24px">Not connected.</td></tr>'; return; }
+  const isAdmin = L.isAdministrator, now = Date.now();
+  const rows = _locksScreenData.filter(l => L.core.lockIsLive(l, now)).map(l => L.core.describeLock(l)).sort((a, b) => b.sinceMs - a.sinceMs);
+  const note = document.getElementById('locks-admin-note'); if (note) note.style.display = isAdmin ? 'none' : 'block';
+  body.innerHTML = rows.length ? rows.map(r => `<tr>
+      <td><strong>${escapeHtml(lockTypeLabel(r.docType))}</strong> ${escapeHtml(r.label || r.docId)}</td>
+      <td>${escapeHtml(r.name)}${r.uid === window.currentUser?.uid ? ' <span style="color:var(--gray)">(you)</span>' : ''}</td>
+      <td>${escapeHtml(r.activity || '—')}</td>
+      <td>${fmtLockTime(r.sinceMs)}</td>
+      <td>${Math.max(0, Math.floor((now - r.heartbeatMs) / 60000))} min ago</td>
+      <td class="center">${isAdmin && r.uid !== window.currentUser?.uid ? `<button class="btn btn-danger btn-sm" onclick="releaseLockFromScreen('${r.docType}','${String(r.docId).replace(/'/g, "\\'")}')"><i class="ti ti-lock-open"></i>Release</button>` : '—'}</td>
+    </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--gray);padding:24px">No document is locked right now.</td></tr>';
+}
+async function releaseLockFromScreen(docType, docId){
+  const l = _locksScreenData.find(x => x.docType === docType && String(x.docId) === String(docId));
+  await forceReleaseLock(docType, docId, l ? (l.label || docId) : docId, l ? l.name : '');
+}
+if (window.BizCoreLocks) window.BizCoreLocks.onSettingsChange(() => {
+  if (document.getElementById('setup-tab-locking')?.style.display === 'block') renderLockingSettings();
+  if (document.getElementById('setup-tab-locks')?.style.display === 'block') renderLocksScreen();
+  if (_activeLock) { startHeartbeat(); if (!document.getElementById('lock-idle-modal')) resetIdleTimer(); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   END DOCUMENT LOCKING
+═══════════════════════════════════════════════════════════════════ */
+
 
 window.addEventListener('load',()=>{
   {const p=new URLSearchParams(location.search);if(!p.get('delivery')&&!p.get('dn')) return;}

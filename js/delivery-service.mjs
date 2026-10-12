@@ -20,7 +20,9 @@ import {
   isSafeId, dnIdForOperation, eventIdForOperation, soLineIndex, emptyLedger, applyLedgerDeltas,
   ledgerDeltasBetween, buildDNItem, validateDispatchLines, validateAcceptanceLines, requireReason,
   requireDate, cleanText, assertSize, dnStatus, dispatchSnapshot, acceptanceSnapshot, roundQty,
-} from './delivery-core.mjs';
+  invoicedQtyByLine,
+} from './delivery-core.mjs?v=262';
+import { LOCK_COLLECTION, LOCK_TYPES, lockId, lockHeldBy } from './lock-service.mjs?v=262';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
 const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, details); };
@@ -36,6 +38,17 @@ export function createDeliveryService(fs, options = {}) {
     return { name: cleanText(a.name || a.email || a.uid, 200), uid: a.uid };
   };
   const formatNumber = options.formatNumber || ((prefix, n) => prefix + String(n).padStart(4, '0'));
+  // Order lock (ERP-style exclusive editing). When required, every operation verifies inside its
+  // transaction that this user/session holds the Sales Order lock; the security rules enforce the
+  // same (with server time for expiry), so a stale window or an expired lock cannot write.
+  const orderLock = options.orderLock || null; // { required(): boolean, sessionId(): string }
+  const lockRequired = () => !!(orderLock && orderLock.required && orderLock.required());
+  const assertOrderLock = (lockSnap, actor, so) => {
+    if (!lockRequired()) return;
+    const held = lockHeldBy(lockSnap && lockSnap.exists() ? lockSnap.data() : null, actor.uid, orderLock.sessionId && orderLock.sessionId());
+    ensure(held, ERR.LOCK_REQUIRED,
+      `You no longer have ${so && so.soNo ? so.soNo : 'this Sales Order'} open for editing (the lock expired or was released). Nothing was saved — please open it again.`);
+  };
 
   const refs = {
     so: id => doc(db, COLLECTIONS.salesOrders, id),
@@ -43,6 +56,7 @@ export function createDeliveryService(fs, options = {}) {
     dn: id => doc(db, COLLECTIONS.deliveryNotes, id),
     event: (dnId, col, id) => doc(db, COLLECTIONS.deliveryNotes, dnId, col, id),
     counter: key => doc(db, COLLECTIONS.counters, key),
+    lock: soId => doc(db, LOCK_COLLECTION, lockId(LOCK_TYPES.salesOrder, soId)),
   };
   const stamp = () => (serverTimestamp ? { recordedAt: serverTimestamp() } : {});
 
@@ -111,8 +125,9 @@ export function createDeliveryService(fs, options = {}) {
 
     return transact(async tx => {
       // Reads first (Firestore requirement).
-      const [soSnap, ledgerSnap, dnSnap, counterSnap] = await Promise.all([
+      const [soSnap, ledgerSnap, dnSnap, counterSnap, lockSnap] = await Promise.all([
         tx.get(refs.so(salesOrderId)), tx.get(refs.ledger(salesOrderId)), tx.get(refs.dn(dnId)), tx.get(refs.counter(numbering.counterKey)),
+        lockRequired() ? tx.get(refs.lock(salesOrderId)) : Promise.resolve(null),
       ]);
       if (dnSnap.exists()) {
         const existing = dnSnap.data();
@@ -120,6 +135,7 @@ export function createDeliveryService(fs, options = {}) {
         return { alreadyApplied: true, dn: existing };
       }
       const so = readSalesOrder(soSnap, salesOrderId, ledgerSnap);
+      assertOrderLock(lockSnap, actor, so);
       const lineIndex = soLineIndex(so);
       const lines = validateDispatchLines(input.lines, lineIndex);
       const ledger = readLedger(ledgerSnap, salesOrderId);
@@ -168,7 +184,8 @@ export function createDeliveryService(fs, options = {}) {
       // Read order matters: the ledger (aggregate) is read BEFORE the DN. If the reads straddle
       // another user's commit, the DN is then the newer read, so the revision check reports an
       // accurate "changed by another user" instead of deltas being computed from a stale DN.
-      const [soSnap, ledgerSnap] = await Promise.all([tx.get(refs.so(soId)), tx.get(refs.ledger(soId))]);
+      const [soSnap, ledgerSnap, lockSnap] = await Promise.all([tx.get(refs.so(soId)), tx.get(refs.ledger(soId)),
+        lockRequired() ? tx.get(refs.lock(soId)) : Promise.resolve(null)]);
       const [dnSnap, eventSnap] = await Promise.all([tx.get(refs.dn(dnId)), tx.get(refs.event(dnId, collection, eventId))]);
       ensure(dnSnap.exists(), ERR.NOT_FOUND, 'Delivery Note not found');
       const old = dnSnap.data();
@@ -182,6 +199,7 @@ export function createDeliveryService(fs, options = {}) {
         `${old.dnNo || 'This Delivery Note'} was changed by another user or session. The latest version has been loaded — please review and try again.`,
         { currentRevision: old.revision, expectedRevision });
       const so = readSalesOrder(soSnap, soId, ledgerSnap);
+      assertOrderLock(lockSnap, actor, so);
       const lineIndex = soLineIndex(so);
       const ledger = readLedger(ledgerSnap, soId);
 
@@ -196,6 +214,18 @@ export function createDeliveryService(fs, options = {}) {
       assertSize(record, LIMITS.dnBytes, 'Delivery Note');
       const deltas = ledgerDeltasBetween(old, record);
       const nextLedger = applyLedgerDeltas(ledger, lineIndex, deltas);
+      // Accepted quantity can never fall below what has already been invoiced for that line:
+      // the invoice must be cancelled (or a credit note issued) first.
+      const invoiced = invoicedQtyByLine(so);
+      for (const d of deltas) {
+        if (!(d.accepted < 0)) continue;
+        const inv = invoiced.get(d.lineId) || 0;
+        const acc = Number(nextLedger.lines?.[d.lineId]?.accepted) || 0;
+        const ref = lineIndex.get(d.lineId);
+        ensure(acc + 1e-6 >= inv, ERR.BELOW_INVOICED,
+          `"${ref?.line?.desc || ref?.line?.code || 'Line'}": ${roundQty(inv)} already invoiced, so the accepted quantity cannot be reduced to ${roundQty(acc)}. Cancel the invoice or issue a credit note first.`,
+          { lineId: d.lineId, invoiced: roundQty(inv), acceptedAfter: roundQty(acc) });
+      }
       const event = {
         id: eventId, kind, type, label, operationId, deliveryNoteId: dnId, salesOrderId: soId, dnNo: old.dnNo,
         fromRevision: old.revision, toRevision: revision, reason, actor: actor.name, actorUid: actor.uid, at,

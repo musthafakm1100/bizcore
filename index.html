@@ -875,6 +875,8 @@ document.addEventListener('error', function(e) {
 <div class="setup-nav-group-title">Security</div>
 <button class="setup-tab" id="stab-users" onclick="switchSetupTab('users')"><i class="ti ti-user-cog"></i><span class="tab-copy"><span class="tab-title">Users</span></span></button>
 <button class="setup-tab" id="stab-roles" onclick="switchSetupTab('roles')"><i class="ti ti-shield-check"></i><span class="tab-copy"><span class="tab-title">Roles &amp; Permissions</span></span></button>
+<button class="setup-tab" id="stab-locking" onclick="switchSetupTab('locking')"><i class="ti ti-lock-cog"></i><span class="tab-copy"><span class="tab-title">Document Locking</span></span></button>
+<button class="setup-tab" id="stab-locks" onclick="switchSetupTab('locks')"><i class="ti ti-lock-access"></i><span class="tab-copy"><span class="tab-title">Active Locks</span></span></button>
 </div>
 <div class="setup-nav-group">
 <div class="setup-nav-group-title">Document Configuration</div>
@@ -1218,6 +1220,18 @@ document.addEventListener('error', function(e) {
 <div><div id="pricing-settings-change-status" style="font-size:12px;font-weight:700;color:var(--gray)">No pending changes</div><div style="font-size:11px;color:var(--gray);margin-top:2px">New pricing calculations use only the last applied settings.</div></div>
 <div class="master-change-actions"><button class="btn btn-secondary" disabled="" id="pricing-settings-cancel-btn" onclick="requestCancelPricingSettingsChanges()"><i class="ti ti-arrow-back-up"></i>Cancel Changes</button><button class="btn btn-primary" disabled="" id="pricing-settings-apply-btn" onclick="requestApplyPricingSettingsChanges()"><i class="ti ti-check"></i>Apply Changes</button></div>
 </div>
+</div>
+<div class="setup-tab-content" id="setup-tab-locking" style="display:none">
+<div class="setup-page-head"><div><h2>Document Locking</h2><p>While a user works on a document, other users can view and print it but cannot change it. These timings control when an unused lock is released.</p></div><span class="phase-badge"><i class="ti ti-lock" style="margin-right:5px"></i>V262</span></div>
+<section class="setup-section"><div class="setup-section-head"><div><h3><i class="ti ti-lock-cog"></i>Locking settings</h3><p>Stored in the database and applied to every user automatically.</p></div></div>
+<div class="setup-section-body" id="locking-settings-body"></div></section>
+</div>
+<div class="setup-tab-content" id="setup-tab-locks" style="display:none">
+<div class="setup-page-head"><div><h2>Active Locks</h2><p>Documents currently being worked on. Locks disappear when the user closes the window, stops responding or stays inactive.</p></div><span class="phase-badge"><i class="ti ti-lock-access" style="margin-right:5px"></i>Live</span></div>
+<section class="setup-section"><div class="setup-section-body">
+<div id="locks-admin-note" style="display:none;background:#FFFBEA;border:1px solid #F0D77B;border-radius:8px;padding:10px 12px;font-size:12.5px;color:#7A5A00;margin-bottom:12px"><i class="ti ti-shield-lock" style="margin-right:6px"></i>Only an administrator can release another user's lock.</div>
+<div style="overflow-x:auto"><table class="uom-table"><thead><tr><th>Document</th><th>User</th><th>Activity</th><th>Since</th><th>Last active</th><th class="center">Action</th></tr></thead><tbody id="locks-table-body"></tbody></table></div>
+</div></section>
 </div>
 <div class="setup-tab-content" id="setup-tab-audit-log" style="display:none">
 <div class="setup-page-head"><div><h2>Audit Log</h2><p>Review important user and document activities recorded by BizCore.</p></div><span class="phase-badge"><i class="ti ti-clock" style="margin-right:5px"></i>Planned</span></div>
@@ -2055,13 +2069,14 @@ document.addEventListener('error', function(e) {
 <div class="toast" id="toast"></div>
 <!-- Firebase: loaded as module, exposes window.FB then loads app.js -->
 <script type="module">
-import { createDeliveryService, loadDeliveryEvents } from './js/delivery-service.mjs?v=260';
-import * as DNCore from './js/delivery-core.mjs?v=260';
+import { createDeliveryService, loadDeliveryEvents } from './js/delivery-service.mjs?v=262';
+import * as DNCore from './js/delivery-core.mjs?v=262';
+import * as LockCore from './js/lock-service.mjs?v=262';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, deleteDoc,
+import { getFirestore, doc, getDoc, getDocFromServer, setDoc, onSnapshot, deleteDoc,
          collection, getDocs, query, where, writeBatch,
          initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
          runTransaction, serverTimestamp, connectFirestoreEmulator }
@@ -2344,7 +2359,10 @@ function _stripEmbeddedImages(node, depth = 0) {
 }
 window.BizCoreStripEmbeddedImages = _stripEmbeddedImages;
 
-async function fbSave(col, arr) {
+/* opts.onlyIds: write only these records (a user action on specific documents). Without it every
+   changed record is written — background writes then go one document at a time, so a document the
+   rules refuse (e.g. an order locked by someone else) cannot block the others. */
+async function fbSave(col, arr, opts = {}) {
   try {
     window.BizCoreStorageDiagnostics.lastSaveError = null;
     if (col === 'salesOrders') arr = await _guardSalesOrderPersistence(arr);
@@ -2357,10 +2375,12 @@ async function fbSave(col, arr) {
     const cache = _lastSynced[col] || (_lastSynced[col] = {});
     const currentIds = new Set();
     const writes = []; // {docId, data, json}
+    const only = Array.isArray(opts.onlyIds) ? new Set(opts.onlyIds.map(String)) : null;
     for (const record of (arr || [])) {
       if (!record || record.id == null) continue;
       const docId = _docIdFor(col, record);
       currentIds.add(docId);
+      if (only && !only.has(String(record.id)) && !only.has(docId)) continue;
       const json = JSON.stringify(record);
       if (cache[docId] !== json) {
         const estimatedBytes = _bizcoreEncoder.encode(json).length;
@@ -2374,13 +2394,25 @@ async function fbSave(col, arr) {
         writes.push({ docId, data: record, json });
       }
     }
-    const deletes = Object.keys(cache).filter(id => !currentIds.has(id));
+    const deletes = Object.keys(cache).filter(id => !currentIds.has(id) && (!only || only.has(id)));
     if (!writes.length && !deletes.length) return true; // nothing changed — skip the network entirely
 
     const ops = [
       ...writes.map(w => ({ op: 'set', docId: w.docId, data: w.data })),
       ...deletes.map(docId => ({ op: 'delete', docId }))
     ];
+    if (col === 'salesOrders' && !only && ops.length > 1) {
+      // Background save of several Sales Orders: one commit per document; report failures, keep the rest.
+      const failed = [];
+      for (const o of ops) {
+        try {
+          if (o.op === 'set') await setDoc(doc(db, col, o.docId), o.data); else await deleteDoc(doc(db, col, o.docId));
+          if (o.op === 'set') cache[o.docId] = writes.find(w => w.docId === o.docId).json; else delete cache[o.docId];
+        } catch (e) { failed.push({ docId: o.docId, code: e.code || 'unknown' }); }
+      }
+      if (failed.length) { const e = new Error('Some Sales Orders were not saved: ' + failed.map(f => f.docId + ' (' + f.code + ')').join(', ')); e.code = failed[0].code; throw e; }
+      return true;
+    }
     for (const part of _chunk(ops, 400)) { // Firestore batch limit is 500 ops
       const batch = writeBatch(db);
       part.forEach(o => o.op === 'set' ? batch.set(doc(db, col, o.docId), o.data) : batch.delete(doc(db, col, o.docId)));
@@ -2580,11 +2612,78 @@ function startDeliveryNoteModeListener() {
  });
 }
 
+/* ── V262: Document locking (ERP-style exclusive editing) ──
+   One lock per business object (locks/{type}_{id}); Sales Order business writes are refused by the
+   security rules unless the writer holds a live order lock. Settings: Administration → Document Locking. */
+const _lockSessionId = 'ses-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+let _lockSettingsStored = null, _lockSettings = LockCore.effectiveLockSettings(null), _lockSettingsUnsub = null;
+let _isAdministrator = false, _accessUnsub = null;
+const _lockSettingsListeners = new Set();
+const _lockActor = () => {
+  const u = auth.currentUser, cu = window.currentUser || {};
+  return u ? { uid: u.uid, name: cu.name || u.displayName || u.email || u.uid, email: u.email || '' } : null;
+};
+const lockService = LockCore.createLockService({ db, doc, runTransaction, serverTimestamp }, {
+  actor: _lockActor, sessionId: _lockSessionId, settings: () => _lockSettings,
+});
+function startLockingListeners() {
+  if (!_lockSettingsUnsub) _lockSettingsUnsub = onSnapshot(doc(db, ...LockCore.LOCK_SETTINGS_PATH), snap => {
+    _lockSettingsStored = snap.exists() ? snap.data() : null;
+    _lockSettings = LockCore.effectiveLockSettings(_lockSettingsStored);
+    _lockSettingsListeners.forEach(fn => { try { fn(_lockSettings, _lockSettingsStored); } catch (e) { console.error(e); } });
+  }, err => console.warn('[BizCore] Locking settings unavailable (defaults used):', err.message));
+  if (!_accessUnsub) _accessUnsub = onSnapshot(doc(db, 'system', 'accessControl'), snap => {
+    const uid = auth.currentUser && auth.currentUser.uid;
+    _isAdministrator = !!(uid && snap.exists() && Array.isArray(snap.data().adminUids) && snap.data().adminUids.includes(uid));
+    _lockSettingsListeners.forEach(fn => { try { fn(_lockSettings, _lockSettingsStored); } catch (e) { console.error(e); } });
+  }, err => console.warn('[BizCore] Access control unavailable:', err.message));
+}
+window.BizCoreLocks = {
+  core: LockCore,
+  service: lockService,
+  sessionId: _lockSessionId,
+  get settings() { return _lockSettings; },
+  get storedSettings() { return _lockSettingsStored; },
+  /** Server-trusted administrator (system/accessControl.adminUids) — used for force release and settings. */
+  get isAdministrator() { return _isAdministrator; },
+  onSettingsChange(fn) { _lockSettingsListeners.add(fn); return () => _lockSettingsListeners.delete(fn); },
+  watch(docType, docId, cb) {
+    return onSnapshot(doc(db, LockCore.LOCK_COLLECTION, LockCore.lockId(docType, docId)), snap => cb(snap.exists() ? snap.data() : null),
+      err => console.warn('[BizCore] Lock watch error:', err.message));
+  },
+  listen(cb) {
+    return onSnapshot(collection(db, LockCore.LOCK_COLLECTION), snap => { const out = []; snap.forEach(d => out.push(d.data())); cb(out); },
+      err => console.warn('[BizCore] Locks listener error:', err.message));
+  },
+  async saveSettings(input) {
+    const v = LockCore.validateLockSettings(input);
+    if (!v.ok) { const e = new Error(v.errors.map(x => x.message).join(' ')); e.code = 'invalid-argument'; e.errors = v.errors; throw e; }
+    const a = _lockActor(); if (!a) throw new Error('Sign in first');
+    const before = _lockSettingsStored ? { idleMinutes: _lockSettingsStored.idleMinutes, idleWarningMinutes: _lockSettingsStored.idleWarningMinutes, crashExpiryMinutes: _lockSettingsStored.crashExpiryMinutes, lockQuotations: _lockSettingsStored.lockQuotations, lockRFQs: _lockSettingsStored.lockRFQs } : null;
+    const batch = writeBatch(db);
+    batch.set(doc(db, ...LockCore.LOCK_SETTINGS_PATH), { ...v.value, updatedAt: serverTimestamp(), updatedByUid: a.uid, updatedByName: a.name });
+    const changeId = 'chg-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    batch.set(doc(db, ...LockCore.LOCK_SETTINGS_PATH, 'changes', changeId), { id: changeId, before, after: v.value, actorUid: a.uid, actorName: a.name, recordedAt: serverTimestamp() });
+    await batch.commit();
+    return v.value;
+  },
+  async loadSettingsHistory() {
+    const snap = await getDocs(collection(db, ...LockCore.LOCK_SETTINGS_PATH, 'changes'));
+    return snap.docs.map(d => d.data()).sort((a, b) => LockCore.toMillis(b.recordedAt) - LockCore.toMillis(a.recordedAt));
+  },
+  async loadForceReleaseLog() {
+    const snap = await getDocs(collection(db, LockCore.LOCK_EVENTS_COLLECTION));
+    return snap.docs.map(d => d.data()).sort((a, b) => LockCore.toMillis(b.recordedAt) - LockCore.toMillis(a.recordedAt));
+  },
+};
+
 const dnService = createDeliveryService({ db, doc, runTransaction, serverTimestamp }, {
   actor: () => {
     const u = auth.currentUser, cu = window.currentUser || {};
     return u ? { uid: u.uid, name: cu.name || u.displayName || u.email || u.uid } : {};
   },
+  // Every Delivery Note operation must be made by the holder of the Sales Order lock (also enforced by the rules).
+  orderLock: { required: () => _dnMode === DNCore.STORAGE_MODES.independent, sessionId: () => _lockSessionId },
   formatNumber: (prefix, n) => (typeof window.formatDocSequence === 'function' ? window.formatDocSequence(prefix, n) : prefix + String(n).padStart(4, '0')),
 });
 
@@ -2622,113 +2721,34 @@ window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings, fbListen, fbListen
   getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
 
   /* ═══════════════════════════════════════════════════
-     PRESENCE LOCKING SYSTEM
-     Prevents two users editing the same document simultaneously
+     DOCUMENT LOCKING (V262) — see window.BizCoreLocks / js/lock-service.mjs
   ═══════════════════════════════════════════════════ */
-
-  /* Acquire a lock on a document.
-     Returns: { granted:true } if lock acquired
-              { granted:false, lockedBy, lockedByEmail, since, lastActive } if locked by someone else */
-  async acquireLock(docType, docId) {
-    if (!window.currentUser) return { granted: true }; // no auth = no lock
-    const lockRef = doc(db, 'locks', docType + '_' + docId);
-    try {
-      const snap = await getDoc(lockRef);
-      const now  = Date.now();
-
-      if (snap.exists()) {
-        const lock = snap.data();
-        // If locked by same user (e.g. another tab), allow
-        if (lock.uid === window.currentUser.uid) {
-          await setDoc(lockRef, { ...lock, lastActive: now });
-          return { granted: true };
-        }
-        // If lock is idle for 30+ minutes, auto-expire it
-        const idleMins = (now - lock.lastActive) / 60000;
-        if (idleMins >= 30) {
-          await setDoc(lockRef, {
-            uid: window.currentUser.uid,
-            name: window.currentUser.name,
-            email: window.currentUser.email,
-            since: now,
-            lastActive: now,
-            docType, docId
-          });
-          return { granted: true };
-        }
-        // Actively locked by someone else
-        return {
-          granted: false,
-          lockedBy: lock.name || lock.email,
-          lockedByEmail: lock.email,
-          since: lock.since,
-          lastActive: lock.lastActive,
-          idleMins: Math.floor(idleMins)
-        };
-      }
-
-      // No lock exists — acquire it
-      await setDoc(lockRef, {
-        uid: window.currentUser.uid,
-        name: window.currentUser.name,
-        email: window.currentUser.email,
-        since: now,
-        lastActive: now,
-        docType, docId
-      });
-      return { granted: true };
-    } catch(e) {
-      console.warn('Lock acquire failed:', e.message);
-      return { granted: true }; // fail open — better to allow editing than block everything
-    }
+  /* → { granted:true, ownOtherSession } | { granted:false, holder } | { granted:false, error } */
+  async acquireLock(docType, docId, opts = {}) {
+    if (!auth.currentUser) return { granted: false, error: { code: 'unauthenticated', message: 'Not signed in' } };
+    try { return await lockService.acquire({ docType, docId: String(docId), label: opts.label || '', activity: opts.activity || '' }); }
+    catch (e) { console.warn('Lock acquire failed:', e.code || '', e.message); return { granted: false, error: { code: e.code || 'unknown', message: e.message } }; }
   },
-
-  /* Release a lock when done editing */
   async releaseLock(docType, docId) {
-    if (!window.currentUser) return;
-    const lockRef = doc(db, 'locks', docType + '_' + docId);
-    try {
-      const snap = await getDoc(lockRef);
-      if (snap.exists() && snap.data().uid === window.currentUser.uid) {
-        await deleteDoc(lockRef);
-      }
-    } catch(e) { console.warn('Lock release failed:', e.message); }
+    if (!auth.currentUser) return;
+    try { await lockService.release({ docType, docId: String(docId) }); } catch (e) { console.warn('Lock release failed:', e.message); }
   },
-
-  /* Force take over a lock (override another user) */
-  async takeover(docType, docId) {
-    if (!window.currentUser) return;
-    const lockRef = doc(db, 'locks', docType + '_' + docId);
-    try {
-      await setDoc(lockRef, {
-        uid: window.currentUser.uid,
-        name: window.currentUser.name,
-        email: window.currentUser.email,
-        since: Date.now(),
-        lastActive: Date.now(),
-        docType, docId
-      });
-    } catch(e) { console.warn('Takeover failed:', e.message); }
+  async heartbeat(docType, docId, activity) {
+    if (!auth.currentUser) return { held: false };
+    try { return await lockService.heartbeat({ docType, docId: String(docId), activity }); }
+    catch (e) { console.warn('Lock heartbeat failed:', e.message); return { held: true, transient: true }; } // network blip: keep trying
   },
-
-  /* Send heartbeat — call every 60s while editing to prove still active */
-  async heartbeat(docType, docId) {
-    if (!window.currentUser) return;
-    const lockRef = doc(db, 'locks', docType + '_' + docId);
-    try {
-      const snap = await getDoc(lockRef);
-      if (snap.exists() && snap.data().uid === window.currentUser.uid) {
-        await setDoc(lockRef, { ...snap.data(), lastActive: Date.now() });
-      }
-    } catch(e) {}
+  async forceReleaseLock(docType, docId, reason) {
+    return lockService.forceRelease({ docType, docId: String(docId), reason, operationId: Date.now().toString(36) + Math.random().toString(36).slice(2, 8) });
   },
-
-  /* Watch a lock in real time — calls cb(lockData|null) when it changes */
-  watchLock(docType, docId, cb) {
-    const lockRef = doc(db, 'locks', docType + '_' + docId);
-    return onSnapshot(lockRef, snap => {
-      cb(snap.exists() ? snap.data() : null);
-    });
+  watchLock(docType, docId, cb) { return window.BizCoreLocks.watch(docType, docId, cb); },
+  /** Latest version of one document straight from the server (used right after a lock is granted). */
+  async fetchFromServer(col, id) {
+    const snap = await getDocFromServer(doc(db, col, String(id)));
+    if (!snap.exists()) return null;
+    const data = snap.data();
+    (_lastSynced[col] || (_lastSynced[col] = {}))[snap.id] = JSON.stringify(data);
+    return data;
   }
 };
 window.fbAuthInstance = auth;
@@ -2738,6 +2758,7 @@ onAuthStateChanged(auth, user => {
   if (!user) { const target=location.pathname.split('/').pop()+(location.search||''); window.location.href='login.html?return='+encodeURIComponent(target); return; }
 
   startDeliveryNoteModeListener();
+  startLockingListeners();
   window.currentUser = {
     uid:   user.uid,
     email: user.email,
@@ -2836,7 +2857,7 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script')) {
     const s   = document.createElement('script');
     s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=261';
+    s.src = 'js/app.js?v=262';
     document.body.appendChild(s);
   }
 });

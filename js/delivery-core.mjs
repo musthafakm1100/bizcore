@@ -62,6 +62,8 @@ export const ERR = Object.freeze({
   LEGACY_DATA: 'legacy-data',
   SIZE_LIMIT: 'size-limit',
   INCONSISTENT: 'inconsistent-data',
+  LOCK_REQUIRED: 'lock-required',
+  BELOW_INVOICED: 'below-invoiced',
 });
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
 const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, details); };
@@ -247,6 +249,24 @@ export function ledgerDeltasBetween(before, after) {
     if (d.inTransit || d.accepted || d.rejected) deltas.push(d);
   }
   return deltas;
+}
+
+/** Quantity already invoiced per SO line (lineId → qty) from the invoices stored on the Sales Order.
+ *  Invoice items carry `soLineId` (V260+) or `soIdx` (SO row) — both resolve to the line's stable ID.
+ *  Cancelled / credited-out invoices are ignored. */
+export function invoicedQtyByLine(so) {
+  const out = new Map();
+  const items = Array.isArray(so?.items) ? so.items : [];
+  for (const inv of (Array.isArray(so?.invoices) ? so.invoices : [])) {
+    if (!inv || inv.cancelled || inv.status === 'Cancelled' || inv.voided) continue;
+    for (const it of (Array.isArray(inv.items) ? inv.items : [])) {
+      const lineId = it.soLineId || (Number.isInteger(it.soIdx) && items[it.soIdx] ? items[it.soIdx].lineId : null);
+      const q = Number(it.qty);
+      if (!lineId || !Number.isFinite(q) || q <= 0) continue;
+      out.set(lineId, roundQty((out.get(lineId) || 0) + q));
+    }
+  }
+  return out;
 }
 
 /** Builds a DN item from the authoritative SO line read inside the transaction. */
