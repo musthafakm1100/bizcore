@@ -91,12 +91,12 @@ function startInvoiceListeners(){
 }
 
 /** Routing used by app.js openCreateInvoice(): 'legacy' → the previous screen; otherwise handled here. */
-function invoiceModeRoute(soId){
+function invoiceModeRoute(soId, opts){
   const m = invMode();
   if (m === 'legacy') return 'legacy';
   if (m === 'migrating') { showToast('The administrator is moving invoices to the new storage. Invoicing is paused until it completes.', 'warning', 'Invoicing Paused'); return false; }
   if (m !== 'independent') { showToast('Invoice storage could not be verified. Please reload BizCore.', 'error', 'Not Available'); return false; }
-  return openIssueInvoice(soId);
+  return openIssueInvoice(soId, opts);
 }
 function invoiceErrorMessage(e){
   const code = e && e.code || '';
@@ -124,7 +124,7 @@ function ensureIssueInvoiceModal(){
     <div class="modal-body">
       <div class="so-flow-strip inv-steps" id="ii-steps"></div>
       <div id="ii-step-type">
-        <div class="inv-step-head"><strong>What do you want to invoice?</strong><span>Choose the invoice type first. You can go back and change it before saving.</span></div>
+        <div class="inv-step-head"><strong>What do you want to invoice?</strong><span>You can change it before saving</span></div>
         <div class="inv-type-grid" id="ii-types" role="radiogroup" aria-label="Invoice type"></div>
         <div class="inv-context-strip" id="ii-context"></div>
       </div>
@@ -180,7 +180,7 @@ function ensureIssueInvoiceModal(){
   return m;
 }
 
-async function openIssueInvoice(soId){
+async function openIssueInvoice(soId, opts = {}){
   const so = salesOrders.find(x => x.id === soId); if (!so) return false;
   if (!navigator.onLine) { showToast('Invoices are saved directly to the cloud database. Please reconnect and try again.', 'error', 'Offline'); return false; }
   const C = invLib();
@@ -197,10 +197,28 @@ async function openIssueInvoice(soId){
   document.getElementById('ii-date').value = today; document.getElementById('ii-due').value = due.toISOString().split('T')[0];
   ['ii-zoho', 'ii-notes', 'ii-reason'].forEach(id => { document.getElementById(id).value = ''; });
   document.querySelector('input[name="ii-adv-method"][value="percentOrder"]').checked = true; document.getElementById('ii-adv-pct').value = '50';
+  m._fromDn = null;
   renderIssueInvoiceTypes();
   issueInvoiceStep(1);
+  if (opts && opts.fromDnId) issueInvoiceFromDN(m, so, opts.fromDnId);
   openModalWithSize('inv-issue-modal');
   return true;
+}
+/** Opened from a Delivery Note: delivery invoice, quantities = what that DN's customer accepted (within what is still uninvoiced). */
+function issueInvoiceFromDN(m, so, dnId){
+  const d = (so.deliveries || []).find(x => x.id === dnId); if (!d) return;
+  const card = document.querySelector('#ii-types [data-inv-type="delivery"]');
+  if (!card || card.disabled) return;   // nothing accepted is waiting — stay on step 1 and let the user choose
+  const accepted = {};
+  (d.items || []).forEach(it => {
+    const row = typeof soRowOfItem === 'function' ? soRowOfItem(so, it, 'dn') : null;
+    const lineId = it.soLineId || (row != null && so.items[row] ? so.items[row].lineId : null);
+    if (lineId) accepted[lineId] = (accepted[lineId] || 0) + deliveryAcceptedQty(d, it);
+  });
+  m._type = 'delivery';
+  m._fromDn = { id: d.id, dnNo: d.dnNo, accepted };
+  document.getElementById('ii-subtitle').textContent += ' · From ' + (d.dnNo || 'Delivery Note');
+  issueInvoiceStep(2);
 }
 function permState(level, isAdmin){
   if (level === 'all') return { ok: true, why: '' };
@@ -218,9 +236,9 @@ function issueInvoiceSnapshot(m){
 function renderIssueInvoiceTypes(){
   const m = document.getElementById('inv-issue-modal'), s = issueInvoiceSnapshot(m);
   const avail = {
-    delivery: s.deliveryLines ? { ok: true, line: `Ready to invoice: <b>${invMoney(s.deliveryValue)}</b> on ${s.deliveryLines} line${s.deliveryLines > 1 ? 's' : ''}` } : { ok: false, line: 'Nothing accepted is waiting to be invoiced' },
-    order: s.orderLines ? { ok: true, line: `Not yet invoiced: <b>${invMoney(s.orderGoods)}</b> on ${s.orderLines} line${s.orderLines > 1 ? 's' : ''}` } : { ok: false, line: 'Every line is already invoiced' },
-    advance: s.room > 0.004 ? { ok: true, line: `Still billable on this order: <b>${invMoney(s.room)}</b>` } : { ok: false, line: 'The whole order value is already billed' },
+    delivery: s.deliveryLines ? { ok: true, line: `<small>Ready to invoice</small><b>${invMoney(s.deliveryValue)}</b><small>${s.deliveryLines} line${s.deliveryLines > 1 ? 's' : ''}</small>` } : { ok: false, line: '<small>Nothing accepted is waiting to be invoiced</small>' },
+    order: s.orderLines ? { ok: true, line: `<small>Not yet invoiced</small><b>${invMoney(s.orderGoods)}</b><small>${s.orderLines} line${s.orderLines > 1 ? 's' : ''}</small>` } : { ok: false, line: '<small>Every line is already invoiced</small>' },
+    advance: s.room > 0.004 ? { ok: true, line: `<small>Still billable</small><b>${invMoney(s.room)}</b><small>on this order</small>` } : { ok: false, line: '<small>The whole order value is already billed</small>' },
   };
   const recommended = avail.delivery.ok ? 'delivery' : null;
   document.getElementById('ii-types').innerHTML = ['delivery', 'order', 'advance'].map(t => {
@@ -248,6 +266,7 @@ function issueInvoiceStep(n){
   const m = document.getElementById('inv-issue-modal');
   if (n === 2 && !m._type) return;
   const two = n === 2;
+  m.querySelector('.modal').classList.toggle('inv-step1', !two);
   document.getElementById('ii-step-type').hidden = two; document.getElementById('ii-step-form').hidden = !two;
   document.getElementById('ii-continue').hidden = two; document.getElementById('ii-save').hidden = !two; document.getElementById('ii-back').hidden = !two;
   document.getElementById('ii-footer-note').style.visibility = two ? 'visible' : 'hidden';
@@ -275,6 +294,7 @@ function renderIssueInvoiceLines(){
   const card = document.getElementById('ii-items-help').closest('.so-items-card'); if (card) card.hidden = false;
   document.getElementById('ii-items-title').textContent = adv ? 'Order Lines' : 'Items to Invoice';
   document.getElementById('ii-items-help').textContent = adv ? 'For "% of selected lines", tick the lines the advance is for.'
+    : t === 'delivery' && m._fromDn ? `Prefilled with the quantities accepted on ${m._fromDn.dnNo} (within what is still uninvoiced). Use "All available" to include other accepted deliveries.`
     : t === 'delivery' ? 'Only quantities the customer has accepted can be invoiced. Available = accepted − already invoiced.'
     : 'Bill ahead of delivery. Available = ordered − already invoiced.';
   const rows = m._states.filter(s => adv || (t === 'delivery' ? s.availableDelivery : s.availableOrder) > 1e-6);
@@ -288,13 +308,18 @@ function renderIssueInvoiceLines(){
     document.getElementById('ii-items-head').innerHTML = '<span>#</span><span>Item / Description</span><span class="num">Ordered</span><span class="num">Accepted</span><span class="num">Invoiced</span><span class="num">Available</span><span class="num">Invoice Qty</span><span>UOM</span><span class="num">Unit Price</span><span class="num">Amount</span>';
     document.getElementById('ii-items').innerHTML = rows.map((s, i) => {
       const avail = t === 'delivery' ? s.availableDelivery : s.availableOrder;
-      return `<div class="inv-line-row"><span class="muted">${i + 1}</span><span class="desc">${invEsc(s.line.desc || '—')}</span><span class="num muted">${formatQuantity(s.ordered)}</span><span class="num">${formatQuantity(s.accepted)}</span><span class="num">${formatQuantity(s.invoiced)}${s.invoicedAhead > 0 ? `<small class="inv-ahead">${formatQuantity(s.invoicedAhead)} ahead</small>` : ''}</span><span class="num inv-avail">${formatQuantity(avail)}</span><span><input class="bc-num-input" id="ii-qty-${i}" type="number" min="0" max="${avail}" step="${qtyStep(s.line.uom)}" value="${t === 'delivery' ? avail : 0}" oninput="recalcIssueInvoice()" aria-label="Invoice quantity"></span><span class="muted">${invEsc(s.line.uom || '—')}</span><span class="num">${documentMoney('customerInvoice', 'unitPrice', s.up)}</span><span class="num strong" id="ii-amt-${i}">—</span></div>`;
+      return `<div class="inv-line-row"><span class="muted">${i + 1}</span><span class="desc">${invEsc(s.line.desc || '—')}</span><span class="num muted">${formatQuantity(s.ordered)}</span><span class="num">${formatQuantity(s.accepted)}</span><span class="num">${formatQuantity(s.invoiced)}${s.invoicedAhead > 0 ? `<small class="inv-ahead">${formatQuantity(s.invoicedAhead)} ahead</small>` : ''}</span><span class="num inv-avail">${formatQuantity(avail)}</span><span><input class="bc-num-input" id="ii-qty-${i}" type="number" min="0" max="${avail}" step="${qtyStep(s.line.uom)}" value="${t === 'delivery' ? issueInvoiceDefaultQty(m, s, avail) : 0}" oninput="recalcIssueInvoice()" aria-label="Invoice quantity"></span><span class="muted">${invEsc(s.line.uom || '—')}</span><span class="num">${documentMoney('customerInvoice', 'unitPrice', s.up)}</span><span class="num strong" id="ii-amt-${i}">—</span></div>`;
     }).join('');
   }
   const empty = !rows.length;
   document.getElementById('ii-empty').hidden = !empty;
   document.getElementById('ii-empty-text').textContent = t === 'delivery' ? 'No customer-accepted quantity is waiting to be invoiced.' : 'Everything on this order has already been invoiced.';
   grid.hidden = empty;
+}
+function issueInvoiceDefaultQty(m, s, avail){
+  if (!m._fromDn) return avail;
+  const a = m._fromDn.accepted[s.lineId] || 0;
+  return roundQtyForUom(Math.max(0, Math.min(avail, a)), s.line.uom);
 }
 function issueInvoiceFill(all){
   const m = document.getElementById('inv-issue-modal');
@@ -642,101 +667,238 @@ function soCanIssueInvoice(so){
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   INVOICE / CREDIT NOTE DOCUMENT VIEW + PRINT
+   INVOICE / CREDIT NOTE VIEW + PRINT (V264.6)
+   Same arrangement as the Delivery Note and Quotation views: the A4 document on the left, an information
+   panel on the right, an action bar at the bottom. The document reuses the Delivery Note layout (header,
+   boxes, reference strip, items table, signatures, footer) with its own accent colour for quick
+   identification: teal for invoices, red for credit notes. The same builder produces the printed copy.
 ═══════════════════════════════════════════════════════════════════ */
-function openIndependentInvoiceDocument(soId, invoiceId){
-  const so = salesOrders.find(x => x.id === soId);
-  const inv = invoicesCache.find(i => i.id === invoiceId); if (!inv) return;
-  closeModal('view-modal'); closeModal('so-view-modal'); closeModal('dn-print-modal');
-  const modal = ensureDocumentSummaryModal();
-  const box = modal.querySelector('.modal'); if (box) box.style.width = 'min(880px,94vw)';
-  const cns = creditNotesCache.filter(c => c.invoiceId === inv.id);
-  const canCredit = permState(window.BizCoreInv.settings.allowCreditNotes, !!window.BizCoreInv.isAdministrator).ok && inv.status !== 'Credited';
-  const row = (k, v) => `<div class="detail-row"><span class="dk">${k}</span><span>${v}</span></div>`;
-  document.getElementById('document-summary-title').textContent = inv.invNo + ' — ' + invTypeLabel(inv.type);
-  document.getElementById('document-summary-body').innerHTML = `
-    <div class="section-title" style="margin-top:0">Invoice information</div>
-    ${row('Invoice number', `<strong style="color:var(--blue)">${invEsc(inv.invNo)}</strong> ${invTypeBadge(inv.type)} ${invStatusBadge(inv.status)}`)}
-    ${row('Date', fmtDate(inv.date))}${row('Due date', fmtDate(inv.dueDate))}${row('Customer', invEsc(inv.customer))}${row('Sales Order', invEsc(inv.soNo))}
-    ${row('Zoho invoice', invEsc(inv.zohoNo || '—'))}${inv.reason ? row(inv.type === 'order' ? 'Billed ahead because' : 'Description', invEsc(inv.reason)) : ''}${inv.notes ? row('Notes', invEsc(inv.notes)) : ''}
-    ${inv.migratedFrom ? row('Origin', 'Migrated from the Sales Order (V264)') : row('Created by', invEsc(inv.createdBy || '—'))}
-    <div class="section-title">${inv.type === 'advance' ? 'Advance' : 'Lines'}</div>
-    <div style="overflow-x:auto">${invoiceLinesTableHtml(inv)}</div>
-    ${cns.length ? `<div class="section-title">Credit notes</div>${cns.map(c => `<div class="detail-row"><span class="dk">${invEsc(c.cnNo)} · ${fmtDate(c.date)}</span><span>−${fmt(c.total)} · ${invEsc(c.reason)} <button class="btn btn-secondary btn-sm" style="margin-left:6px" onclick="printCreditNote('${c.id}')"><i class="ti ti-printer"></i></button></span></div>`).join('')}` : ''}
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
-      ${so ? `<button class="btn btn-secondary" onclick="closeDocumentSummary();viewSO('${so.id}')"><i class="ti ti-shopping-cart"></i>${invEsc(so.soNo)}</button>` : ''}
-      <button class="btn btn-secondary" onclick="printCustomerInvoice('${inv.id}')"><i class="ti ti-printer"></i>Print</button>
-      ${canCredit ? `<button class="btn btn-danger" onclick="closeDocumentSummary();openIssueCreditNote('${inv.salesOrderId}','${inv.id}')"><i class="ti ti-receipt-refund"></i>Credit note</button>` : ''}
-    </div>`;
-  modal.classList.add('open');
+let _invDnBaseCss = null;
+/** The Delivery Note document stylesheet (one source of truth for the A4 layout). */
+function invDnBaseCss(){
+  if (_invDnBaseCss !== null) return _invDnBaseCss;
+  try {
+    const h = buildDeliveryNoteDocument({ id: '', items: [], deliveries: [] }, { id: '', items: [], dnNo: '', date: '' }, 0, 'standard', false);
+    const m = /<style>([\s\S]*?)<\/style>/.exec(h); _invDnBaseCss = m ? m[1] : '';
+  } catch (e) { _invDnBaseCss = ''; }
+  return _invDnBaseCss;
 }
-function invoiceLinesTableHtml(inv){
-  const t = inv.totals || {};
-  if (inv.type === 'advance') {
-    const a = inv.advance || {};
-    const basis = a.method === 'full' ? 'Full order value' : a.method === 'percentLines' ? `${formatNumber(a.percent, 2)}% of selected lines (${formatNumber(a.base, 2)})` : `${formatNumber(a.percent, 2)}% of order value (${formatNumber(a.base, 2)})`;
-    return `<table class="inv-items-table"><tbody>
-      <tr><td>Advance payment — ${invEsc(basis)}</td><td style="text-align:right">${invMoney(t.subtotal)}</td></tr>
-      <tr><td>VAT (${Math.round((a.vatRate || 0) * 100)}%)</td><td style="text-align:right">${invMoney(t.vat)}</td></tr>
-      <tr><td><strong>Total</strong></td><td style="text-align:right"><strong>${invMoney(t.total)}</strong></td></tr></tbody></table>`;
+const INV_DOC_CSS = `
+.inv-a4{--ia:#0f766e;--ia-soft:#9fd6cd;--ia-tint:#effaf7;--ia-ink:#134e48}
+.inv-a4.inv-cn{--ia:#b42318;--ia-soft:#f3b8b2;--ia-tint:#fef3f2;--ia-ink:#7a1a12}
+.inv-a4 .dn-head{border-bottom-color:var(--ia)}
+.inv-a4 .dn-titlebox{border-color:var(--ia-soft)}
+.inv-a4 .dn-titlebox h1{background:var(--ia);color:#fff;font-size:18px}
+.inv-a4 .dn-titlebox h1 span{display:block;font-size:10px;font-weight:700;letter-spacing:0;opacity:.9;margin-top:1px;font-family:Tahoma,Arial,sans-serif}
+.inv-a4 .dn-titlebox div{border-top-color:var(--ia-soft)}
+.inv-a4 .dn-box{border-color:var(--ia-soft)}
+.inv-a4 .dn-box h3{color:var(--ia);background:var(--ia-tint);border-bottom-color:var(--ia-soft)}
+.inv-a4 .dn-ref>div{background:var(--ia-tint);border-color:var(--ia-soft)}
+.inv-a4 .dn-items th{background:var(--ia);border-color:var(--ia)}
+.inv-a4 .dn-items .num{text-align:right}
+.inv-a4 .dn-items td.c{text-align:center}
+.inv-a4 .dn-items td small{display:block;color:#b42318;font-size:8px;margin-top:2px}
+.inv-a4 .dn-foot{border-top-color:var(--ia)}
+.inv-a4 .dn-subtitle{color:var(--ia-ink)}
+.inv-doc-sum{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;margin-top:10px;align-items:start}
+.inv-doc-notes{border:1px solid #cbd8e5;padding:8px 9px;font-size:9.5px;line-height:1.5;color:#3b5068;min-height:60px}
+.inv-doc-notes b{display:block;font-size:8px;text-transform:uppercase;color:var(--ia);margin-bottom:3px}
+.inv-doc-notes p{margin:0 0 6px}.inv-doc-notes p:last-child{margin:0}
+.inv-doc-totals{width:100%;border-collapse:collapse;font-size:10px}
+.inv-doc-totals td{padding:5px 8px;border:1px solid #d6e0e9;color:#263f56}
+.inv-doc-totals td:last-child{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;width:110px}
+.inv-doc-totals tr.ded td{color:#9a3412}
+.inv-doc-totals tr.sub td{font-weight:700;background:#f8fafc}
+.inv-doc-totals tr.grand td{background:var(--ia);color:#fff;font-weight:800;font-size:11.5px;border-color:var(--ia)}
+.inv-doc-credited{margin-top:6px;font-size:9px;color:#b42318;text-align:right}
+.inv-status-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:9.5px;font-weight:800;white-space:nowrap}
+.inv-status-chip i{font-style:normal;width:7px;height:7px;border-radius:50%;background:currentColor}
+.inv-status-chip.issued{color:#0f766e;background:#ccfbef}.inv-status-chip.partial{color:#6941c6;background:#eee7ff}.inv-status-chip.credited{color:#b42318;background:#fee4e2}
+@media print{.inv-status-row{display:none!important}}
+`;
+function invDocStatusChip(status){
+  const cls = status === 'Credited' ? 'credited' : /partial/i.test(status || '') ? 'partial' : 'issued';
+  return `<div class="dn-screen-status-row inv-status-row"><span class="inv-status-chip ${cls}"><i></i>${invEsc(status || 'Issued')}</span></div>`;
+}
+function invCustomerVat(custName, custId){
+  const c = (typeof customers !== 'undefined' ? customers : []).find(x => (custId && x.id === custId) || (x.company || '').trim() === (custName || '').trim());
+  return c ? { vat: c.vat || '', nameAr: c.companyAr || '' } : { vat: '', nameAr: '' };
+}
+/** A4 document for an invoice (kind 'invoice') or a credit note (kind 'credit'). */
+function invoiceDocumentHtml(doc, kind, screenMode){
+  const cn = kind === 'credit';
+  const so = salesOrders.find(x => x.id === doc.salesOrderId) || { id: doc.salesOrderId, soNo: doc.soNo, customer: doc.customer, customerId: doc.custId, poNo: doc.poNo, items: [] };
+  const cp = dnCompanyProfile(), cust = dnCustomerProfile(so), cv = invCustomerVat(doc.customer, doc.custId);
+  const inv = cn ? (invoicesCache.find(i => i.id === doc.invoiceId) || {}) : doc;
+  const q = quotations.find(x => x.id === (inv.quotationId || so.quotationId));
+  const n2 = v => formatNumber(invNum(v), 2);
+  const logo = cp.logo ? `<img src="${cp.logo}" alt="${invEsc(cp.name)}" style="max-width:260px;max-height:78px;width:auto;height:auto;object-fit:contain">`
+    : `<div style="font-size:23px;font-weight:900;color:#174b7a">${invEsc(cp.name)}</div>${cp.nameAr ? `<div dir="rtl" style="font-size:15px;font-weight:700;color:#174b7a;margin-top:3px">${invEsc(cp.nameAr)}</div>` : ''}`;
+  const contactParts = [cp.pobox ? `P.O. Box ${invEsc(cp.pobox)}` : '', cp.address ? invEsc(cp.address) : '', cp.phone ? `Tel: ${invEsc(cp.phone)}` : '', cp.email ? invEsc(cp.email) : '', cp.website ? invEsc(cp.website) : ''].filter(Boolean);
+  const contact = contactParts.join('<br>') + (cp.vat ? `<br><b>VAT No.:</b> ${invEsc(cp.vat)}` : '') + (cp.cr ? `<br><b>CR No.:</b> ${invEsc(cp.cr)}` : '');
+  const no = cn ? doc.cnNo : doc.invNo;
+  const title = cn ? 'CREDIT NOTE<span>إشعار دائن</span>' : 'TAX INVOICE<span>فاتورة ضريبية</span>';
+  const subtitle = cn ? `AGAINST INVOICE ${invEsc(doc.invNo)}` : { advance: 'ADVANCE INVOICE', order: 'ORDER INVOICE — BILLED AHEAD OF DELIVERY', delivery: 'DELIVERY INVOICE — ACCEPTED GOODS' }[doc.type] || 'INVOICE';
+  const refs = cn
+    ? [['Credit Note Date', fmtDate(doc.date)], ['Original Invoice', invEsc(doc.invNo)], ['Invoice Date', fmtDate(doc.invoiceDate)], ['Sales Order No.', invEsc(doc.soNo || '—')]]
+    : [['Sales Order No.', invEsc(doc.soNo || '—')], ['Customer PO No.', invEsc(doc.poNo || so.poNo || '—')], ['Payment Due', fmtDate(doc.dueDate) || '—'], [doc.zohoNo ? 'Zoho Invoice No.' : 'Quotation', invEsc(doc.zohoNo || (q && q.qno) || '—')]];
+  // Lines
+  let head, rows;
+  if (!cn && doc.type === 'advance') {
+    const a = doc.advance || {};
+    const basis = a.method === 'full' ? 'full order value' : `${formatNumber(a.percent, 2)}% of ${a.method === 'percentLines' ? 'selected lines' : 'order value'} (${n2(a.base)})`;
+    head = '<th>#</th><th>Description</th><th class="num">VAT %</th><th class="num">Amount (SAR)</th>';
+    rows = `<tr><td class="c">1</td><td class="desc">Advance payment against Sales Order ${invEsc(doc.soNo)} — ${invEsc(basis)}</td><td class="num">${Math.round(invNum(a.vatRate) * 100)}%</td><td class="num">${n2(doc.totals && doc.totals.subtotal)}</td></tr>`;
+  } else if (cn && doc.kind === 'advance') {
+    head = '<th>#</th><th>Description</th><th class="num">VAT %</th><th class="num">Amount (SAR)</th>';
+    rows = `<tr><td class="c">1</td><td class="desc">Advance credited — invoice ${invEsc(doc.invNo)} dated ${fmtDate(doc.invoiceDate)}</td><td class="num">${Math.round(invNum(doc.vatRate || (inv.advance || {}).vatRate || 0.15) * 100)}%</td><td class="num">${n2(doc.advanceSubtotal)}</td></tr>`;
+  } else {
+    const credited = (!cn && doc.credited && doc.credited.lines) || {};
+    head = '<th>#</th><th>Item Code</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Unit Price</th><th class="num">VAT %</th><th class="num">Amount (SAR)</th>';
+    rows = (doc.lines || []).map((l, i) => `<tr><td class="c">${i + 1}</td><td>${invEsc(l.code || '—')}</td><td class="desc">${invEsc(l.desc || '—')}${credited[l.lineId] ? `<small>${formatQuantity(credited[l.lineId])} credited</small>` : ''}</td><td class="num">${formatQuantity(l.qty)}</td><td>${invEsc(l.uom || '—')}</td><td class="num">${n2(l.up)}</td><td class="num">${Math.round(invNum(l.vatRate) * 100)}%</td><td class="num">${n2(l.subtotal)}</td></tr>`).join('');
   }
-  const credited = inv.credited?.lines || {};
-  return `<table class="inv-items-table"><thead><tr><th>#</th><th>Description</th><th>Qty</th><th>UOM</th><th>Unit price</th><th>VAT</th><th style="text-align:right">Amount</th></tr></thead><tbody>
-    ${(inv.lines || []).map((l, i) => `<tr><td>${i + 1}</td><td>${invEsc(l.desc)}${credited[l.lineId] ? `<div style="font-size:10.5px;color:#991B1B">${formatQuantity(credited[l.lineId])} credited</div>` : ''}</td><td>${formatQuantity(l.qty)}</td><td>${invEsc(l.uom)}</td><td>${documentMoney('customerInvoice', 'unitPrice', l.up)}</td><td>${Math.round(l.vatRate * 100)}%</td><td style="text-align:right">${documentMoney('customerInvoice', 'lineAmount', l.subtotal)}</td></tr>`).join('')}
-    <tr><td colspan="6" style="text-align:right">Goods (ex-VAT)</td><td style="text-align:right">${invMoney(t.goodsSubtotal)}</td></tr>
-    ${(inv.deductions || []).map(d => `<tr><td colspan="6" style="text-align:right">Less: advance ${invEsc(d.advanceInvNo)} dated ${fmtDate(d.advanceDate)}</td><td style="text-align:right">− ${invMoney(d.subtotal)}</td></tr>`).join('')}
-    ${t.deductionSubtotal ? `<tr><td colspan="6" style="text-align:right">Sub-total (ex-VAT)</td><td style="text-align:right">${invMoney(t.subtotal)}</td></tr>` : ''}
-    <tr><td colspan="6" style="text-align:right">VAT</td><td style="text-align:right">${invMoney(t.vat)}</td></tr>
-    <tr><td colspan="6" style="text-align:right"><strong>Invoice total</strong></td><td style="text-align:right"><strong>${invMoney(t.total)}</strong></td></tr></tbody></table>`;
+  // Totals
+  const tr = (k, v, cls = '') => `<tr${cls ? ` class="${cls}"` : ''}><td>${k}</td><td>${v}</td></tr>`;
+  let totals = '';
+  if (cn) {
+    const goods = doc.kind === 'advance' ? invNum(doc.advanceSubtotal) : invNum(doc.goodsSubtotal);
+    totals += tr(doc.kind === 'advance' ? 'Advance credited (ex-VAT)' : 'Goods credited (ex-VAT)', n2(goods));
+    (doc.deductionReversal || []).forEach(d => { totals += tr(`Less: advance ${invEsc(d.advanceInvNo)} given back`, '− ' + n2(d.subtotal), 'ded'); });
+    totals += tr('Subtotal (ex-VAT)', n2(doc.subtotal), 'sub') + tr('VAT', n2(doc.vat)) + tr('Total credited (SAR)', n2(doc.total), 'grand');
+  } else {
+    const t = doc.totals || {};
+    if (doc.type !== 'advance') {
+      totals += tr('Goods (ex-VAT)', n2(t.goodsSubtotal));
+      (doc.deductions || []).forEach(d => { totals += tr(`Less: advance ${invEsc(d.advanceInvNo)} dated ${fmtDate(d.advanceDate)}`, '− ' + n2(d.subtotal), 'ded'); });
+    }
+    totals += tr('Subtotal (ex-VAT)', n2(t.subtotal), 'sub') + tr('VAT', n2(t.vat)) + tr('Total (SAR)', n2(t.total), 'grand');
+  }
+  const creditedLine = !cn && (doc.creditNotes || []).length ? `<div class="inv-doc-credited">Credited by ${(doc.creditNotes || []).map(c => `${invEsc(c.cnNo)} (${n2(c.total)})`).join(', ')}</div>` : '';
+  const notes = [cn ? `<p><b>Reason</b>${invEsc(doc.reason || '—')}</p>` : '', !cn && doc.reason ? `<p><b>${doc.type === 'order' ? 'Billed ahead because' : 'Description'}</b>${invEsc(doc.reason)}</p>` : '', !cn && doc.notes ? `<p><b>Notes</b>${invEsc(doc.notes)}</p>` : '',
+    !cn && doc.type === 'advance' ? '<p><b>Advance</b>This advance will be deducted from the following invoices for this order.</p>' : ''].filter(Boolean).join('') || '<p><b>Notes</b>—</p>';
+  const billTo = `<strong>${invEsc(doc.customer || cust.name)}</strong>${cv.nameAr ? `<div dir="rtl">${invEsc(cv.nameAr)}</div>` : ''}${cust.address ? invEsc(cust.address) : ''}${cust.contact ? `<br>Attn: ${invEsc(cust.contact)}` : ''}${cust.phone ? `<br>Tel: ${invEsc(cust.phone)}` : ''}`;
+  return `<div class="dn-a4 inv-a4${cn ? ' inv-cn' : ''}${screenMode ? ' dn-a4-screen' : ''}"><style>${invDnBaseCss()}${INV_DOC_CSS}</style>
+  <div class="dn-head"><div>${logo}</div><div class="dn-contact">${contact || '&nbsp;'}</div><div class="dn-title-stack">${screenMode ? invDocStatusChip(cn ? 'Issued' : doc.status) : ''}<div class="dn-titlebox"><h1>${title}</h1><div><small>${cn ? 'Credit Note No.' : 'Invoice No.'}</small><strong>${invEsc(no || '—')}</strong></div><div><small>Date</small><strong>${fmtDate(doc.date)}</strong></div></div></div></div>
+  <div class="dn-subtitle">${subtitle}</div>
+  <div class="dn-two"><div class="dn-box"><h3>Bill To</h3><div class="content">${billTo}</div></div><div class="dn-box"><h3>Customer VAT / Seller</h3><div class="content"><strong>Customer VAT No.: ${invEsc(cv.vat || '—')}</strong>${invEsc(cp.name)}${cp.vat ? `<br>Seller VAT No.: ${invEsc(cp.vat)}` : ''}${cp.cr ? `<br>CR No.: ${invEsc(cp.cr)}` : ''}</div></div></div>
+  <div class="dn-ref">${refs.map(([k, v]) => `<div><small>${k}</small><strong>${v}</strong></div>`).join('')}</div>
+  <table class="dn-items"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>
+  <div class="inv-doc-sum"><div class="inv-doc-notes">${notes}</div><div><table class="inv-doc-totals"><tbody>${totals}</tbody></table>${creditedLine}</div></div>
+  <div class="dn-bottom"><div class="dn-sign"><h4>Prepared By</h4><div>Name: ${invEsc(doc.createdBy || '________________')}<br>Date: ${fmtDate(doc.date)}<br>Signature: <span class="dn-line"></span></div></div><div class="dn-sign"><h4>${cn ? 'Acknowledged By (Customer)' : 'Received By (Customer)'}</h4><div>Name: ________________<br>Date: ________________<br>Signature: <span class="dn-line"></span></div></div><div class="dn-doc-qr-slot"></div></div>
+  <div class="dn-foot"><div>${contactParts.join(' &nbsp; | &nbsp; ')}</div></div></div>`;
 }
-function invPrintShell(title, number, bodyHtml){
-  const s = typeof settings === 'object' && settings ? settings : {};
-  const addr = [s.building, s.street, s.district, s.city, s.postal, s.country].filter(Boolean).map(invEsc).join(', ');
+
+function ensureInvoiceViewModal(){
+  let m = document.getElementById('inv-view-modal');
+  if (m) return m;
+  m = document.createElement('div');
+  m.className = 'modal-overlay'; m.id = 'inv-view-modal';
+  m.innerHTML = `<div class="modal modal-normal">
+    <div class="modal-header"><h2 id="inv-view-title">Invoice</h2><button class="close-btn" onclick="closeViewWithReturn('inv-view-modal')">✕</button></div>
+    <div class="modal-body" id="inv-view-body" style="padding:0;overflow-y:auto"></div>
+    <div class="dn-view-actionbar" id="inv-view-actions" role="toolbar" aria-label="Invoice actions"></div>
+  </div>`;
+  document.body.appendChild(m);
+  return m;
+}
+function invFlowNode(label, text, onclick, cls = ''){
+  return onclick ? `<button class="qv-doc-node ${cls}" onclick="${onclick}"><small>${label}</small><strong>${text}</strong></button>` : `<div class="qv-doc-node ${cls}"><small>${label}</small><strong>${text}</strong></div>`;
+}
+const invFlowArrow = '<span class="qv-doc-arrow"><i class="ti ti-chevron-down"></i></span>';
+function invViewGo(js){ return `closeModal('inv-view-modal');${js}`; }
+function invActivityRow(title, when, icon){
+  let w = '—';
+  if (when) { const d = new Date(when); w = /T\d\d:/.test(String(when)) && !isNaN(d) ? d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : fmtDate(when); }
+  return `<div class="qv-activity-row"><span class="qv-activity-icon"><i class="ti ${icon}"></i></span><div><strong>${invEsc(title)}</strong><span>${invEsc(w)}</span></div></div>`;
+}
+/** Builds the right-hand panel and the action bar for an invoice or a credit note. */
+function renderInvoiceView(doc, kind){
+  const cn = kind === 'credit', m = ensureInvoiceViewModal();
+  const so = salesOrders.find(x => x.id === doc.salesOrderId);
+  const inv = cn ? invoicesCache.find(i => i.id === doc.invoiceId) : doc;
+  const q = so && quotations.find(x => x.id === so.quotationId);
+  const cns = cn ? [] : creditNotesCache.filter(c => c.invoiceId === doc.id);
+  const n = v => invMoney(v);
+  const row = (k, v) => `<div class="qv-side-row"><span>${k}</span><strong>${v}</strong></div>`;
+  let summary;
+  if (cn) {
+    summary = row('Type', '<span class="inv-type-pill credit">Credit note</span>') + row('Against invoice', invEsc(doc.invNo)) + row('Total credited', n(doc.total)) + row('Reason', invEsc(doc.reason || '—')) + row('Created by', invEsc(doc.createdBy || '—'));
+  } else {
+    const t = doc.totals || {}, credited = cns.reduce((s, c) => s + invNum(c.total), 0);
+    summary = row('Type', invTypeBadge(doc.type)) + row('Status', invStatusBadge(doc.status) || '<span style="background:#ECFDF5;color:#0F766E;border:1px solid #99F6E4;border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:700">Issued</span>') + row('Invoice total', n(t.total))
+      + (credited ? row('Credited', '− ' + n(credited)) + row('Net after credit', n(invNum(t.total) - credited)) : '')
+      + (doc.type !== 'advance' && invNum(t.deductionSubtotal) ? row('Advance deducted', n(t.deductionSubtotal)) : '')
+      + row('Payment due', fmtDate(doc.dueDate) || '—') + row('Zoho invoice', invEsc(doc.zohoNo || '—')) + row('Created by', invEsc(doc.createdBy || '—'));
+    if (doc.type === 'advance') {
+      const usedBy = invoicesCache.filter(i => (i.deductions || []).some(d => d.advanceInvoiceId === doc.id));
+      const deducted = usedBy.reduce((s, i) => s + (i.deductions || []).filter(d => d.advanceInvoiceId === doc.id).reduce((a, d) => a + invNum(d.subtotal), 0), 0);
+      summary += row('Deducted so far', n(deducted)) + row('Advance remaining', n(Math.max(0, invNum(t.subtotal) - deducted - cns.reduce((s, c) => s + invNum(c.advanceSubtotal), 0))));
+    }
+  }
+  // Document flow: Quotation → Sales Order → (advance) → this document → credit notes
+  const flow = [];
+  flow.push(q ? invFlowNode('QUOTATION', invEsc(q.qno), invViewGo(`viewQuotation('${q.id}')`)) : invFlowNode('QUOTATION', 'Not linked', '', 'muted'));
+  flow.push(so ? invFlowNode('SALES ORDER', invEsc(so.soNo), invViewGo(`viewSO('${so.id}')`)) : invFlowNode('SALES ORDER', invEsc(doc.soNo || '—'), '', 'muted'));
+  if (!cn) (doc.deductions || []).forEach(d => flow.push(invFlowNode('ADVANCE DEDUCTED', `${invEsc(d.advanceInvNo)} · ${n(d.subtotal)}`, `openInvoiceView('${d.advanceInvoiceId}')`)));
+  if (cn && inv) flow.push(invFlowNode(inv.type === 'advance' ? 'ADVANCE INVOICE' : 'INVOICE', invEsc(inv.invNo), `openInvoiceView('${inv.id}')`));
+  flow.push(invFlowNode(cn ? 'CREDIT NOTE' : (doc.type === 'advance' ? 'ADVANCE INVOICE' : 'INVOICE'), invEsc(cn ? doc.cnNo : doc.invNo), '', 'current'));
+  cns.forEach(c => flow.push(invFlowNode('CREDIT NOTE', `${invEsc(c.cnNo)} · − ${n(c.total)}`, `openCreditNoteView('${c.id}')`)));
+  if (!cn && doc.type === 'advance') invoicesCache.filter(i => (i.deductions || []).some(d => d.advanceInvoiceId === doc.id))
+    .forEach(i => flow.push(invFlowNode('DEDUCTED ON', invEsc(i.invNo), `openInvoiceView('${i.id}')`)));
+  // Activity
+  const act = [[cn ? 'Credit note issued' : 'Invoice issued', doc.created || doc.date, cn ? 'ti-receipt-refund' : 'ti-file-invoice']];
+  cns.forEach(c => act.push([`Credited by ${c.cnNo}`, c.created || c.date, 'ti-receipt-refund']));
+  if (!cn && doc.migratedFrom) act.push(['Migrated from the Sales Order', doc.created || doc.date, 'ti-transfer']);
+  const panel = `<aside class="qv-erp-panel inv-view-panel" aria-label="${cn ? 'Credit note' : 'Invoice'} information">
+    <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ${cn ? 'ti-receipt-refund' : 'ti-file-invoice'}"></i>${cn ? 'Credit note' : 'Invoice'} summary</span><span class="qv-screen-only">Staff only</span></div><div class="qv-side-body">${summary}</div></section>
+    <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ti-route"></i>Document flow</span></div><div class="qv-side-body qv-doc-flow">${flow.join(invFlowArrow)}</div></section>
+    <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ti-history"></i>Document activity</span></div><div class="qv-side-body qv-activity">${act.map(a => invActivityRow(a[0], a[1], a[2])).join('')}</div></section>
+  </aside>`;
+  m._kind = kind; m._docId = doc.id;
+  m.querySelector('.modal').classList.toggle('inv-view-cn', cn);
+  document.getElementById('inv-view-title').textContent = cn ? `${doc.cnNo} — Credit Note` : `${doc.invNo} — ${invTypeLabel(doc.type)}`;
+  document.getElementById('inv-view-body').innerHTML = `<div class="dn-view-workspace inv-view-workspace"><div class="dn-view-document">${invoiceDocumentHtml(doc, kind, true)}</div>${panel}</div>`;
+  const canCredit = !cn && permState(window.BizCoreInv.settings.allowCreditNotes, !!window.BizCoreInv.isAdministrator).ok && doc.status !== 'Credited';
+  const b = [];
+  b.push('<div class="dn-view-actionbar-spacer"></div>');
+  b.push(`<button class="btn btn-secondary" onclick="closeViewWithReturn('inv-view-modal')"><i class="ti ti-x"></i><span>Close</span></button>`);
+  if (so) b.push(`<button class="btn btn-secondary" id="inv-view-so-btn" onclick="${invViewGo(`viewSO('${so.id}')`)}"><i class="ti ti-file-description"></i><span>Sales Order</span></button>`);
+  if (cn && inv) b.push(`<button class="btn btn-secondary" onclick="openInvoiceView('${inv.id}')"><i class="ti ti-file-invoice"></i><span>${invEsc(inv.invNo)}</span></button>`);
+  if (canCredit) b.push(`<button class="btn btn-danger" id="inv-view-credit-btn" onclick="${invViewGo(`openIssueCreditNote('${doc.salesOrderId}','${doc.id}')`)}"><i class="ti ti-receipt-refund"></i><span>Credit Note</span></button>`);
+  b.push(`<button class="btn btn-primary" id="inv-view-print-btn" onclick="${cn ? `printCreditNote('${doc.id}')` : `printCustomerInvoice('${doc.id}')`}"><i class="ti ti-printer"></i><span>Print / PDF</span></button>`);
+  document.getElementById('inv-view-actions').innerHTML = b.join('');
+  if (!m.classList.contains('open')) openModalWithSize('inv-view-modal');
+}
+function openInvoiceView(invoiceId){
+  const inv = invoicesCache.find(i => i.id === invoiceId);
+  if (!inv) { showToast('This invoice is not loaded yet. Please try again in a moment.', 'warning'); return; }
+  ['view-modal', 'so-view-modal', 'dn-print-modal'].forEach(id => { if (isModalOpen(id)) closeModal(id); });
+  if (typeof closeDocumentSummary === 'function') closeDocumentSummary();
+  renderInvoiceView(inv, 'invoice');
+}
+function openCreditNoteView(cnId){
+  const c = creditNotesCache.find(x => x.id === cnId);
+  if (!c) { showToast('This credit note is not loaded yet. Please try again in a moment.', 'warning'); return; }
+  if (typeof closeDocumentSummary === 'function') closeDocumentSummary();
+  renderInvoiceView(c, 'credit');
+}
+/** Kept names (called from the Sales Order, the register and app.js). */
+function openIndependentInvoiceDocument(soId, invoiceId){ openInvoiceView(invoiceId); }
+function openCreditNoteDocument(cnId){ openCreditNoteView(cnId); }
+
+function invPrintDocument(html, fileTitle){
   const w = window.open('', '_blank');
   if (!w) { showToast('Allow pop-ups for BizCore to print.', 'warning'); return; }
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${invEsc(number)}</title><style>
-    body{font-family:Arial,Helvetica,sans-serif;color:#1f2937;margin:28px;font-size:12px}
-    h1{font-size:20px;margin:0 0 4px;color:#1F4E79} .muted{color:#6b7280} table{width:100%;border-collapse:collapse;margin-top:12px}
-    th{background:#1F4E79;color:#fff;text-align:left;padding:6px;font-size:11px} td{padding:6px;border-bottom:1px solid #e5e7eb;vertical-align:top}
-    .r{text-align:right} .tot td{border:none;padding:4px 6px} .grand td{font-weight:800;font-size:13px;border-top:2px solid #1F4E79}
-    .hdr{display:flex;justify-content:space-between;gap:20px;border-bottom:3px solid #1F4E79;padding-bottom:10px;margin-bottom:12px} .box{border:1px solid #d1d5db;border-radius:6px;padding:8px 10px}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px} @media print{body{margin:12mm}}
-  </style></head><body>
-    <div class="hdr"><div>${s.logo ? `<img src="${s.logo}" style="max-height:60px;max-width:220px"><br>` : ''}<strong style="font-size:14px">${invEsc(s.coname || 'BizCore')}</strong>${s.conameAr ? `<div>${invEsc(s.conameAr)}</div>` : ''}<div class="muted">${addr}</div>${s.vat ? `<div>VAT No: ${invEsc(s.vat)}</div>` : ''}${s.cr ? `<div>CR: ${invEsc(s.cr)}</div>` : ''}</div>
-    <div style="text-align:right"><h1>${invEsc(title)}</h1><div style="font-size:15px;font-weight:800">${invEsc(number)}</div></div></div>
-    ${bodyHtml}
-    <script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>`);
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${invEsc(fileTitle)}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>${html}<scr` + `ipt>(function(){var done=false;function back(){if(done)return;done=true;try{if(window.opener&&!window.opener.closed)window.opener.focus();}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},80);}window.addEventListener('afterprint',back);window.onload=function(){requestAnimationFrame(function(){requestAnimationFrame(function(){setTimeout(function(){window.print();},180);});});};})();</scr` + `ipt></body></html>`);
   w.document.close();
 }
 function printCustomerInvoice(invoiceId){
   const inv = invoicesCache.find(i => i.id === invoiceId); if (!inv) return;
-  const t = inv.totals || {};
-  const info = `<div class="grid"><div class="box"><div class="muted">Bill to</div><strong>${invEsc(inv.customer)}</strong></div>
-    <div class="box">Date: <strong>${fmtDate(inv.date)}</strong><br>Due: ${fmtDate(inv.dueDate)}<br>Sales Order: ${invEsc(inv.soNo)}${inv.poNo ? '<br>Customer PO: ' + invEsc(inv.poNo) : ''}${inv.zohoNo ? '<br>Zoho: ' + invEsc(inv.zohoNo) : ''}</div></div>`;
-  let lines;
-  if (inv.type === 'advance') {
-    const a = inv.advance || {};
-    const basis = a.method === 'full' ? 'full order value' : `${formatNumber(a.percent, 2)}% of ${a.method === 'percentLines' ? 'selected lines' : 'order value'} (${formatNumber(a.base, 2)})`;
-    lines = `<table><thead><tr><th>Description</th><th class="r">Amount</th></tr></thead><tbody><tr><td>Advance payment against Sales Order ${invEsc(inv.soNo)} — ${invEsc(basis)}${inv.reason ? '<br>' + invEsc(inv.reason) : ''}</td><td class="r">${formatNumber(t.subtotal, 2)}</td></tr></tbody></table>
-      <table class="tot"><tr><td class="r">Sub-total (ex-VAT)</td><td class="r" style="width:140px">${formatNumber(t.subtotal, 2)}</td></tr><tr><td class="r">VAT ${Math.round((a.vatRate || 0) * 100)}%</td><td class="r">${formatNumber(t.vat, 2)}</td></tr><tr class="grand"><td class="r">Total (SAR)</td><td class="r">${formatNumber(t.total, 2)}</td></tr></table>`;
-  } else {
-    lines = `<table><thead><tr><th>#</th><th>Description</th><th class="r">Qty</th><th>UOM</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>
-      ${(inv.lines || []).map((l, i) => `<tr><td>${i + 1}</td><td>${invEsc(l.desc)}</td><td class="r">${formatQuantity(l.qty)}</td><td>${invEsc(l.uom)}</td><td class="r">${formatNumber(l.up, 2)}</td><td class="r">${formatNumber(l.subtotal, 2)}</td></tr>`).join('')}</tbody></table>
-      <table class="tot"><tr><td class="r">Goods (ex-VAT)</td><td class="r" style="width:140px">${formatNumber(t.goodsSubtotal, 2)}</td></tr>
-      ${(inv.deductions || []).map(d => `<tr><td class="r">Less: advance ${invEsc(d.advanceInvNo)} dated ${fmtDate(d.advanceDate)}</td><td class="r">−${formatNumber(d.subtotal, 2)}</td></tr>`).join('')}
-      <tr><td class="r">Sub-total (ex-VAT)</td><td class="r">${formatNumber(t.subtotal, 2)}</td></tr><tr><td class="r">VAT</td><td class="r">${formatNumber(t.vat, 2)}</td></tr><tr class="grand"><td class="r">Total (SAR)</td><td class="r">${formatNumber(t.total, 2)}</td></tr></table>`;
-  }
-  invPrintShell('TAX INVOICE', inv.invNo, info + lines + (inv.notes ? `<p class="muted">${invEsc(inv.notes)}</p>` : ''));
+  invPrintDocument(invoiceDocumentHtml(inv, 'invoice', false), [inv.invNo, typeof dnSafeFilePart === 'function' ? dnSafeFilePart(inv.customer) : inv.customer].filter(Boolean).join(' - '));
 }
 function printCreditNote(cnId){
   const c = creditNotesCache.find(x => x.id === cnId); if (!c) return;
-  const info = `<div class="grid"><div class="box"><div class="muted">Customer</div><strong>${invEsc(c.customer)}</strong></div>
-    <div class="box">Date: <strong>${fmtDate(c.date)}</strong><br>Against invoice: <strong>${invEsc(c.invNo)}</strong> dated ${fmtDate(c.invoiceDate)}<br>Sales Order: ${invEsc(c.soNo)}<br>Reason: ${invEsc(c.reason)}</div></div>`;
-  const body = c.kind === 'advance'
-    ? `<table><thead><tr><th>Description</th><th class="r">Amount</th></tr></thead><tbody><tr><td>Advance credited</td><td class="r">${formatNumber(c.advanceSubtotal, 2)}</td></tr></tbody></table>`
-    : `<table><thead><tr><th>#</th><th>Description</th><th class="r">Qty</th><th>UOM</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>${(c.lines || []).map((l, i) => `<tr><td>${i + 1}</td><td>${invEsc(l.desc)}</td><td class="r">${formatQuantity(l.qty)}</td><td>${invEsc(l.uom)}</td><td class="r">${formatNumber(l.up, 2)}</td><td class="r">${formatNumber(l.subtotal, 2)}</td></tr>`).join('')}</tbody></table>
-      ${(c.deductionReversal || []).length ? `<table class="tot">${c.deductionReversal.map(d => `<tr><td class="r">Less: advance ${invEsc(d.advanceInvNo)} given back</td><td class="r" style="width:140px">−${formatNumber(d.subtotal, 2)}</td></tr>`).join('')}</table>` : ''}`;
-  invPrintShell('CREDIT NOTE', c.cnNo, info + body + `<table class="tot"><tr><td class="r">Sub-total (ex-VAT)</td><td class="r" style="width:140px">${formatNumber(c.subtotal, 2)}</td></tr><tr><td class="r">VAT</td><td class="r">${formatNumber(c.vat, 2)}</td></tr><tr class="grand"><td class="r">Total credited (SAR)</td><td class="r">${formatNumber(c.total, 2)}</td></tr></table>`);
+  invPrintDocument(invoiceDocumentHtml(c, 'credit', false), [c.cnNo, typeof dnSafeFilePart === 'function' ? dnSafeFilePart(c.customer) : c.customer].filter(Boolean).join(' - '));
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -844,21 +1006,4 @@ function renderInvoiceRegister(){
   const open = r => r.kind === 'credit' ? `openCreditNoteDocument('${r.id}')` : r.kind === 'invoice' ? `openIndependentInvoiceDocument('${r.soId}','${r.id}')` : `openInvoiceDocument('${r.soId}',${r.idx})`;
   body.innerHTML = rows.length ? rows.map(r => `<tr class="quotation-clickable-row" tabindex="0" role="button" onclick="${open(r)}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${open(r)}}"><td>${invEsc(r.no || '—')}</td><td>${typeBadge(r)}</td><td>${fmtDate(r.date)}</td><td>${invEsc(r.customer || '—')}</td><td>${invEsc(r.soNo || '—')}</td><td class="inv-reg-ref">${invEsc(r.ref || '—')}</td><td class="num${r.total < 0 ? ' neg' : ''}">${formatNumber(r.total, 2)}</td><td>${statusBadge(r)}</td></tr>`).join('')
     : '<tr><td colspan="8"><div class="empty-state"><i class="ti ti-file-invoice"></i><strong>No invoices found</strong><p>Invoices are created from the Sales Order (Create invoice). Adjust the filters to see other documents.</p></div></td></tr>';
-}
-/** Credit note view (summary modal) with print. */
-function openCreditNoteDocument(cnId){
-  const c = creditNotesCache.find(x => x.id === cnId); if (!c) return;
-  const modal = ensureDocumentSummaryModal();
-  const box = modal.querySelector('.modal'); if (box) box.style.width = 'min(880px,94vw)';
-  const row = (k, v) => `<div class="detail-row"><span class="dk">${k}</span><span>${v}</span></div>`;
-  document.getElementById('document-summary-title').textContent = c.cnNo + ' — Credit Note';
-  const lines = c.kind === 'advance' ? `<div class="detail-row"><span class="dk">Advance credited (ex-VAT)</span><span>${invMoney(c.advanceSubtotal)}</span></div>`
-    : `<div style="overflow-x:auto"><table class="inv-items-table"><thead><tr><th>#</th><th>Description</th><th>Qty</th><th>UOM</th><th>Unit price</th><th style="text-align:right">Amount</th></tr></thead><tbody>${(c.lines || []).map((l, i) => `<tr><td>${i + 1}</td><td>${invEsc(l.desc)}</td><td>${formatQuantity(l.qty)}</td><td>${invEsc(l.uom)}</td><td>${formatNumber(l.up, 2)}</td><td style="text-align:right">${formatNumber(l.subtotal, 2)}</td></tr>`).join('')}
-      ${(c.deductionReversal || []).map(d => `<tr><td colspan="5" style="text-align:right">Less: advance ${invEsc(d.advanceInvNo)} given back</td><td style="text-align:right">− ${formatNumber(d.subtotal, 2)}</td></tr>`).join('')}</tbody></table></div>`;
-  document.getElementById('document-summary-body').innerHTML = `<div class="section-title" style="margin-top:0">Credit note information</div>
-    ${row('Credit note', `<strong style="color:var(--blue)">${invEsc(c.cnNo)}</strong>`)}${row('Date', fmtDate(c.date))}${row('Against invoice', `${invEsc(c.invNo)} dated ${fmtDate(c.invoiceDate)}`)}${row('Customer', invEsc(c.customer))}${row('Sales Order', invEsc(c.soNo))}${row('Reason', invEsc(c.reason))}${row('Created by', invEsc(c.createdBy || '—'))}
-    <div class="section-title">Credited</div>${lines}
-    ${row('Subtotal (ex-VAT)', invMoney(c.subtotal))}${row('VAT', invMoney(c.vat))}${row('<strong>Total credited</strong>', `<strong>${invMoney(c.total)}</strong>`)}
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-secondary" onclick="closeDocumentSummary();openIndependentInvoiceDocument('${c.salesOrderId}','${c.invoiceId}')"><i class="ti ti-file-invoice"></i>${invEsc(c.invNo)}</button><button class="btn btn-secondary" onclick="printCreditNote('${c.id}')"><i class="ti ti-printer"></i>Print</button></div>`;
-  modal.classList.add('open');
 }

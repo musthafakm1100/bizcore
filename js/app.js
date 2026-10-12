@@ -6542,10 +6542,16 @@ function beginScreenTransition(message,{immediate=false}={}){
   if(existing){
     const title=existing.querySelector('.screen-transition-title');
     if(title && message) title.textContent=message;
+    existing.classList.add('show');   // it may be fading out from a step that just finished
     return;
   }
+  // V264.6: a nested call while the first one's delayed mount is still pending shares that timer
+  // (a second timer would overwrite the handle, survive endScreenTransition and leave the overlay stuck).
+  if(_screenTransitionTimer && !immediate) return;
+  if(_screenTransitionTimer){clearTimeout(_screenTransitionTimer);_screenTransitionTimer=null;}
   const mount=()=>{
     _screenTransitionTimer=null;
+    if(_screenTransitionDepth<=0) return;
     if(document.getElementById('bizcore-screen-transition')) return;
     const overlay=document.createElement('div');
     overlay.id='bizcore-screen-transition';
@@ -6575,7 +6581,7 @@ function endScreenTransition({immediate=false,force=false}={}){
   if(immediate){overlay.remove();return;}
   overlay.classList.remove('show');
   // This 140ms is CSS fade cleanup only, after the operation is complete.
-  setTimeout(()=>overlay.remove(),140);
+  setTimeout(()=>{ if(_screenTransitionDepth===0) overlay.remove(); },140);
 }
 function waitForUiCondition(test){
   // No completion timeout: slow network/rendering keeps the screen blocked.
@@ -11224,6 +11230,7 @@ function viewDeliveryNote(soId, deliveryIdx) {
   const btn=document.getElementById('dn-open-confirm-btn');if(btn){btn.style.display=d.voided?'none':'inline-flex';btn.disabled=false;btn.classList.toggle('btn-success',!d.customerConfirmed);btn.classList.toggle('btn-secondary',!!d.customerConfirmed);btn.innerHTML=d.customerConfirmed?'<i class="ti ti-clipboard-check"></i><span>View Acceptance</span>':'<i class="ti ti-device-mobile-check"></i><span>Delivery Confirmation</span>'}
   document.getElementById('dn-print-title').textContent=d.dnNo+(d.voided?' — VOID':'');
   const tools=document.getElementById('dn-dispatch-tools');if(tools)tools.style.display=(!d.customerConfirmed&&!d.voided)?'inline-flex':'none';
+  const invBtn=document.getElementById('dn-create-invoice-btn');if(invBtn)invBtn.style.display=dnCanInvoiceFromView(so,d)?'inline-flex':'none';
   const hist=document.getElementById('dn-dispatch-history-btn');if(hist)hist.style.display=dnIndependentMode()?'none':(d.dispatchHistory||[]).length?'inline-flex':'none';
   window._activeDNView={soId:so.id,deliveryIdx};document.getElementById('dn-print-body').innerHTML=`<div class="dn-view-workspace"><div class="dn-view-document">${buildDeliveryNoteDocument(so,d,deliveryIdx,'standard',true)}</div><aside class="dn-view-acceptance" aria-label="Delivery confirmation">${buildDNConfirmationPanel(d)}</aside></div>`;
   renderDNQRCode(d);openModalWithSize('dn-print-modal');
@@ -11248,6 +11255,19 @@ function continueDNFormat(){
   if(d.voided){showToast('Voided Delivery Notes cannot be printed.','warning');return;}
   if((format==='accepted-standard'||format==='accepted-progress')&&(!d.customerConfirmed||!(d.items||[]).some(it=>deliveryAcceptedQty(d,it)>0))){showToast('Accepted Delivery Note requires confirmed accepted items','warning');return;}
   closeModal('dn-format-modal');printDeliveryNote(format,so,d,dlg._deliveryIdx);
+}
+/* V264.6: invoice straight from the Delivery Note — shown once the DN is accepted and accepted goods are still uninvoiced. */
+function dnCanInvoiceFromView(so,d){
+  if(!so||!d||d.voided||!d.customerConfirmed)return false;
+  if(!(d.items||[]).some(it=>deliveryAcceptedQty(d,it)>0))return false;
+  if(typeof soHasInvoiceableQty==='function'&&!soHasInvoiceableQty(so))return false;
+  return !(typeof invMode==='function'&&invMode()==='migrating');
+}
+function openInvoiceFromDNView(){
+  const vm=document.getElementById('dn-print-modal');const soId=vm?._soId,dnId=vm?._dnId;
+  if(!soId){showToast('Unable to identify the linked Sales Order','error');return}
+  closeModal('dn-print-modal');
+  return openCreateInvoice(soId,{fromDnId:dnId});
 }
 function openSOFromDNView(){
   const viewModal=document.getElementById('dn-print-modal');
@@ -11336,9 +11356,9 @@ function recalcInvoiceSummary(){
 }
 function invoiceAllAvailable(){const m=document.getElementById('so-invoice-modal');(m._invoiceLines||[]).forEach((it,i)=>{const e=document.getElementById('inv-qty-'+i);if(e)e.value=it.availableQty;});recalcInvoiceSummary();}
 function clearInvoiceQty(){const m=document.getElementById('so-invoice-modal');(m._invoiceLines||[]).forEach((it,i)=>{const e=document.getElementById('inv-qty-'+i);if(e)e.value=0;});recalcInvoiceSummary();}
-function openCreateInvoice(soId) {
+function openCreateInvoice(soId, opts) {
   // V264: independent invoices (delivery / order / advance) use the new screen
-  if(typeof invoiceModeRoute==='function'){const routed=invoiceModeRoute(soId);if(routed!=='legacy')return routed;}
+  if(typeof invoiceModeRoute==='function'){const routed=invoiceModeRoute(soId, opts);if(routed!=='legacy')return routed;}
   const so=salesOrders.find(x=>x.id===soId);if(!so)return;currentSOId=soId;
   const lines=invoiceAvailableLines(so),availableLines=lines.filter(x=>x.availableQty>0.001);
   const today=new Date().toISOString().split('T')[0],dueDate=new Date();dueDate.setDate(dueDate.getDate()+14);
@@ -13866,7 +13886,10 @@ function wrapOrderAction(fnName, soIdOf, activityOf){
     }
     if (_orderActionBusy) return false;   // a second click while the first is still opening
     _orderActionBusy = true;
-    try { return await runOrderAction.call(this, soId, args); } finally { _orderActionBusy = false; }
+    // One overlay for the whole action (lock + reload + the screen's own loading, e.g. invoice balances), so the
+    // order screen never shows through between the steps. Nested begin/end calls share it.
+    beginScreenTransition('Opening ' + ((soForNo && soForNo.soNo) || soId) + '…');
+    try { return await runOrderAction.call(this, soId, args); } finally { _orderActionBusy = false; endScreenTransition(); }
   };
   async function runOrderAction(soId, args){
     const activity = typeof activityOf === 'function' ? activityOf(...args) : activityOf;
@@ -13964,7 +13987,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3)');
+console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS

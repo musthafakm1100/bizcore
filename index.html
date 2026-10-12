@@ -20,7 +20,7 @@
 <link href="css/masters.css?v=245" rel="stylesheet"/>
 <link href="css/administration-typography.css?v=247" rel="stylesheet"/>
 <link href="css/numbering-controls.css?v=248" rel="stylesheet"/>
-<link href="css/invoicing.css?v=264" rel="stylesheet"/>
+<link href="css/invoicing.css?v=264.6" rel="stylesheet"/>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
 .quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
@@ -2051,6 +2051,7 @@ document.addEventListener('error', function(e) {
   <button class="btn btn-secondary" id="dn-open-so-btn" onclick="openSOFromDNView()"><i class="ti ti-file-description"></i><span>Sales Order</span></button>
   <span id="dn-dispatch-tools" style="display:none;gap:6px;align-items:center"><button class="btn btn-secondary" onclick="openDNDispatchAction('correct')"><i class="ti ti-edit"></i><span>Correct Dispatch</span></button><button class="btn btn-danger" onclick="openDNDispatchAction('void')"><i class="ti ti-ban"></i><span>Void</span></button></span><button class="btn btn-secondary" id="dn-dispatch-history-btn" style="display:none" onclick="openDNDispatchHistory()"><i class="ti ti-history"></i>Dispatch History</button>
   <button class="btn btn-success" id="dn-open-confirm-btn" onclick="openDeliveryConfirmationFromDNView()"><i class="ti ti-device-mobile-check"></i><span>Delivery Confirmation</span></button>
+  <button class="btn btn-success" id="dn-create-invoice-btn" onclick="openInvoiceFromDNView()" style="display:none"><i class="ti ti-file-invoice"></i><span>Create Invoice</span></button>
   <button class="btn btn-primary" onclick="openDNFormatDialog('print')"><i class="ti ti-printer"></i><span>Print / PDF</span></button>
 </div>
 </div>
@@ -3043,12 +3044,12 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script') && !document.getElementById('bizcore-invoicing-script')) {
     const inv = document.createElement('script');
     inv.id  = 'bizcore-invoicing-script';
-    inv.src = 'js/invoicing.js?v=264';
+    inv.src = 'js/invoicing.js?v=264.6';
     const start = () => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=264.5';
+      s.src = 'js/app.js?v=264.6';
       document.body.appendChild(s);
     };
     inv.onload = start;

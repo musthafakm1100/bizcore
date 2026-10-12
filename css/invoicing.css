@@ -29,25 +29,30 @@
 .inv-type-chip{margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:3px 4px 3px 10px;border-radius:999px;background:#eef4ff;color:#1e3a8a;font-weight:700;font-size:11.5px;border:1px solid #c7d7fe}
 .inv-type-chip button{border:0;background:#fff;color:#1d4ed8;border-radius:999px;padding:3px 10px;font:inherit;font-size:11px;font-weight:700;cursor:pointer}
 .inv-type-chip button:hover{background:#dbeafe}
-.inv-step-head{display:flex;flex-direction:column;gap:3px;margin:4px 0 12px}
-.inv-step-head strong{font-size:15px;color:#0f172a}.inv-step-head span{font-size:12px;color:#64748b}
-.inv-type-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-.inv-type-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;padding:16px 16px 14px;border:1.5px solid #dbe3ec;border-radius:12px;background:#fff;cursor:pointer;font:inherit;color:inherit;transition:border-color .15s,box-shadow .15s,background .15s}
-.inv-type-card:hover:not(:disabled){border-color:#93c5fd;box-shadow:0 4px 14px rgba(15,23,42,.06)}
+/* Step 1 (choose type) — compact dialog: the modal shrinks to its content; types are radio rows */
+#inv-issue-modal .modal.inv-step1{width:min(720px,94vw)!important;max-width:720px!important;height:auto!important;max-height:92vh!important}
+#inv-issue-modal .modal.inv-step1 .modal-body{padding:14px 18px 16px}
+#inv-issue-modal .modal.inv-step1 .inv-steps{margin-bottom:12px}
+.inv-step-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 8px}
+.inv-step-head strong{font-size:13.5px;color:#0f172a}.inv-step-head span{font-size:11.5px;color:#94a3b8}
+.inv-type-grid{display:flex;flex-direction:column;gap:8px}
+.inv-type-card{position:relative;display:grid;grid-template-columns:20px 34px minmax(0,1fr) auto;align-items:center;column-gap:12px;row-gap:2px;text-align:left;padding:10px 14px;border:1.5px solid #dbe3ec;border-radius:10px;background:#fff;cursor:pointer;font:inherit;color:inherit;transition:border-color .15s,box-shadow .15s,background .15s}
+.inv-type-card:hover:not(:disabled){border-color:#93c5fd;background:#fbfdff}
 .inv-type-card:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(59,130,246,.25)}
-.inv-type-card.selected{border-color:#2563eb;background:#f5f9ff;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
-.inv-type-card:disabled{cursor:not-allowed;background:#f8fafc;opacity:.72}
-.inv-type-icon{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:#eaf2fb;color:#1f4e79;font-size:20px}
-.inv-type-card.selected .inv-type-icon{background:#2563eb;color:#fff}
-.inv-type-title{font-weight:800;font-size:13.5px;color:#0f172a;display:flex;align-items:center;gap:8px}
-.inv-type-title em{font-style:normal;font-size:10px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:#166534;background:#dcfce7;border-radius:999px;padding:2px 7px}
-.inv-type-text{font-size:12px;color:#475569;line-height:1.45}
-.inv-type-meta{margin-top:4px;font-size:12px;color:#0f172a;padding-top:8px;border-top:1px dashed #e2e8f0;width:100%}
-.inv-type-meta.muted{color:#94a3b8}
-.inv-type-lock{font-size:11.5px;color:#9a3412;display:flex;gap:5px;align-items:flex-start}
-.inv-type-check{position:absolute;top:12px;right:12px;width:22px;height:22px;border-radius:50%;border:1.5px solid #cbd5e1;display:grid;place-items:center;color:transparent;font-size:13px;background:#fff}
+.inv-type-card.selected{border-color:#2563eb;background:#f5f9ff;box-shadow:0 0 0 3px rgba(37,99,235,.10)}
+.inv-type-card:disabled{cursor:not-allowed;background:#f8fafc;opacity:.7}
+.inv-type-check{grid-row:1/span 2;width:18px;height:18px;border-radius:50%;border:1.5px solid #cbd5e1;display:grid;place-items:center;color:transparent;font-size:11px;background:#fff}
 .inv-type-card.selected .inv-type-check{background:#2563eb;border-color:#2563eb;color:#fff}
-.inv-context-strip{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:14px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:#f8fafc;font-size:12px;color:#475569}
+.inv-type-icon{grid-row:1/span 2;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:#eaf2fb;color:#1f4e79;font-size:18px}
+.inv-type-card.selected .inv-type-icon{background:#2563eb;color:#fff}
+.inv-type-title{grid-column:3;font-weight:800;font-size:13px;color:#0f172a;display:flex;align-items:center;gap:8px}
+.inv-type-title em{font-style:normal;font-size:9.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:#166534;background:#dcfce7;border-radius:999px;padding:2px 7px}
+.inv-type-text{grid-column:3;font-size:11.5px;color:#64748b;line-height:1.35}
+.inv-type-meta{grid-column:4;grid-row:1/span 2;min-width:150px;max-width:200px;padding-left:14px;border-left:1px dashed #e2e8f0;align-self:stretch;display:flex;flex-direction:column;justify-content:center;align-items:flex-end;text-align:right;gap:1px}
+.inv-type-meta small{font-size:10.5px;color:#64748b;line-height:1.3}.inv-type-meta b{font-size:13px;color:#0f172a;font-variant-numeric:tabular-nums}
+.inv-type-meta.muted small{color:#94a3b8}
+.inv-type-lock{grid-column:3/span 2;font-size:11px;color:#9a3412;display:flex;gap:5px;align-items:center;margin-top:2px}
+.inv-context-strip{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px;padding:8px 12px;border:1px solid var(--border);border-radius:9px;background:#f8fafc;font-size:11.5px;color:#475569}
 .inv-context-strip b{color:#0f172a;margin-left:4px}.inv-context-strip .muted{margin-left:auto;color:#94a3b8}
 .inv-facts{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}
 .inv-facts>div{display:flex;flex-direction:column;gap:3px;padding:8px 10px;border-radius:8px;background:#f8fafc;border:1px solid #eef2f7}
@@ -89,7 +94,7 @@ label.inv-line-row{cursor:pointer;margin:0;text-transform:none;letter-spacing:0;
 .inv-deduction-row .inv-input-prefix{max-width:150px}
 .inv-deduction-info{margin-top:6px;font-size:11.5px;color:#64748b;line-height:1.45}
 .inv-error{margin-top:12px;padding:10px 12px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-size:12.5px}
-@media(max-width:900px){.inv-type-grid{grid-template-columns:1fr}.inv-facts{grid-template-columns:1fr}.inv-grid-goods .inv-line-head,.inv-grid-goods .inv-line-row,.inv-grid-credit .inv-line-head,.inv-grid-credit .inv-line-row{min-width:960px}}
+@media(max-width:900px){.inv-type-card{grid-template-columns:20px 34px minmax(0,1fr)}.inv-type-meta{grid-column:3;grid-row:auto;border-left:0;padding-left:0;align-items:flex-start;text-align:left;flex-direction:row;flex-wrap:wrap;gap:4px;max-width:none}.inv-facts{grid-template-columns:1fr}.inv-grid-goods .inv-line-head,.inv-grid-goods .inv-line-row,.inv-grid-credit .inv-line-head,.inv-grid-credit .inv-line-row{min-width:960px}}
 
 /* ── Invoices register: badges and cells ── */
 #page-customerinvoices th.num,#page-customerinvoices td.num{text-align:right;font-variant-numeric:tabular-nums}
@@ -205,3 +210,61 @@ label.inv-line-row{cursor:pointer;margin:0;text-transform:none;letter-spacing:0;
 #page-customerinvoices .dn-overview-row.inv-monitor-amount{grid-template-columns:minmax(0,1fr) auto!important;cursor:default}
 #page-customerinvoices .dn-overview-row.inv-monitor-amount>strong{font-size:13.5px!important;white-space:nowrap}
 #page-customerinvoices .dn-overview-row.inv-monitor-amount:hover{background:#fff!important}
+
+/* ── V264.6 Invoice / credit note view — same frame as the Delivery Note view (cloned from #dn-print-modal) ── */
+#inv-view-modal .modal{max-width:min(1500px,98vw);width:98vw;height:96vh;max-height:96vh}
+#inv-view-modal .modal-body{background:#eef3f7!important}
+@media(max-width:900px){#inv-view-modal .modal{width:100vw!important;max-width:none!important;height:100dvh!important;max-height:100dvh!important;border-radius:0!important}}
+@media(max-width:560px){#inv-view-modal .modal-header{padding:10px 12px}}
+#inv-view-modal .modal{display:flex;flex-direction:column;overflow:hidden}
+#inv-view-modal .modal-body{flex:1;min-height:0}
+#inv-view-modal .dn-view-actionbar{position:relative;z-index:70;flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;gap:8px;min-height:58px;padding:9px 16px;background:#fff;border-top:1px solid #d9e2ec;box-shadow:0 -2px 8px rgba(15,23,42,.04)}
+#inv-view-modal .dn-view-actionbar-spacer{flex:1}
+#inv-view-modal .dn-view-actionbar .btn{min-height:38px;white-space:nowrap}
+@media(max-width:700px){#inv-view-modal .dn-view-actionbar{padding:8px 10px max(8px,env(safe-area-inset-bottom));gap:6px;overflow-x:auto;justify-content:flex-start;scrollbar-width:none}#inv-view-modal .dn-view-actionbar::-webkit-scrollbar{display:none}#inv-view-modal .dn-view-actionbar-spacer{display:none}#inv-view-modal .dn-view-actionbar .btn{flex:0 0 auto;min-height:40px;padding-left:11px;padding-right:11px}}
+@media print{#inv-view-modal .dn-view-actionbar{display:none!important}}
+#inv-view-modal.modal-overlay{
+  padding:0!important;
+  align-items:stretch!important;
+  justify-content:stretch!important;
+}
+#inv-view-modal>.modal{
+  width:100vw!important;
+  max-width:none!important;
+  height:100vh!important;
+  height:100dvh!important;
+  max-height:none!important;
+  margin:0!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+}
+#inv-view-modal>.modal>.modal-header{
+  flex:0 0 auto;
+  margin:0!important;
+  border-radius:0!important;
+}
+#inv-view-modal #inv-view-body{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  margin:0!important;
+}
+#inv-view-modal .dn-view-actionbar{
+  margin:0!important;
+  border-radius:0!important;
+}
+@media(max-width:700px){#inv-view-modal>.modal{width:100vw!important;height:100dvh!important;max-width:none!important;border-radius:0!important}}
+#inv-view-modal .inv-view-workspace{grid-template-columns:minmax(0,1fr) 340px}
+#inv-view-modal .qv-erp-panel{display:flex;flex-direction:column;gap:12px;position:sticky;top:0;min-width:0}
+#inv-view-modal .qv-doc-flow{display:flex;flex-direction:column;align-items:stretch}
+#inv-view-modal .qv-activity{padding-top:6px;padding-bottom:6px}
+#inv-view-modal .qv-side-row strong{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:4px;max-width:62%}
+/* quick identification: teal accent for invoices, red for credit notes */
+#inv-view-modal>.modal>.modal-header{border-top:4px solid #0f766e!important}
+#inv-view-modal>.modal.inv-view-cn>.modal-header{border-top-color:#b42318!important}
+#inv-view-modal .qv-doc-node.current{background:#effaf7;border-color:#9fd6cd}
+#inv-view-modal .qv-doc-node.current strong{color:#134e48}
+#inv-view-modal .inv-view-cn .qv-doc-node.current{background:#fef3f2;border-color:#f3b8b2}
+#inv-view-modal .inv-view-cn .qv-doc-node.current strong{color:#7a1a12}
+@media(max-width:1120px){#inv-view-modal .inv-view-workspace{grid-template-columns:minmax(0,1fr) 300px}}
+@media(max-width:900px){#inv-view-modal .inv-view-workspace{display:flex;flex-direction:column}#inv-view-modal .qv-erp-panel{position:static;width:100%}#inv-view-modal .dn-view-document{overflow-x:auto;justify-content:flex-start}}
