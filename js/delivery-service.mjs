@@ -21,8 +21,8 @@ import {
   ledgerDeltasBetween, buildDNItem, validateDispatchLines, validateAcceptanceLines, requireReason,
   requireDate, cleanText, assertSize, dnStatus, dispatchSnapshot, acceptanceSnapshot, roundQty,
   invoicedQtyByLine,
-} from './delivery-core.mjs?v=263';
-import { LOCK_COLLECTION, LOCK_TYPES, lockId, lockHeldBy } from './lock-service.mjs?v=263';
+} from './delivery-core.mjs?v=264';
+import { LOCK_COLLECTION, LOCK_TYPES, lockId, lockHeldBy } from './lock-service.mjs?v=264';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
 const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, details); };
@@ -216,10 +216,14 @@ export function createDeliveryService(fs, options = {}) {
       const nextLedger = applyLedgerDeltas(ledger, lineIndex, deltas);
       // Accepted quantity can never fall below what has already been invoiced for that line:
       // the invoice must be cancelled (or a credit note issued) first.
-      const invoiced = invoicedQtyByLine(so);
+      // Invoiced-by-delivery quantity: from the ledger once invoices are independent documents,
+      // otherwise from the invoices still embedded in the Sales Order.
+      const invoicedEmbedded = invoicedQtyByLine(so);
+      const invoicedOf = id => (ledger.lines?.[id] && ledger.lines[id].invoicedDelivery != null)
+        ? Number(ledger.lines[id].invoicedDelivery) || 0 : (invoicedEmbedded.get(id) || 0);
       for (const d of deltas) {
         if (!(d.accepted < 0)) continue;
-        const inv = invoiced.get(d.lineId) || 0;
+        const inv = invoicedOf(d.lineId);
         const acc = Number(nextLedger.lines?.[d.lineId]?.accepted) || 0;
         const ref = lineIndex.get(d.lineId);
         ensure(acc + 1e-6 >= inv, ERR.BELOW_INVOICED,

@@ -20,6 +20,7 @@
 <link href="css/masters.css?v=245" rel="stylesheet"/>
 <link href="css/administration-typography.css?v=247" rel="stylesheet"/>
 <link href="css/numbering-controls.css?v=248" rel="stylesheet"/>
+<link href="css/invoicing.css?v=264" rel="stylesheet"/>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
 .quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
@@ -697,7 +698,56 @@ document.addEventListener('error', function(e) {
     </div>
   </div>
 </div>
-<div class="page" id="page-customerinvoices"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-receipt"></i></div><h2>Customer Invoices</h2><p>Generate customer invoices from one or multiple delivery notes and track invoice status and receivables.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
+<div class="page" id="page-customerinvoices">
+  <div class="customerinvoices-page-header document-page-header" aria-label="Invoices page header">
+    <div class="customerinvoices-page-heading document-page-heading">
+      <h2>Invoices</h2>
+      <span>Customer invoices, advances and credit notes — created from the Sales Order</span>
+    </div>
+  </div>
+  <div class="dn-register-shell module-main-workspace" id="customerinvoices-main-workspace" data-module-monitor="customerinvoices">
+    <aside class="dn-overview-panel module-monitor" aria-label="Billing Monitor">
+      <div class="dn-overview-head module-monitor-head"><div><strong>Billing Monitor</strong><span>Invoices, advances &amp; credits</span></div><button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('customerinvoices')" aria-label="Collapse Billing Monitor" title="Collapse Billing Monitor"><i class="ti ti-chevron-left"></i></button></div>
+      <div class="dn-overview-body module-monitor-body">
+        <button type="button" class="dn-overview-total dn-kpi active" data-inv-kpi="all" onclick="filterInvoiceKPI('all')"><span>All documents</span><strong id="invreg-k-total">0</strong></button>
+        <div class="dn-overview-section-label">Type</div>
+        <button type="button" class="dn-overview-row dn-kpi" data-inv-kpi="delivery" onclick="filterInvoiceKPI('delivery')"><span><i class="dn-dot dn-dot-delivered"></i>Delivery invoices</span><strong id="invreg-k-delivery">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-inv-kpi="order" onclick="filterInvoiceKPI('order')"><span><i class="dn-dot dn-dot-awaiting-confirmation"></i>Billed ahead</span><strong id="invreg-k-order">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-inv-kpi="advance" onclick="filterInvoiceKPI('advance')"><span><i class="dn-dot dn-dot-partial"></i>Advance invoices</span><strong id="invreg-k-advance">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-inv-kpi="credit" onclick="filterInvoiceKPI('credit')"><span><i class="dn-dot dn-dot-rejected"></i>Credit notes</span><strong id="invreg-k-credit">0</strong></button>
+        <div class="dn-overview-section-label">Amounts (incl. VAT)</div>
+        <div class="dn-overview-row inv-monitor-amount"><span>Invoiced</span><strong id="invreg-a-invoiced">0.00</strong></div>
+        <div class="dn-overview-row inv-monitor-amount"><span>Credited</span><strong id="invreg-a-credited">0.00</strong></div>
+        <div class="dn-overview-row inv-monitor-amount"><span>Net billed</span><strong id="invreg-a-net">0.00</strong></div>
+      </div>
+    </aside>
+    <button class="module-monitor-rail" type="button" onclick="toggleModuleMonitor('customerinvoices')" aria-label="Expand Billing Monitor" title="Expand Billing Monitor"><i class="ti ti-layout-sidebar-left-expand"></i><span>Invoices</span></button>
+    <div class="dn-register-area module-register-area">
+      <div class="dn-register-toolbar page-toolbar page-toolbar--sticky page-control-bar" role="toolbar" aria-label="Invoice filters">
+        <div class="dn-toolbar-left">
+          <select id="invreg-sort" onchange="renderInvoiceRegister()" aria-label="Sort invoices"><option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option><option value="no-asc">Number A–Z</option><option value="customer-asc">Customer A–Z</option><option value="total-desc">Highest amount</option></select>
+          <span id="invreg-count" class="so-toolbar-count"></span>
+        </div>
+        <div class="dn-toolbar-right">
+          <select id="invreg-status" onchange="renderInvoiceRegister()" aria-label="Status"><option value="">All statuses</option><option value="Issued">Issued</option><option value="Partially credited">Partly credited</option><option value="Credited">Credited</option></select>
+          <select id="invreg-date" onchange="renderInvoiceRegister()" aria-label="Date"><option value="all">All Dates</option><option value="today">Today</option><option value="week">This Week</option><option value="month">This Month</option><option value="lastmonth">Last Month</option><option value="last3months">Last 3 Months</option><option value="year">This Year</option></select>
+          <input id="invreg-q" placeholder="Search number, customer, SO or Zoho no…" oninput="renderInvoiceRegister()" aria-label="Search invoices"/>
+          <button class="btn btn-secondary btn-sm register-clear-filters" id="invreg-clear" onclick="clearInvoiceRegisterFilters()"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
+        </div>
+      </div>
+      <div class="card dn-register-card"><div class="dn-table-scroll"><table id="invreg-table"><thead><tr>
+        <th class="sortable-register-th" data-sort-screen="inv" data-sort-key="no" onclick="setRegisterSort('inv','no',renderInvoiceRegister)">Number</th>
+        <th class="sortable-register-th" data-sort-screen="inv" data-sort-key="type" onclick="setRegisterSort('inv','type',renderInvoiceRegister)">Type</th>
+        <th class="sortable-register-th" data-sort-screen="inv" data-sort-key="date" onclick="setRegisterSort('inv','date',renderInvoiceRegister)">Date</th>
+        <th class="sortable-register-th" data-sort-screen="inv" data-sort-key="customer" onclick="setRegisterSort('inv','customer',renderInvoiceRegister)">Customer</th>
+        <th class="sortable-register-th" data-sort-screen="inv" data-sort-key="so" onclick="setRegisterSort('inv','so',renderInvoiceRegister)">Sales Order</th>
+        <th>Reference</th>
+        <th class="sortable-register-th num" data-sort-screen="inv" data-sort-key="total" onclick="setRegisterSort('inv','total',renderInvoiceRegister)">Total (SAR)</th>
+        <th class="sortable-register-th" data-sort-screen="inv" data-sort-key="status" onclick="setRegisterSort('inv','status',renderInvoiceRegister)">Status</th>
+      </tr></thead><tbody id="invreg-body"></tbody></table></div></div>
+    </div>
+  </div>
+</div>
 <div class="page" id="page-supplierrfqs"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-file-search"></i></div><h2>Supplier RFQs</h2><p>Request and compare supplier offers. This module is reserved for a later development phase.</p><span class="module-tag"><i class="ti ti-clock"></i>Planned for later</span></div></div></div>
 <div class="page" id="page-purchaseorders"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-clipboard-check"></i></div><h2>Purchase Orders</h2><p>Create purchase orders for selected suppliers and connect them to sales orders and costing records.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
 <div class="page" id="page-purchaseinvoices"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-file-invoice"></i></div><h2>Purchase Invoices</h2><p>Record supplier invoices, costs, VAT, payment status, and related purchase orders.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
@@ -904,6 +954,7 @@ document.addEventListener('error', function(e) {
 <button class="setup-tab" id="stab-roles" onclick="switchSetupTab('roles')"><i class="ti ti-shield-check"></i><span class="tab-copy"><span class="tab-title">Roles &amp; Permissions</span></span></button>
 <button class="setup-tab" id="stab-locking" onclick="switchSetupTab('locking')"><i class="ti ti-lock-cog"></i><span class="tab-copy"><span class="tab-title">Document Locking</span></span></button>
 <button class="setup-tab" id="stab-locks" onclick="switchSetupTab('locks')"><i class="ti ti-lock-access"></i><span class="tab-copy"><span class="tab-title">Active Locks</span></span></button>
+<button class="setup-tab" id="stab-billing" onclick="switchSetupTab('billing')"><i class="ti ti-file-invoice"></i><span class="tab-copy"><span class="tab-title">Billing Settings</span></span></button>
 </div>
 <div class="setup-nav-group">
 <div class="setup-nav-group-title">Document Configuration</div>
@@ -1252,6 +1303,11 @@ document.addEventListener('error', function(e) {
 <div class="setup-page-head"><div><h2>Document Locking</h2><p>While a user works on a document, other users can view and print it but cannot change it. These timings control when an unused lock is released.</p></div><span class="phase-badge"><i class="ti ti-lock" style="margin-right:5px"></i>V262</span></div>
 <section class="setup-section"><div class="setup-section-head"><div><h3><i class="ti ti-lock-cog"></i>Locking settings</h3><p>Stored in the database and applied to every user automatically.</p></div></div>
 <div class="setup-section-body" id="locking-settings-body"></div></section>
+</div>
+<div class="setup-tab-content" id="setup-tab-billing" style="display:none">
+<div class="setup-page-head"><div><h2>Billing Settings</h2><p>Who may bill ahead of delivery or issue advances and credit notes, and how advances are deducted on later invoices.</p></div><span class="phase-badge"><i class="ti ti-file-invoice" style="margin-right:5px"></i>V264</span></div>
+<section class="setup-section"><div class="setup-section-head"><div><h3><i class="ti ti-file-invoice"></i>Invoicing rules</h3><p>Stored in the database, enforced by the server for every user.</p></div></div>
+<div class="setup-section-body" id="billing-settings-body"></div></section>
 </div>
 <div class="setup-tab-content" id="setup-tab-locks" style="display:none">
 <div class="setup-page-head"><div><h2>Active Locks</h2><p>Documents currently being worked on. Locks disappear when the user closes the window, stops responding or stays inactive.</p></div><span class="phase-badge"><i class="ti ti-lock-access" style="margin-right:5px"></i>Live</span></div>
@@ -2096,9 +2152,11 @@ document.addEventListener('error', function(e) {
 <div class="toast" id="toast"></div>
 <!-- Firebase: loaded as module, exposes window.FB then loads app.js -->
 <script type="module">
-import { createDeliveryService, loadDeliveryEvents } from './js/delivery-service.mjs?v=263';
-import * as DNCore from './js/delivery-core.mjs?v=263';
-import * as LockCore from './js/lock-service.mjs?v=263';
+import { createDeliveryService, loadDeliveryEvents } from './js/delivery-service.mjs?v=264';
+import * as DNCore from './js/delivery-core.mjs?v=264';
+import * as LockCore from './js/lock-service.mjs?v=264';
+import * as InvCore from './js/invoice-core.mjs?v=264';
+import { createInvoiceService } from './js/invoice-service.mjs?v=264';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator }
@@ -2743,6 +2801,89 @@ window.BizCoreDN = {
     return { exists: true, active, ledger: snap.data() };
   },
 };
+
+/* ═══════════════════════════════════════════════════
+   V264 CUSTOMER INVOICES & CREDIT NOTES
+   Invoice storage mode (system/invoiceStorage) is DATABASE-WIDE and set only by the administrator's
+   migration tool. legacy = invoices embedded in Sales Orders (as before); migrating = invoices frozen;
+   independent = customerInvoices / creditNotes documents written by the invoice service.
+═══════════════════════════════════════════════════ */
+let _invMode = 'unknown', _resolveInvMode, _invReadyResolved = false, _invModeUnsub = null, _billingUnsub = null;
+const _invModeReady = new Promise(r => { _resolveInvMode = r; });
+const _invModeListeners = new Set(), _billingListeners = new Set();
+let _billingStored = null, _billingSettings = InvCore.effectiveBillingSettings(null);
+function startInvoiceModeListener() {
+  if (_invModeUnsub) return;
+  setTimeout(() => { if (!_invReadyResolved) { _invReadyResolved = true; _resolveInvMode('unknown'); } }, 10000);
+  _invModeUnsub = onSnapshot(doc(db, 'system', 'invoiceStorage'), { includeMetadataChanges: true }, snap => {
+    if (!snap.exists() && snap.metadata && snap.metadata.fromCache) return;
+    const data = snap.exists() ? snap.data() : {};
+    const next = ['legacy', 'migrating', 'independent'].includes(data.mode) ? data.mode : 'legacy';
+    const previous = _invMode;
+    _invMode = next;
+    if (!_invReadyResolved) { _invReadyResolved = true; _resolveInvMode(next); }
+    else if (previous !== next) _invModeListeners.forEach(fn => { try { fn(next, previous); } catch (e) { console.error(e); } });
+  }, err => {
+    console.error('[BizCore] Invoice storage mode unavailable:', err.message);
+    if (!_invReadyResolved) { _invMode = 'unavailable'; _invReadyResolved = true; _resolveInvMode('unavailable'); }
+  });
+  if (!_billingUnsub) _billingUnsub = onSnapshot(doc(db, ...InvCore.BILLING_SETTINGS_PATH), snap => {
+    _billingStored = snap.exists() ? snap.data() : null;
+    _billingSettings = InvCore.effectiveBillingSettings(_billingStored);
+    _billingListeners.forEach(fn => { try { fn(_billingSettings, _billingStored); } catch (e) { console.error(e); } });
+  }, err => console.warn('[BizCore] Billing settings unavailable (defaults used):', err.message));
+}
+const invoiceService = createInvoiceService({ db, doc, runTransaction, serverTimestamp }, {
+  actor: () => { const u = auth.currentUser, cu = window.currentUser || {}; return u ? { uid: u.uid, name: cu.name || u.displayName || u.email || u.uid } : {}; },
+  // Every invoice / credit note is issued by the holder of the Sales Order lock (also enforced by the rules).
+  orderLock: { required: () => true, sessionId: () => _lockSessionId },
+  formatNumber: (prefix, n) => (typeof window.formatDocSequence === 'function' ? window.formatDocSequence(prefix, n) : prefix + String(n).padStart(4, '0')),
+});
+window.BizCoreInv = {
+  get mode() { return _invMode; },
+  ready: _invModeReady,
+  core: InvCore,
+  service: invoiceService,
+  get settings() { return _billingSettings; },
+  get storedSettings() { return _billingStored; },
+  get isAdministrator() { return _isAdministrator; },
+  onModeChange(fn) { _invModeListeners.add(fn); return () => _invModeListeners.delete(fn); },
+  onSettingsChange(fn) { _billingListeners.add(fn); return () => _billingListeners.delete(fn); },
+  listenInvoices(onUpdate, onError) {
+    return onSnapshot(collection(db, InvCore.INVOICE_COLLECTIONS.invoices), snap => { const out = []; snap.forEach(d => out.push(d.data())); onUpdate(out); },
+      err => { console.error('[BizCore] Invoice listener error:', err.message); onError && onError(err); });
+  },
+  listenCreditNotes(onUpdate, onError) {
+    return onSnapshot(collection(db, InvCore.INVOICE_COLLECTIONS.creditNotes), snap => { const out = []; snap.forEach(d => out.push(d.data())); onUpdate(out); },
+      err => { console.error('[BizCore] Credit note listener error:', err.message); onError && onError(err); });
+  },
+  /** Authoritative ledger (delivery + billing quantities) straight from the server. */
+  async getLedger(soId) {
+    const snap = await getDocFromServer(doc(db, DNCore.COLLECTIONS.fulfillment, String(soId)));
+    return snap.exists() ? snap.data() : null;
+  },
+  async loadInvoiceEvents(invoiceId) {
+    const snap = await getDocs(collection(db, InvCore.INVOICE_COLLECTIONS.invoices, String(invoiceId), InvCore.INVOICE_COLLECTIONS.invoiceEvents));
+    return snap.docs.map(d => d.data()).sort((a, b) => (Number(a.toRevision) || 0) - (Number(b.toRevision) || 0));
+  },
+  async saveSettings(input) {
+    const v = InvCore.validateBillingSettings(input);
+    if (!v.ok) { const e = new Error(v.errors.map(x => x.message).join(' ')); e.code = 'invalid-argument'; e.errors = v.errors; throw e; }
+    const a = _lockActor(); if (!a) throw new Error('Sign in first');
+    const s = _billingStored;
+    const before = s ? { deductionMethod: s.deductionMethod, allowOrderInvoices: s.allowOrderInvoices, allowAdvanceInvoices: s.allowAdvanceInvoices, allowCreditNotes: s.allowCreditNotes } : null;
+    const batch = writeBatch(db);
+    batch.set(doc(db, ...InvCore.BILLING_SETTINGS_PATH), { ...v.value, updatedAt: serverTimestamp(), updatedByUid: a.uid, updatedByName: a.name });
+    const changeId = 'chg-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    batch.set(doc(db, ...InvCore.BILLING_SETTINGS_PATH, 'changes', changeId), { id: changeId, before, after: v.value, actorUid: a.uid, actorName: a.name, recordedAt: serverTimestamp() });
+    await batch.commit();
+    return v.value;
+  },
+  async loadSettingsHistory() {
+    const snap = await getDocs(collection(db, ...InvCore.BILLING_SETTINGS_PATH, 'changes'));
+    return snap.docs.map(d => d.data()).sort((a, b) => LockCore.toMillis(b.recordedAt) - LockCore.toMillis(a.recordedAt));
+  },
+};
 /* Expose to app.js */
 window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
   getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
@@ -2786,6 +2927,7 @@ onAuthStateChanged(auth, user => {
 
   startDeliveryNoteModeListener();
   startLockingListeners();
+  startInvoiceModeListener();
   window.currentUser = {
     uid:   user.uid,
     email: user.email,
@@ -2881,11 +3023,21 @@ onAuthStateChanged(auth, user => {
   // Keep the topbar uncluttered: no duplicate Firebase user/sign-out pill.
 
   // Load app.js — window.FB is ready
+  // invoicing.js (V264 invoice screens) first, then app.js
   if (!document.getElementById('bizcore-app-script')) {
-    const s   = document.createElement('script');
-    s.id  = 'bizcore-app-script';
-    s.src = 'js/app.js?v=263';
-    document.body.appendChild(s);
+    const inv = document.createElement('script');
+    inv.id  = 'bizcore-invoicing-script';
+    inv.src = 'js/invoicing.js?v=264';
+    const start = () => {
+      if (document.getElementById('bizcore-app-script')) return;
+      const s   = document.createElement('script');
+      s.id  = 'bizcore-app-script';
+      s.src = 'js/app.js?v=264';
+      document.body.appendChild(s);
+    };
+    inv.onload = start;
+    inv.onerror = () => { console.error('[BizCore] invoicing.js could not be loaded'); start(); };
+    document.body.appendChild(inv);
   }
 });
 

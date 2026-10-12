@@ -180,7 +180,8 @@ export function applyLedgerDeltas(ledger, lineIndex, deltas) {
         `Quantity for "${lineLabel(ref)}" exceeds the ordered quantity (ordered ${ref.ordered}, already committed ${roundQty(committedBefore)}, requested total ${roundQty(committedAfter)}).`,
         { lineId: d.lineId, ordered: ref.ordered, committedBefore: roundQty(committedBefore), committedAfter: roundQty(committedAfter) });
     }
-    lines[d.lineId] = next;
+    // Keep other per-line fields (e.g. invoiced quantities maintained by the invoice service).
+    lines[d.lineId] = { ...(lines[d.lineId] || {}), ...next };
   }
   return { ...(ledger || {}), lines };
 }
@@ -380,6 +381,11 @@ export function projectSalesOrders(rawSalesOrders, deliveryNotes) {
 export function stripProjection(so) {
   if (!so || typeof so !== 'object') return so;
   const { deliveries, ...rest } = so;
+  if (rest._invoiceProjection) {
+    // V264: invoices / credit notes shown inside the order come from their own documents (view only)
+    const { invoices, creditNotes, billingSummary, _invoiceProjection, ...plain } = rest;
+    return plain;
+  }
   return rest;
 }
 

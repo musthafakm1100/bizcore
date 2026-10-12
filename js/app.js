@@ -503,6 +503,8 @@ async function loadData() {
             showToast('Delivery Notes could not be synchronised (' + (err && err.code || 'error') + '). The list may be incomplete — please reload.', 'error', 'Delivery Notes');
           });
         }
+        // V264: independent customer invoices and credit notes
+        if (typeof startInvoiceListeners === 'function') startInvoiceListeners();
         if (window.BizCoreDN && typeof window.BizCoreDN.onModeChange === 'function') {
           // The storage mode is changed only by the administrator's migration tool.
           // Reload so this session can never mix the two persistence models.
@@ -678,7 +680,8 @@ function dnCore(){ return window.BizCoreDN && window.BizCoreDN.core; }
 function setRawSalesOrders(records){ rawSalesOrders = (records || []).map(r => dnCore().stripProjection(r)); }
 function rebuildSalesOrderView(){
   const r = dnCore().projectSalesOrders(rawSalesOrders, deliveryNotesCache);
-  salesOrders = r.salesOrders;
+  // V264: invoices / credit notes from their own documents (view only; stripped before saves)
+  salesOrders = typeof projectInvoicesIntoSalesOrders === 'function' ? projectInvoicesIntoSalesOrders(r.salesOrders) : r.salesOrders;
   window.BizCoreDN.lastProjectionIssues = r.issues;
   const serious = r.issues.filter(i => i.code !== 'EMBEDDED_DELIVERIES_PRESENT');
   if (serious.length) console.error('[BizCore DN read model] records excluded from view', serious);
@@ -1247,7 +1250,7 @@ function validUntil(q) {
 
 /* ── v103 Central document numbering ── */
 const DOC_NUMBERING_DEFAULTS={
-  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'}
+  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'}
 };
 function ensureDocumentNumbering(){settings.documentNumbering=settings.documentNumbering||{};Object.entries(DOC_NUMBERING_DEFAULTS).forEach(([k,d])=>{settings.documentNumbering[k]={...d,...(settings.documentNumbering[k]||{})};});return settings.documentNumbering;}
 function docPeriod(reset='monthly',date=new Date()){const yy=String(date.getFullYear()).slice(2),mm=String(date.getMonth()+1).padStart(2,'0');return reset==='yearly'?yy:(reset==='never'?'':yy+mm);}
@@ -1261,7 +1264,7 @@ async function allocateDocumentNumber(type,date=new Date()){
 }
 function existingDocumentNumbers(type){
   if(type==='rfq')return rfqs.map(x=>x.rfqNo||''); if(type==='quotation')return quotations.map(x=>x.qno||''); if(type==='salesOrder')return salesOrders.map(x=>x.soNo||'');
-  if(type==='deliveryNote')return salesOrders.flatMap(s=>(s.deliveries||[]).map(x=>x.dnNo||'')); if(type==='customerInvoice')return salesOrders.flatMap(s=>(s.invoices||[]).map(x=>x.invNo||'')); return [];
+  if(type==='deliveryNote')return salesOrders.flatMap(s=>(s.deliveries||[]).map(x=>x.dnNo||'')); if(type==='customerInvoice')return salesOrders.flatMap(s=>(s.invoices||[]).map(x=>x.invNo||'')); if(type==='creditNote')return salesOrders.flatMap(s=>(s.creditNotes||[]).map(x=>x.cnNo||'')); return [];
 }
 function estimatedNextDocumentNumber(type){const x=docNumberParts(type);const vals=existingDocumentNumbers(type).filter(n=>String(n).startsWith(x.displayPrefix)&&!String(n).includes('-OFF-')).map(n=>parseInt(String(n).slice(x.displayPrefix.length),10)||0);return formatDocSequence(x.displayPrefix,(vals.length?Math.max(...vals):0)+1);}
 function renderDocumentNumbering(){
@@ -2881,6 +2884,7 @@ function switchSetupTab(tab) {
   if (tab === 'users') renderUsers();
   if (tab === 'roles') renderRoles();
   if (tab === 'locking' && typeof renderLockingSettings === 'function') renderLockingSettings();
+  if (tab === 'billing' && typeof renderBillingSettings === 'function') renderBillingSettings();
   if (tab === 'locks' && typeof startLocksScreen === 'function') startLocksScreen();
   if (tab === 'defaults') { renderSetupTermsList('delivery'); renderSetupTermsList('payment'); }
   if (tab === 'cost-components') renderCostComponents();
@@ -4368,6 +4372,7 @@ function showPage(page, el) {
   if(page==='analytics')renderAnalytics();
   if(page==='salesorders')renderSOPage();
   if(page==='deliverynotes')renderDNPage();
+  if(page==='customerinvoices'&&typeof renderInvoiceRegister==='function')renderInvoiceRegister();
   closeMobileSidebar();
 }
 
@@ -5446,11 +5451,12 @@ function ensureDocumentSummaryModal() {
 }
 function closeDocumentSummary() {
   const modal = document.getElementById('document-summary-modal');
-  if (modal) modal.classList.remove('open');
+  if (modal) { modal.classList.remove('open'); const box = modal.querySelector('.modal'); if (box) box.style.width = 'min(620px,92vw)'; }
 }
 function openInvoiceDocument(soId, invoiceIdx) {
   const so = salesOrders.find(x => x.id === soId); if (!so) return;
   const inv = (so.invoices || [])[invoiceIdx]; if (!inv) return;
+  if (inv.independent && typeof openIndependentInvoiceDocument === 'function') return openIndependentInvoiceDocument(soId, inv.id);
   const q = quotations.find(x => x.id === so.quotationId);
   closeModal('view-modal'); closeModal('so-view-modal'); closeModal('dn-print-modal');
   const modal = ensureDocumentSummaryModal();
@@ -7121,7 +7127,7 @@ function applyRFQMonitorFilter(status, btn) {
 }
 function moduleMonitorStorageKey(moduleKey){ return `bizcore-${moduleKey}-monitor-collapsed`; }
 function getModuleMonitorWorkspace(moduleKey){
-  const ids={rfq:'rfq-main-workspace',quotations:'quotation-main-workspace',pricing:'pricing-main-workspace',salesorders:'salesorders-main-workspace'};
+  const ids={rfq:'rfq-main-workspace',quotations:'quotation-main-workspace',pricing:'pricing-main-workspace',salesorders:'salesorders-main-workspace',customerinvoices:'customerinvoices-main-workspace'};
   return document.getElementById(ids[moduleKey]||'');
 }
 function setModuleMonitorState(moduleKey, collapsed, persist=true){
@@ -7137,7 +7143,7 @@ function toggleModuleMonitor(moduleKey){
   setModuleMonitorState(moduleKey,!workspace.classList.contains('monitor-collapsed'),true);
 }
 function restoreModuleMonitors(){
-  ['rfq','quotations','pricing','salesorders','deliverynotes'].forEach(moduleKey=>{
+  ['rfq','quotations','pricing','salesorders','deliverynotes','customerinvoices'].forEach(moduleKey=>{
     const workspace=getModuleMonitorWorkspace(moduleKey);
     if(!workspace) return;
     const saved=localStorage.getItem(moduleMonitorStorageKey(moduleKey));
@@ -10397,7 +10403,7 @@ function viewSO(soId) {
     : '<p style="font-size:12px;color:var(--gray)">No deliveries dispatched yet.</p>';
 
   // Invoices
-  const invoicesHtml = (so.invoices||[]).length
+  const invoicesHtml = (typeof invIndependentMode==='function'&&invIndependentMode()) ? soInvoicesSectionHtml(so) : (so.invoices||[]).length
     ? (so.invoices||[]).map((inv,invoiceIdx)=>`
         <div class="inv-card">
           <div>
@@ -10529,7 +10535,8 @@ function viewSO(soId) {
   if (hasUndelivered) {
     fBtns.push(`<button class="btn btn-secondary" data-sid="${so.id}" onclick="openRecordDelivery(this.dataset.sid)"><i class="ti ti-truck"></i>Dispatch delivery</button>`);
   }
-  if (soHasInvoiceableQty(so)) { // V260: also after a partial invoice, while accepted quantity remains un-invoiced
+  const canInvoiceV264 = typeof soCanIssueInvoice==='function' ? soCanIssueInvoice(so) : null;
+  if (canInvoiceV264===null ? soHasInvoiceableQty(so) : canInvoiceV264) { // V260: also after a partial invoice, while accepted quantity remains un-invoiced
     fBtns.push(`<button class="btn btn-secondary" data-sid="${so.id}" onclick="openCreateInvoice(this.dataset.sid)"><i class="ti ti-file-invoice"></i>${(so.invoices||[]).length?'Invoice remaining':'Create invoice'}</button>`);
   }
   if ((so.invoices||[]).length > 0 && outstanding > 0.01) {
@@ -11277,6 +11284,7 @@ function invoiceAcceptedQtyMap(so){
 function invoicePreviouslyInvoicedQtyMap(so){
   const map={};
   (so.invoices||[]).forEach(inv=>{
+    if(inv&&inv.type==='advance')return; // V264: an advance bills money, not quantities
     if(Array.isArray(inv.items)&&inv.items.length){inv.items.forEach(it=>{const idx=soRowOfItem(so,it,'invoice');if(idx==null)return;map[idx]=roundQty((map[idx]||0)+(Number(it.qty)||0));});}
     else { // Backward compatibility: invoices created before partial invoicing represented the full SO.
       (so.items||[]).forEach((it,i)=>{map[i]=roundQty((map[i]||0)+(Number(it.qty)||0));});
@@ -11300,6 +11308,8 @@ function recalcInvoiceSummary(){
 function invoiceAllAvailable(){const m=document.getElementById('so-invoice-modal');(m._invoiceLines||[]).forEach((it,i)=>{const e=document.getElementById('inv-qty-'+i);if(e)e.value=it.availableQty;});recalcInvoiceSummary();}
 function clearInvoiceQty(){const m=document.getElementById('so-invoice-modal');(m._invoiceLines||[]).forEach((it,i)=>{const e=document.getElementById('inv-qty-'+i);if(e)e.value=0;});recalcInvoiceSummary();}
 function openCreateInvoice(soId) {
+  // V264: independent invoices (delivery / order / advance) use the new screen
+  if(typeof invoiceModeRoute==='function'){const routed=invoiceModeRoute(soId);if(routed!=='legacy')return routed;}
   const so=salesOrders.find(x=>x.id===soId);if(!so)return;currentSOId=soId;
   const lines=invoiceAvailableLines(so),availableLines=lines.filter(x=>x.availableQty>0.001);
   const today=new Date().toISOString().split('T')[0],dueDate=new Date();dueDate.setDate(dueDate.getDate()+14);
@@ -11332,7 +11342,7 @@ function openRecordPayment(soId) {
   const outstanding = so.total - totalPaid;
   document.getElementById('pay-modal-title').textContent = 'Record Payment — ' + so.soNo;
   document.getElementById('pay-outstanding-info').innerHTML =
-    `<strong>Invoice total:</strong> ${fmt(so.total)} &nbsp;·&nbsp; <strong>Paid so far:</strong> ${fmt(totalPaid)} &nbsp;·&nbsp; <strong>Outstanding:</strong> <span style="color:var(--red);font-weight:700">${fmt(outstanding)}</span>`;
+    ((typeof invIndependentMode==='function'&&invIndependentMode()&&typeof soBilledTotal==='function')?`<strong>Invoiced so far (net):</strong> ${fmt(soBilledTotal(so))} &nbsp;·&nbsp; `:'')+`<strong>Order total:</strong> ${fmt(so.total)} &nbsp;·&nbsp; <strong>Paid so far:</strong> ${fmt(totalPaid)} &nbsp;·&nbsp; <strong>Outstanding:</strong> <span style="color:var(--red);font-weight:700">${fmt(outstanding)}</span>`;
   document.getElementById('pay-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('pay-amount').value = outstanding.toFixed(2);
   document.getElementById('pay-method').value = 'Bank transfer';
@@ -13503,7 +13513,7 @@ let _idleReleaseTimer= null;
 let _lockWatcher     = null;
 let _lastActivity    = Date.now();
 let _lockReleasePromise = null;
-const SO_LOCK_MODALS = new Set(['so-create-modal', 'so-delivery-modal', 'dn-confirm-modal', 'dn-dispatch-action-modal', 'so-invoice-modal', 'so-payment-modal']);
+const SO_LOCK_MODALS = new Set(['so-create-modal', 'so-delivery-modal', 'dn-confirm-modal', 'dn-dispatch-action-modal', 'so-invoice-modal', 'so-payment-modal', 'inv-issue-modal', 'cn-issue-modal']);
 const EDITOR_LOCK_MODALS = new Set(['quote-modal', 'rfq-modal']);
 
 function lockSettings(){
@@ -13775,10 +13785,15 @@ async function refreshSalesOrderFromServer(soId){
 async function acquireOrderLock(soId, activity){
   const so = salesOrders.find(x => x.id === soId);
   const label = so ? (so.soNo || soId) : soId;
-  const ok = await acquireDocLock('salesOrder', soId, label, activity);
-  if (ok && _activeLock) await refreshSalesOrderFromServer(soId);
-  return ok;
+  // Blocking "working" overlay (appears only if this takes more than a moment) so nothing else can be clicked.
+  beginScreenTransition('Opening ' + label + ' for editing…');
+  try {
+    const ok = await acquireDocLock('salesOrder', soId, label, activity);
+    if (ok && _activeLock) await refreshSalesOrderFromServer(soId);
+    return ok;
+  } finally { endScreenTransition(); }
 }
+let _orderActionBusy = false;
 function openOverlayIds(){ return [...document.querySelectorAll('.modal-overlay.open')].map(x => x.id).filter(Boolean); }
 
 /* Wrap each Sales Order action so it runs only while this user holds the order lock. */
@@ -13788,6 +13803,11 @@ function wrapOrderAction(fnName, soIdOf, activityOf){
   window[fnName] = async function(...args){
     const soId = soIdOf(...args);
     if (!soId) return orig.apply(this, args);
+    if (_orderActionBusy) return false;   // a second click while the first is still opening
+    _orderActionBusy = true;
+    try { return await runOrderAction.call(this, soId, args); } finally { _orderActionBusy = false; }
+  };
+  async function runOrderAction(soId, args){
     const activity = typeof activityOf === 'function' ? activityOf(...args) : activityOf;
     const already = _activeLock && _activeLock.docType === 'salesOrder' && _activeLock.docId === String(soId) && _activeLock.modalId && document.getElementById(_activeLock.modalId)?.classList.contains('open');
     if (!already) {
@@ -13802,7 +13822,7 @@ function wrapOrderAction(fnName, soIdOf, activityOf){
     if (opened.length && _activeLock) { _activeLock.modalId = opened[opened.length - 1]; if (window.FB.heartbeat) window.FB.heartbeat('salesOrder', soId, activity); }
     else if (!already && !(_activeLock && _activeLock.modalId && document.getElementById(_activeLock.modalId)?.classList.contains('open'))) await releaseLock();
     return result;
-  };
+  }
 }
 const dnNoFor = (soId, idx) => { const d = salesOrders.find(x => x.id === soId)?.deliveries?.[idx]; return d ? d.dnNo : 'Delivery Note'; };
 wrapOrderAction('openEditSO', soId => soId, 'Editing the Sales Order');
@@ -13813,6 +13833,7 @@ wrapOrderAction('openDNDispatchAction', () => document.getElementById('dn-print-
   mode => (mode === 'void' ? 'Voiding ' : 'Correcting dispatch, ') + (dnForModal(document.getElementById('dn-print-modal'))?.dnNo || 'Delivery Note'));
 wrapOrderAction('openCreateInvoice', soId => soId, 'Creating an invoice');
 wrapOrderAction('openRecordPayment', soId => soId, 'Recording a payment');
+wrapOrderAction('openIssueCreditNote', soId => soId, (soId, invoiceId) => 'Issuing a credit note' + (typeof invoicesCache !== 'undefined' ? ', ' + ((invoicesCache.find(i => i.id === invoiceId) || {}).invNo || '') : ''));
 
 /* ═══════════════════════════════════════════════════════════════════
    QUOTATION / RFQ EDITOR LOCKS
@@ -13882,7 +13903,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V263)');
+console.log('Document locking system active ✅ (V264)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS
