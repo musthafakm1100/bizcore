@@ -327,6 +327,7 @@ async function loadData() {
       }
       if (fbSet && fbSet.coname)  settings      = fbSet;
       console.log('Data loaded from Firebase ✅');
+      setTimeout(() => { if (typeof finalizeProvisionalNumbers === 'function') finalizeProvisionalNumbers(); }, 4000);
 
       // ── Real-time listeners: auto-update when another device saves ──
       // Uses smart refresh — updates data in background, only re-renders
@@ -1345,35 +1346,63 @@ function getDeviceTag() {
   return tag;
 }
 
-/* ── Renumber provisional (offline-created) quotations once back online ──
-   Call this after reconnecting — finds any "OFF-" tagged quotations
-   this device created and assigns them a real sequential number. ── */
-async function renumberProvisionalQuotations() {
-  if (!navigator.onLine || !window.FB || !window.FB.getNextDocNumber) return;
-  const provisional = quotations.filter(q => q.qno && q.qno.includes('-OFF-'));
-  if (!provisional.length) return;
-
-  console.log('Renumbering ' + provisional.length + ' offline-created quotation(s)...');
-  for (const q of provisional) {
-    const t = new Date(q.date || q.created || Date.now());
-    const x=docNumberParts('quotation',t);
-    const seq = await window.FB.getNextDocSequence(x.counterKey);
-    const realNo = seq ? formatDocSequence(x.displayPrefix,seq) : null;
-    if (realNo) {
-      const oldQno = q.qno;
-      q.qno = realNo;
-      console.log('Renumbered ' + oldQno + ' → ' + realNo);
+/* ── Final numbers for documents created OFFLINE (V264) ──
+   Offline, RFQs / quotations / Sales Orders get a provisional number "<PREFIX>-OFF-<device>-<n>".
+   As soon as a device is online (at start-up, on reconnect and every 2 minutes) each provisional
+   document receives the next real number in ONE transaction with the counter (only if the server copy is
+   still provisional — so two devices can never both number it), keeps the old one in `provisionalNumber`,
+   and is read back from the server to confirm it was recorded. ── */
+let _finalizingNumbers = false;
+const PROVISIONAL_SPECS = [
+  { type: 'rfq', col: 'rfqs', field: 'rfqNo', label: 'RFQ', list: () => rfqs, save: () => saveRFQs() },
+  { type: 'quotation', col: 'quotations', field: 'qno', label: 'Quotation', list: () => quotations, save: () => saveQuotations() },
+  { type: 'salesOrder', col: 'salesOrders', field: 'soNo', label: 'Sales Order', list: () => salesOrders, save: ids => saveSalesOrders({ onlyIds: ids }) },
+];
+function isProvisionalNumber(no){ return String(no || '').includes('-OFF-'); }
+async function finalizeProvisionalNumbers(){
+  if (_finalizingNumbers || !navigator.onLine || !window.FB || !window.FB.finalizeProvisionalNumber || !window.currentUser) return;
+  _finalizingNumbers = true;
+  const done = [], problems = [];
+  try {
+    for (const sp of PROVISIONAL_SPECS) {
+      const pending = (sp.list() || []).filter(d => isProvisionalNumber(d[sp.field]));
+      for (const d of pending) {
+        const t = new Date(String(d.date || '').slice(0, 10) + 'T00:00:00');
+        const x = docNumberParts(sp.type, isNaN(t) ? new Date() : t);
+        let r;
+        try { r = await window.FB.finalizeProvisionalNumber({ col: sp.col, id: d.id, field: sp.field, counterKey: x.counterKey, displayPrefix: x.displayPrefix }); }
+        catch (e) { console.warn('[BizCore] Final number not assigned yet for', d[sp.field], e.message); problems.push(d[sp.field]); continue; }
+        if (r.status === 'missing') continue;                       // not yet in the database: the offline save is still syncing
+        // Read back from the server: this also refreshes the copy BizCore compares against when saving.
+        let stored = null;
+        try { stored = window.FB.fetchFromServer ? await window.FB.fetchFromServer(sp.col, d.id) : null; } catch (e) {}
+        const finalNo = stored ? stored[sp.field] : r.number;
+        if (!stored || isProvisionalNumber(finalNo)) { problems.push(d[sp.field]); continue; }
+        const oldNo = d[sp.field];
+        d[sp.field] = finalNo; d.provisionalNumber = stored.provisionalNumber || oldNo; d.numberFinalizedAt = stored.numberFinalizedAt || '';
+        if (sp.type === 'salesOrder' && typeof rawSalesOrders !== 'undefined') { const raw = rawSalesOrders.find(x => x.id === d.id); if (raw) { raw[sp.field] = finalNo; raw.provisionalNumber = d.provisionalNumber; raw.numberFinalizedAt = d.numberFinalizedAt; } }
+        if (r.status === 'numbered') done.push(`${sp.label} ${oldNo} → ${finalNo}`);
+      }
     }
+    if (done.length || problems.length) {
+      try { localStorage.setItem('dtq_quotations', JSON.stringify(quotations)); localStorage.setItem('dtq_rfqs', JSON.stringify(rfqs)); } catch (e) {}
+      if (typeof cacheSalesOrdersLocally === 'function') cacheSalesOrdersLocally();
+    }
+  } catch (e) { console.error('[BizCore] Final numbering failed', e); }
+  finally { _finalizingNumbers = false; }
+  if (done.length) {
+    console.log('[BizCore] Offline documents numbered:', done);
+    if (typeof renderAll === 'function') renderAll();
+    if (typeof renderSOPage === 'function') renderSOPage();
+    if (typeof renderRFQPage === 'function') try { renderRFQPage(); } catch (e) {}
+    showToast(`${done.length} document(s) created offline now have their final number and are confirmed in the database: ${done.join(', ')}`, 'success', 'Final Numbers Assigned');
   }
-  await saveQuotations();
-  renderAll();
-  showToast(provisional.length + ' offline quotation(s) assigned final numbers', 'success');
+  if (problems.length) showToast(`${problems.length} offline document(s) could not get a final number yet (${problems.join(', ')}). BizCore will try again automatically.`, 'warning', 'Numbering Pending');
 }
-
-// Run renumbering automatically whenever the app comes back online
-window.addEventListener('online', function() {
-  setTimeout(renumberProvisionalQuotations, 3000); // small delay to let sync settle first
-});
+// keep the old name working
+const renumberProvisionalQuotations = finalizeProvisionalNumbers;
+window.addEventListener('online', function() { setTimeout(finalizeProvisionalNumbers, 3000); });
+setInterval(() => { if (navigator.onLine) finalizeProvisionalNumbers(); }, 120000);
 
 /* ── RENDER ALL ── */
 function setDatePreset(preset) {
@@ -11497,7 +11526,23 @@ function setTemplateGalleryFilter(filter){
   document.querySelectorAll('.template-filter').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));
   renderTemplateGallery();
 }
-function openTemplatePicker(qid) {
+/* V264: a quotation goes to the customer only with its FINAL number (never a temporary offline one). */
+async function ensureFinalQuotationNumber(qid){
+  const q = quotations.find(x => x.id === qid);
+  if (!q || !isProvisionalNumber(q.qno)) return true;
+  if (!navigator.onLine) {
+    showValidationDialog('Final number needed', `This quotation was created offline and still has a temporary number (${q.qno}). It can be printed or saved as PDF for the customer once you are online and it has received its final number — this happens automatically when the connection is back.`, '', '');
+    return false;
+  }
+  if (typeof beginScreenTransition === 'function') beginScreenTransition('Assigning the final quotation number…');
+  try { await finalizeProvisionalNumbers(); } finally { if (typeof endScreenTransition === 'function') endScreenTransition(); }
+  const fresh = quotations.find(x => x.id === qid);
+  if (fresh && !isProvisionalNumber(fresh.qno)) return true;
+  showValidationDialog('Final number needed', `The final number for ${q.qno} could not be assigned yet (the quotation may still be synchronising). Please try again in a moment.`, '', '');
+  return false;
+}
+async function openTemplatePicker(qid) {
+  if (!(await ensureFinalQuotationNumber(qid))) return;
   _printQID = qid;
   const qForTpl = quotations.find(x=>x.id===qid);
   const typeDefault = qForTpl && qForTpl.quoteType === 'contracting' ? 'servicequote' : 'erpbox';
@@ -11553,6 +11598,7 @@ function quotationAuthorizationHtml(){
 }
 function logQuotationOutput(){try{const q=quotations.find(x=>x.id===_printQID);const key='dtq_quotation_output_audit';const a=JSON.parse(localStorage.getItem(key)||'[]');a.push({quotationId:_printQID,quotationNo:q?.qno||'',template:_pendingQuotationTemplate,signature:!!_quotationOutputOptions.signature,stamp:!!_quotationOutputOptions.stamp,generatedAt:new Date().toISOString()});localStorage.setItem(key,JSON.stringify(a.slice(-500)));}catch(e){}}
 function generateQuotationOutput(){
+  { const qq = quotations.find(x => x.id === _printQID); if (qq && isProvisionalNumber(qq.qno)) { closeModal('quotation-output-modal'); ensureFinalQuotationNumber(_printQID); return; } }
   _quotationOutputOptions={signature:!!document.getElementById('qout-signature')?.checked,stamp:!!document.getElementById('qout-stamp')?.checked};
   closeModal('quotation-output-modal'); logQuotationOutput(); const tpl=_pendingQuotationTemplate||'erpbox';
   if      (tpl === 'professional') printQuotation(_printQID);
@@ -13812,6 +13858,12 @@ function wrapOrderAction(fnName, soIdOf, activityOf){
   window[fnName] = async function(...args){
     const soId = soIdOf(...args);
     if (!soId) return orig.apply(this, args);
+    const soForNo = salesOrders.find(x => x.id === soId);
+    if (fnName !== 'openEditSO' && soForNo && isProvisionalNumber(soForNo.soNo)) {
+      showToast(`${soForNo.soNo} was created offline and is still waiting for its final number. Dispatch and invoicing are possible once it is numbered (automatic when online).`, 'warning', 'Number Pending');
+      if (navigator.onLine) finalizeProvisionalNumbers();
+      return false;
+    }
     if (_orderActionBusy) return false;   // a second click while the first is still opening
     _orderActionBusy = true;
     try { return await runOrderAction.call(this, soId, args); } finally { _orderActionBusy = false; }
@@ -13912,7 +13964,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V264 · lock fix 2)');
+console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS

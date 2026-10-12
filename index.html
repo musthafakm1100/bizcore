@@ -2157,6 +2157,7 @@ import * as DNCore from './js/delivery-core.mjs?v=264';
 import * as LockCore from './js/lock-service.mjs?v=264';
 import * as InvCore from './js/invoice-core.mjs?v=264';
 import { createInvoiceService } from './js/invoice-service.mjs?v=264';
+import { createNumbering } from './js/numbering.mjs?v=264';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator }
@@ -2623,6 +2624,11 @@ async function getNextDocSequence(counterKey) {
     });
   } catch(e) { console.warn('Atomic sequence failed:', e.message); return null; }
 }
+/** V264: final numbers for offline-created documents — one transaction with the counter (js/numbering.mjs). */
+const _numbering = createNumbering({ db, doc, runTransaction }, {
+  format: (prefix, n) => (typeof window.formatDocSequence === 'function' ? window.formatDocSequence(prefix, n) : prefix + String(n).padStart(4, '0')),
+});
+const finalizeProvisionalNumber = input => _numbering.finalizeProvisionalNumber(input);
 async function getDocSequence(counterKey) {
   try {
     const snap = await getDoc(doc(db, 'counters', counterKey));
@@ -2896,7 +2902,7 @@ window.BizCoreInv = {
 };
 /* Expose to app.js */
 window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
-  getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
+  getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, finalizeProvisionalNumber, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
 
   /* ═══════════════════════════════════════════════════
      DOCUMENT LOCKING (V262) — see window.BizCoreLocks / js/lock-service.mjs
@@ -3042,7 +3048,7 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=264.2';
+      s.src = 'js/app.js?v=264.5';
       document.body.appendChild(s);
     };
     inv.onload = start;
