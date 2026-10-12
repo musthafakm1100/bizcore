@@ -5080,14 +5080,25 @@ const modalNavHistory = [];
 let lastClosedModal = null;
 let lastClosedModalAt = 0;
 const modalNavExcluded = new Set(['confirm-modal','validation-dialog','template-picker-modal']);
+/* V264.8 — Entry screens of the order workflow. Once one of them is closed (saved or cancelled) its work is
+   finished, so it must never become a "Back" target: the screen opened right after it (e.g. the Sales Order
+   refreshed after saving an invoice) must not record it as the screen to return to, and any return entry that
+   points back to it is dropped. Otherwise closing the next screens would reopen the already-saved form. */
+const modalNavEntryScreens = new Set(['so-create-modal','so-delivery-modal','dn-confirm-modal','dn-dispatch-action-modal','so-invoice-modal','so-payment-modal','inv-issue-modal','cn-issue-modal']);
+function forgetFinishedEntryScreen(id){
+  if(!modalNavEntryScreens.has(id)) return;
+  for(let i=modalNavHistory.length-1;i>=0;i--){ if(modalNavHistory[i].from===id) modalNavHistory.splice(i,1); }
+}
 
 function modalFriendlyName(modalId) {
   const names={
     'rfq-view-modal':'RFQ','rfq-modal':'RFQ','pricing-modal':'Pricing','pricing-ro-modal':'Pricing',
     'quote-modal':'Quotation','view-modal':'Quotation','so-view-modal':'Sales Order','so-create-modal':'Sales Order',
     'cust-view-modal':'Customer','cust-modal':'Customer','sup-modal':'Supplier','prod-modal':'Product','prod-view-modal':'Product',
-    'so-delivery-modal':'Sales Order','dn-print-modal':'Delivery Note','so-invoice-modal':'Sales Order','so-payment-modal':'Sales Order'
+    'so-delivery-modal':'Sales Order','dn-print-modal':'Delivery Note','so-invoice-modal':'Sales Order','so-payment-modal':'Sales Order',
+    'inv-view-modal':'Invoice','inv-issue-modal':'Invoice','cn-issue-modal':'Credit Note','dn-confirm-modal':'Delivery Note','dn-dispatch-action-modal':'Delivery Note'
   };
+  if(modalId==='inv-view-modal' && document.getElementById(modalId)?._kind==='credit') return 'Credit Note';
   return names[modalId]||'Previous screen';
 }
 
@@ -5141,7 +5152,7 @@ function openModalWithSize(modalId) {
   const now=Date.now();
   const currentlyOpen=[...document.querySelectorAll('.modal-overlay.open')].map(x=>x.id).filter(id=>id&&id!==modalId&&!modalNavExcluded.has(id));
   let from=currentlyOpen[currentlyOpen.length-1]||null;
-  if(!from && lastClosedModal && now-lastClosedModalAt<1200 && lastClosedModal!==modalId && !modalNavExcluded.has(lastClosedModal)) from=lastClosedModal;
+  if(!from && lastClosedModal && now-lastClosedModalAt<1200 && lastClosedModal!==modalId && !modalNavExcluded.has(lastClosedModal) && !modalNavEntryScreens.has(lastClosedModal)) from=lastClosedModal;
   // V225: each destination may have only one active return context. Remove any
   // stale context left by an earlier open/close cycle before recording this one.
   // This makes repeated View -> Edit -> Close cycles deterministic.
@@ -6470,6 +6481,7 @@ function closeModal(id) {
   if(id==='dn-dispatch-action-modal' && document.getElementById(id)?._saving)return;
   const overlay = document.getElementById(id);
   if(overlay?.classList.contains('open') && !modalNavExcluded.has(id)){lastClosedModal=id;lastClosedModalAt=Date.now();}
+  forgetFinishedEntryScreen(id);
   overlay?.classList.remove('open','modal-fs-overlay');
   updateFullscreenShellState();
   _dirtyModal = null;
@@ -13987,7 +13999,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1)');
+console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS
