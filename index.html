@@ -2733,9 +2733,19 @@ window.BizCoreLocks = {
   get isAdministrator() { return _isAdministrator; },
   onSettingsChange(fn) { _lockSettingsListeners.add(fn); return () => _lockSettingsListeners.delete(fn); },
   watch(docType, docId, cb) {
-    return onSnapshot(doc(db, LockCore.LOCK_COLLECTION, LockCore.lockId(docType, docId)), snap => cb(snap.exists() ? snap.data() : null),
-      err => console.warn('[BizCore] Lock watch error:', err.message));
+    // Only server-confirmed versions count: the offline cache can still hold an OLDER copy of the lock
+    // (e.g. from an earlier visit), which must never be mistaken for "taken over by another window".
+    return onSnapshot(doc(db, LockCore.LOCK_COLLECTION, LockCore.lockId(docType, docId)), { includeMetadataChanges: true }, snap => {
+      if (snap.metadata && (snap.metadata.fromCache || snap.metadata.hasPendingWrites)) return;
+      cb(snap.exists() ? snap.data() : null);
+    }, err => console.warn('[BizCore] Lock watch error:', err.message));
   },
+  /** The lock document exactly as the server has it now (null if none). */
+  async readFromServer(docType, docId) {
+    const snap = await getDocFromServer(doc(db, LockCore.LOCK_COLLECTION, LockCore.lockId(docType, docId)));
+    return snap.exists() ? snap.data() : null;
+  },
+  build: 'V264-lockfix2',
   listen(cb) {
     return onSnapshot(collection(db, LockCore.LOCK_COLLECTION), snap => { const out = []; snap.forEach(d => out.push(d.data())); cb(out); },
       err => console.warn('[BizCore] Locks listener error:', err.message));
@@ -3024,7 +3034,7 @@ onAuthStateChanged(auth, user => {
 
   // Load app.js — window.FB is ready
   // invoicing.js (V264 invoice screens) first, then app.js
-  if (!document.getElementById('bizcore-app-script')) {
+  if (!document.getElementById('bizcore-app-script') && !document.getElementById('bizcore-invoicing-script')) {
     const inv = document.createElement('script');
     inv.id  = 'bizcore-invoicing-script';
     inv.src = 'js/invoicing.js?v=264';
@@ -3032,7 +3042,7 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=264';
+      s.src = 'js/app.js?v=264.2';
       document.body.appendChild(s);
     };
     inv.onload = start;

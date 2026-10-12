@@ -13628,7 +13628,16 @@ function watchActiveLock(){
   _lockWatcher = window.FB.watchLock(lock.docType, lock.docId, data => {
     if (_activeLock !== lock) return;
     if (!data || data.uid !== window.currentUser?.uid || (mySession && data.sessionId !== mySession)) {
-      handleLockLost(lock, data ? window.BizCoreLocks.core.describeLock(data) : null);
+      // Double-check with the server before telling the user the lock is gone (a cached or
+      // out-of-order copy must never close the window).
+      const confirmLost = async () => {
+        let cur = data;
+        try { if (window.BizCoreLocks.readFromServer) cur = await window.BizCoreLocks.readFromServer(lock.docType, lock.docId); } catch (e) { return; /* cannot confirm: the heartbeat will decide */ }
+        if (_activeLock !== lock) return;
+        if (cur && cur.uid === window.currentUser?.uid && (!mySession || cur.sessionId === mySession)) return; // still ours
+        handleLockLost(lock, cur ? window.BizCoreLocks.core.describeLock(cur) : null);
+      };
+      confirmLost();
     }
   });
 }
@@ -13903,7 +13912,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V264)');
+console.log('Document locking system active ✅ (V264 · lock fix 2)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS
