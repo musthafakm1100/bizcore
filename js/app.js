@@ -3384,10 +3384,10 @@ function updateQuotationFilterHighlights() {
   if(sortEl) sortEl.classList.toggle('filter-active', sort !== 'date-desc');
   if(searchEl) searchEl.classList.toggle('filter-active', !!search);
 
-  document.querySelectorAll('#page-quotations .quotation-monitor-item, #page-quotations .quotation-overview-total-btn').forEach(item => item.classList.remove('active'));
+  document.querySelectorAll('#page-quotations [data-overview-key]').forEach(item => item.classList.remove('active'));
   const target = status
-    ? document.querySelector(`#page-quotations .quotation-monitor-item[onclick*="'${status}'"]`)
-    : document.querySelector('#page-quotations .quotation-overview-total-btn');
+    ? document.querySelector(`#page-quotations [data-overview-key="${status}"]`)
+    : document.querySelector('#page-quotations [data-overview-key="all"]');
   if(target) target.classList.add('active');
   updateQuotationOverviewTint();
 
@@ -3654,7 +3654,7 @@ function resetQuotationRegisterFiltersForNewRecord(){
   if(to)to.value='';
   currentPage=1;
   if(typeof quotationMonitorFilter!=='undefined') quotationMonitorFilter='all';
-  document.querySelectorAll('#page-quotations .quotation-monitor-item, #page-quotations [data-overview-key]')
+  document.querySelectorAll('#page-quotations [data-overview-key]')
     .forEach(el=>el.classList.remove('active'));
   document.querySelector('#page-quotations [data-overview-key="all"]')?.classList.add('active');
 }
@@ -4105,7 +4105,7 @@ function closePricingDateMenu(){
 }
 function setPricingDatePreset(preset){
   pricingDateFilter=preset==='all'?{preset:'all',from:'',to:''}:{preset,...pricingDateRangeForPreset(preset)};
-  document.querySelectorAll('#page-costing .pricing-overview-row').forEach(row=>{
+  document.querySelectorAll('#page-costing [data-pricing-filter]').forEach(row=>{
     const active=(row.dataset.pricingFilter||'')==='all';
     row.classList.toggle('active',active);
     row.setAttribute('aria-pressed',active?'true':'false');
@@ -4150,14 +4150,9 @@ function applyOverviewTint(selector,key,styles){
     const active=elKey===key;
     el.classList.toggle('active',active);
     el.setAttribute('aria-pressed',active?'true':'false');
-    if(active){
-      const s=styles[elKey]||styles.all;
-      el.style.setProperty('background-color',s.bg,'important');
-      el.style.setProperty('box-shadow',`inset 3px 0 0 ${s.accent}`,'important');
-    }else{
-      el.style.removeProperty('background-color');
-      el.style.removeProperty('box-shadow');
-    }
+    // V265: the active row look is the standard Delivery Monitor style (CSS), no per-status inline tint
+    el.style.removeProperty('background-color');
+    el.style.removeProperty('box-shadow');
   });
 }
 function updatePricingOverviewTint(){
@@ -4166,7 +4161,7 @@ function updatePricingOverviewTint(){
     Saved:{bg:'#fff8e5',accent:'#d7a323'},
     Converted:{bg:'#eef9f2',accent:'#43a66b'}
   };
-  applyOverviewTint('#page-costing .pricing-overview-row',pricingDocumentFilter||'all',styles);
+  applyOverviewTint('#page-costing [data-pricing-filter]',pricingDocumentFilter||'all',styles);
 }
 function updateQuotationOverviewTint(){
   const status=document.getElementById('filter-status')?.value||'';
@@ -4197,7 +4192,7 @@ function updateSOOverviewTint(){
     open:{bg:'#fff8e5',accent:'#d7a323'},
     'pending-invoice':{bg:'#eef6ff',accent:'#3b82c4'}
   };
-  applyOverviewTint('#page-salesorders .so-kpi',key,styles);
+  applyOverviewTint('#page-salesorders [data-kpi-filter]',key,styles);
 }
 
 function filterPricingDocuments(filter,btn){
@@ -4205,7 +4200,7 @@ function filterPricingDocuments(filter,btn){
   pricingDocPage=1;
   document.querySelectorAll('.pricing-register-filters .dash-period-btn').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
-  document.querySelectorAll('#page-costing .pricing-overview-row').forEach(row=>{
+  document.querySelectorAll('#page-costing [data-pricing-filter]').forEach(row=>{
     const key=row.dataset.pricingFilter||'';
     const active=key===pricingDocumentFilter;
     row.classList.toggle('active',active);
@@ -4216,6 +4211,8 @@ function filterPricingDocuments(filter,btn){
 }
 function clearAllPricingFilters(){
   pricingDocumentFilter='all';
+  ['pricing-customer-filter','pricing-status-filter'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  {const e=document.getElementById('pricing-sort');if(e)e.value='updated-desc';}
   pricingDateFilter={preset:'all',from:'',to:''};
   const search=document.getElementById('pricing-doc-search');if(search)search.value='';
   const from=document.getElementById('pricing-date-from');if(from)from.value='';
@@ -4253,11 +4250,13 @@ function openPricingLinkedQuotation(id){
 }
 function renderPricingDocuments(){
   const tbody=document.getElementById('pricing-doc-tbody');if(!tbody)return;
-  const all=getPricingDocuments();
+  const allDocs=getPricingDocuments();
+  const pCust=document.getElementById('pricing-customer-filter')?.value||'';
+  const all=pCust?allDocs.filter(d=>d.rfq.company===pCust):allDocs;   // V265: customer filter (monitor counts follow it)
   const saved=all.filter(d=>d.status==='Saved'), converted=all.filter(d=>d.status==='Converted');
   const set=(id,val)=>{const e=document.getElementById(id);if(e)e.textContent=val};
   set('pricing-doc-k-total',all.length);set('pricing-doc-k-saved',saved.length);set('pricing-doc-k-converted',converted.length);updatePricingOverviewTint();
-  document.querySelectorAll('#page-costing .pricing-overview-row').forEach(row=>{
+  document.querySelectorAll('#page-costing [data-pricing-filter]').forEach(row=>{
     const key=row.dataset.pricingFilter||'';
     const active=key===pricingDocumentFilter;
     row.classList.toggle('active',active);
@@ -4265,7 +4264,16 @@ function renderPricingDocuments(){
   });
   set('pricing-doc-c-all',all.length?'('+all.length+')':'');set('pricing-doc-c-saved',saved.length?'('+saved.length+')':'');set('pricing-doc-c-converted',converted.length?'('+converted.length+')':'');
   const search=(document.getElementById('pricing-doc-search')?.value||'').trim().toLowerCase();
-  const rows=all.filter(d=>(pricingDocumentFilter==='all'||d.status===pricingDocumentFilter)&&pricingMatchesDateFilter(d)&&(!search||[d.pricingNo,d.rfq.rfqNo,d.rfq.company,d.rfq.ref,d.quote?.qno].some(x=>String(x||'').toLowerCase().includes(search))));
+  const pCustSel=document.getElementById('pricing-customer-filter');
+  if(pCustSel){const cur=pCustSel.value;const names=[...new Set(allDocs.map(d=>d.rfq.company).filter(Boolean))].sort((x,y)=>x.localeCompare(y));pCustSel.innerHTML='<option value="">All customers</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');pCustSel.value=names.includes(cur)?cur:'';}
+  const pStatSel=document.getElementById('pricing-status-filter');if(pStatSel)pStatSel.value=pricingDocumentFilter==='all'?'':pricingDocumentFilter;
+  const pSort=document.getElementById('pricing-sort')?.value||'updated-desc';
+  let rows=all.filter(d=>(pricingDocumentFilter==='all'||d.status===pricingDocumentFilter)&&pricingMatchesDateFilter(d)&&(!search||[d.pricingNo,d.rfq.rfqNo,d.rfq.company,d.rfq.ref,d.quote?.qno].some(x=>String(x||'').toLowerCase().includes(search))));
+  if(pSort==='updated-asc')rows.sort((a,b)=>String(a.updated||'').localeCompare(String(b.updated||'')));
+  else if(pSort==='selling-desc')rows.sort((a,b)=>(Number(b.selling)||0)-(Number(a.selling)||0));
+  else if(pSort==='customer-asc')rows.sort((a,b)=>String(a.rfq.company||'').localeCompare(String(b.rfq.company||'')));
+  else rows.sort((a,b)=>String(b.updated||'').localeCompare(String(a.updated||'')));
+  {const c=document.getElementById('pricing-register-count');if(c)c.textContent=`${rows.length} document${rows.length===1?'':'s'}`;}
   const sortedRows=sortRegisterRows(rows,'pricing',{no:d=>d.pricingNo,customer:d=>d.rfq.company,version:d=>d.version,updated:d=>d.updated,cost:d=>d.cost,selling:d=>d.selling,profit:d=>d.profit,margin:d=>d.marginPct,status:d=>d.status,quotation:d=>d.quote?.qno||''});
   const pricingDocPages = Math.ceil(sortedRows.length / PRICING_DOC_PER_PAGE) || 1;
   if (pricingDocPage > pricingDocPages) pricingDocPage = 1;
@@ -7024,15 +7032,25 @@ function renderRFQPage() {
   };
 
   const search = (document.getElementById('rfq-search')?.value || '').trim().toLowerCase();
+  // V265: customer filter (the monitor counts follow it, like the other registers)
+  const rfqCustSel = document.getElementById('rfq-customer-filter');
+  if (rfqCustSel) {
+    const cur = rfqCustSel.value;
+    const names = [...new Set(rfqs.map(r => r.company).filter(Boolean))].sort((x, y) => x.localeCompare(y));
+    rfqCustSel.innerHTML = '<option value="">All customers</option>' + names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+    rfqCustSel.value = names.includes(cur) ? cur : '';
+  }
+  const rfqCust = rfqCustSel ? rfqCustSel.value : '';
+  const rfqScope = rfqCust ? rfqs.filter(r => r.company === rfqCust) : rfqs;
   const statusFiltered = rfqFilter === 'all'
-    ? rfqs
+    ? rfqScope
     : rfqFilter === 'Open'
-      ? rfqs.filter(r => !['Quoted','Sales Order','No Bid'].includes(getRFQWorkflowStage(r)))
+      ? rfqScope.filter(r => !['Quoted','Sales Order','No Bid'].includes(getRFQWorkflowStage(r)))
     : rfqFilter === 'Overdue'
-      ? rfqs.filter(r => getRfqDisplayStatus(r) === 'Overdue')
+      ? rfqScope.filter(r => getRfqDisplayStatus(r) === 'Overdue')
       : rfqFilter === 'Quoted'
-        ? rfqs.filter(r => ['Quoted','Sales Order'].includes(getRFQWorkflowStage(r)))
-        : rfqs.filter(r => getRFQWorkflowStage(r) === rfqFilter);
+        ? rfqScope.filter(r => ['Quoted','Sales Order'].includes(getRFQWorkflowStage(r)))
+        : rfqScope.filter(r => getRFQWorkflowStage(r) === rfqFilter);
 
   const dateFiltered = statusFiltered.filter(r => rfqMatchesDateFilter(r));
 
@@ -7041,30 +7059,34 @@ function renderRFQPage() {
     return [r.rfqNo, r.company, r.ref, r.desc, r.assigned, r.channel]
       .some(v => String(v || '').toLowerCase().includes(search));
   });
+  const rfqSort = document.getElementById('rfq-sort')?.value || 'date-desc';
   let sorted = [...filtered].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  if (rfqSort === 'date-asc') sorted.reverse();
+  else if (rfqSort === 'due-asc') sorted.sort((a,b) => (a.due||'9999').localeCompare(b.due||'9999'));
+  else if (rfqSort === 'customer-asc') sorted.sort((a,b) => (a.company||'').localeCompare(b.company||''));
 
-  const open    = rfqs.filter(r => !['Quoted','Sales Order','No Bid'].includes(getRFQWorkflowStage(r)));
-  const overdue = rfqs.filter(r => getRfqDisplayStatus(r) === 'Overdue');
-  const quoted  = rfqs.filter(r => ['Quoted','Sales Order'].includes(getRFQWorkflowStage(r)));
-  const noBid   = rfqs.filter(r => getRFQWorkflowStage(r) === 'No Bid');
+  const open    = rfqScope.filter(r => !['Quoted','Sales Order','No Bid'].includes(getRFQWorkflowStage(r)));
+  const overdue = rfqScope.filter(r => getRfqDisplayStatus(r) === 'Overdue');
+  const quoted  = rfqScope.filter(r => ['Quoted','Sales Order'].includes(getRFQWorkflowStage(r)));
+  const noBid   = rfqScope.filter(r => getRFQWorkflowStage(r) === 'No Bid');
 
   const totalRfqKpi = document.getElementById('rfq-k-total');
-  if (totalRfqKpi) totalRfqKpi.textContent = rfqs.length;
+  if (totalRfqKpi) totalRfqKpi.textContent = rfqScope.length;
   document.getElementById('rfq-k-open').textContent    = open.length;
   document.getElementById('rfq-k-overdue').textContent = overdue.length;
   // Awaiting Pricing = all RFQs that have not yet produced a saved Pricing record.
   // Overdue unpriced RFQs remain part of this count; Overdue is an overlapping urgency indicator.
-  document.getElementById('rfq-k-pricing').textContent = rfqs.filter(r=>getRFQWorkflowStage(r)==='New').length;
+  document.getElementById('rfq-k-pricing').textContent = rfqScope.filter(r=>getRFQWorkflowStage(r)==='New').length;
   const inPricingKpi = document.getElementById('rfq-k-inpricing');
-  if (inPricingKpi) inPricingKpi.textContent = rfqs.filter(r=>getRFQWorkflowStage(r)==='Pricing').length;
+  if (inPricingKpi) inPricingKpi.textContent = rfqScope.filter(r=>getRFQWorkflowStage(r)==='Pricing').length;
   document.getElementById('rfq-k-quoted').textContent  = quoted.length;
   document.getElementById('rfq-k-nobid').textContent   = noBid.length;
   updateRFQMonitorSelection();
 
   const setCount = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val?'('+val+')':''; };
-  setCount('rfq-cnt-all',     rfqs.length);
-  setCount('rfq-cnt-new',     rfqs.filter(r=>getRFQWorkflowStage(r)==='New').length);
-  setCount('rfq-cnt-pricing', rfqs.filter(r=>getRFQWorkflowStage(r)==='Pricing').length);
+  setCount('rfq-cnt-all',     rfqScope.length);
+  setCount('rfq-cnt-new',     rfqScope.filter(r=>getRFQWorkflowStage(r)==='New').length);
+  setCount('rfq-cnt-pricing', rfqScope.filter(r=>getRFQWorkflowStage(r)==='Pricing').length);
   setCount('rfq-cnt-quoted',  quoted.length);
   setCount('rfq-cnt-nobid',   noBid.length);
   setCount('rfq-cnt-overdue', overdue.length);
@@ -7087,9 +7109,10 @@ function renderRFQPage() {
     const avgDays = openWithDates.reduce((sum,r)=>sum+Math.max(0,(now-new Date(r.date))/86400000),0)/openWithDates.length;
     document.getElementById('rfq-k-avg').textContent = avgDays < 1 ? '<1d' : avgDays.toFixed(1)+'d';
   }
-  document.querySelectorAll('.rfq-main-monitor-item').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('#page-rfq [data-rfq-monitor-filter]').forEach(el=>el.classList.remove('active'));
 
   sorted=sortRegisterRows(sorted,'rfq',{no:r=>r.rfqNo,customer:r=>r.company,reference:r=>r.ref,date:r=>r.date,due:r=>r.due||'',status:r=>getRFQWorkflowStage(r),progress:r=>{const qs=quotations.filter(q=>q.rfqId===r.id);return qs.some(q=>salesOrders.some(so=>so.quotationId===q.id))?'Sales Order':qs.length?'Quotation':(r.pricingItems&&r.pricingItems.length)?'Pricing':r.status||'RFQ'}});
+  { const c=document.getElementById('rfq-register-count'); if(c) c.textContent=`${sorted.length} RFQ${sorted.length===1?'':'s'}`; }
 
   const list = document.getElementById('rfq-list');
   if (!sorted.length) {
@@ -7155,15 +7178,10 @@ function updateRFQMonitorSelection(){
     const active=key===rfqFilter;
     el.classList.toggle('active',active);
     el.setAttribute('aria-pressed',active?'true':'false');
-    if(active){
-      const s=styles[key]||styles.all;
-      el.style.setProperty('background-color',s.bg,'important');
-      el.style.setProperty('box-shadow',`inset 3px 0 0 ${s.accent}`,'important');
-    }else{
-      el.style.removeProperty('background-color');
-      el.style.removeProperty('box-shadow');
-    }
+    el.style.removeProperty('background-color');
+    el.style.removeProperty('box-shadow');
   });
+  const sel=document.getElementById('rfq-status-filter'); if(sel) sel.value=rfqFilter==='all'?'':rfqFilter;
 }
 
 function applyRFQMonitorFilter(status, btn) {
@@ -7178,7 +7196,7 @@ function applyRFQMonitorFilter(status, btn) {
 }
 function moduleMonitorStorageKey(moduleKey){ return `bizcore-${moduleKey}-monitor-collapsed`; }
 function getModuleMonitorWorkspace(moduleKey){
-  const ids={rfq:'rfq-main-workspace',quotations:'quotation-main-workspace',pricing:'pricing-main-workspace',salesorders:'salesorders-main-workspace',customerinvoices:'customerinvoices-main-workspace'};
+  const ids={rfq:'rfq-main-workspace',quotations:'quotation-main-workspace',pricing:'pricing-main-workspace',salesorders:'salesorders-main-workspace',deliverynotes:'deliverynotes-main-workspace',customerinvoices:'customerinvoices-main-workspace'};
   return document.getElementById(ids[moduleKey]||'');
 }
 function setModuleMonitorState(moduleKey, collapsed, persist=true){
@@ -7216,6 +7234,8 @@ function filterRFQ(status, btn) {
 
 function clearAllRFQFilters() {
   rfqFilter = 'all'; rfqPage = 1;
+  ['rfq-customer-filter','rfq-status-filter'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';});
+  { const e=document.getElementById('rfq-sort'); if(e) e.value='date-desc'; }
   const search=document.getElementById('rfq-search'); if(search) search.value='';
   const from=document.getElementById('rfq-date-from'); if(from) from.value='';
   const to=document.getElementById('rfq-date-to'); if(to) to.value='';
@@ -9781,7 +9801,7 @@ function filterSO(status, btn) {
   soFilter = status;
   soKpiFilter = 'none';
   soPage = 1;
-  document.querySelectorAll('.so-kpi').forEach(card=>{ card.classList.remove('active'); card.setAttribute('aria-pressed','false'); });
+  document.querySelectorAll('#page-salesorders [data-kpi-filter]').forEach(card=>{ card.classList.remove('active'); card.setAttribute('aria-pressed','false'); });
   document.querySelectorAll('.so-filter-btn').forEach(b=>{ if(!b.id.startsWith('so-d-')) b.classList.remove('active'); });
   if (btn) btn.classList.add('active');
   renderSOPage();
@@ -9796,9 +9816,10 @@ function handleSOKPIKey(event, filter, card) {
 
 function filterSOKPI(filter, card) {
   soKpiFilter = filter==='all' ? 'none' : filter;
+  { const sel=document.getElementById('so-status-filter'); if(sel) sel.value = soKpiFilter==='none' ? '' : soKpiFilter; }
   soFilter = 'all';
   soPage = 1;
-  document.querySelectorAll('#page-salesorders .so-kpi').forEach(el=>{
+  document.querySelectorAll('#page-salesorders [data-kpi-filter]').forEach(el=>{
     const key=el.dataset.kpiFilter||'';
     const active=(soKpiFilter==='none'&&key==='all') || key===soKpiFilter;
     el.classList.toggle('active',active);
@@ -9810,8 +9831,9 @@ function filterSOKPI(filter, card) {
 
 function clearSOKPIFilter() {
   soKpiFilter = 'none';
+  { const sel=document.getElementById('so-status-filter'); if(sel) sel.value=''; }
   soPage = 1;
-  document.querySelectorAll('.so-kpi').forEach(card=>{ card.classList.remove('active'); card.setAttribute('aria-pressed','false'); });
+  document.querySelectorAll('#page-salesorders [data-kpi-filter]').forEach(card=>{ card.classList.remove('active'); card.setAttribute('aria-pressed','false'); });
   renderSOPage();
   updateSOOverviewTint();
 }
@@ -9891,10 +9913,11 @@ function clearAllSOFilters() {
   const customer=document.getElementById('so-customer-filter');if(customer)customer.value='';
   const sort=document.getElementById('so-sort');if(sort)sort.value='date-desc';
   const preset=document.getElementById('so-date-preset');if(preset)preset.value='all';
+  const statusSel=document.getElementById('so-status-filter');if(statusSel)statusSel.value='';
   const from=document.getElementById('so-d-from');if(from)from.value='';
   const to=document.getElementById('so-d-to');if(to)to.value='';
-  document.querySelectorAll('#page-salesorders .so-kpi').forEach(card=>{card.classList.remove('active');card.setAttribute('aria-pressed','false');});
-  document.querySelector('#page-salesorders .so-overview-total')?.classList.add('active');
+  document.querySelectorAll('#page-salesorders [data-kpi-filter]').forEach(card=>{card.classList.remove('active');card.setAttribute('aria-pressed','false');});
+  document.querySelector('#page-salesorders [data-kpi-filter="all"]')?.classList.add('active');
   renderSOPage();
 }
 
@@ -9991,7 +10014,7 @@ function renderSOPage() {
   if(countEl)countEl.textContent=`${list.length} order${list.length===1?'':'s'}`;
 
   // Active filter highlighting.
-  document.querySelectorAll('#page-salesorders .so-kpi').forEach(el=>{
+  document.querySelectorAll('#page-salesorders [data-kpi-filter]').forEach(el=>{
     const key=el.dataset.kpiFilter||'';
     const active=(soKpiFilter==='none'&&key==='all') || (soKpiFilter===key);
     el.classList.toggle('active',active);
@@ -10666,15 +10689,21 @@ function filterDNKPI(key,card){
 }
 function clearAllDNFilters(){
  dnKpiFilter='all';dnDateFilter={mode:'all',from:null,to:null};
- const ids={ 'dn-search':'','dn-status-filter':'','dn-sort':'date-desc','dn-date-preset':'all'};Object.entries(ids).forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.value=v});renderDNPage();
+ const ids={ 'dn-search':'','dn-status-filter':'','dn-customer-filter':'','dn-sort':'date-desc','dn-date-preset':'all'};Object.entries(ids).forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.value=v});renderDNPage();
 }
 function renderDNPage(){
  const body=document.getElementById('dn-register-tbody');if(!body)return;
  const q=(document.getElementById('dn-search')?.value||'').trim().toLowerCase();
- const st=document.getElementById('dn-status-filter')?.value||'';
  const sort=document.getElementById('dn-sort')?.value||'date-desc';
- let scope=allDeliveryNotes().filter(x=>{
-   if(st&&x.status!==st)return false;
+ // V265: the Status filter is the same filter as the Delivery Monitor (kept in sync); Customer narrows the scope.
+ const dnCustSel=document.getElementById('dn-customer-filter');
+ const dnAll=allDeliveryNotes();
+ if(dnCustSel){const cur=dnCustSel.value;const names=[...new Set(dnAll.map(x=>x.so.customer).filter(Boolean))].sort((a,b)=>a.localeCompare(b));dnCustSel.innerHTML='<option value="">All customers</option>'+names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');dnCustSel.value=names.includes(cur)?cur:'';}
+ const cust=dnCustSel?dnCustSel.value:'';
+ const st='';
+ { const sel=document.getElementById('dn-status-filter'); if(sel) sel.value=dnKpiFilter==='all'?'':dnKpiFilter; }
+ let scope=dnAll.filter(x=>{
+   if(cust&&x.so.customer!==cust)return false;
    if(dnDateFilter.from&&(x.d.date||'')<dnDateFilter.from)return false;
    if(dnDateFilter.to&&(x.d.date||'')>dnDateFilter.to)return false;
    if(q&&!`${x.d.dnNo||''} ${x.so.soNo||''} ${x.so.customer||''} ${x.so.poNo||''}`.toLowerCase().includes(q))return false;
@@ -10693,7 +10722,7 @@ function renderDNPage(){
  else rows.sort((a,b)=>(b.d.date||'').localeCompare(a.d.date||'')||(b.d.dnNo||'').localeCompare(a.d.dnNo||'',undefined,{numeric:true}));
  rows=sortRegisterRows(rows,'dn',{no:x=>x.d.dnNo,date:x=>x.d.date,customer:x=>x.so.customer,so:x=>x.so.soNo,po:x=>x.so.poNo,items:x=>(x.d.items||[]).length,status:x=>x.status});
  const ce=document.getElementById('dn-register-count');if(ce)ce.textContent=`${rows.length} delivery note${rows.length===1?'':'s'}`;
- const clear=document.getElementById('dn-clear-filters-btn');if(clear){const active=!!(q||st||dnDateFilter.mode!=='all'||sort!=='date-desc'||dnKpiFilter!=='all');clear.disabled=!active;clear.classList.toggle('active',active)}
+ const clear=document.getElementById('dn-clear-filters-btn');if(clear){const active=!!(q||cust||dnDateFilter.mode!=='all'||sort!=='date-desc'||dnKpiFilter!=='all');clear.disabled=!active;clear.classList.toggle('active',active)}
  body.innerHTML=rows.length?rows.map(x=>`<tr class="quotation-clickable-row" tabindex="0" role="button" onclick="viewDeliveryNote('${x.so.id}',${x.i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewDeliveryNote('${x.so.id}',${x.i})}"><td>${escapeHtml(x.d.dnNo||'—')}</td><td>${fmtDate(x.d.date)}</td><td>${escapeHtml(x.so.customer||'—')}</td><td>${escapeHtml(x.so.soNo||'—')}</td><td>${escapeHtml(x.so.poNo||'—')}</td><td class="center">${(x.d.items||[]).length}</td><td>${x.d.customerConfirmed?(()=>{const sm=dnConfirmationSummary(x.d);return `<span class="dn-reg-result">${sm.accepted?`<b class="ok">${sm.accepted} accepted</b>`:''}${sm.partial?`<b class="warn">${sm.partial} partial</b>`:''}${sm.rejected?`<b class="bad">${sm.rejected} rejected</b>`:''}</span>`})():'<span class="dn-reg-pending">Pending</span>'}</td><td><span class="badge ${getDNBadgeClass(x.status)}">${x.status}</span></td></tr>`).join(''):'<tr><td colspan="8"><div class="empty-state"><i class="ti ti-truck-delivery"></i><strong>No delivery notes found</strong><p>Adjust the filters to see other delivery records.</p></div></td></tr>';
 }
 
@@ -14019,7 +14048,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1)');
+console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1 · registers 1)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS

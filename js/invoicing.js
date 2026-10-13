@@ -1101,7 +1101,7 @@ function filterInvoiceKPI(k){ _invRegKpi = k; renderInvoiceRegister(); }
 function clearInvoiceRegisterFilters(){
   ['invreg-q'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
-  set('invreg-status', ''); set('invreg-date', 'all'); set('invreg-sort', 'date-desc'); _invRegKpi = 'all';
+  set('invreg-status', ''); set('invreg-customer', ''); set('invreg-date', 'all'); set('invreg-sort', 'date-desc'); _invRegKpi = 'all';
   renderInvoiceRegister();
 }
 function renderInvoiceRegister(){
@@ -1109,7 +1109,11 @@ function renderInvoiceRegister(){
   const val = id => (document.getElementById(id)?.value || '');
   const q = val('invreg-q').trim().toLowerCase(), st = val('invreg-status'), dp = val('invreg-date') || 'all', sort = val('invreg-sort') || 'date-desc';
   const [from, to] = invRegDateRange(dp);
-  const scope = invoiceRegisterRows().filter(r => (!st || r.status === st) && (!from || (r.date || '') >= from) && (!to || (r.date || '') <= to)
+  const allRows = invoiceRegisterRows();
+  const custSel = document.getElementById('invreg-customer');
+  if (custSel) { const cur = custSel.value; const names = [...new Set(allRows.map(r => r.customer).filter(Boolean))].sort((a, b) => a.localeCompare(b)); custSel.innerHTML = '<option value="">All customers</option>' + names.map(n => `<option value="${invEsc(n)}">${invEsc(n)}</option>`).join(''); custSel.value = names.includes(cur) ? cur : ''; }
+  const cust = custSel ? custSel.value : '';
+  const scope = allRows.filter(r => (!cust || r.customer === cust) && (!st || r.status === st) && (!from || (r.date || '') >= from) && (!to || (r.date || '') <= to)
     && (!q || [r.no, r.customer, r.soNo, r.ref].some(v => String(v || '').toLowerCase().includes(q))));
   const count = t => scope.filter(r => r.type === t).length;
   const sum = f => Math.round(scope.filter(f).reduce((s, r) => s + r.total, 0) * 100) / 100;
@@ -1126,7 +1130,7 @@ function renderInvoiceRegister(){
   if (typeof sortRegisterRows === 'function') rows = sortRegisterRows(rows, 'inv', { no: r => r.no, type: r => r.type, date: r => r.date, customer: r => r.customer, so: r => r.soNo, total: r => r.total, status: r => r.status });
   setT('invreg-count', `${rows.length} document${rows.length === 1 ? '' : 's'}`);
   const clear = document.getElementById('invreg-clear');
-  if (clear) { const active = !!(q || st || dp !== 'all' || sort !== 'date-desc' || _invRegKpi !== 'all'); clear.disabled = !active; clear.classList.toggle('active', active); }
+  if (clear) { const active = !!(q || cust || st || dp !== 'all' || sort !== 'date-desc' || _invRegKpi !== 'all'); clear.disabled = !active; clear.classList.toggle('active', active); }
   const statusBadge = r => r.kind === 'credit' ? '<span class="badge inv-badge-credit">Credit note</span>'
     : r.status === 'Credited' ? '<span class="badge inv-badge-credited">Credited</span>' : r.status === 'Partially credited' ? '<span class="badge inv-badge-partcredit">Partly credited</span>' : '<span class="badge inv-badge-issued">Issued</span>';
   const typeBadge = r => r.kind === 'credit' ? '<span class="inv-type-pill credit">Credit note</span>' : `<span class="inv-type-pill ${r.type}">${invTypeShort(r.type)}</span>`;
