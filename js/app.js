@@ -450,6 +450,7 @@ async function loadData() {
             dnEvents = (typeof detectRemoteDNEvents === 'function')
               ? detectRemoteDNEvents(previousSalesOrders, data || []) : [];
             salesOrders = data;
+            if (typeof refreshOpenSalesOrderView === 'function') refreshOpenSalesOrderView();
           }
           cacheSalesOrdersLocally();
 
@@ -531,6 +532,7 @@ async function loadData() {
             const fresh = await window.FB.fbLoad('salesOrders');
             if (Array.isArray(fresh)) {
               salesOrders = fresh;
+              if (typeof refreshOpenSalesOrderView === 'function') refreshOpenSalesOrderView();
               cacheSalesOrdersLocally();
               if (getActivePage()==='deliverynotes' && typeof renderDNPage==='function') renderDNPage();
               if (getActivePage()==='salesorders' && typeof renderSOPage==='function') renderSOPage();
@@ -686,6 +688,7 @@ function rebuildSalesOrderView(){
   window.BizCoreDN.lastProjectionIssues = r.issues;
   const serious = r.issues.filter(i => i.code !== 'EMBEDDED_DELIVERIES_PRESENT');
   if (serious.length) console.error('[BizCore DN read model] records excluded from view', serious);
+  if (typeof refreshOpenSalesOrderView === 'function') refreshOpenSalesOrderView();
   return salesOrders;
 }
 /** Applies a DN returned by a committed transaction immediately (the listener confirms it shortly after). */
@@ -5132,7 +5135,7 @@ function smartModalBack(currentId) {
   const current=document.getElementById(currentId);
   current?.classList.remove('open','modal-fs-overlay');
   const previous=document.getElementById(entry.from);
-  if(previous){previous.classList.add('open');setModalSize(entry.from,modalSizes[entry.from]||'normal');ensureSmartBackButton(entry.from);}
+  if(previous){previous.classList.add('open');setModalSize(entry.from,modalSizes[entry.from]||'normal');ensureSmartBackButton(entry.from);if(entry.from==='so-view-modal')refreshOpenSalesOrderView();}
   else updateFullscreenShellState();
 }
 
@@ -6482,6 +6485,7 @@ function closeModal(id) {
   const overlay = document.getElementById(id);
   if(overlay?.classList.contains('open') && !modalNavExcluded.has(id)){lastClosedModal=id;lastClosedModalAt=Date.now();}
   forgetFinishedEntryScreen(id);
+  if(id!=='so-view-modal' && typeof refreshOpenSalesOrderView==='function' && document.getElementById('so-view-modal')?.classList.contains('open')) refreshOpenSalesOrderView();
   overlay?.classList.remove('open','modal-fs-overlay');
   updateFullscreenShellState();
   _dirtyModal = null;
@@ -10315,9 +10319,10 @@ async function deleteSalesOrder(soId){
 }
 
 /* ── View Sales Order ── */
-function viewSO(soId) {
+function viewSO(soId, opts = {}) {
   const so = salesOrders.find(x=>x.id===soId); if (!so) return;
   currentSOId = soId;
+  const soViewModal = document.getElementById('so-view-modal'); if (soViewModal) soViewModal._soId = soId;
   const status = getSOStatus(so);
   const q = quotations.find(x=>x.id===so.quotationId);
   const badgeCls = getSOBadgeClass(status);
@@ -10590,7 +10595,22 @@ function viewSO(soId) {
     fBtns.push(`<button class="btn btn-success" data-sid="${so.id}" onclick="openRecordPayment(this.dataset.sid)"><i class="ti ti-cash"></i>Record payment</button>`);
   }
   document.getElementById('so-view-footer').innerHTML = fBtns.join('');
+  if (opts.refreshOnly) return;   // V264.8: content refresh of the already-open view (no navigation change)
   openModalWithSize('so-view-modal');
+}
+/* V264.8 — The Sales Order view stays open underneath the screens opened from it (Delivery Note, invoice …).
+   Whenever order data changes (a save here, or another user's change arriving), or a screen on top of it is
+   closed, it is re-rendered in place — same order, same scroll position — so it never shows stale figures. */
+let _soViewRefreshTimer = null;
+function refreshOpenSalesOrderView(){
+  clearTimeout(_soViewRefreshTimer);
+  _soViewRefreshTimer = setTimeout(() => {
+    const m = document.getElementById('so-view-modal');
+    if (!m || !m.classList.contains('open') || !m._soId || !salesOrders.some(x => x.id === m._soId)) return;
+    const body = m.querySelector('.modal-body'), top = body ? body.scrollTop : 0;
+    try { viewSO(m._soId, { refreshOnly: true }); } catch (e) { console.error('[BizCore] Sales Order view refresh', e); }
+    if (body) body.scrollTop = top;
+  }, 0);
 }
 
 /* ── Delivery Notes v125 ── */
@@ -13999,7 +14019,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1)');
+console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS
