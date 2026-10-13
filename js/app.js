@@ -296,6 +296,11 @@ async function loadData() {
   // ── Load from Firebase first (shared cloud data) ──
   if (window.FB) {
     try {
+      // V265.6: start loading the Delivery Notes at the same time as everything else (it used to wait for all of it)
+      const dnEarly = (window.BizCoreDN && window.BizCoreDN.ready)
+        ? Promise.resolve(window.BizCoreDN.ready).then(m => m === 'independent' ? window.BizCoreDN.loadDeliveryNotes() : null)
+        : Promise.resolve(null);
+      dnEarly.catch(() => {}); // handled below
       const [fbQ, fbC, fbSup, fbP, fbDT, fbPT, fbR, fbE, fbSO, fbSet] = await Promise.all([
         window.FB.fbLoad('quotations'),
         window.FB.fbLoad('customers'),
@@ -321,12 +326,13 @@ async function loadData() {
       const dnMode = window.BizCoreDN ? await window.BizCoreDN.ready : 'legacy';
       if (dnMode === 'independent') {
         setRawSalesOrders(Array.isArray(fbSO) ? fbSO : salesOrders);
-        try { deliveryNotesCache = await window.BizCoreDN.loadDeliveryNotes(); dnCacheLoaded = true; }
+        try { deliveryNotesCache = (await dnEarly) || await window.BizCoreDN.loadDeliveryNotes(); dnCacheLoaded = true; }
         catch (e) { console.error('[BizCore] Delivery Notes could not be loaded', e); deliveryNotesCache = []; dnCacheLoaded = false; }
         rebuildSalesOrderView();
       }
       if (fbSet && fbSet.coname)  settings      = fbSet;
       console.log('Data loaded from Firebase ✅');
+      window.__bcDataReady = true; if (typeof bcDeliveriesRefresh === 'function') bcDeliveriesRefresh(); // V265.6: Deliveries leaves its loading state
       setTimeout(() => { if (typeof finalizeProvisionalNumbers === 'function') finalizeProvisionalNumbers(); }, 4000);
 
       // ── Real-time listeners: auto-update when another device saves ──
@@ -569,6 +575,7 @@ async function loadData() {
     }
   }
 
+  if (!window.__bcDataReady) { window.__bcDataReady = true; setTimeout(() => { if (typeof bcDeliveriesRefresh === 'function') bcDeliveriesRefresh(); }, 0); }
   // ── Fall back to localStorage if Firebase load failed or returned nothing ──
   try {
     if (!quotations.length) { const r=localStorage.getItem('dtq_quotations'); if(r) quotations=JSON.parse(r); }
@@ -14206,7 +14213,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1 · registers 1 · date filter A · compact views 1 · delivered by 1 · confirm open 1 · deliveries 2)');
+console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1 · registers 1 · date filter A · compact views 1 · delivered by 1 · confirm open 1 · deliveries 3)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS

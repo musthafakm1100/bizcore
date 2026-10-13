@@ -78,6 +78,12 @@
     const cm = document.getElementById('dl-count-mine'), ca = document.getElementById('dl-count-all');
     if (cm) cm.textContent = mine.length; if (ca) ca.textContent = all.length;
     const box = document.getElementById('dl-list'); if (!box) return;
+    // V265.6: until the data has arrived, say so — never "Nothing is out for delivery" while still loading
+    if (!window.__bcDataReady) {
+      box.innerHTML = `<div class="dl-loading" role="status"><span class="dl-spinner" aria-hidden="true"></span>Loading deliveries…</div>`
+        + `<div class="dl-grid dl-skeleton" aria-hidden="true">${'<div class="dl-card"><i></i><i></i><i></i><b></b></div>'.repeat(3)}</div>`;
+      return;
+    }
     if (!list.length) {
       const msg = q ? 'No delivery matches your search.' : scope === 'mine' && all.length ? 'Nothing out for delivery in your name.' : 'Nothing is out for delivery.';
       box.innerHTML = `<div class="dl-empty"><i class="ti ti-truck-off"></i><p>${msg}</p>${scope === 'mine' && all.length && !q ? `<button type="button" class="dl-view" onclick="bcDeliveriesScope('all')">Show all (${all.length})</button>` : ''}</div>`;
@@ -212,6 +218,9 @@
       else if (tries > 60) clearInterval(t);
     }, 250);
   }
+  // V265.6: phones pause background pages — refresh as soon as the screen is shown again
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') window.bcDeliveriesRefresh(); });
+  window.addEventListener('pageshow', () => window.bcDeliveriesRefresh());
   window.addEventListener('hashchange', () => { if (location.hash === '#deliveries') { window.__bcStartHandled = false; openFromHash(); } });
   openFromHash();
   setTimeout(() => { try { updateBadge(); } catch (e) { /* data not loaded yet */ } }, 0);

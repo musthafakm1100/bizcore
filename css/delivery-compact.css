@@ -266,3 +266,13 @@
   #page-deliveries .dl-panel .dl-grid { grid-template-columns: 1fr; }
   #page-deliveries .dl-panel-hint { display: none; }
 }
+
+/* V265.6 — loading state */
+#page-deliveries .dl-loading { display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 600; color: #475569; padding: 14px 4px; }
+#page-deliveries .dl-spinner { width: 18px; height: 18px; border: 3px solid #dbe5f0; border-top-color: #173a5e; border-radius: 50%; animation: dlspin .8s linear infinite; }
+@keyframes dlspin { to { transform: rotate(360deg); } }
+#page-deliveries .dl-skeleton .dl-card { gap: 9px; }
+#page-deliveries .dl-skeleton i, #page-deliveries .dl-skeleton b { display: block; height: 12px; border-radius: 6px; background: linear-gradient(90deg,#eef2f6 25%,#f6f8fa 50%,#eef2f6 75%); background-size: 200% 100%; animation: dlshimmer 1.2s infinite; }
+#page-deliveries .dl-skeleton i:nth-child(1) { width: 45%; height: 15px; } #page-deliveries .dl-skeleton i:nth-child(2) { width: 70%; } #page-deliveries .dl-skeleton i:nth-child(3) { width: 55%; }
+#page-deliveries .dl-skeleton b { height: 40px; border-radius: 9px; margin-top: 4px; }
+@keyframes dlshimmer { to { background-position: -200% 0; } }
