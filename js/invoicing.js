@@ -1087,28 +1087,19 @@ function invoiceRegisterRows(){
   }
   return rows;
 }
-function invRegDateRange(v){
-  const d = new Date(), iso = x => x.toISOString().slice(0, 10), y = d.getFullYear(), mo = d.getMonth();
-  if (v === 'today') return [iso(d), iso(d)];
-  if (v === 'week') { const s = new Date(d); s.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return [iso(s), iso(d)]; }
-  if (v === 'month') return [iso(new Date(y, mo, 1)), iso(d)];
-  if (v === 'lastmonth') return [iso(new Date(y, mo - 1, 1)), iso(new Date(y, mo, 0))];
-  if (v === 'last3months') return [iso(new Date(y, mo - 2, 1)), iso(d)];
-  if (v === 'year') return [y + '-01-01', iso(d)];
-  return [null, null];
-}
 function filterInvoiceKPI(k){ _invRegKpi = k; renderInvoiceRegister(); }
 function clearInvoiceRegisterFilters(){
   ['invreg-q'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
-  set('invreg-status', ''); set('invreg-customer', ''); set('invreg-date', 'all'); set('invreg-sort', 'date-desc'); _invRegKpi = 'all';
+  set('invreg-status', ''); set('invreg-customer', ''); if (window.BCDateFilter) BCDateFilter.set('invreg', { preset: 'all' }); set('invreg-sort', 'date-desc'); _invRegKpi = 'all';
   renderInvoiceRegister();
 }
 function renderInvoiceRegister(){
   const body = document.getElementById('invreg-body'); if (!body) return;
   const val = id => (document.getElementById(id)?.value || '');
-  const q = val('invreg-q').trim().toLowerCase(), st = val('invreg-status'), dp = val('invreg-date') || 'all', sort = val('invreg-sort') || 'date-desc';
-  const [from, to] = invRegDateRange(dp);
+  const q = val('invreg-q').trim().toLowerCase(), st = val('invreg-status'), sort = val('invreg-sort') || 'date-desc';
+  const ds = window.BCDateFilter ? BCDateFilter.get('invreg') : { preset: 'all', from: '', to: '' };   // V265 standard date filter
+  const dp = ds.preset, from = ds.from || null, to = ds.to || null;
   const allRows = invoiceRegisterRows();
   const custSel = document.getElementById('invreg-customer');
   if (custSel) { const cur = custSel.value; const names = [...new Set(allRows.map(r => r.customer).filter(Boolean))].sort((a, b) => a.localeCompare(b)); custSel.innerHTML = '<option value="">All customers</option>' + names.map(n => `<option value="${invEsc(n)}">${invEsc(n)}</option>`).join(''); custSel.value = names.includes(cur) ? cur : ''; }

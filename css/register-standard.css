@@ -391,3 +391,39 @@
 #page-customerinvoices .bc-filter-date,
 #page-customerinvoices .bc-filter-search{flex:1 1 140px!important;width:auto!important}
 }
+
+/* ── Standard date filter (js/ui-standard.js) ── */
+.bc-date{position:relative!important;display:inline-flex!important;flex:0 0 140px!important;width:140px!important;margin:0!important;padding:0!important;border:0!important;background:none!important}
+.bc-date>.bc-date-btn{width:100%!important}
+.bc-date .bc-date-chev{margin-left:auto!important}
+.bc-date.open>.bc-date-btn{border-color:#3b82f6!important;box-shadow:0 0 0 3px rgba(59,130,246,.15)!important}
+.bc-date>.bc-date-btn.active{color:#1d4ed8!important;border-color:#bfdbfe!important;background-color:#f5f9ff!important}
+.bc-date .bc-date-pop{position:absolute!important;top:calc(100% + 6px)!important;left:0!important;z-index:400!important;width:320px!important;max-width:calc(100vw - 24px)!important;background:#fff!important;border:1px solid #dbe3ec!important;border-radius:12px!important;box-shadow:0 14px 34px rgba(15,23,42,.16)!important;overflow:hidden!important;text-align:left!important;font-family:inherit!important;cursor:default}
+.bc-date .bc-date-pop[hidden]{display:none!important}
+.bc-date .bc-date-title{padding:10px 14px 6px!important;margin:0!important;font-size:10px!important;font-weight:800!important;letter-spacing:.07em!important;text-transform:uppercase!important;color:#8a98a8!important;line-height:1.2!important}
+.bc-date .bc-date-list{padding:0 6px 6px!important}
+.bc-date .bc-date-sep{height:1px!important;background:#eef2f5!important;margin:4px 4px!important}
+.bc-date .bc-date-item{all:unset;box-sizing:border-box!important;width:100%!important;height:33px!important;display:flex!important;align-items:center!important;gap:8px!important;padding:0 10px!important;border-radius:7px!important;font-size:13px!important;font-weight:500!important;color:#1f2937!important;cursor:pointer!important;line-height:1!important}
+.bc-date .bc-date-item:hover{background:#f6f9fc!important}
+.bc-date .bc-date-item:focus-visible{outline:2px solid #93c5fd!important;outline-offset:-2px!important}
+.bc-date .bc-date-item .bc-date-tick{width:14px!important;flex:0 0 14px!important;font-size:12px!important;font-weight:900!important;color:transparent!important}
+.bc-date .bc-date-item small{margin-left:auto!important;font-size:11px!important;font-weight:500!important;color:#94a3b8!important;white-space:nowrap!important}
+.bc-date .bc-date-item.on{background:#eff6ff!important;color:#1d4ed8!important;font-weight:650!important}
+.bc-date .bc-date-item.on .bc-date-tick{color:#2563eb!important}
+.bc-date .bc-date-item.on small{color:#60a5fa!important}
+.bc-date .bc-date-custom{border-top:1px solid #eef2f5!important;background:#f8fafc!important;padding:0 14px 12px!important}
+.bc-date .bc-date-custom .bc-date-title{padding:10px 0 8px!important}
+.bc-date .bc-date-custom.on .bc-date-title{color:#1d4ed8!important}
+.bc-date .bc-date-row{display:flex!important;align-items:center!important;gap:6px!important}
+.bc-date .bc-date-row input{flex:1 1 0!important;min-width:0!important;width:auto!important;height:32px!important;min-height:32px!important;box-sizing:border-box!important;margin:0!important;padding:0 8px!important;border:1px solid #d5dde7!important;border-radius:7px!important;background:#fff!important;font:inherit!important;font-size:12px!important;color:#334155!important;box-shadow:none!important}
+.bc-date .bc-date-row input:focus{outline:none!important;border-color:#3b82f6!important;box-shadow:0 0 0 3px rgba(59,130,246,.15)!important}
+.bc-date .bc-date-arrow{color:#94a3b8!important;font-size:13px!important;flex:0 0 auto!important}
+.bc-date .bc-date-err{margin-top:7px!important;font-size:11.5px!important;font-weight:600!important;color:#b91c1c!important}
+.bc-date .bc-date-err[hidden]{display:none!important}
+.bc-date .bc-date-actions{display:flex!important;justify-content:flex-end!important;gap:8px!important;margin-top:10px!important}
+.bc-date .bc-date-actions button{all:unset;box-sizing:border-box!important;height:30px!important;padding:0 14px!important;border-radius:7px!important;font-size:12px!important;font-weight:700!important;cursor:pointer!important;display:inline-flex!important;align-items:center!important}
+.bc-date .bc-date-clear{color:#64748b!important}
+.bc-date .bc-date-clear:hover{background:#eef2f6!important}
+.bc-date .bc-date-apply{background:#173a5e!important;color:#fff!important}
+.bc-date .bc-date-apply:hover{background:#1f4e79!important}
+@media(max-width:760px){.bc-date{flex:1 1 140px!important;width:auto!important}.bc-date .bc-date-pop{position:fixed!important;left:12px!important;right:12px!important;top:auto!important;bottom:12px!important;width:auto!important}}

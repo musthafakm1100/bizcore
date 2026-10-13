@@ -21,7 +21,8 @@
 <link href="css/administration-typography.css?v=247" rel="stylesheet"/>
 <link href="css/numbering-controls.css?v=248" rel="stylesheet"/>
 <link href="css/invoicing.css?v=264.7" rel="stylesheet"/>
-<link href="css/register-standard.css?v=265" rel="stylesheet"/>
+<link href="css/register-standard.css?v=265.1" rel="stylesheet"/>
+<script src="js/ui-standard.js?v=265.1" defer></script>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
 .quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
@@ -276,30 +277,7 @@ document.addEventListener('error', function(e) {
 <div class="quotation-toolbar-right bc-filterbar-right">
 <select id="filter-customer" class="bc-filter bc-filter-customer" onchange="currentPage=1;renderTable()" aria-label="Filter quotations by customer"><option value="">All customers</option></select>
 <select id="filter-status" class="bc-filter bc-filter-status" onchange="currentPage=1;renderTable()" aria-label="Filter quotations by status"><option value="">All statuses</option><option value="Draft">Draft</option><option value="Sent">Sent</option><option value="Won">Won</option><option value="Lost">Lost</option><option value="Expired">Expired</option><option value="Revised">Revised</option><option value="Cancelled">Cancelled</option></select>
-<div class="quotation-date-filter-wrap">
-        <button class="quotation-date-filter-btn bc-filter bc-filter-date bc-filter-datebtn" id="quotation-date-filter-btn" type="button" onclick="toggleQuotationDateMenu(event)" aria-haspopup="true" aria-expanded="false">
-          <i class="ti ti-calendar"></i><span id="quotation-date-filter-label">All Dates</span><i class="ti ti-chevron-down quotation-date-chevron"></i>
-        </button>
-        <div class="quotation-date-menu" id="quotation-date-menu" onclick="event.stopPropagation()">
-          <div class="quotation-date-menu-title">Quotation Date</div>
-          <button class="quotation-date-preset active" data-preset="all" type="button" onclick="setQuotationDatePreset('all')">All Dates</button>
-          <button class="quotation-date-preset" data-preset="today" type="button" onclick="setQuotationDatePreset('today')">Today</button>
-          <button class="quotation-date-preset" data-preset="week" type="button" onclick="setQuotationDatePreset('week')">This Week</button>
-          <button class="quotation-date-preset" data-preset="month" type="button" onclick="setQuotationDatePreset('month')">This Month</button>
-          <button class="quotation-date-preset" data-preset="lastmonth" type="button" onclick="setQuotationDatePreset('lastmonth')">Last Month</button>
-          <button class="quotation-date-preset" data-preset="30days" type="button" onclick="setQuotationDatePreset('30days')">Last 30 Days</button>
-          <button class="quotation-date-preset" data-preset="last3months" type="button" onclick="setQuotationDatePreset('last3months')">Last 3 Months</button>
-          <div class="quotation-date-custom">
-            <div class="quotation-date-custom-title">Custom Range</div>
-            <label>From<input id="filter-date-from" type="date" onchange="markQuotationDateCustom()"/></label>
-            <label>To<input id="filter-date-to" type="date" onchange="markQuotationDateCustom()"/></label>
-            <div class="quotation-date-custom-actions">
-              <button type="button" class="btn btn-ghost btn-sm" onclick="clearQuotationDateFilter()">Clear</button>
-              <button type="button" class="btn btn-primary btn-sm" onclick="applyQuotationCustomDate()">Apply</button>
-            </div>
-          </div>
-        </div>
-      </div>
+<div class="bc-date" data-bc-date="quotation" data-bc-date-title="Quotation date"></div><input type="hidden" id="filter-date-from"/><input type="hidden" id="filter-date-to"/>
       <input id="search-input" class="bc-filter bc-filter-search" type="text" oninput="currentPage=1;renderTable()" placeholder="Search quotation, customer, reference or item…" aria-label="Search quotations"/>
 <button class="btn btn-secondary btn-sm register-clear-filters quotation-clear-filters-btn bc-filter-btn" id="quotation-clear-filters-btn" onclick="clearAllQuotationFilters()" title="Clear all quotation filters" type="button" disabled aria-disabled="true"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
 <button class="btn btn-secondary btn-sm quotation-export-excel-btn bc-filter-btn" id="quotation-export-excel-btn" onclick="openQuotationExcelExportDialog()" title="Export the currently filtered quotation register to Excel" type="button"><i class="ti ti-file-spreadsheet"></i><span>Export Excel</span></button>
@@ -376,30 +354,7 @@ document.addEventListener('error', function(e) {
 <div class="rfq-toolbar-actions bc-filterbar-right">
 <select id="rfq-customer-filter" class="bc-filter bc-filter-customer" onchange="rfqPage=1;renderRFQPage()" aria-label="Filter RFQs by customer"><option value="">All customers</option></select>
 <select id="rfq-status-filter" class="bc-filter bc-filter-status" onchange="applyRFQMonitorFilter(this.value||'all')" aria-label="Filter RFQs by status"><option value="">All statuses</option><option value="New">Awaiting Pricing</option><option value="Pricing">In Pricing</option><option value="Quoted">Quoted / Sales Order</option><option value="No Bid">No Bid</option><option value="Open">Open RFQs</option><option value="Overdue">Overdue</option></select>
-<div class="rfq-date-filter-wrap">
-<button class="rfq-date-filter-btn bc-filter bc-filter-date bc-filter-datebtn" id="rfq-date-filter-btn" type="button" onclick="toggleRFQDateMenu(event)" aria-haspopup="true" aria-expanded="false">
-<i class="ti ti-calendar"></i><span id="rfq-date-filter-label">All Dates</span><i class="ti ti-chevron-down rfq-date-chevron"></i>
-</button>
-<div class="rfq-date-menu" id="rfq-date-menu" onclick="event.stopPropagation()">
-<div class="rfq-date-menu-title">RFQ Date</div>
-<button class="rfq-date-preset active" data-preset="all" type="button" onclick="setRFQDatePreset('all')">All Dates</button>
-<button class="rfq-date-preset" data-preset="today" type="button" onclick="setRFQDatePreset('today')">Today</button>
-<button class="rfq-date-preset" data-preset="week" type="button" onclick="setRFQDatePreset('week')">This Week</button>
-<button class="rfq-date-preset" data-preset="month" type="button" onclick="setRFQDatePreset('month')">This Month</button>
-<button class="rfq-date-preset" data-preset="lastmonth" type="button" onclick="setRFQDatePreset('lastmonth')">Last Month</button>
-<button class="rfq-date-preset" data-preset="30days" type="button" onclick="setRFQDatePreset('30days')">Last 30 Days</button>
-<button class="rfq-date-preset" data-preset="last3months" type="button" onclick="setRFQDatePreset('last3months')">Last 3 Months</button>
-<div class="rfq-date-custom">
-<div class="rfq-date-custom-title">Custom Range</div>
-<label>From<input id="rfq-date-from" type="date"/></label>
-<label>To<input id="rfq-date-to" type="date"/></label>
-<div class="rfq-date-custom-actions">
-<button type="button" class="btn btn-ghost btn-sm" onclick="clearRFQDateFilter()">Clear</button>
-<button type="button" class="btn btn-primary btn-sm" onclick="applyRFQCustomDate()">Apply</button>
-</div>
-</div>
-</div>
-</div>
+<div class="bc-date" data-bc-date="rfq" data-bc-date-title="RFQ date"></div>
 <input id="rfq-search" class="bc-filter bc-filter-search" type="text" oninput="rfqPage=1;renderRFQPage()" placeholder="Search RFQ, customer or reference…" aria-label="Search RFQs"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="rfq-clear-filters-btn" onclick="clearAllRFQFilters()" type="button" title="Clear all RFQ filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
 </div>
@@ -447,30 +402,7 @@ document.addEventListener('error', function(e) {
 <div class="pricing-toolbar-actions bc-filterbar-right">
 <select id="pricing-customer-filter" class="bc-filter bc-filter-customer" onchange="pricingDocPage=1;renderPricingDocuments()" aria-label="Filter pricing by customer"><option value="">All customers</option></select>
 <select id="pricing-status-filter" class="bc-filter bc-filter-status" onchange="filterPricingDocuments(this.value||'all',document.getElementById(this.value==='Saved'?'pricing-doc-f-saved':this.value==='Converted'?'pricing-doc-f-converted':'pricing-doc-f-all'))" aria-label="Filter pricing by status"><option value="">All statuses</option><option value="Saved">Saved Drafts</option><option value="Converted">Converted to Quotation</option></select>
-<div class="pricing-date-filter-wrap">
-        <button class="pricing-date-filter-btn bc-filter bc-filter-date bc-filter-datebtn" id="pricing-date-filter-btn" type="button" onclick="togglePricingDateMenu(event)" aria-haspopup="true" aria-expanded="false">
-          <i class="ti ti-calendar"></i><span id="pricing-date-filter-label">All Dates</span><i class="ti ti-chevron-down pricing-date-chevron"></i>
-        </button>
-        <div class="pricing-date-menu" id="pricing-date-menu" onclick="event.stopPropagation()">
-          <div class="pricing-date-menu-title">Updated Date</div>
-          <button class="pricing-date-preset active" data-preset="all" type="button" onclick="setPricingDatePreset('all')">All Dates</button>
-          <button class="pricing-date-preset" data-preset="today" type="button" onclick="setPricingDatePreset('today')">Today</button>
-          <button class="pricing-date-preset" data-preset="week" type="button" onclick="setPricingDatePreset('week')">This Week</button>
-          <button class="pricing-date-preset" data-preset="month" type="button" onclick="setPricingDatePreset('month')">This Month</button>
-          <button class="pricing-date-preset" data-preset="lastmonth" type="button" onclick="setPricingDatePreset('lastmonth')">Last Month</button>
-          <button class="pricing-date-preset" data-preset="30days" type="button" onclick="setPricingDatePreset('30days')">Last 30 Days</button>
-          <button class="pricing-date-preset" data-preset="last3months" type="button" onclick="setPricingDatePreset('last3months')">Last 3 Months</button>
-          <div class="pricing-date-custom">
-            <div class="pricing-date-custom-title">Custom Range</div>
-            <label>From<input id="pricing-date-from" type="date"/></label>
-            <label>To<input id="pricing-date-to" type="date"/></label>
-            <div class="pricing-date-custom-actions">
-              <button type="button" class="btn btn-ghost btn-sm" onclick="clearPricingDateFilter()">Clear</button>
-              <button type="button" class="btn btn-primary btn-sm" onclick="applyPricingCustomDate()">Apply</button>
-            </div>
-          </div>
-        </div>
-      </div>
+<div class="bc-date" data-bc-date="pricing" data-bc-date-title="Pricing updated date"></div>
       <input id="pricing-doc-search" class="bc-filter bc-filter-search" type="text" oninput="pricingDocPage=1;renderPricingDocuments()" placeholder="Search pricing no., RFQ, customer or quotation…" aria-label="Search pricing documents"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="pricing-clear-filters-btn" onclick="clearAllPricingFilters()" type="button" title="Clear all Pricing filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
 <button class="btn btn-secondary btn-sm register-export-excel-btn bc-filter-btn" id="pricing-export-excel-btn" onclick="openPricingExcelExportDialog()" type="button" title="Export filtered Pricing register to Excel"><i class="ti ti-file-spreadsheet"></i><span>Export Excel</span></button>
@@ -551,16 +483,7 @@ document.addEventListener('error', function(e) {
 <div class="so-toolbar-right bc-filterbar-right">
 <select id="so-customer-filter" class="bc-filter bc-filter-customer" onchange="soPage=1;renderSOPage()" aria-label="Filter Sales Orders by customer"><option value="">All customers</option></select>
 <select id="so-status-filter" class="bc-filter bc-filter-status" onchange="filterSOKPI(this.value||'all',document.querySelector('#page-salesorders [data-kpi-filter=&quot;'+(this.value||'all')+'&quot;]'))" aria-label="Filter Sales Orders by status"><option value="">All statuses</option><option value="status-confirmed">Confirmed</option><option value="status-ofd">Out for Delivery</option><option value="status-partdel">Partially Delivered</option><option value="status-delivered">Delivered</option><option value="status-invoiced">Invoiced</option><option value="status-partpaid">Partially Paid</option><option value="status-paid">Paid</option><option value="open">Open Orders</option><option value="pending-invoice">Pending Invoice</option></select>
-<select id="so-date-preset" class="bc-filter bc-filter-date" onchange="filterSODate(this.value)" aria-label="Filter Sales Orders by date">
-        <option value="all">All Dates</option>
-        <option value="today">Today</option>
-        <option value="week">This Week</option>
-        <option value="month">This Month</option>
-        <option value="lastmonth">Last Month</option>
-        <option value="30days">Last 30 Days</option>
-        <option value="last3months">Last 3 Months</option>
-        <option value="year">This Year</option>
-      </select>
+<div class="bc-date" data-bc-date="so" data-bc-date-title="Sales Order date"></div>
 <input id="so-search" class="bc-filter bc-filter-search" type="text" oninput="soPage=1;renderSOPage()" placeholder="Search SO No, customer, PO No…" aria-label="Search Sales Orders"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="so-clear-filters-btn" onclick="clearAllSOFilters()" type="button" title="Clear all Sales Order filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
 </div>
@@ -620,7 +543,7 @@ document.addEventListener('error', function(e) {
         <div class="dn-toolbar-right bc-filterbar-right">
 <select id="dn-customer-filter" class="bc-filter bc-filter-customer" onchange="renderDNPage()" aria-label="Filter Delivery Notes by customer"><option value="">All customers</option></select>
 <select id="dn-status-filter" class="bc-filter bc-filter-status" onchange="filterDNKPI(this.value||'all')" aria-label="Filter Delivery Notes by status"><option value="">All statuses</option><option value="Awaiting Delivery">Awaiting Delivery</option><option value="Out for Delivery">Awaiting Confirmation</option><option value="Delivered">Delivered</option><option value="Partially Accepted">Partially Accepted</option><option value="Rejected">Rejected</option><option value="attention">Need Attention</option></select>
-<select id="dn-date-preset" class="bc-filter bc-filter-date" aria-label="Filter Delivery Notes by date" onchange="filterDNDate(this.value)"><option value="all">All Dates</option><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="week">This Week</option><option value="lastweek">Last Week</option><option value="month">This Month</option><option value="lastmonth">Last Month</option><option value="last3months">Last 3 Months</option><option value="custom">Custom…</option></select>
+<div class="bc-date" data-bc-date="dn" data-bc-date-title="Delivery Note date"></div>
 <input id="dn-search" class="bc-filter bc-filter-search" type="text" oninput="renderDNPage()" placeholder="Search DN, SO, customer or PO…" aria-label="Search Delivery Notes"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="dn-clear-filters-btn" onclick="clearAllDNFilters()" type="button" title="Clear all Delivery Note filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
         </div>
@@ -659,7 +582,7 @@ document.addEventListener('error', function(e) {
         <div class="dn-toolbar-right bc-filterbar-right">
 <select id="invreg-customer" class="bc-filter bc-filter-customer" onchange="renderInvoiceRegister()" aria-label="Filter invoices by customer"><option value="">All customers</option></select>
 <select id="invreg-status" class="bc-filter bc-filter-status" onchange="renderInvoiceRegister()" aria-label="Status"><option value="">All statuses</option><option value="Issued">Issued</option><option value="Partially credited">Partly credited</option><option value="Credited">Credited</option></select>
-<select id="invreg-date" class="bc-filter bc-filter-date" onchange="renderInvoiceRegister()" aria-label="Date"><option value="all">All Dates</option><option value="today">Today</option><option value="week">This Week</option><option value="month">This Month</option><option value="lastmonth">Last Month</option><option value="last3months">Last 3 Months</option><option value="year">This Year</option></select>
+<div class="bc-date" data-bc-date="invreg" data-bc-date-title="Invoice date"></div>
 <input id="invreg-q" class="bc-filter bc-filter-search" type="text" oninput="renderInvoiceRegister()" placeholder="Search number, customer, SO or Zoho no…" aria-label="Search invoices"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="invreg-clear" onclick="clearInvoiceRegisterFilters()" type="button" title="Clear all invoice filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
         </div>
@@ -1042,7 +965,7 @@ document.addEventListener('error', function(e) {
 <section class="numbering-section admin-master-width" id="numbering-section-defaults" style="display:none">
 <div class="defaults-intro"><div><strong>Document Defaults</strong><span>These values pre-fill new transactions. Users can change them on an individual document where the workflow allows.</span></div><button class="btn btn-primary btn-sm" onclick="saveSetup()"><i class="ti ti-device-floppy"></i>Save Defaults</button></div>
 <div class="numbering-default-grid">
-<div class="setup-card default-setting-card"><h4><i class="ti ti-file-settings"></i>General Defaults</h4><p>Standard timing values for newly created documents.</p><div class="default-fields"><div class="form-group"><label>Default quotation validity</label><div class="field-with-suffix"><input id="s-validity" min="1" type="number" value="7"/><span>Days</span></div></div><div class="form-group"><label>RFQ response due</label><div class="field-with-suffix"><input id="s-rfqhours" min="1" type="number" value="48"/><span>Hours</span></div></div></div></div>
+<div class="setup-card default-setting-card"><h4><i class="ti ti-file-settings"></i>General Defaults</h4><p>Standard timing values for new documents and the week used by date filters.</p><div class="default-fields"><div class="form-group"><label>Default quotation validity</label><div class="field-with-suffix"><input id="s-validity" min="1" type="number" value="7"/><span>Days</span></div></div><div class="form-group"><label>RFQ response due</label><div class="field-with-suffix"><input id="s-rfqhours" min="1" type="number" value="48"/><span>Hours</span></div></div><div class="form-group"><label for="s-weekstart">Week starts on</label><select id="s-weekstart"><option value="sunday">Sunday</option><option value="monday">Monday</option></select><div style="font-size:11.5px;color:var(--gray);margin-top:4px">Used by the "This Week" date filter on every register.</div></div></div></div>
 <div class="setup-card default-setting-card"><h4><i class="ti ti-truck"></i>Delivery Terms</h4><p>Click a term to make it the default for new documents.</p><div id="setup-delivery-list" class="default-term-list"></div><div class="default-term-add"><input id="setup-delivery-new" onkeydown="if(event.key==='Enter') addSetupTerm('delivery')" placeholder="Add delivery term…"/><button class="btn btn-secondary btn-sm" onclick="addSetupTerm('delivery')"><i class="ti ti-plus"></i>Add</button></div></div>
 <div class="setup-card default-setting-card"><h4><i class="ti ti-credit-card"></i>Payment Terms</h4><p>Click a term to make it the default for new documents.</p><div id="setup-payment-list" class="default-term-list"></div><div class="default-term-add"><input id="setup-payment-new" onkeydown="if(event.key==='Enter') addSetupTerm('payment')" placeholder="Add payment term…"/><button class="btn btn-secondary btn-sm" onclick="addSetupTerm('payment')"><i class="ti ti-plus"></i>Add</button></div></div>
 </div>
@@ -2973,12 +2896,12 @@ onAuthStateChanged(auth, user => {
   if (!document.getElementById('bizcore-app-script') && !document.getElementById('bizcore-invoicing-script')) {
     const inv = document.createElement('script');
     inv.id  = 'bizcore-invoicing-script';
-    inv.src = 'js/invoicing.js?v=265';
+    inv.src = 'js/invoicing.js?v=265.1';
     const start = () => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=265';
+      s.src = 'js/app.js?v=265.1';
       document.body.appendChild(s);
     };
     inv.onload = start;

@@ -906,6 +906,7 @@ function applySettings() {
   Object.entries(map).forEach(([key,id])=>{const node=document.getElementById('s-'+id);if(node)node.value=settings[key]||'';});
   const vh=document.getElementById('s-rfqhours');if(vh)vh.value=settings.rfqDefaultHours||48;
   const vl=document.getElementById('s-validity');if(vl)vl.value=settings.validity||7;
+  const vw=document.getElementById('s-weekstart');if(vw)vw.value=settings.weekStart==='monday'?'monday':'sunday';
   const dl=document.getElementById('s-delivery');if(dl)dl.value=settings.delivery||'';
   const pl=document.getElementById('s-payment');if(pl)pl.value=settings.payment||'';
   const vatLabel=document.getElementById('t-vat-label');if(vatLabel)vatLabel.textContent=`VAT (${getQuoteVatPercent()}%)`;
@@ -1027,6 +1028,7 @@ async function saveSetup() {
   saveDocumentDisplayDraft();
   const validity=document.getElementById('s-validity');if(validity)settings.validity=parseInt(validity.value)||7;
   const rfq=document.getElementById('s-rfqhours');if(rfq)settings.rfqDefaultHours=parseInt(rfq.value)||48;
+  const wk=document.getElementById('s-weekstart');if(wk)settings.weekStart=wk.value==='monday'?'monday':'sunday';
   await saveSettings();applySettings();showToast('Company settings saved','success');
 }
 
@@ -3701,14 +3703,8 @@ function renderTable() {
   else if(fSort==='amount-asc') filtered.sort((a,b)=>calcQuote(a).net-calcQuote(b).net);
   filtered=sortRegisterRows(filtered,'quotation',{no:q=>q.qno,date:q=>normalizedQuotationDate(q),customer:q=>q.company,reference:q=>q.ref,items:q=>(q.items||[]).length,amount:q=>calcQuote(q).net,status:q=>q.status,salesorders:q=>salesOrders.filter(x=>x.quotationId===q.id).map(x=>x.soNo).join(' '),valid:q=>validUntil(q)});
 
-  const fFrom2 = document.getElementById('filter-date-from').value;
-  const fTo2   = document.getElementById('filter-date-to').value;
-  let countLabel = `${filtered.length} quotation${filtered.length!==1?'s':''}`;
-  if (fFrom2 || fTo2) {
-    const range = [fFrom2, fTo2].filter(Boolean).map(fmtDate).join(' → ');
-    countLabel += ` · ${range}`;
-  }
-  document.getElementById('q-count').textContent = countLabel;
+  // V265 standard: the count shows only the number; the chosen period is shown on the date filter itself
+  document.getElementById('q-count').textContent = `${filtered.length} quotation${filtered.length!==1?'s':''}`;
   const pages=Math.ceil(filtered.length/PER_PAGE)||1;
   if(currentPage>pages) currentPage=1;
   const slice=filtered.slice((currentPage-1)*PER_PAGE,currentPage*PER_PAGE);
@@ -14048,7 +14044,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1 · registers 1)');
+console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1 · registers 1 · date filter A)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS
@@ -14147,3 +14143,47 @@ window.addEventListener('load',()=>{
   };
   setTimeout(routeDN,100);
 });
+
+/* ═══════════════════════════════════════════════════════════════════
+   V265 — Standard date filter (js/ui-standard.js, design "A") wired to every register.
+   One component, one set of presets with one meaning (see BCDateFilter.range); each register keeps its own
+   filter state. The previous per-screen helpers stay callable and now drive the standard component.
+═══════════════════════════════════════════════════════════════════ */
+(function wireStandardDateFilters(){
+  const D = window.BCDateFilter; if (!D) { console.error('[BizCore] ui-standard.js not loaded — date filters unavailable'); return; }
+  const norm = st => st.preset === 'all' ? { preset:'all', from:'', to:'' } : { preset:st.preset, from:st.from||'', to:st.to||'' };
+  // RFQs
+  rfqDateRangeForPreset = preset => D.range(preset);
+  updateRFQDateFilterUI = () => D.set('rfq', rfqDateFilter);
+  closeRFQDateMenu = () => D.close('rfq');
+  toggleRFQDateMenu = e => { e?.stopPropagation(); D.open('rfq'); };
+  D.register('rfq', st => { rfqDateFilter = norm(st); rfqPage = 1; renderRFQPage(); });
+  // Pricing
+  pricingDateRangeForPreset = preset => D.range(preset);
+  updatePricingDateFilterUI = () => D.set('pricing', pricingDateFilter);
+  closePricingDateMenu = () => D.close('pricing');
+  togglePricingDateMenu = e => { e?.stopPropagation(); D.open('pricing'); };
+  D.register('pricing', st => { pricingDateFilter = norm(st); pricingDocPage = 1; renderPricingDocuments(); });
+  // Quotations (the register reads the hidden From / To inputs)
+  const qSet = st => { const f = document.getElementById('filter-date-from'), t = document.getElementById('filter-date-to'); if (f) f.value = st.from || ''; if (t) t.value = st.to || ''; quotationDatePreset = st.preset; };
+  D.register('quotation', st => { qSet(norm(st)); currentPage = 1; renderTable(); });
+  setQuotationDatePreset = preset => D.choose('quotation', { preset });
+  updateQuotationDateFilterUI = (label, preset) => { quotationDatePreset = preset || 'custom'; D.set('quotation', { preset: quotationDatePreset, from: document.getElementById('filter-date-from')?.value || '', to: document.getElementById('filter-date-to')?.value || '' }); };
+  closeQuotationDateMenu = () => D.close('quotation');
+  toggleQuotationDateMenu = e => { e?.stopPropagation(); D.open('quotation'); };
+  clearQuotationDateFilter = () => D.choose('quotation', { preset:'all' });
+  // Sales Orders
+  const soSet = st => { soDateFilter = { mode: st.preset, from: st.from || null, to: st.to || null }; const f = document.getElementById('so-d-from'), t = document.getElementById('so-d-to'); if (f) f.value = st.from || ''; if (t) t.value = st.to || ''; };
+  D.register('so', st => { soSet(norm(st)); soPage = 1; renderSOPage(); });
+  filterSODate = mode => D.choose('so', { preset: mode || 'all' });
+  clearSODateFilter = () => D.choose('so', { preset:'all' });
+  const _clearAllSO = clearAllSOFilters;
+  clearAllSOFilters = function(){ D.set('so', { preset:'all' }); return _clearAllSO.apply(this, arguments); };
+  // Delivery Notes
+  D.register('dn', st => { const n = norm(st); dnDateFilter = { mode: n.preset, from: n.from || null, to: n.to || null }; renderDNPage(); });
+  filterDNDate = mode => D.choose('dn', { preset: mode || 'all' });
+  const _clearAllDN = clearAllDNFilters;
+  clearAllDNFilters = function(){ D.set('dn', { preset:'all' }); return _clearAllDN.apply(this, arguments); };
+  // Invoices (state read by renderInvoiceRegister)
+  D.register('invreg', () => { if (typeof renderInvoiceRegister === 'function') renderInvoiceRegister(); });
+})();
