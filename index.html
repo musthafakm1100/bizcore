@@ -23,7 +23,7 @@
 <link href="css/invoicing.css?v=264.7" rel="stylesheet"/>
 <link href="css/register-standard.css?v=265.1" rel="stylesheet"/>
 <link href="css/doc-view.css?v=265.2" rel="stylesheet"/>
-<link href="css/delivery-compact.css?v=265.3" rel="stylesheet"/>
+<link href="css/delivery-compact.css?v=265.5" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=265.2" defer></script>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
@@ -127,6 +127,7 @@ document.addEventListener('error', function(e) {
 <div aria-label="Quotations" class="nav-item" data-nav-page="quotations" onclick="showPage('quotations',this)" role="button" tabindex="0" title="Quotations"><i class="ti ti-file-text"></i><span class="nav-text">Quotations</span></div>
 <div aria-label="Sales Orders" class="nav-item" data-nav-page="salesorders" onclick="showPage('salesorders',this)" role="button" tabindex="0" title="Sales Orders"><i class="ti ti-shopping-cart"></i><span class="nav-text">Sales Orders</span><span class="nav-badge nav-badge-workflow" id="so-badge" style="display:none"></span></div>
 <div aria-label="Delivery Notes" class="nav-item" data-nav-page="deliverynotes" onclick="showPage('deliverynotes',this)" role="button" tabindex="0" title="Delivery Notes"><i class="ti ti-truck-delivery"></i><span class="nav-text">Delivery Notes</span><span class="nav-badge nav-badge-workflow" id="dn-badge" style="display:none" title="Delivery notes requiring attention"></span></div>
+<div aria-label="Deliveries" class="nav-item" data-nav-page="deliveries" onclick="showPage('deliveries',this)" role="button" tabindex="0" title="Deliveries — out for delivery"><i class="ti ti-truck"></i><span class="nav-text">Deliveries</span><span class="nav-badge nav-badge-workflow" id="deliveries-badge" style="display:none" title="Out for delivery"></span></div>
 <div aria-label="Invoices" class="nav-item" data-nav-page="customerinvoices" onclick="showPage('customerinvoices',this)" role="button" tabindex="0" title="Invoices"><i class="ti ti-receipt"></i><span class="nav-text">Invoices</span><span class="nav-badge nav-badge-workflow" id="invoice-badge" style="display:none" title="Invoices requiring attention"></span></div>
 </div>
 </div>
@@ -513,6 +514,18 @@ document.addEventListener('error', function(e) {
         </div>
       </div>
     </div>
+  </div>
+</div>
+<!-- V265.5 DELIVERIES (delivery staff: out for delivery → confirm) -->
+<div class="page" id="page-deliveries">
+  <div class="dl-page">
+    <div class="dl-head"><h2>Deliveries</h2><span>Delivery notes out for delivery — confirm when the customer receives them.</span></div>
+    <div class="dl-tools">
+      <input id="dl-search" class="dl-search" type="search" placeholder="DN, customer or SO…" oninput="bcDeliveriesSearch(this.value)" aria-label="Search deliveries" autocomplete="off"/>
+      <div class="dl-seg" role="group" aria-label="Show"><button type="button" data-dl-scope="mine" onclick="bcDeliveriesScope('mine')">Mine <b id="dl-count-mine">0</b></button><button type="button" data-dl-scope="all" onclick="bcDeliveriesScope('all')">All <b id="dl-count-all">0</b></button></div>
+      <button type="button" class="dl-scan-btn" onclick="bcDeliveriesScan()"><i class="ti ti-qrcode"></i><span>Scan QR</span></button>
+    </div>
+    <div id="dl-list" class="dl-list" aria-live="polite"></div>
   </div>
 </div>
 <!-- FUTURE / FOUNDATION MODULES -->
@@ -1900,12 +1913,13 @@ document.addEventListener('error', function(e) {
 <div class="modal-body" id="dn-print-body" style="padding:0;overflow-y:auto"></div>
 <div class="dn-view-actionbar" role="toolbar" aria-label="Delivery Note actions">
   <div class="dn-view-actionbar-spacer"></div>
-  <button class="btn btn-secondary" onclick="closeViewWithReturn('dn-print-modal')"><i class="ti ti-x"></i><span>Close</span></button>
+  <button class="btn btn-secondary dn-m-keep-tablet" id="dn-close-btn" onclick="closeViewWithReturn('dn-print-modal')"><i class="ti ti-x"></i><span>Close</span></button>
+  <button class="btn btn-secondary dn-m-more" type="button" onclick="dnOpenMoreSheet()" aria-label="More actions"><i class="ti ti-dots"></i><span>More</span></button>
   <button class="btn btn-secondary" id="dn-open-so-btn" onclick="openSOFromDNView()"><i class="ti ti-file-description"></i><span>Sales Order</span></button>
   <span id="dn-dispatch-tools" style="display:none;gap:6px;align-items:center"><button class="btn btn-secondary" onclick="openDNDispatchAction('correct')"><i class="ti ti-edit"></i><span>Correct Dispatch</span></button><button class="btn btn-danger" onclick="openDNDispatchAction('void')"><i class="ti ti-ban"></i><span>Void</span></button></span><button class="btn btn-secondary" id="dn-dispatch-history-btn" style="display:none" onclick="openDNDispatchHistory()"><i class="ti ti-history"></i>Dispatch History</button>
   <button class="btn btn-success" id="dn-open-confirm-btn" onclick="openDeliveryConfirmationFromDNView()"><i class="ti ti-device-mobile-check"></i><span>Delivery Confirmation</span></button>
   <button class="btn btn-success" id="dn-create-invoice-btn" onclick="openInvoiceFromDNView()" style="display:none"><i class="ti ti-file-invoice"></i><span>Create Invoice</span></button>
-  <button class="btn btn-primary" onclick="openDNFormatDialog('print')"><i class="ti ti-printer"></i><span>Print / PDF</span></button>
+  <button class="btn btn-primary" id="dn-print-btn" onclick="openDNFormatDialog('print')" aria-label="Print / PDF"><i class="ti ti-printer"></i><span>Print / PDF</span></button>
 </div>
 </div>
 </div>
@@ -2902,7 +2916,9 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=265.3';
+      s.src = 'js/app.js?v=265.5';
+      // V265.5: the Deliveries screen builds on app.js
+      s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.5'; document.body.appendChild(d); };
       document.body.appendChild(s);
     };
     inv.onload = start;

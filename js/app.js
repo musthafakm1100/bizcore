@@ -10843,7 +10843,7 @@ function openDeliveryAcceptance(soId,deliveryIdx,opts={}){
  if(!modal){showToast('Delivery Confirmation screen is unavailable','error');return false;}
  // V265.3: identify the DN on the screen BEFORE the lines are drawn and checked. Before, the checks ran against the
  // previously opened DN (the "1 Invalid" chip on a fully accepted line).
- modal._soId=soId;modal._deliveryIdx=deliveryIdx;modal._dnId=d.id;modal._dnRevision=d.revision;modal._confirmOperationId='';modal._acceptanceMode=editMode?opts.mode:'confirm';
+ modal._soId=soId;modal._deliveryIdx=deliveryIdx;modal._dnId=d.id;modal._dnRevision=d.revision;modal._confirmOperationId='';modal._acceptanceMode=editMode?opts.mode:'confirm';modal._returnTo=opts.returnTo||'';
  modal.querySelector('.modal')?.classList.toggle('dn-confirm-edit',editMode);
  document.getElementById('dn-confirm-title').textContent=editMode?(opts.mode==='correction'?'Correct Confirmation':'Revise Acceptance'):'Confirm Delivery';
  document.getElementById('dn-confirm-sub').textContent=[d.dnNo,so.customer,so.soNo].filter(Boolean).join(' · ');
@@ -10983,8 +10983,11 @@ async function _saveDeliveryAcceptanceCore(operationId){
    });
    const saved=r.dn;
    if(mode!=='confirm'&&!wasLocal)window._dnLocalConfirmationIds.delete(saved.id); // only confirmations produce a realtime event
+   const backToList=m._returnTo==='deliveries';
    closeModal('dn-confirm-modal');
-   showCommittedDeliveryNote(so.id,saved);
+   // V265.5: started from the Deliveries screen → back to that list (not the DN view)
+   if(backToList){upsertDeliveryNoteCache(saved);renderSOPage();renderDNPage();if(typeof bcDeliveriesAfterConfirm==='function')bcDeliveriesAfterConfirm(saved);}
+   else showCommittedDeliveryNote(so.id,saved);
    if(!r.alreadyApplied){
     try{
      const rejected=(saved.items||[]).reduce((n,it)=>n+(Number(it.rejectedQty)||0),0);
@@ -11028,7 +11031,7 @@ async function _saveDeliveryAcceptanceCore(operationId){
  if(window.FB?.fbPublishOperationalEvent){
    try{await window.FB.fbPublishOperationalEvent({id:`dn-confirmed-${d.id}-${operationId.replace(/[^a-zA-Z0-9_-]/g,'')}`,type:'dn-confirmed',dnId:d.id,dnNo:d.dnNo,soId:so.id,status:d.status,actor:deliveryActor(),sourceSession:getBizCoreSessionId(),createdAt:new Date().toISOString(),acceptanceMode:mode})}catch(e){console.warn('Delivery saved; operational notification publish failed',e)}
  }
- closeModal('dn-confirm-modal');renderSOPage();renderDNPage();viewDeliveryNote(so.id,m._deliveryIdx);showToast(mode==='confirm'?`${d.dnNo} confirmed — ${d.status}`:`${d.dnNo} ${mode==='correction'?'correction saved':'acceptance revised'}`,'success');return d;
+ const backToList=m._returnTo==='deliveries';closeModal('dn-confirm-modal');renderSOPage();renderDNPage();if(backToList&&typeof bcDeliveriesAfterConfirm==='function')bcDeliveriesAfterConfirm(d);else viewDeliveryNote(so.id,m._deliveryIdx);showToast(mode==='confirm'?`${d.dnNo} confirmed — ${d.status}`:`${d.dnNo} ${mode==='correction'?'correction saved':'acceptance revised'}`,'success');return d;
 }
 async function saveDeliveryAcceptance(){
  const m=document.getElementById('dn-confirm-modal');if(!m)return null;
@@ -11347,6 +11350,87 @@ function openDNDispatchHistory(){
  const box=document.getElementById('dn-dispatch-history-body');box.innerHTML=records.map((r,i)=>{const t=r.type||r.kind||'correct';const label=r.label||(t==='void'?'Dispatch voided':t==='dispatch'?'Dispatched':'Dispatch corrected');return `<div style="border-bottom:1px solid #e2e8f0;padding:12px 0"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${i+1}. <span style="padding:2px 8px;border-radius:10px;font-size:12px;background:${badge(t)}">${escapeHtml(label)}</span></strong><span style="font-size:12px;color:#64748b">${escapeHtml(dnHistoryWhen(r.at))}</span></div><div style="font-size:12px;color:#475569;margin-top:4px">By ${escapeHtml(r.actor||'—')}${r.migrated?' · <em>migrated from V259</em>':''}</div><div style="font-size:12px;margin-top:2px"><span style="color:#64748b">Reason:</span> ${escapeHtml(r.reason||'—')}</div>${dnHistoryTable(r)}</div>`;}).join('');
  const modal=document.getElementById('dn-dispatch-history-modal');modal.style.zIndex='6700';openModalWithSize('dn-dispatch-history-modal');
 }
+/* ── V265.5 Delivery Note view on phone & tablet ──
+   Below 900 px the view gets two tabs: "Details" (easy to read on the road) and "Document" (the A4 page, scaled to
+   the screen width). The action bar keeps Confirm / Print visible and moves the rest into "⋯ More". Desktop unchanged. */
+function dnCustomerOf(so){
+  const byId=so.custId&&customers.find(c=>String(c.id)===String(so.custId));
+  return byId||customers.find(c=>normalizeMasterValue(c.company)===normalizeMasterValue(so.customer))||null;
+}
+function dnCustomerAddress(c,short){
+  if(!c)return '';
+  const parts=short?[c.district,c.city]:[[c.buildingNo,c.street].filter(Boolean).join(' '),c.district,c.city];
+  const out=parts.map(x=>String(x||'').trim()).filter(Boolean).join(', ');
+  return out||String(c.address||'').trim();
+}
+function dnCustomerContact(c){
+  if(!c)return {name:'',phone:''};
+  const list=c.contacts||(c.contact?[{name:c.contact,phone:c.phone||''}]:[]);
+  const k=list.find(x=>x&&x.isDefault)||list[0]||{};
+  return {name:String(k.name||'').trim(),phone:String(k.phone||k.mobile||c.mobile||c.phone||'').trim()};
+}
+function dnMobileDetailsHtml(so,d){
+  const c=dnCustomerOf(so),addr=dnCustomerAddress(c,false),k=dnCustomerContact(c);
+  const q=quotations.find(x=>x.id===so.quotationId);
+  const tel=k.phone?`<a class="dn-m-tel" href="tel:${escapeHtml(k.phone.replace(/[^\d+]/g,''))}"><i class="ti ti-phone"></i> ${escapeHtml([k.name,k.phone].filter(Boolean).join(' · '))}</a>`:(k.name?`<div class="dn-m-sub">${escapeHtml(k.name)}</div>`:'');
+  const f=(l,v)=>`<div><small>${l}</small><b>${escapeHtml(v||'—')}</b></div>`;
+  const conf=d.customerConfirmed;
+  const items=(d.items||[]).map((it,i)=>{const acc=deliveryAcceptedQty(d,it),rej=deliveryRejectedQty(d,it);
+    return `<div class="dn-m-item"><span class="n">${i+1}</span><span class="d">${escapeHtml(it.desc||'—')}${conf&&rej>0?`<small>Accepted ${roundQtyForUom(acc,it.uom)} · <em>Rejected ${roundQtyForUom(rej,it.uom)}</em></small>`:''}</span><span class="q">${roundQtyForUom(Number(it.qty)||0,it.uom)}</span><span class="u">${escapeHtml(it.uom||'')}</span></div>`;}).join('');
+  return `<section class="dn-m-details" aria-label="Delivery details">
+    <div class="dn-m-card"><div class="dn-m-lbl">Customer</div><div class="dn-m-cu">${escapeHtml(so.customer||'—')}</div>${addr?`<div class="dn-m-sub"><i class="ti ti-map-pin"></i> ${escapeHtml(addr)}</div>`:''}${tel}</div>
+    <div class="dn-m-card dn-m-grid">${f('Date',fmtDate(d.date))}${f('Sales order',so.soNo)}${f('Customer PO',so.poNo)}${f('Delivered by',d.deliveredBy)}${f('Vehicle / AWB',d.vehicle)}${f('Quotation',q?.qno)}</div>
+    <div class="dn-m-card"><div class="dn-m-lbl">Items (${(d.items||[]).length})</div>${items}</div>
+    ${d.remarks?`<div class="dn-m-card"><div class="dn-m-lbl">Remarks</div><div class="dn-m-sub">${escapeHtml(d.remarks)}</div></div>`:''}
+    ${conf?`<div class="dn-m-card"><div class="dn-m-lbl">Received by</div><div class="dn-m-sub"><b>${escapeHtml(d.receivedBy||'—')}</b>${d.customerRemarks?` · ${escapeHtml(d.customerRemarks)}`:''}</div></div>`:''}
+  </section>`;
+}
+function dnMobileTab(tab,silent){
+  const ws=document.querySelector('#dn-print-body .dn-view-workspace');if(!ws)return;
+  ws.dataset.mtab=tab==='details'?'details':'doc';
+  document.querySelectorAll('#dn-print-body .dn-m-tabs [data-mtab]').forEach(b=>{const on=b.dataset.mtab===ws.dataset.mtab;b.classList.toggle('on',on);b.setAttribute('aria-selected',on?'true':'false');});
+  if(!silent){const body=document.getElementById('dn-print-body');if(body)body.scrollTop=0;}
+  requestAnimationFrame(dnFitA4);
+}
+/** Scale the A4 page to the available width on small screens (pinch-zoom still works). */
+function dnFitA4(){
+  const docEl=document.querySelector('#dn-print-body .dn-view-document'),a4=docEl?.querySelector('.dn-a4');if(!a4)return;
+  if(window.innerWidth>=900){a4.style.zoom='';return;}
+  const avail=docEl.clientWidth-12;if(avail<=0)return;
+  a4.style.zoom='';const w=a4.offsetWidth||794;
+  a4.style.zoom=String(Math.min(1,avail/w));
+}
+window.addEventListener('resize',()=>{if(isModalOpen('dn-print-modal'))dnFitA4();});
+function dnMobileHeaderChip(d){
+  const t=document.getElementById('dn-print-title');if(!t)return;
+  document.querySelectorAll('#dn-print-modal .dn-m-chip').forEach(x=>x.remove());
+  const st=getDNStatus(d),cls={'Out for Delivery':'out','Delivered':'ok','Partially Accepted':'part','Rejected':'rej','Voided':'rej'}[st]||'out';
+  t.insertAdjacentHTML('afterend',`<span class="dn-m-chip ${cls}">${escapeHtml(st)}</span>`);
+}
+/** "⋯ More" on phone / tablet: the actions that do not fit the bar, as a sheet from the bottom. */
+function dnOpenMoreSheet(){
+  const vis=id=>{const e=document.getElementById(id);return e&&e.style.display!=='none';};
+  const tools=document.getElementById('dn-dispatch-tools'),toolsOn=tools&&tools.style.display!=='none';
+  const items=[
+    {icon:'ti-file-description',text:'Sales Order',run:()=>openSOFromDNView()},
+    vis('dn-dispatch-history-btn')?{icon:'ti-history',text:'Dispatch History',run:()=>openDNDispatchHistory()}:null,
+    toolsOn?{icon:'ti-edit',text:'Correct Dispatch',run:()=>openDNDispatchAction('correct')}:null,
+    vis('dn-create-invoice-btn')?{icon:'ti-file-invoice',text:'Create Invoice',run:()=>openInvoiceFromDNView()}:null,
+    toolsOn?{icon:'ti-ban',text:'Void',run:()=>openDNDispatchAction('void'),danger:true}:null,
+    {icon:'ti-x',text:'Close',run:()=>closeViewWithReturn('dn-print-modal')},
+  ].filter(Boolean);
+  bcActionSheet(items);
+}
+function bcActionSheet(items){
+  document.getElementById('bc-action-sheet')?.remove();
+  const el=document.createElement('div');el.id='bc-action-sheet';el.className='bc-sheet-overlay';
+  el.innerHTML=`<div class="bc-sheet" role="menu"><div class="bc-sheet-grab"></div>${items.map((it,i)=>`<button type="button" role="menuitem" class="bc-sheet-item${it.danger?' danger':''}" data-i="${i}"><i class="ti ${it.icon}"></i><span>${escapeHtml(it.text)}</span></button>`).join('')}<button type="button" class="bc-sheet-cancel">Cancel</button></div>`;
+  const close=()=>el.remove();
+  el.addEventListener('click',e=>{if(e.target===el)close();});
+  el.querySelector('.bc-sheet-cancel').addEventListener('click',close);
+  el.querySelectorAll('.bc-sheet-item').forEach(b=>b.addEventListener('click',()=>{close();try{items[Number(b.dataset.i)].run();}catch(err){console.error('[BizCore] action',err);}}));
+  document.body.appendChild(el);
+}
 function viewDeliveryNote(soId, deliveryIdx) {
   const so=salesOrders.find(x=>x.id===soId);if(!so)return;const d=so.deliveries?.[deliveryIdx];if(!d)return;
   const m=document.getElementById('dn-print-modal');if(m){m._soId=soId;m._deliveryIdx=deliveryIdx;m._dnId=d.id;m._printFormat='standard'}
@@ -11355,8 +11439,11 @@ function viewDeliveryNote(soId, deliveryIdx) {
   const tools=document.getElementById('dn-dispatch-tools');if(tools)tools.style.display=(!d.customerConfirmed&&!d.voided)?'inline-flex':'none';
   const invBtn=document.getElementById('dn-create-invoice-btn');if(invBtn)invBtn.style.display=dnCanInvoiceFromView(so,d)?'inline-flex':'none';
   const hist=document.getElementById('dn-dispatch-history-btn');if(hist)hist.style.display=dnIndependentMode()?'none':(d.dispatchHistory||[]).length?'inline-flex':'none';
-  window._activeDNView={soId:so.id,deliveryIdx};document.getElementById('dn-print-body').innerHTML=`<div class="dn-view-workspace"><div class="dn-view-document">${buildDeliveryNoteDocument(so,d,deliveryIdx,'standard',true)}</div><aside class="dn-view-acceptance" aria-label="Delivery confirmation">${buildDNConfirmationPanel(d)}</aside></div>`;
-  renderDNQRCode(d);openModalWithSize('dn-print-modal');
+  // V265.5: phone / tablet (below 900 px) — "Details" and "Document" tabs; the desktop view is unchanged.
+  const mtab=window.innerWidth<700?'details':'doc';
+  window._activeDNView={soId:so.id,deliveryIdx};document.getElementById('dn-print-body').innerHTML=`<div class="dn-m-tabs" role="tablist" aria-label="Delivery Note view"><button type="button" role="tab" data-mtab="details" onclick="dnMobileTab('details')">Details</button><button type="button" role="tab" data-mtab="doc" onclick="dnMobileTab('doc')">Document</button></div><div class="dn-view-workspace" data-mtab="${mtab}">${dnMobileDetailsHtml(so,d)}<div class="dn-view-document">${buildDeliveryNoteDocument(so,d,deliveryIdx,'standard',true)}</div><aside class="dn-view-acceptance" aria-label="Delivery confirmation">${buildDNConfirmationPanel(d)}</aside></div>`;
+  dnMobileHeaderChip(d);dnMobileTab(mtab,true);
+  renderDNQRCode(d);openModalWithSize('dn-print-modal');requestAnimationFrame(dnFitA4);
   if(m)m._independentAudit=null;
   void loadIndependentDNAudit(soId,d.id);
 }
@@ -11399,7 +11486,7 @@ function openSOFromDNView(){
   closeModal('dn-print-modal');
   viewSO(soId);
 }
-function openDeliveryConfirmationFromDNView(){
+async function openDeliveryConfirmationFromDNView(){
   const viewModal=document.getElementById('dn-print-modal');const soId=viewModal?._soId,deliveryIdx=viewModal?._deliveryIdx;if(soId==null||deliveryIdx==null){showToast('Unable to identify this Delivery Note','error');return}
   const so=salesOrders.find(x=>x.id===soId),d=so?.deliveries?.[deliveryIdx];
   if(d?.voided){showToast('This Delivery Note has been voided.','warning');return;}
@@ -11410,7 +11497,8 @@ function openDeliveryConfirmationFromDNView(){
     panel?.scrollIntoView({behavior:'smooth',block:'start'});
     return;
   }
-  try{const opened=openDeliveryAcceptance(soId,deliveryIdx),confirmModal=document.getElementById('dn-confirm-modal');if(opened&&confirmModal?.classList.contains('open')){viewModal?.classList.remove('open','modal-fs-overlay');updateFullscreenShellState();confirmModal.style.zIndex='6200';return}showToast('Could not open Delivery Confirmation','error')}catch(err){console.error('Delivery Confirmation open failed',err);showToast('Could not open Delivery Confirmation: '+(err?.message||'Unknown error'),'error')}
+  // V265.3: openDeliveryAcceptance is wrapped by the document lock (async) — wait for it before checking the screen.
+  try{const opened=await openDeliveryAcceptance(soId,deliveryIdx),confirmModal=document.getElementById('dn-confirm-modal');if(opened===false&&!confirmModal?.classList.contains('open'))return;if(confirmModal?.classList.contains('open')){viewModal?.classList.remove('open','modal-fs-overlay');updateFullscreenShellState();confirmModal.style.zIndex='6200';return}showToast('Could not open Delivery Confirmation','error')}catch(err){console.error('Delivery Confirmation open failed',err);showToast('Could not open Delivery Confirmation: '+(err?.message||'Unknown error'),'error')}
 }
 function dnSafeFilePart(value){
   return String(value||'').replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim().replace(/[. ]+$/,'');
@@ -14110,7 +14198,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1 · registers 1 · date filter A · compact views 1 · delivered by 1)');
+console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1 · registers 1 · date filter A · compact views 1 · delivered by 1 · confirm open 1 · deliveries 1)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS
