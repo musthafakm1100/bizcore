@@ -927,16 +927,7 @@ function ensureInvoiceViewModal(){
   document.body.appendChild(m);
   return m;
 }
-function invFlowNode(label, text, onclick, cls = ''){
-  return onclick ? `<button class="qv-doc-node ${cls}" onclick="${onclick}"><small>${label}</small><strong>${text}</strong></button>` : `<div class="qv-doc-node ${cls}"><small>${label}</small><strong>${text}</strong></div>`;
-}
-const invFlowArrow = '<span class="qv-doc-arrow"><i class="ti ti-chevron-down"></i></span>';
 function invViewGo(js){ return `closeModal('inv-view-modal');${js}`; }
-function invActivityRow(title, when, icon){
-  let w = '—';
-  if (when) { const d = new Date(when); w = /T\d\d:/.test(String(when)) && !isNaN(d) ? d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : fmtDate(when); }
-  return `<div class="qv-activity-row"><span class="qv-activity-icon"><i class="ti ${icon}"></i></span><div><strong>${invEsc(title)}</strong><span>${invEsc(w)}</span></div></div>`;
-}
 /** Builds the right-hand panel and the action bar for an invoice or a credit note. */
 function renderInvoiceView(doc, kind){
   const cn = kind === 'credit', m = ensureInvoiceViewModal();
@@ -944,41 +935,58 @@ function renderInvoiceView(doc, kind){
   const inv = cn ? invoicesCache.find(i => i.id === doc.invoiceId) : doc;
   const q = so && quotations.find(x => x.id === so.quotationId);
   const cns = cn ? [] : creditNotesCache.filter(c => c.invoiceId === doc.id);
-  const n = v => invMoney(v);
+  const n = v => invMoney(v), f = v => formatNumber(invNum(v), 2);
   const row = (k, v) => `<div class="qv-side-row"><span>${k}</span><strong>${v}</strong></div>`;
-  let summary;
+  const dueText = due => {
+    if (!due) return '—';
+    const m0 = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(due)); if (!m0) return fmtDate(due);
+    const t = new Date(); const today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+    const days = Math.round((new Date(+m0[1], +m0[2] - 1, +m0[3]) - today) / 86400000);
+    const when = days === 0 ? 'due today' : days > 0 ? `in ${days} day${days === 1 ? '' : 's'}` : `<span style="color:#b42318">${-days} day${days === -1 ? '' : 's'} overdue</span>`;
+    return `${fmtDate(due)} · ${when}`;
+  };
+  // Summary card: 2 × 2 figures, then a few rows — only what the A4 page does not already show prominently
+  let kpis, rows, note = '';
   if (cn) {
-    summary = row('Type', '<span class="inv-type-pill credit">Credit note</span>') + row('Against invoice', invEsc(doc.invNo)) + row('Total credited', n(doc.total)) + row('Reason', invEsc(doc.reason || '—')) + row('Created by', invEsc(doc.createdBy || '—'));
+    const invCns = inv ? creditNotesCache.filter(c => c.invoiceId === inv.id) : [doc];
+    const invCredited = invCns.reduce((s, c) => s + invNum(c.total), 0), invTotal = inv ? invNum((inv.totals || {}).total) : null;
+    kpis = [{ label: 'Credit total', value: f(doc.total), tone: 'red' }, { label: 'VAT credited', value: f(doc.vat) },
+      { label: 'Invoice total', value: invTotal === null ? '—' : f(invTotal) }, { label: 'Invoice net', value: invTotal === null ? '—' : f(invTotal - invCredited), tone: 'green' }];
+    rows = row('Against invoice', invEsc(doc.invNo || '—')) + (invCns.length > 1 ? row('Credit notes on it', String(invCns.length)) : '') + row('Reason', invEsc(doc.reason || '—')) + row('Created by', invEsc(doc.createdBy || '—'));
   } else {
     const t = doc.totals || {}, credited = cns.reduce((s, c) => s + invNum(c.total), 0);
-    summary = row('Type', invTypeBadge(doc.type)) + row('Status', invStatusBadge(doc.status) || '<span style="background:#ECFDF5;color:#0F766E;border:1px solid #99F6E4;border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:700">Issued</span>') + row('Invoice total', n(t.total))
-      + (credited ? row('Credited', '− ' + n(credited)) + row('Net after credit', n(invNum(t.total) - credited)) : '')
-      + (doc.type !== 'advance' && invNum(t.deductionSubtotal) ? row('Advance deducted', n(t.deductionSubtotal)) : '')
-      + row('Payment due', fmtDate(doc.dueDate) || '—') + row('Zoho invoice', invEsc(doc.zohoNo || '—')) + row('Created by', invEsc(doc.createdBy || '—'));
+    kpis = [{ label: 'Invoice total', value: f(t.total) }, { label: 'Credited', value: f(credited), tone: credited ? 'red' : 'muted' }];
     if (doc.type === 'advance') {
       const usedBy = invoicesCache.filter(i => (i.deductions || []).some(d => d.advanceInvoiceId === doc.id));
       const deducted = usedBy.reduce((s, i) => s + (i.deductions || []).filter(d => d.advanceInvoiceId === doc.id).reduce((a, d) => a + invNum(d.subtotal), 0), 0);
-      summary += row('Deducted so far', n(deducted)) + row('Advance remaining', n(Math.max(0, invNum(t.subtotal) - deducted - cns.reduce((s, c) => s + invNum(c.advanceSubtotal), 0))));
+      kpis.push({ label: 'Deducted so far', value: f(deducted) }, { label: 'Advance left', value: f(Math.max(0, invNum(t.subtotal) - deducted - cns.reduce((s, c) => s + invNum(c.advanceSubtotal), 0))), tone: 'green' });
+    } else {
+      kpis.push({ label: 'Net after credit', value: f(invNum(t.total) - credited), tone: 'green' }, { label: 'Advance deducted', value: f(t.deductionSubtotal), tone: invNum(t.deductionSubtotal) ? '' : 'muted' });
     }
+    rows = row('Status', invStatusBadge(doc.status) || '<span style="background:#ECFDF5;color:#0F766E;border:1px solid #99F6E4;border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:700">Issued</span>')
+      + row('Type', invTypeBadge(doc.type)) + row('Payment due', dueText(doc.dueDate)) + row('Zoho invoice', invEsc(doc.zohoNo || '—')) + row('Created by', invEsc(doc.createdBy || '—'));
+    note = '<div class="bc-kpi-note"><i class="ti ti-info-circle"></i> Payments are recorded on the Sales Order, not per invoice.</div>';
   }
-  // Document flow: Quotation → Sales Order → (advance) → this document → credit notes
+  const summary = `${bcKpiGrid(kpis)}<div class="bc-kpi-rows">${rows}</div>${note}`;
+  // Document flow (one line): Quotation › Sales Order › (advance) › this document › credit notes
   const flow = [];
-  flow.push(q ? invFlowNode('QUOTATION', invEsc(q.qno), invViewGo(`viewQuotation('${q.id}')`)) : invFlowNode('QUOTATION', 'Not linked', '', 'muted'));
-  flow.push(so ? invFlowNode('SALES ORDER', invEsc(so.soNo), invViewGo(`viewSO('${so.id}')`)) : invFlowNode('SALES ORDER', invEsc(doc.soNo || '—'), '', 'muted'));
-  if (!cn) (doc.deductions || []).forEach(d => flow.push(invFlowNode('ADVANCE DEDUCTED', `${invEsc(d.advanceInvNo)} · ${n(d.subtotal)}`, `openInvoiceView('${d.advanceInvoiceId}')`)));
-  if (cn && inv) flow.push(invFlowNode(inv.type === 'advance' ? 'ADVANCE INVOICE' : 'INVOICE', invEsc(inv.invNo), `openInvoiceView('${inv.id}')`));
-  flow.push(invFlowNode(cn ? 'CREDIT NOTE' : (doc.type === 'advance' ? 'ADVANCE INVOICE' : 'INVOICE'), invEsc(cn ? doc.cnNo : doc.invNo), '', 'current'));
-  cns.forEach(c => flow.push(invFlowNode('CREDIT NOTE', `${invEsc(c.cnNo)} · − ${n(c.total)}`, `openCreditNoteView('${c.id}')`)));
+  flow.push(q ? { label: 'Quotation', text: q.qno, onclick: invViewGo(`viewQuotation('${q.id}')`) } : { label: 'Quotation', state: 'muted' });
+  flow.push(so ? { label: 'Sales order', text: so.soNo, onclick: invViewGo(`viewSO('${so.id}')`) } : (doc.soNo ? { label: 'Sales order', text: doc.soNo } : { label: 'Sales order', state: 'muted' }));
+  if (!cn) (doc.deductions || []).forEach(d => flow.push({ label: `Advance deducted · ${n(d.subtotal)}`, tag: 'Adv.', text: d.advanceInvNo, onclick: `openInvoiceView('${d.advanceInvoiceId}')` }));
+  if (cn && inv) flow.push({ label: inv.type === 'advance' ? 'Advance invoice' : 'Invoice', text: inv.invNo, onclick: `openInvoiceView('${inv.id}')` });
+  flow.push({ label: cn ? 'Credit note' : (doc.type === 'advance' ? 'Advance invoice' : 'Invoice'), text: cn ? doc.cnNo : doc.invNo, state: 'current' });
+  cns.forEach(c => flow.push({ label: `Credit note · − ${n(c.total)}`, text: c.cnNo, cls: 'cn', onclick: `openCreditNoteView('${c.id}')` }));
   if (!cn && doc.type === 'advance') invoicesCache.filter(i => (i.deductions || []).some(d => d.advanceInvoiceId === doc.id))
-    .forEach(i => flow.push(invFlowNode('DEDUCTED ON', invEsc(i.invNo), `openInvoiceView('${i.id}')`)));
+    .forEach(i => flow.push({ label: 'Deducted on', tag: 'Ded.', text: i.invNo, onclick: `openInvoiceView('${i.id}')` }));
   // Activity
-  const act = [[cn ? 'Credit note issued' : 'Invoice issued', doc.created || doc.date, cn ? 'ti-receipt-refund' : 'ti-file-invoice']];
-  cns.forEach(c => act.push([`Credited by ${c.cnNo}`, c.created || c.date, 'ti-receipt-refund']));
-  if (!cn && doc.migratedFrom) act.push(['Migrated from the Sales Order', doc.created || doc.date, 'ti-transfer']);
+  const who = doc.createdBy ? ` by ${doc.createdBy}` : '';
+  const act = [[(cn ? 'Credit note issued' : 'Invoice issued') + who, doc.created || doc.date]];
+  cns.forEach(c => act.push([`Credited by ${c.cnNo}`, c.created || c.date]));
+  if (!cn && doc.migratedFrom) act.push(['Migrated from the Sales Order', doc.created || doc.date]);
   const panel = `<aside class="qv-erp-panel inv-view-panel" aria-label="${cn ? 'Credit note' : 'Invoice'} information">
-    <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ${cn ? 'ti-receipt-refund' : 'ti-file-invoice'}"></i>${cn ? 'Credit note' : 'Invoice'} summary</span><span class="qv-screen-only">Staff only</span></div><div class="qv-side-body">${summary}</div></section>
-    <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ti-route"></i>Document flow</span></div><div class="qv-side-body qv-doc-flow">${flow.join(invFlowArrow)}</div></section>
-    <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ti-history"></i>Document activity</span></div><div class="qv-side-body qv-activity">${act.map(a => invActivityRow(a[0], a[1], a[2])).join('')}</div></section>
+    <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ${cn ? 'ti-receipt-refund' : 'ti-file-invoice'}"></i>${cn ? 'Credit status' : 'Billing status'}</span><span class="qv-screen-only">Staff only</span></div>${summary}</section>
+    <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ti-route"></i>Document flow</span></div>${bcFlowChips(flow)}</section>
+    <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ti-history"></i>Activity</span></div>${bcActivityList(act)}</section>
   </aside>`;
   m._kind = kind; m._docId = doc.id;
   m.querySelector('.modal').classList.toggle('inv-view-cn', cn);

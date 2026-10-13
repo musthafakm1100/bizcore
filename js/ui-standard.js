@@ -151,6 +151,37 @@
     get(key) { return instances[key] ? { ...instances[key].state } : { preset: 'all', from: '', to: '' }; },
     open, close,
   };
+  /* ── V265.2 — Compact document view panel pieces (Quotation, DN, Invoice, Credit Note) ──
+     bcKpiGrid([{ label, value, tone }])        → 2 × 2 figure tiles (tone: red | green | muted)
+     bcFlowChips([{ label, text, onclick, state, tag, cls, attrs }])
+                                                 → the document flow on one line; state: current | muted.
+                                                   A muted node shows "Label —"; the label is the tooltip.
+     bcActivityList([[title, when]])            → dot + text + date rows                                    */
+  window.bcKpiGrid = function (list) {
+    return `<div class="bc-kpi-grid">${list.filter(Boolean).map(k => `<div class="bc-kpi${k.tone ? ' ' + esc(k.tone) : ''}"><small>${esc(k.label)}</small><b>${k.value}</b></div>`).join('')}</div>`;
+  };
+  window.bcFlowChips = function (nodes) {
+    const html = nodes.filter(Boolean).map(n => {
+      const cls = `bc-flow-chip${n.state ? ' ' + n.state : ''}${n.cls ? ' ' + n.cls : ''}`;
+      const tag = n.tag ? `<span class="bc-flow-tag">${esc(n.tag)}</span>` : '';
+      if (n.state === 'muted') return `<span class="${cls}" title="${esc(n.label)}: not linked">${esc(n.label)} —</span>`;
+      const body = `${tag}${esc(n.text)}`;
+      if (n.onclick && n.state !== 'current') return `<button type="button" class="${cls}" title="${esc(n.label)}" ${n.attrs || ''} onclick="${n.onclick}">${body}</button>`;
+      return `<span class="${cls}" title="${esc(n.label)}"${n.state === 'current' ? ' aria-current="true"' : ''}>${body}</span>`;
+    });
+    return `<div class="bc-flow">${html.join('<span class="bc-flow-arrow" aria-hidden="true">›</span>')}</div>`;
+  };
+  window.bcActivityList = function (rows) {
+    const when = w => {
+      if (!w) return '—';
+      const d = parse(w) || new Date(w);
+      if (isNaN(d)) return esc(w);
+      const day = `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+      return /T\d\d:/.test(String(w)) ? `${day}, ${pad(d.getHours())}:${pad(d.getMinutes())}` : day;
+    };
+    return `<div class="bc-activity">${rows.filter(Boolean).map(r => `<div class="bc-activity-row"><i aria-hidden="true"></i><div>${esc(r[0])}</div><span>${when(r[1])}</span></div>`).join('')}</div>`;
+  };
+
   function mountAll() { document.querySelectorAll('[data-bc-date]').forEach(mount); }
   document.addEventListener('click', () => Object.keys(instances).forEach(close));
   document.addEventListener('keydown', e => { if (e.key === 'Escape') Object.keys(instances).forEach(close); });

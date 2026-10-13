@@ -1,0 +1,97 @@
+/* ═══════════════════════════════════════════════════════════════════
+   BizCore V265.2 — Compact document view (approved 13 Oct 2026)
+   Applies to the four display screens:
+     Quotation (#view-modal) · Delivery Note (#dn-print-modal) · Invoice / Credit Note (#inv-view-modal)
+
+   • The window is only as wide as the A4 page + the right panel (max 1320 px), centred,
+     with the app dimmed around it. Below 1200 px the old full-screen layout stays.
+   • The A4 document itself is NOT changed by this file.
+   • Right panel 300 px: summary card (KPI grid + rows), document flow as chips, activity.
+   • Buttons stay in the bottom-right action bar.
+═══════════════════════════════════════════════════════════════════ */
+
+@media (min-width: 1200px) {
+  html body #view-modal.modal-overlay,
+  html body #dn-print-modal.modal-overlay,
+  html body #inv-view-modal.modal-overlay {
+    padding: 18px !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  html body #view-modal.modal-overlay > .modal,
+  html body #dn-print-modal.modal-overlay > .modal,
+  html body #inv-view-modal.modal-overlay > .modal {
+    width: min(1320px, calc(100vw - 36px)) !important;
+    max-width: 1320px !important;
+    height: calc(100vh - 36px) !important;
+    max-height: calc(100vh - 36px) !important;
+    margin: 0 auto !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, .30) !important;
+  }
+  html body #view-modal.modal-overlay > .modal > .modal-header,
+  html body #dn-print-modal.modal-overlay > .modal > .modal-header,
+  html body #inv-view-modal.modal-overlay > .modal > .modal-header { border-radius: 0 !important; }
+
+  /* A4 page + 300 px panel, centred; the page keeps its own width */
+  html body #view-modal .qv-document-workspace,
+  html body #dn-print-modal .dn-view-workspace,
+  html body #inv-view-modal .inv-view-workspace {
+    display: grid !important;
+    grid-template-columns: minmax(0, 794px) 300px !important;
+    justify-content: center !important;
+    gap: 20px !important;
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 18px !important;
+    align-items: start !important;
+  }
+  html body #view-modal .modal-body { padding: 0 !important; }
+  html body #view-modal .qv-erp-panel,
+  html body #dn-print-modal .dn-view-acceptance,
+  html body #inv-view-modal .qv-erp-panel { width: 300px !important; min-width: 0 !important; }
+}
+
+/* ── Right panel: slim cards (all four screens, every width) ── */
+#view-modal .qv-erp-panel,
+#inv-view-modal .qv-erp-panel { gap: 10px !important; }
+#view-modal .qv-side-head,
+#inv-view-modal .qv-side-head { min-height: 38px !important; padding: 9px 12px !important; font-size: 12px !important; }
+#view-modal .qv-side-row,
+#inv-view-modal .qv-side-row { padding-top: 7px !important; padding-bottom: 7px !important; font-size: 11.5px !important; }
+
+/* KPI grid (2 × 2) */
+.bc-kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 12px; }
+.bc-kpi { border: 1px solid #e2e8f0; border-radius: 8px; padding: 7px 9px; min-width: 0; background: #fff; }
+.bc-kpi small { display: block; font-size: 9.5px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bc-kpi b { display: block; font-size: 14.5px; font-weight: 750; color: #17324d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.bc-kpi.red b { color: #b42318; }
+.bc-kpi.green b { color: #0f766e; }
+.bc-kpi.muted b { color: #94a3b8; }
+.bc-kpi-rows { border-top: 1px solid #edf0f3; }
+.bc-kpi-rows .qv-side-row { padding-left: 12px !important; padding-right: 12px !important; }
+.bc-kpi-note { padding: 7px 12px 9px; font-size: 10.5px; color: #748293; line-height: 1.4; border-top: 1px solid #edf0f3; }
+
+/* Document flow on one compact line (chips) */
+.bc-flow { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; padding: 10px 12px; }
+.bc-flow-chip { border: 1px solid #d9e2eb !important; border-radius: 999px !important; padding: 4px 9px !important; margin: 0 !important; height: auto !important; min-height: 0 !important; font-family: inherit !important; font-size: 10.5px !important; font-weight: 700 !important; letter-spacing: 0 !important; color: #315e87; background: #fff; line-height: 1.3 !important; box-shadow: none !important; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+button.bc-flow-chip { cursor: pointer; }
+button.bc-flow-chip:hover { border-color: #9db8d3; background: #f5f9fd; }
+.bc-flow-chip.current { background: #eef5fc; border-color: #9ec0e2; color: #17324d; cursor: default; }
+.bc-flow-chip.muted { color: #94a3b8; border-style: dashed; font-weight: 600; cursor: default; }
+.bc-flow-chip .bc-flow-tag { font-weight: 600; color: #7f8d9b; margin-right: 3px; }
+.bc-flow-arrow { color: #9aa7b4; font-size: 11px; }
+#inv-view-modal .bc-flow-chip.current { background: #effaf7; border-color: #9fd6cd; color: #134e48; }
+#inv-view-modal .inv-view-cn .bc-flow-chip.current { background: #fef3f2; border-color: #f3b8b2; color: #7a1a12; }
+#inv-view-modal .bc-flow-chip.cn { color: #b42318; }
+
+/* Activity: dot + text + date */
+.bc-activity { padding: 8px 12px; }
+.bc-activity-row { display: flex; gap: 8px; padding: 4px 0; font-size: 11px; color: #27384a; align-items: flex-start; }
+.bc-activity-row i { width: 8px; height: 8px; border-radius: 50%; background: #2b6cb0; margin-top: 4px; flex: 0 0 8px; }
+.bc-activity-row div { flex: 1; min-width: 0; }
+.bc-activity-row span { color: #84909d; font-size: 10px; white-space: nowrap; }
+#inv-view-modal .bc-activity-row i { background: #0f766e; }
+#inv-view-modal .inv-view-cn .bc-activity-row i { background: #b42318; }

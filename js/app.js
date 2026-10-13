@@ -5582,19 +5582,27 @@ function viewQuotation(id, skipVatCheck=false) {
   const coAddr=[buildAddressLine1(settings),buildAddressLine2(settings)].filter(Boolean).join(' · ');
   const logoHtml=settings.logo?'<img class="qdoc-logo" src="'+settings.logo+'" alt="'+escapeHtml(co)+'">':'<div class="qdoc-logo-fallback">DT</div>';
   const qRevision=Number(q.revision||q.rev||0);
-  const flowNodes=[
-    lRFQ?'<button class="qv-doc-node" data-rfqid="'+escapeHtml(q.rfqId||'')+'" onclick="viewRFQFromQuote(this)"><small>RFQ</small><strong>'+escapeHtml(lRFQ.rfqNo||'RFQ')+'</strong></button>':'<div class="qv-doc-node muted"><small>RFQ</small><strong>Not linked</strong></div>',
-    hPricing?'<button class="qv-doc-node" data-rfqid="'+escapeHtml(q.rfqId||'')+'" onclick="viewPricingFromQuote(this)"><small>PRICING</small><strong>'+escapeHtml(lRFQ.pricingNo||lRFQ.rfqNo||'Pricing')+'</strong></button>':'<div class="qv-doc-node muted"><small>PRICING</small><strong>Not linked</strong></div>',
-    '<div class="qv-doc-node current"><small>QUOTATION</small><strong>'+escapeHtml(q.qno)+'</strong></div>',
-    linkedSO?'<button class="qv-doc-node" data-soid="'+linkedSO.id+'" onclick="openSalesOrderDocument(this.dataset.soid)"><small>SALES ORDER</small><strong>'+escapeHtml(linkedSO.soNo)+'</strong></button>':'<div class="qv-doc-node muted"><small>SALES ORDER</small><strong>Not created</strong></div>'
-  ];
-  const flowHtml=flowNodes.map((n,i)=>n+(i<flowNodes.length-1?'<span class="qv-doc-arrow"><i class="ti ti-chevron-down"></i></span>':'')).join('');
-  const activityRows=[
-    ['Created',q.created||q.date,'ti-file-plus'],
-    qRevision>0?['Revision '+qRevision,q.updated||q.date,'ti-git-branch']:null,
-    ['Current status: '+status,q.updated||q.date,'ti-tag'],
-    linkedSO?['Converted to '+linkedSO.soNo,linkedSO.created||linkedSO.date,'ti-shopping-cart']:null
-  ].filter(Boolean).map(a=>'<div class="qv-activity-row"><span class="qv-activity-icon"><i class="ti '+a[2]+'"></i></span><div><strong>'+escapeHtml(a[0])+'</strong><span>'+(a[1]?fmtDate(a[1]):'—')+'</span></div></div>').join('');
+  // V265.2 compact panel: flow on one line (chips), activity as dot rows
+  const flowHtml=bcFlowChips([
+    lRFQ?{label:'RFQ',text:lRFQ.rfqNo||'RFQ',onclick:'viewRFQFromQuote(this)',attrs:'data-rfqid="'+escapeHtml(q.rfqId||'')+'"'}:{label:'RFQ',state:'muted'},
+    hPricing?{label:'Pricing',text:lRFQ.pricingNo||'Pricing',onclick:'viewPricingFromQuote(this)',attrs:'data-rfqid="'+escapeHtml(q.rfqId||'')+'"'}:{label:'Pricing',state:'muted'},
+    {label:'Quotation',text:q.qno,state:'current'},
+    linkedSO?{label:'Sales order',text:linkedSO.soNo,onclick:'openSalesOrderDocument(this.dataset.soid)',attrs:'data-soid="'+escapeHtml(linkedSO.id)+'"'}:{label:'Sales order',state:'muted'}
+  ]);
+  const activityRows=bcActivityList([
+    ['Created',q.created||q.date],
+    qRevision>0?['Revision '+qRevision,q.updated||q.date]:null,
+    ['Current status: '+status,q.updated||q.date],
+    linkedSO?['Converted to '+linkedSO.soNo,linkedSO.created||linkedSO.date]:null
+  ]);
+  const qvValidDays=(()=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(vu||'');if(!m)return null;const t=new Date();return Math.round((new Date(+m[1],+m[2]-1,+m[3])-new Date(t.getFullYear(),t.getMonth(),t.getDate()))/86400000);})();
+  const qvValidity=qvValidDays===null?'—':qvValidDays<0?'Expired':qvValidDays===0?'Today':qvValidDays+' day'+(qvValidDays===1?'':'s');
+  const qvKpis=bcKpiGrid([
+    {label:'Estimated cost',value:hPricing?formatNumber(pricingCost,2):'—',tone:hPricing?'':'muted'},
+    {label:'Gross profit',value:grossProfit!==null?formatNumber(grossProfit,2):'—',tone:grossProfit===null?'muted':(grossProfit<0?'red':'green')},
+    {label:'Margin',value:margin,tone:hPricing?'':'muted'},
+    {label:'Valid for',value:qvValidity,tone:qvValidDays!==null&&qvValidDays<0?'red':''}
+  ]);
 
   document.getElementById('view-body').innerHTML=`
     <div class="qv-document-workspace">
@@ -5630,16 +5638,13 @@ function viewQuotation(id, skipVatCheck=false) {
         </article>
       </main>
       <aside class="qv-erp-panel">
-        <section class="qv-side-card qv-internal-card"><div class="qv-side-head"><span><i class="ti ti-lock"></i>Internal information</span><span class="qv-screen-only">Staff only</span></div><div class="qv-side-body">
+        <section class="qv-side-card qv-internal-card"><div class="qv-side-head"><span><i class="ti ti-lock"></i>Internal information</span><span class="qv-screen-only">Staff only</span></div>${qvKpis}<div class="bc-kpi-rows">
           <div class="qv-side-row"><span>Pricing reference</span><strong>${hPricing?escapeHtml(lRFQ.pricingNo||lRFQ.rfqNo||'Linked'):'—'}</strong></div>
-          <div class="qv-side-row"><span>Estimated cost</span><strong>${hPricing?qvSummaryMoney(pricingCost):'—'}</strong></div>
-          <div class="qv-side-row"><span>Gross profit</span><strong>${grossProfit!==null?qvSummaryMoney(grossProfit):'—'}</strong></div>
-          <div class="qv-side-row"><span>Margin</span><strong>${margin}</strong></div>
           <div class="qv-side-row"><span>Revision</span><strong>${qRevision||'Original'}</strong></div>
-          <div class="qv-internal-note"><span>Internal note</span><p>${internal}</p></div>
-        </div></section>
-        <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ti-route"></i>Document flow</span></div><div class="qv-side-body qv-doc-flow">${flowHtml}</div></section>
-        <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ti-history"></i>Document activity</span></div><div class="qv-side-body qv-activity">${activityRows}</div></section>
+          </div><div class="qv-side-body" style="padding-top:0"><div class="qv-internal-note"><span>Internal note</span><p>${internal}</p></div></div>
+        </section>
+        <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ti-route"></i>Document flow</span></div>${flowHtml}</section>
+        <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ti-history"></i>Activity</span></div>${activityRows}</section>
       </aside>
     </div>`;
 
@@ -14044,7 +14049,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1 · registers 1 · date filter A)');
+console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1 · registers 1 · date filter A · compact views 1)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS
