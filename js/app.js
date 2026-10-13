@@ -465,6 +465,8 @@ async function loadData() {
           if (getActivePage()==='deliverynotes' && typeof renderDNPage==='function') {
             renderDNPage();
           }
+          // V265.6: keep the Deliveries screen (and its sidebar count) live as well
+          if (typeof bcDeliveriesRefresh==='function') bcDeliveriesRefresh();
 
           // If the office currently has this exact DN View open, refresh it after a
           // remote confirmation so the status/details change without browser refresh.
@@ -497,6 +499,7 @@ async function loadData() {
               renderDashboard();
             }, 'Delivery Notes');
             if (getActivePage()==='deliverynotes' && typeof renderDNPage==='function') renderDNPage();
+            if (typeof bcDeliveriesRefresh==='function') bcDeliveriesRefresh(); // V265.6: Deliveries screen stays live
             if (dnEvents.length && typeof refreshOpenDNViewFromRealtime==='function') refreshOpenDNViewFromRealtime(dnEvents);
             if (dnEvents.length && typeof handleRemoteDNEvents==='function') handleRemoteDNEvents(dnEvents);
             if (typeof openDNFromDeepLink === 'function') setTimeout(openDNFromDeepLink, 0);
@@ -10964,9 +10967,9 @@ async function _saveDeliveryAcceptanceCore(operationId){
  const m=document.getElementById('dn-confirm-modal'),so=salesOrders.find(x=>x.id===m?._soId),d=dnForModal(m);if(!d)return null;
  if(d.voided){showDNActionMessage('This Delivery Note has been voided.','error');return null;}
  const mode=m._acceptanceMode||'confirm';if(d.customerConfirmed&&mode==='confirm'){showToast('This delivery is already confirmed','info','Already Confirmed');return d}
- const changeReason=mode==='confirm'?'':(document.getElementById('dn-change-reason')?.value.trim()||'');if(mode!=='confirm'&&!changeReason){document.getElementById('dn-change-reason')?.focus();showDNActionMessage('Please enter the reason for this '+mode+'.','error');return null}
- const receivedBy=document.getElementById('dn-received-by').value.trim();if(!receivedBy){const el=document.getElementById('dn-received-by');el?.focus();el?.scrollIntoView({behavior:'smooth',block:'center'});showDNActionMessage('Received By is required.','error');return null}
- const liveCheck=validateAllDNLines({requireReason:true});if(!liveCheck.ok){const bad=document.getElementById('dn-card-'+liveCheck.first);bad?.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>document.querySelector(`#dn-card-${liveCheck.first} input.invalid, #dn-card-${liveCheck.first} select`)?.focus(),250);showDNActionMessage('Please correct the highlighted delivery quantities before confirming.','error');return null}
+ const changeReason=mode==='confirm'?'':(document.getElementById('dn-change-reason')?.value.trim()||'');if(mode!=='confirm'&&!changeReason){showValidationDialog('Reason required','Please enter the reason for this '+mode+'.','dn-change-reason','Enter the reason');return null}
+ const receivedBy=document.getElementById('dn-received-by').value.trim();if(!receivedBy){showValidationDialog('Received by required','Enter the name of the customer representative who received the goods.','dn-received-by','Enter the name');return null}
+ const liveCheck=validateAllDNLines({requireReason:true});if(!liveCheck.ok){const i=liveCheck.first,needReason=!document.getElementById('dn-error-'+i)?.textContent.includes('Accepted');const fid=document.querySelector(`#dn-card-${i} input.invalid`)?.id||(needReason?'dn-reason-'+i:'dn-acc-'+i);showValidationDialog('Check line '+(i+1),document.getElementById('dn-error-'+i)?.textContent||'Please correct the highlighted quantities.',fid,needReason?'Select a reason':'Check the quantities');return null}
  // Validate first; do not mutate the persisted model until every line passes.
  const lineUpdates=[];
  for(let i=0;i<d.items.length;i++){const it=d.items[i],qty=Number(it.qty)||0,a=roundQtyForUom(document.getElementById('dn-acc-'+i).value,it.uom),r=roundQtyForUom(document.getElementById('dn-rej-'+i).value,it.uom);if(Math.abs((a+r)-qty)>0.001){showDNActionMessage(`Line ${i+1}: Accepted + Rejected must equal delivery quantity`,'error');return null}const reason=document.getElementById('dn-reason-'+i)?.value||'';if(r>0&&!reason){showDNActionMessage(`Line ${i+1}: Select a rejection reason`,'error');return null}lineUpdates.push({a,r,reason,disposition:r>0?(document.getElementById('dn-disposition-'+i)?.value||''):'',remarks:document.getElementById('dn-line-remarks-'+i)?.value.trim()||''})}
@@ -11036,7 +11039,12 @@ async function _saveDeliveryAcceptanceCore(operationId){
 async function saveDeliveryAcceptance(){
  const m=document.getElementById('dn-confirm-modal');if(!m)return null;
  const so=salesOrders.find(x=>x.id===m._soId),d=dnForModal(m);if(!d)return null;
- const mode=m._acceptanceMode||'confirm';const operationId=m._confirmOperationId||(m._confirmOperationId=newDeliveryOperationId(mode,d.id));
+ const mode=m._acceptanceMode||'confirm';
+ // V265.6: check the form BEFORE the busy overlay, so a missing name shows the standard message without the screen flashing.
+ if(mode!=='confirm'&&!document.getElementById('dn-change-reason')?.value.trim()){showValidationDialog('Reason required','Please enter the reason for this '+mode+'.','dn-change-reason','Enter the reason');return null}
+ if(!document.getElementById('dn-received-by')?.value.trim()){showValidationDialog('Received by required','Enter the name of the customer representative who received the goods.','dn-received-by','Enter the name');return null}
+ const pre=validateAllDNLines({requireReason:true});if(!pre.ok){const i=pre.first,msg=document.getElementById('dn-error-'+i)?.textContent||'',isQty=/Accepted|negative/.test(msg);showValidationDialog('Check line '+(i+1),msg||'Please correct the highlighted quantities.',isQty?'dn-acc-'+i:'dn-reason-'+i,isQty?'Check the quantities':'Select a reason');return null}
+ const operationId=m._confirmOperationId||(m._confirmOperationId=newDeliveryOperationId(mode,d.id));
  return runProtectedDocumentSave({
    key:'deliveryConfirm:'+operationId,
    message:mode==='confirm'?'Confirming Delivery…':(mode==='correction'?'Saving Correction…':'Saving Revision…'),buttonId:'dn-confirm-save-btn',buttonTextId:'dn-confirm-save-btn-text',busyText:'Confirming Delivery…',
@@ -14198,7 +14206,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1 · registers 1 · date filter A · compact views 1 · delivered by 1 · confirm open 1 · deliveries 1)');
+console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1 · registers 1 · date filter A · compact views 1 · delivered by 1 · confirm open 1 · deliveries 2)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS

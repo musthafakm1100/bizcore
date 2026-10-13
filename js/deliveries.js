@@ -84,8 +84,10 @@
       return;
     }
     const t = todayIso(), earlier = list.filter(x => String(x.d.date || '') < t), today = list.filter(x => String(x.d.date || '') >= t);
-    box.innerHTML = (earlier.length ? `<div class="dl-grp">Earlier</div><div class="dl-grid">${earlier.map(card).join('')}</div>` : '')
-      + (today.length ? `<div class="dl-grp">Today</div><div class="dl-grid">${today.map(card).join('')}</div>` : '');
+    // V265.6 (Design 1): each group in its own box — coloured top line, count, same cards as the phone
+    const group = (cls, title, hint, rows) => `<section class="dl-panel ${cls}" aria-label="${title}"><div class="dl-panel-head"><span class="dl-dot" aria-hidden="true"></span><span class="dl-panel-title">${title}</span><span class="dl-cnt">${rows.length}</span>${hint ? `<span class="dl-panel-hint">${hint}</span>` : ''}</div><div class="dl-grid">${rows.map(card).join('')}</div></section>`;
+    box.innerHTML = (earlier.length ? group('late', 'Earlier', 'out more than a day', earlier) : '')
+      + (today.length ? group('today', 'Today', '', today) : '');
   }
 
   function find(soId, dnId) {
@@ -95,6 +97,11 @@
   }
 
   window.renderDeliveriesPage = render;
+  /** V265.6 — called by the real-time listeners: a DN confirmed on another device disappears here at once. */
+  window.bcDeliveriesRefresh = () => {
+    try { if (document.getElementById('page-deliveries')?.classList.contains('active')) render(); else updateBadge(); }
+    catch (e) { console.error('[BizCore Deliveries]', e); }
+  };
   window.bcDeliveriesScope = s => { scope = s === 'mine' ? 'mine' : 'all'; lsSet(LS_SCOPE, scope); render(); };
   window.bcDeliveriesSearch = v => { query = String(v || ''); render(); };
   window.bcDeliveriesView = (soId, dnId) => { const h = find(soId, dnId); if (!h) { showToast('This Delivery Note is no longer available.', 'warning'); render(); return; } viewDeliveryNote(h.so.id, h.i); };
@@ -109,11 +116,12 @@
     if (!document.getElementById('page-deliveries')?.classList.contains('active')) showPage('deliveries'); else render();
   };
 
-  /* ── QR scan: the QR printed on a DN is …?delivery=<token> (older prints: …?dn=<id>). A typed DN number also works. ── */
+  /* ── QR scan: the QR printed on a DN is …/delivery.html?t=<token> (also accepted: ?delivery=<token>, older ?dn=<id>).
+        A typed DN number works too. ── */
   window.bcDeliveriesOpenFromCode = function (text) {
     const raw = String(text || '').trim(); if (!raw) return false;
     let token = null, legacyId = null;
-    try { const u = new URL(raw); token = u.searchParams.get('delivery'); legacyId = u.searchParams.get('dn'); } catch (e) { /* not a URL */ }
+    try { const u = new URL(raw); token = u.searchParams.get('t') || u.searchParams.get('delivery'); legacyId = u.searchParams.get('dn'); } catch (e) { /* not a URL */ }
     const rows = typeof allDeliveryNotes === 'function' ? allDeliveryNotes() : [];
     const hit = rows.find(x => (token && x.d.deliveryAccessToken === token) || (legacyId && x.d.id === legacyId) || (!token && !legacyId && String(x.d.dnNo || '').toLowerCase() === raw.toLowerCase()));
     if (!hit) { showToast('No Delivery Note found for this code.', 'warning', 'Not found'); return false; }
@@ -178,7 +186,7 @@
   if (typeof origShowPage === 'function') {
     window.showPage = function (page, el) {
       const r = origShowPage.apply(this, arguments);
-      if (page === 'deliveries') { const t = document.getElementById('page-title'); if (t) t.textContent = 'Deliveries'; render(); }
+      if (page === 'deliveries') { const t = document.getElementById('page-title'); if (t) t.textContent = 'Deliveries'; syncStartBox(); render(); }
       return r;
     };
   }
@@ -190,8 +198,13 @@
       return r;
     };
   }
+  /* V265.6 — "Open Deliveries when BizCore starts on this device" (per device, stored in the browser). */
+  const LS_START = 'bc_start_page';
+  window.bcDeliveriesSetStart = on => { lsSet(LS_START, on ? 'deliveries' : ''); showToast(on ? 'This device will open on Deliveries.' : 'This device will open on the Dashboard.', 'success'); };
+  function syncStartBox() { const b = document.getElementById('dl-start-here'); if (b) b.checked = lsGet(LS_START) === 'deliveries'; }
   function openFromHash() {
-    if (location.hash !== '#deliveries') return;
+    if (location.hash !== '#deliveries' && lsGet(LS_START) !== 'deliveries') return;
+    if (window.__bcStartHandled) return; window.__bcStartHandled = true;
     let tries = 0;
     const t = setInterval(() => {
       tries++;
@@ -199,7 +212,7 @@
       else if (tries > 60) clearInterval(t);
     }, 250);
   }
-  window.addEventListener('hashchange', openFromHash);
+  window.addEventListener('hashchange', () => { if (location.hash === '#deliveries') { window.__bcStartHandled = false; openFromHash(); } });
   openFromHash();
   setTimeout(() => { try { updateBadge(); } catch (e) { /* data not loaded yet */ } }, 0);
 })();

@@ -23,7 +23,7 @@
 <link href="css/invoicing.css?v=264.7" rel="stylesheet"/>
 <link href="css/register-standard.css?v=265.1" rel="stylesheet"/>
 <link href="css/doc-view.css?v=265.2" rel="stylesheet"/>
-<link href="css/delivery-compact.css?v=265.5" rel="stylesheet"/>
+<link href="css/delivery-compact.css?v=265.6" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=265.2" defer></script>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
@@ -519,7 +519,7 @@ document.addEventListener('error', function(e) {
 <!-- V265.5 DELIVERIES (delivery staff: out for delivery → confirm) -->
 <div class="page" id="page-deliveries">
   <div class="dl-page">
-    <div class="dl-head"><h2>Deliveries</h2><span>Delivery notes out for delivery — confirm when the customer receives them.</span></div>
+    <div class="dl-headrow"><div class="dl-head"><h2>Deliveries</h2><span>Delivery notes out for delivery — confirm when the customer receives them.</span></div><label class="dl-start"><input type="checkbox" id="dl-start-here" onchange="bcDeliveriesSetStart(this.checked)"/> Open Deliveries when BizCore starts on this device</label></div>
     <div class="dl-tools">
       <input id="dl-search" class="dl-search" type="search" placeholder="DN, customer or SO…" oninput="bcDeliveriesSearch(this.value)" aria-label="Search deliveries" autocomplete="off"/>
       <div class="dl-seg" role="group" aria-label="Show"><button type="button" data-dl-scope="mine" onclick="bcDeliveriesScope('mine')">Mine <b id="dl-count-mine">0</b></button><button type="button" data-dl-scope="all" onclick="bcDeliveriesScope('all')">All <b id="dl-count-all">0</b></button></div>
@@ -2807,7 +2807,7 @@ window.fbAuthInstance = auth;
 
 /* ── Auth guard ── */
 onAuthStateChanged(auth, user => {
-  if (!user) { const target=location.pathname.split('/').pop()+(location.search||''); window.location.href='login.html?return='+encodeURIComponent(target); return; }
+  if (!user) { const target=(location.pathname.split('/').pop()||'index.html')+(location.search||'')+(location.hash||''); /* V265.6: keep #deliveries through sign-in */ window.location.href='login.html?return='+encodeURIComponent(target); return; }
 
   startDeliveryNoteModeListener();
   startLockingListeners();
@@ -2916,9 +2916,9 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=265.5';
+      s.src = 'js/app.js?v=265.6';
       // V265.5: the Deliveries screen builds on app.js
-      s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.5'; document.body.appendChild(d); };
+      s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.6'; document.body.appendChild(d); };
       document.body.appendChild(s);
     };
     inv.onload = start;
