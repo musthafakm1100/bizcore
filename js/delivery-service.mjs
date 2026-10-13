@@ -19,10 +19,10 @@ import {
   COLLECTIONS, SCHEMA_VERSION, LIMITS, ERR, DeliveryError,
   isSafeId, dnIdForOperation, eventIdForOperation, soLineIndex, emptyLedger, applyLedgerDeltas,
   ledgerDeltasBetween, buildDNItem, validateDispatchLines, validateAcceptanceLines, requireReason,
-  requireDate, cleanText, assertSize, dnStatus, dispatchSnapshot, acceptanceSnapshot, roundQty,
+  requireDate, cleanText, cleanDeliveredBy, assertSize, dnStatus, dispatchSnapshot, acceptanceSnapshot, roundQty,
   invoicedQtyByLine,
-} from './delivery-core.mjs?v=264.7';
-import { LOCK_COLLECTION, LOCK_TYPES, lockId, lockHeldBy } from './lock-service.mjs?v=264.7';
+} from './delivery-core.mjs?v=265.3';
+import { LOCK_COLLECTION, LOCK_TYPES, lockId, lockHeldBy } from './lock-service.mjs?v=265.3';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
 const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, details); };
@@ -119,6 +119,7 @@ export function createDeliveryService(fs, options = {}) {
     const eventId = eventIdForOperation('dispatch', operationId);
     const date = requireDate(input.date);
     const vehicle = cleanText(input.vehicle, 200), remarks = cleanText(input.remarks, 1000);
+    const deliveredBy = cleanDeliveredBy(input.deliveredBy);
     const accessToken = input.accessToken == null ? null : String(input.accessToken);
     ensure(accessToken === null || /^[a-f0-9]{48}$/.test(accessToken), ERR.INVALID_INPUT, 'Invalid delivery access token');
     const actor = actorOf(), at = now();
@@ -146,6 +147,7 @@ export function createDeliveryService(fs, options = {}) {
       const dn = {
         id: dnId, schemaVersion: SCHEMA_VERSION, dnNo, salesOrderId, soNo: so.soNo || '', customer: so.customer || '', custId: so.custId || '',
         poNo: so.poNo || '', date, vehicle, remarks, status: 'Out for Delivery', items,
+        ...(deliveredBy || {}),
         voided: false, customerConfirmed: false,
         deliveryAccessToken: accessToken, deliveryAccessCreatedAt: accessToken ? at : null,
         creationOperationId: operationId, created: at, createdBy: actor.name, createdByUid: actor.uid,
@@ -263,7 +265,7 @@ export function createDeliveryService(fs, options = {}) {
           const ref = lineIndex.get(l.lineId); return buildDNItem(ref.line, ref.index, l.qty);
         }).sort((a, b) => a.soIdx - b.soIdx);
         return {
-          next: { ...old, date, vehicle: cleanText(input.vehicle, 200), remarks: cleanText(input.remarks, 1000), items, lastDispatchCorrectionAt: at, lastDispatchCorrectionBy: actor.name },
+          next: { ...old, date, vehicle: cleanText(input.vehicle, 200), remarks: cleanText(input.remarks, 1000), ...(cleanDeliveredBy(input.deliveredBy) || {}), items, lastDispatchCorrectionAt: at, lastDispatchCorrectionBy: actor.name },
           kind: 'correct', type: 'correct', label: 'Dispatch corrected', reason, before: dispatchSnapshot(old), after: dispatchSnapshot,
         };
       },

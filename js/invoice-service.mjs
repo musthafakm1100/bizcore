@@ -16,11 +16,11 @@ import {
   invoiceIdForOperation, creditNoteIdForOperation, effectiveBillingSettings, permitted, permissionFor,
   priceGoodsLines, deductionLimits, checkDeduction, allocateDeduction, priceAdvance, applyInvoiceToLedger, buildCreditNote, r2,
   zohoNoKey,
-} from './invoice-core.mjs?v=264.7';
+} from './invoice-core.mjs?v=265.3';
 import {
   COLLECTIONS, SCHEMA_VERSION, DeliveryError, isSafeId, eventIdForOperation, emptyLedger, requireDate, requireReason, cleanText, assertSize,
-} from './delivery-core.mjs?v=264.7';
-import { LOCK_COLLECTION, LOCK_TYPES, lockId, lockHeldBy } from './lock-service.mjs?v=264.7';
+} from './delivery-core.mjs?v=265.3';
+import { LOCK_COLLECTION, LOCK_TYPES, lockId, lockHeldBy } from './lock-service.mjs?v=265.3';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
 const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, details); };

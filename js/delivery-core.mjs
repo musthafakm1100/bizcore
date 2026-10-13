@@ -141,6 +141,17 @@ export function parseQty(v, label, { allowZero = true } = {}) {
 }
 const cleanText = (v, max = LIMITS.textMax) => String(v ?? '').trim().slice(0, max);
 
+/** V265.3 "Delivered by": { name, type: 'staff' | 'other', employeeId } → flat DN fields, or null when not given.
+ *  The type is for staff screens only; documents for the customer print the name alone. */
+export function cleanDeliveredBy(v) {
+  if (v == null || typeof v !== 'object') return null;
+  const name = cleanText(v.name, 120);
+  if (!name) return null;
+  const type = v.type === 'other' ? 'other' : 'staff';
+  const employeeId = type === 'staff' && isSafeId(v.employeeId) ? String(v.employeeId).slice(0, 120) : '';
+  return { deliveredBy: name, deliveredByType: type, deliveredByEmployeeId: employeeId };
+}
+
 /* ───────────────────────── ledger ───────────────────────── */
 
 /** Ledger line: inTransit = dispatched but not yet accepted/rejected/voided,
@@ -210,6 +221,7 @@ export function dnStatus(dn) {
 export function dispatchSnapshot(dn) {
   return {
     date: dn.date || '', vehicle: dn.vehicle || '', remarks: dn.remarks || '',
+    deliveredBy: dn.deliveredBy || '', deliveredByType: dn.deliveredByType || '',
     items: (dn.items || []).map(it => ({ soLineId: it.soLineId, code: it.code || '', desc: it.desc || '', uom: it.uom || '', qty: Number(it.qty) || 0 })),
   };
 }
