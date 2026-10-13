@@ -23,6 +23,7 @@
 <link href="css/invoicing.css?v=264.7" rel="stylesheet"/>
 <link href="css/register-standard.css?v=265.1" rel="stylesheet"/>
 <link href="css/doc-view.css?v=265.2" rel="stylesheet"/>
+<link href="css/delivery-compact.css?v=265.3" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=265.2" defer></script>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
@@ -528,8 +529,7 @@ document.addEventListener('error', function(e) {
       <div class="dn-overview-body module-monitor-body">
         <button type="button" class="dn-overview-total dn-kpi active" data-dn-kpi="all" onclick="filterDNKPI('all',this)"><span>Total DNs</span><strong id="dn-k-total">0</strong></button>
         <div class="dn-overview-section-label">Status</div>
-        <button type="button" class="dn-overview-row dn-kpi" data-dn-kpi="Awaiting Delivery" onclick="filterDNKPI('Awaiting Delivery',this)"><span><i class="dn-dot dn-dot-awaiting-delivery"></i>Awaiting Delivery</span><strong id="dn-k-awaiting">0</strong></button>
-        <button type="button" class="dn-overview-row dn-kpi" data-dn-kpi="Out for Delivery" onclick="filterDNKPI('Out for Delivery',this)"><span><i class="dn-dot dn-dot-awaiting-confirmation"></i>Awaiting Confirmation</span><strong id="dn-k-out">0</strong></button>
+                <button type="button" class="dn-overview-row dn-kpi" data-dn-kpi="Out for Delivery" onclick="filterDNKPI('Out for Delivery',this)"><span><i class="dn-dot dn-dot-awaiting-confirmation"></i>Out for Delivery</span><strong id="dn-k-out">0</strong></button>
         <button type="button" class="dn-overview-row dn-kpi" data-dn-kpi="Delivered" onclick="filterDNKPI('Delivered',this)"><span><i class="dn-dot dn-dot-delivered"></i>Delivered</span><strong id="dn-k-delivered">0</strong></button>
         <button type="button" class="dn-overview-row dn-kpi" data-dn-kpi="Partially Accepted" onclick="filterDNKPI('Partially Accepted',this)"><span><i class="dn-dot dn-dot-partial"></i>Partially Accepted</span><strong id="dn-k-partial">0</strong></button>
         <button type="button" class="dn-overview-row dn-kpi" data-dn-kpi="Rejected" onclick="filterDNKPI('Rejected',this)"><span><i class="dn-dot dn-dot-rejected"></i>Rejected</span><strong id="dn-k-rejected">0</strong></button>
@@ -543,7 +543,7 @@ document.addEventListener('error', function(e) {
         <div class="dn-toolbar-left bc-filterbar-left"><select id="dn-sort" class="bc-filter bc-filter-sort" onchange="renderDNPage()" aria-label="Sort Delivery Notes"><option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option><option value="dn-asc">DN No. A–Z</option><option value="customer-asc">Customer A–Z</option><option value="updated-desc">Recently Updated</option></select><span id="dn-register-count" class="so-toolbar-count bc-filter-count"></span></div>
         <div class="dn-toolbar-right bc-filterbar-right">
 <select id="dn-customer-filter" class="bc-filter bc-filter-customer" onchange="renderDNPage()" aria-label="Filter Delivery Notes by customer"><option value="">All customers</option></select>
-<select id="dn-status-filter" class="bc-filter bc-filter-status" onchange="filterDNKPI(this.value||'all')" aria-label="Filter Delivery Notes by status"><option value="">All statuses</option><option value="Awaiting Delivery">Awaiting Delivery</option><option value="Out for Delivery">Awaiting Confirmation</option><option value="Delivered">Delivered</option><option value="Partially Accepted">Partially Accepted</option><option value="Rejected">Rejected</option><option value="attention">Need Attention</option></select>
+<select id="dn-status-filter" class="bc-filter bc-filter-status" onchange="filterDNKPI(this.value||'all')" aria-label="Filter Delivery Notes by status"><option value="">All statuses</option><option value="Out for Delivery">Out for Delivery</option><option value="Delivered">Delivered</option><option value="Partially Accepted">Partially Accepted</option><option value="Rejected">Rejected</option><option value="attention">Need Attention</option></select>
 <div class="bc-date" data-bc-date="dn" data-bc-date-title="Delivery Note date"></div>
 <input id="dn-search" class="bc-filter bc-filter-search" type="text" oninput="renderDNPage()" placeholder="Search DN, SO, customer or PO…" aria-label="Search Delivery Notes"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="dn-clear-filters-btn" onclick="clearAllDNFilters()" type="button" title="Clear all Delivery Note filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
@@ -1814,21 +1814,21 @@ document.addEventListener('error', function(e) {
 <div class="modal-body">
 <div class="quote-info-panel" style="margin-bottom:14px"><div class="section-title" style="margin-top:0"><i class="ti ti-truck-delivery"></i> Delivery Details</div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
 <div class="form-group"><label>Delivery Note No.</label><input id="dn-no" readonly class="so-readonly"/></div><div class="form-group"><label>DN Date *</label><input id="dn-date" type="date"/></div>
-<div class="form-group"><label>Vehicle / AWB No.</label><input id="dn-vehicle" placeholder="Vehicle plate or tracking no."/></div><div class="form-group"><label>Customer PO</label><input id="dn-po" readonly class="so-readonly"/></div><div class="form-group"><label>Sales Order</label><input id="dn-so-ref" readonly class="so-readonly"/></div></div></div>
+<div class="form-group"><label>Vehicle / AWB No.</label><input id="dn-vehicle" placeholder="Vehicle plate or tracking no."/></div><div class="form-group"><label>Customer PO</label><input id="dn-po" readonly class="so-readonly"/></div><div class="form-group"><label>Sales Order</label><input id="dn-so-ref" readonly class="so-readonly"/></div><div class="form-group dn-delivered-by-field"><label for="dn-delivered-by">Delivered by *</label><div class="dn-delivered-by-row"><select id="dn-delivered-by" onchange="dnDeliveredByChanged('dn')" aria-label="Delivered by"></select><input id="dn-delivered-by-other" class="dn-delivered-by-other" placeholder="Name" maxlength="120" aria-label="Name of the person delivering" hidden/></div></div></div></div>
 <div class="section-title"><i class="ti ti-package"></i> Delivery Items</div><p style="font-size:12px;color:var(--gray);margin:-6px 0 10px">Enter the quantity being dispatched. Completed quantities cannot be dispatched again.</p>
 <div class="table-wrap"><table><thead><tr><th style="width:42px">#</th><th>Description</th><th class="center">Ordered</th><th class="center">Previously Accepted</th><th class="center">This Delivery</th><th class="center">Remaining After</th><th class="center">UOM</th></tr></thead><tbody id="dn-items-list"></tbody></table></div>
 <div class="form-group" style="margin-top:14px"><label>Delivery / Dispatch Remarks</label><textarea id="dn-remarks" placeholder="Delivery instructions or dispatch remarks…" style="height:58px"></textarea></div>
 </div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('so-delivery-modal')">Cancel</button><button class="btn btn-success" id="dn-dispatch-save-btn" onclick="saveDelivery()"><i class="ti ti-truck"></i><span id="dn-dispatch-save-btn-text">Save &amp; Dispatch</span></button></div></div></div>
 
 <!-- MOBILE-FIRST DELIVERY CONFIRMATION -->
-<div class="modal-overlay" id="dn-confirm-modal"><div class="modal modal-normal dn-mobile-confirm">
-<div class="modal-header dn-confirm-header"><div class="dn-confirm-heading"><button class="dn-back-btn" type="button" onclick="closeModal('dn-confirm-modal')"><i class="ti ti-arrow-left"></i><span>Back</span></button><div><h2 id="dn-confirm-title">Delivery Confirmation</h2><div id="dn-confirm-sub" class="dn-confirm-sub"></div></div></div><button class="close-btn" onclick="closeModal('dn-confirm-modal')">✕</button></div>
+<div class="modal-overlay" id="dn-confirm-modal"><div class="modal modal-normal dn-mobile-confirm dn-compact-confirm">
+<div class="modal-header dn-confirm-header"><div class="dn-confirm-heading"><div><h2 id="dn-confirm-title">Confirm Delivery</h2><div id="dn-confirm-sub" class="dn-confirm-sub"></div></div></div><button class="close-btn" onclick="closeModal('dn-confirm-modal')" aria-label="Close">✕</button></div>
+<div class="dn-confirm-bar"><div id="dn-confirm-summary" class="dn-confirm-summary"></div><button type="button" class="dn-accept-all" id="dn-accept-all" onclick="dnAcceptAll()"><i class="ti ti-checks"></i> Accept all</button></div>
 <div class="modal-body dn-confirm-body">
-<div class="dn-auth-banner"><div class="dn-auth-icon"><i class="ti ti-shield-check"></i></div><div><strong>Authenticated delivery update</strong><span id="dn-auth-user">Signed in user</span></div><span class="dn-secure-pill"><i class="ti ti-lock"></i> Secure</span></div>
-<div class="dn-confirm-intro"><div><strong>Confirm customer acceptance</strong><span>Rejected quantities automatically return to the Sales Order remaining quantity.</span></div><div id="dn-confirm-summary" class="dn-confirm-summary"></div></div>
+<div id="dn-edit-slot"></div>
 <div id="dn-confirm-items" class="dn-confirm-items"></div>
-<section class="dn-receiver-card"><div class="dn-section-title"><span class="dn-section-icon"><i class="ti ti-user-check"></i></span><div><strong>Customer Receipt</strong><span>Record who accepted this delivery.</span></div></div><div class="dn-receiver-grid"><div class="form-group"><label>Received By <em>*</em></label><input id="dn-received-by" autocomplete="name" placeholder="Customer representative name"/></div><div class="form-group"><label>Customer / Delivery Remarks</label><textarea id="dn-customer-remarks" rows="2" placeholder="Add remarks if required…"></textarea></div></div></section>
-</div><div class="modal-footer dn-confirm-footer"><div class="dn-footer-note"><i class="ti ti-info-circle"></i><span>Review quantities before confirming.</span></div><div class="dn-footer-actions"><button class="btn btn-secondary" onclick="closeModal('dn-confirm-modal')">Cancel</button><button class="btn btn-success dn-confirm-primary" id="dn-confirm-save-btn" onclick="saveDeliveryAcceptance()"><i class="ti ti-circle-check"></i><span id="dn-confirm-save-btn-text">Confirm Delivery</span></button></div></div></div></div>
+<div class="dn-receiver-grid"><div class="form-group"><label for="dn-received-by">Received by <em>*</em></label><input id="dn-received-by" autocomplete="name" placeholder="Customer representative name"/></div><div class="form-group"><label for="dn-customer-remarks">Remarks</label><textarea id="dn-customer-remarks" rows="1" placeholder="Optional"></textarea></div></div>
+</div><div class="modal-footer dn-confirm-footer"><div class="dn-footer-note"><i class="ti ti-lock"></i><span id="dn-auth-user">Signed in</span></div><div class="dn-footer-actions"><button class="btn btn-secondary" onclick="closeModal('dn-confirm-modal')">Cancel</button><button class="btn btn-success dn-confirm-primary" id="dn-confirm-save-btn" onclick="saveDeliveryAcceptance()"><i class="ti ti-circle-check"></i><span id="dn-confirm-save-btn-text">Confirm Delivery</span></button></div></div></div></div>
 <!-- CREATE INVOICE MODAL -->
 <div class="modal-overlay" id="so-invoice-modal">
 <div class="modal inv-create-modal">
@@ -1910,7 +1910,7 @@ document.addEventListener('error', function(e) {
 </div>
 </div>
 <!-- DISPATCH CORRECTION / VOID MODALS -->
-<div class="modal-overlay" id="dn-dispatch-action-modal"><div class="modal modal-normal dn-dispatch-dialog"><div class="modal-header"><h2 id="dn-dispatch-action-title">Correct Dispatch</h2><button class="close-btn" onclick="closeModal('dn-dispatch-action-modal')" aria-label="Close">✕</button></div><div class="modal-body dn-dispatch-body"><p class="dn-dispatch-info"><i class="ti ti-info-circle"></i> Available only before customer acceptance. Original dispatch details are retained in the audit history.</p><div id="dn-dispatch-action-editor"><div class="dn-dispatch-fields"><div class="dn-dispatch-field"><label for="dn-dispatch-edit-date">Dispatch Date</label><input type="date" id="dn-dispatch-edit-date"></div><div class="dn-dispatch-field"><label for="dn-dispatch-edit-vehicle">Vehicle / AWB</label><input id="dn-dispatch-edit-vehicle" placeholder="Optional reference"></div></div><div class="dn-dispatch-field"><label for="dn-dispatch-edit-remarks">Remarks</label><textarea id="dn-dispatch-edit-remarks" rows="2" placeholder="Optional dispatch remarks"></textarea></div><div class="dn-dispatch-section-title">Dispatch Items <span>Update quantities against the Sales Order</span></div><div class="dn-dispatch-table-wrap"><table class="table dn-dispatch-table"><thead><tr><th>Sales Order Item</th><th>Available</th><th>Dispatch Qty</th></tr></thead><tbody id="dn-dispatch-edit-lines"></tbody></table></div></div><div class="dn-dispatch-field dn-dispatch-reason-field form-group"><label for="dn-dispatch-action-reason">Reason for correction / void <span class="dn-required">*</span></label><textarea id="dn-dispatch-action-reason" rows="3" placeholder="Explain why this dispatch must be changed"></textarea></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('dn-dispatch-action-modal')">Cancel</button><button class="btn btn-primary" onclick="saveDNDispatchAction()">Confirm &amp; Save</button></div></div></div>
+<div class="modal-overlay" id="dn-dispatch-action-modal"><div class="modal modal-normal dn-dispatch-dialog"><div class="modal-header"><h2 id="dn-dispatch-action-title">Correct Dispatch</h2><button class="close-btn" onclick="closeModal('dn-dispatch-action-modal')" aria-label="Close">✕</button></div><div class="modal-body dn-dispatch-body"><p class="dn-dispatch-info"><i class="ti ti-info-circle"></i> Available only before customer acceptance. Original dispatch details are retained in the audit history.</p><div id="dn-dispatch-action-editor"><div class="dn-dispatch-fields"><div class="dn-dispatch-field"><label for="dn-dispatch-edit-date">Dispatch Date</label><input type="date" id="dn-dispatch-edit-date"></div><div class="dn-dispatch-field"><label for="dn-dispatch-edit-vehicle">Vehicle / AWB</label><input id="dn-dispatch-edit-vehicle" placeholder="Optional reference"></div></div><div class="dn-dispatch-field dn-delivered-by-field"><label for="dn-dispatch-delivered-by">Delivered by</label><div class="dn-delivered-by-row"><select id="dn-dispatch-delivered-by" onchange="dnDeliveredByChanged('dn-dispatch')" aria-label="Delivered by"></select><input id="dn-dispatch-delivered-by-other" class="dn-delivered-by-other" placeholder="Name" maxlength="120" aria-label="Name of the person delivering" hidden/></div></div><div class="dn-dispatch-field"><label for="dn-dispatch-edit-remarks">Remarks</label><textarea id="dn-dispatch-edit-remarks" rows="2" placeholder="Optional dispatch remarks"></textarea></div><div class="dn-dispatch-section-title">Dispatch Items <span>Update quantities against the Sales Order</span></div><div class="dn-dispatch-table-wrap"><table class="table dn-dispatch-table"><thead><tr><th>Sales Order Item</th><th>Available</th><th>Dispatch Qty</th></tr></thead><tbody id="dn-dispatch-edit-lines"></tbody></table></div></div><div class="dn-dispatch-field dn-dispatch-reason-field form-group"><label for="dn-dispatch-action-reason">Reason for correction / void <span class="dn-required">*</span></label><textarea id="dn-dispatch-action-reason" rows="3" placeholder="Explain why this dispatch must be changed"></textarea></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('dn-dispatch-action-modal')">Cancel</button><button class="btn btn-primary" onclick="saveDNDispatchAction()">Confirm &amp; Save</button></div></div></div>
 <div class="modal-overlay" id="dn-dispatch-history-modal"><div class="modal modal-normal" style="max-width:740px"><div class="modal-header"><h2>Dispatch History</h2><button class="close-btn" onclick="closeModal('dn-dispatch-history-modal')">✕</button></div><div class="modal-body" id="dn-dispatch-history-body" style="padding:18px;max-height:65vh;overflow:auto"></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('dn-dispatch-history-modal')">Close</button></div></div></div>
 <!-- DELIVERY NOTE FORMAT MODAL -->
 <div class="modal-overlay dn-format-overlay" id="dn-format-modal">
@@ -2006,12 +2006,12 @@ document.addEventListener('error', function(e) {
 <div class="toast" id="toast"></div>
 <!-- Firebase: loaded as module, exposes window.FB then loads app.js -->
 <script type="module">
-import { createDeliveryService, loadDeliveryEvents } from './js/delivery-service.mjs?v=264.7';
-import * as DNCore from './js/delivery-core.mjs?v=264.7';
-import * as LockCore from './js/lock-service.mjs?v=264.7';
-import * as InvCore from './js/invoice-core.mjs?v=264.7';
-import { createInvoiceService } from './js/invoice-service.mjs?v=264.7';
-import { createNumbering } from './js/numbering.mjs?v=264.7';
+import { createDeliveryService, loadDeliveryEvents } from './js/delivery-service.mjs?v=265.3';
+import * as DNCore from './js/delivery-core.mjs?v=265.3';
+import * as LockCore from './js/lock-service.mjs?v=265.3';
+import * as InvCore from './js/invoice-core.mjs?v=265.3';
+import { createInvoiceService } from './js/invoice-service.mjs?v=265.3';
+import { createNumbering } from './js/numbering.mjs?v=265.3';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator }
@@ -2902,7 +2902,7 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=265.2';
+      s.src = 'js/app.js?v=265.3';
       document.body.appendChild(s);
     };
     inv.onload = start;

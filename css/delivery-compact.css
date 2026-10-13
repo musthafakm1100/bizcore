@@ -1,0 +1,120 @@
+/* ═══════════════════════════════════════════════════════════════════
+   BizCore V265.3 — Delivery screens (approved mockups, 13 Oct 2026)
+   • "Delivered by" picker (Create Delivery Note, Correct Dispatch)
+   • Compact Confirm Delivery / Correct Confirmation / Revise Acceptance — desktop, tablet and phone
+═══════════════════════════════════════════════════════════════════ */
+
+/* ── Delivered by ── */
+.dn-delivered-by-row { display: flex; gap: 8px; min-width: 0; }
+.dn-delivered-by-row select { flex: 1 1 auto; min-width: 0; }
+.dn-delivered-by-row.is-other select { flex: 0 0 46%; }
+.dn-delivered-by-row .dn-delivered-by-other { flex: 1 1 auto; min-width: 0; }
+.dn-delivered-by-row .dn-delivered-by-other[hidden] { display: none !important; }
+
+/* ── Confirm Delivery: window ── */
+#dn-confirm-modal .dn-compact-confirm {
+  width: min(860px, calc(100vw - 32px)) !important; max-width: 860px !important;
+  height: auto !important; max-height: calc(100dvh - 32px) !important;
+  display: flex !important; flex-direction: column !important; overflow: hidden !important; border-radius: 12px !important;
+}
+#dn-confirm-modal .dn-confirm-header { min-height: 0 !important; padding: 10px 14px !important; gap: 10px; }
+#dn-confirm-modal .dn-confirm-heading { gap: 10px; min-width: 0; }
+#dn-confirm-modal .dn-confirm-heading h2 { font-size: 15.5px !important; line-height: 1.2; }
+#dn-confirm-modal .dn-confirm-sub { font-size: 11.5px !important; margin-top: 2px !important; }
+#dn-confirm-modal .dn-confirm-edit { border-top: 4px solid #d97706; }
+
+/* summary chips + Accept all */
+#dn-confirm-modal .dn-confirm-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: #f8fafc; border-bottom: 1px solid #e7ecf2; flex: 0 0 auto; }
+#dn-confirm-modal .dn-confirm-summary { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 !important; }
+#dn-confirm-modal .dn-summary-chip { white-space: nowrap; }
+#dn-confirm-modal .dn-accept-all { margin-left: auto; border: 1px solid #cfd8e3; border-radius: 7px; background: #fff; color: #1f568c; font: inherit; font-size: 12px; font-weight: 700; padding: 5px 10px; white-space: nowrap; cursor: pointer; }
+#dn-confirm-modal .dn-accept-all:hover { background: #f1f7fd; border-color: #9db8d3; }
+#dn-confirm-modal .dn-accept-all[hidden] { display: none; }
+
+/* body */
+#dn-confirm-modal .dn-confirm-body { padding: 10px 14px 12px !important; display: flex; flex-direction: column; gap: 8px; overflow-y: auto !important; flex: 1 1 auto; min-height: 0; background: #fff !important; }
+#dn-confirm-modal .dn-confirm-items { display: flex; flex-direction: column; gap: 8px; margin: 0 !important; padding: 0 !important; }
+
+/* correction / revision reason: one box, aligned with the items */
+#dn-confirm-modal .dn-edit-mode-box { margin: 0 !important; padding: 9px 11px !important; border: 1px solid #f5d38a !important; background: #fffbeb !important; border-radius: 10px !important; display: block !important; box-shadow: none !important; }
+#dn-confirm-modal .dn-edit-mode-box.revision { border-color: #c9d9e8 !important; background: #f7fbff !important; }
+#dn-confirm-modal .dn-edit-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+#dn-confirm-modal .dn-edit-head label { display: inline !important; font-size: 12px !important; font-weight: 800 !important; color: #92400e !important; margin: 0 !important; text-transform: none !important; letter-spacing: 0 !important; }
+#dn-confirm-modal .dn-edit-mode-box.revision .dn-edit-head label { color: #1f568c; }
+#dn-confirm-modal .dn-edit-head em { display: inline !important; color: #b42318; font-style: normal; }
+#dn-confirm-modal .dn-edit-head small { font-size: 10.5px; color: #a16207; font-weight: 600; }
+#dn-confirm-modal .dn-edit-mode-box.revision .dn-edit-head small { color: #64748b; }
+#dn-confirm-modal #dn-change-reason { width: 100%; min-height: 36px; height: 36px; resize: vertical; border: 1px solid #e8cf8f; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13px; background: #fff; }
+
+/* item rows */
+#dn-confirm-modal .dn-accept-card { border: 1px solid #e3e9f0 !important; border-left-width: 1px !important; border-radius: 10px !important; padding: 9px 11px !important; margin: 0 !important; background: #fff !important; box-shadow: none !important; }
+#dn-confirm-modal .dn-accept-card.is-partial,
+#dn-confirm-modal .dn-accept-card.is-rejected { border-color: #f3c9c4 !important; background: #fffafa !important; }
+#dn-confirm-modal .dn-accept-card.is-invalid { border-color: #ef4444 !important; background: #fff5f5 !important; }
+#dn-confirm-modal .dn-acc-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; }
+#dn-confirm-modal .dn-acc-name { min-width: 0; }
+#dn-confirm-modal .dn-acc-name strong { display: block; font-size: 13.5px; font-weight: 700; color: #17324d; overflow-wrap: anywhere; }
+#dn-confirm-modal .dn-acc-name small { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; font-size: 11.5px; color: #64748b; margin-top: 2px; }
+#dn-confirm-modal .dn-was { color: #a16207; font-weight: 700; }
+#dn-confirm-modal .dn-line-status { font-size: 10px !important; font-weight: 800 !important; border-radius: 999px !important; padding: 1px 7px !important; margin: 0 !important; }
+#dn-confirm-modal .dn-accept-card.is-ok .dn-line-status { display: none !important; }
+#dn-confirm-modal .dn-acc-qtys { display: flex; gap: 10px; justify-content: flex-end; }
+#dn-confirm-modal .dn-acc-qtys > .dn-qty-field { flex: 0 0 auto !important; max-width: none !important; }
+#dn-confirm-modal .dn-qty-field { display: flex !important; flex-direction: column !important; align-items: center !important; gap: 3px !important; padding: 0 !important; border: 0 !important; background: none !important; width: auto !important; min-width: 0 !important; box-shadow: none !important; margin: 0 !important; }
+#dn-confirm-modal .dn-qty-label { font-size: 10px !important; font-weight: 800 !important; letter-spacing: .05em; text-transform: uppercase; margin: 0 !important; }
+#dn-confirm-modal .dn-accepted-field .dn-qty-label { color: #15803d !important; }
+#dn-confirm-modal .dn-rejected-field .dn-qty-label { color: #b42318 !important; }
+#dn-confirm-modal .dn-qty-control { display: flex !important; height: 40px !important; border: 1px solid #cfd8e3 !important; border-radius: 9px !important; overflow: hidden !important; background: #fff !important; width: auto !important; }
+#dn-confirm-modal .dn-accepted-field .dn-qty-control { border-color: #9bd3ad !important; }
+#dn-confirm-modal .dn-rejected-field .dn-qty-control { border-color: #efb1aa !important; }
+#dn-confirm-modal .dn-qty-control button { width: 40px !important; min-width: 40px !important; height: 100% !important; border: 0 !important; border-radius: 0 !important; background: #f3f6f9 !important; color: #334155 !important; font-size: 18px !important; font-weight: 700 !important; padding: 0 !important; cursor: pointer; touch-action: manipulation; }
+#dn-confirm-modal .dn-qty-control button:active { background: #e2e8f0 !important; }
+#dn-confirm-modal .dn-qty-control input { width: 56px !important; min-width: 0 !important; height: 100% !important; border: 0 !important; border-left: 1px solid #e3e9f0 !important; border-right: 1px solid #e3e9f0 !important; border-radius: 0 !important; text-align: center !important; font-size: 15px !important; font-weight: 700 !important; padding: 0 2px !important; background: #fff !important; -moz-appearance: textfield; }
+#dn-confirm-modal .dn-qty-control input::-webkit-outer-spin-button,
+#dn-confirm-modal .dn-qty-control input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+#dn-confirm-modal .dn-qty-control input.invalid { background: #fef2f2 !important; color: #b42318 !important; }
+#dn-confirm-modal .dn-acc-extra { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#dn-confirm-modal .dn-acc-extra:has(> [style*="display: flex"]),
+#dn-confirm-modal .dn-acc-extra:has(> [style*="display:flex"]) { margin-top: 8px; }
+#dn-confirm-modal .dn-reject-extra { margin: 0 !important; padding: 0 !important; font-size: 0; }
+#dn-confirm-modal .dn-reject-extra select { width: 100%; height: 38px; border: 1px solid #cfd8e3; border-radius: 8px; padding: 0 10px; font-size: 13px; background: #fff; }
+#dn-confirm-modal .dn-line-remarks { grid-column: 1 / -1; max-width: none !important; width: 100% !important; box-sizing: border-box; height: 36px; border: 1px solid #cfd8e3; border-radius: 8px; padding: 0 10px; font-size: 13px; margin: 0 !important; width: 100%; }
+#dn-confirm-modal .dn-line-error:not(.show) { display: none; }
+#dn-confirm-modal .dn-line-error.show { margin-top: 6px; font-size: 11.5px; }
+
+/* received by + remarks */
+#dn-confirm-modal .dn-receiver-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 10px !important; margin: 2px 0 0 !important; padding: 0 !important; }
+#dn-confirm-modal .dn-receiver-grid .form-group { margin: 0 !important; }
+#dn-confirm-modal .dn-receiver-grid label { font-size: 10.5px !important; font-weight: 800 !important; letter-spacing: .04em; text-transform: uppercase; color: #475569 !important; margin-bottom: 5px !important; }
+#dn-confirm-modal .dn-receiver-grid label em { color: #b42318; font-style: normal; }
+#dn-confirm-modal #dn-received-by,
+#dn-confirm-modal #dn-customer-remarks { height: 38px; min-height: 38px; font-size: 13.5px; }
+#dn-confirm-modal #dn-customer-remarks { resize: vertical; padding-top: 9px; }
+
+/* footer */
+#dn-confirm-modal .dn-confirm-footer { padding: 10px 14px !important; gap: 8px; flex: 0 0 auto; }
+#dn-confirm-modal .dn-footer-note { font-size: 11px !important; color: #64748b !important; gap: 5px; }
+#dn-confirm-modal .dn-confirm-edit .dn-confirm-primary { background: #b45309 !important; border-color: #b45309 !important; }
+#dn-confirm-modal .dn-confirm-primary.has-invalid { opacity: .55; }
+
+/* phone */
+@media (max-width: 700px) {
+  #dn-confirm-modal.modal-overlay { padding: 0 !important; }
+  #dn-confirm-modal .dn-compact-confirm { width: 100vw !important; max-width: none !important; height: 100dvh !important; max-height: 100dvh !important; border-radius: 0 !important; }
+  #dn-confirm-modal .dn-confirm-bar { padding: 7px 10px; gap: 5px; }
+  #dn-confirm-modal .dn-summary-chip { font-size: 10.5px !important; }
+  #dn-confirm-modal .dn-accept-all { font-size: 11px; padding: 4px 8px; }
+  #dn-confirm-modal .dn-confirm-body { padding: 10px !important; }
+  #dn-confirm-modal .dn-acc-main { grid-template-columns: 1fr; }
+  #dn-confirm-modal .dn-acc-qtys { gap: 10px; justify-content: flex-start; }
+  #dn-confirm-modal .dn-receiver-grid { grid-template-columns: 1fr !important; }
+  #dn-confirm-modal .dn-confirm-footer { flex-wrap: wrap; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)) !important; }
+  #dn-confirm-modal .dn-footer-note { width: 100%; }
+  #dn-confirm-modal .dn-footer-actions { width: 100%; display: flex; gap: 8px; }
+  #dn-confirm-modal .dn-footer-actions .btn { flex: 1; height: 42px; justify-content: center; }
+  #dn-confirm-modal .dn-footer-actions .dn-confirm-primary { flex: 2; }
+}
+@media (max-width: 360px) {
+  #dn-confirm-modal .dn-qty-control button { width: 36px !important; min-width: 36px !important; }
+  #dn-confirm-modal .dn-qty-control input { width: 46px !important; }
+}

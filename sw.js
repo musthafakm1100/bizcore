@@ -8,7 +8,7 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v265c';
+const CACHE_NAME = 'bizcore-shell-v265d';
 const APP_SHELL = [
   './login.html',
   './delivery.html',
@@ -22,15 +22,16 @@ const APP_SHELL = [
   './css/invoicing.css?v=264.7',
   './css/register-standard.css?v=265.1',
   './css/doc-view.css?v=265.2',
+  './css/delivery-compact.css?v=265.3',
   './js/ui-standard.js?v=265.2',
-  './js/app.js?v=265.2',
-  './js/delivery-core.mjs?v=264.7',
-  './js/delivery-service.mjs?v=264.7',
-  './js/lock-service.mjs?v=264.7',
-  './js/invoice-core.mjs?v=264.7',
-  './js/invoice-service.mjs?v=264.7',
+  './js/app.js?v=265.3',
+  './js/delivery-core.mjs?v=265.3',
+  './js/delivery-service.mjs?v=265.3',
+  './js/lock-service.mjs?v=265.3',
+  './js/invoice-core.mjs?v=265.3',
+  './js/invoice-service.mjs?v=265.3',
   './js/invoicing.js?v=265.2',
-  './js/numbering.mjs?v=264.7',
+  './js/numbering.mjs?v=265.3',
   './manifest.json',
   './icons/bizcore-icon-192.png',
   './icons/bizcore-icon-512.png'
