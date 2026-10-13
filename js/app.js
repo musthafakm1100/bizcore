@@ -516,6 +516,8 @@ async function loadData() {
         }
         // V264: independent customer invoices and credit notes
         if (typeof startInvoiceListeners === 'function') startInvoiceListeners();
+        // V266: payment receipts
+        if (typeof startReceiptListeners === 'function') startReceiptListeners();
         if (window.BizCoreDN && typeof window.BizCoreDN.onModeChange === 'function') {
           // The storage mode is changed only by the administrator's migration tool.
           // Reload so this session can never mix the two persistence models.
@@ -1266,7 +1268,7 @@ function validUntil(q) {
 
 /* ── v103 Central document numbering ── */
 const DOC_NUMBERING_DEFAULTS={
-  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'}
+  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},paymentReceipt:{label:'Payment Receipt',prefix:'RCT',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'}
 };
 function ensureDocumentNumbering(){settings.documentNumbering=settings.documentNumbering||{};Object.entries(DOC_NUMBERING_DEFAULTS).forEach(([k,d])=>{settings.documentNumbering[k]={...d,...(settings.documentNumbering[k]||{})};});return settings.documentNumbering;}
 function docPeriod(reset='monthly',date=new Date()){const yy=String(date.getFullYear()).slice(2),mm=String(date.getMonth()+1).padStart(2,'0');return reset==='yearly'?yy:(reset==='never'?'':yy+mm);}
@@ -1280,7 +1282,7 @@ async function allocateDocumentNumber(type,date=new Date()){
 }
 function existingDocumentNumbers(type){
   if(type==='rfq')return rfqs.map(x=>x.rfqNo||''); if(type==='quotation')return quotations.map(x=>x.qno||''); if(type==='salesOrder')return salesOrders.map(x=>x.soNo||'');
-  if(type==='deliveryNote')return salesOrders.flatMap(s=>(s.deliveries||[]).map(x=>x.dnNo||'')); if(type==='customerInvoice')return salesOrders.flatMap(s=>(s.invoices||[]).map(x=>x.invNo||'')); if(type==='creditNote')return salesOrders.flatMap(s=>(s.creditNotes||[]).map(x=>x.cnNo||'')); return [];
+  if(type==='deliveryNote')return salesOrders.flatMap(s=>(s.deliveries||[]).map(x=>x.dnNo||'')); if(type==='customerInvoice')return salesOrders.flatMap(s=>(s.invoices||[]).map(x=>x.invNo||'')); if(type==='creditNote')return salesOrders.flatMap(s=>(s.creditNotes||[]).map(x=>x.cnNo||'')); if(type==='paymentReceipt')return (typeof receiptsCache!=='undefined'?receiptsCache:[]).map(x=>x.rctNo||''); return [];
 }
 function estimatedNextDocumentNumber(type){const x=docNumberParts(type);const vals=existingDocumentNumbers(type).filter(n=>String(n).startsWith(x.displayPrefix)&&!String(n).includes('-OFF-')).map(n=>parseInt(String(n).slice(x.displayPrefix.length),10)||0);return formatDocSequence(x.displayPrefix,(vals.length?Math.max(...vals):0)+1);}
 function renderDocumentNumbering(){
@@ -2929,6 +2931,7 @@ function switchSetupTab(tab) {
   if (tab === 'roles') renderRoles();
   if (tab === 'locking' && typeof renderLockingSettings === 'function') renderLockingSettings();
   if (tab === 'billing' && typeof renderBillingSettings === 'function') renderBillingSettings();
+  if (tab === 'billing' && typeof renderReceiptSettings === 'function') renderReceiptSettings();
   if (tab === 'locks' && typeof startLocksScreen === 'function') startLocksScreen();
   if (tab === 'defaults') { renderSetupTermsList('delivery'); renderSetupTermsList('payment'); }
   if (tab === 'cost-components') renderCostComponents();
@@ -4419,6 +4422,7 @@ function showPage(page, el) {
   if(page==='salesorders')renderSOPage();
   if(page==='deliverynotes')renderDNPage();
   if(page==='customerinvoices'&&typeof renderInvoiceRegister==='function')renderInvoiceRegister();
+  if(page==='receipts'&&typeof renderReceiptRegister==='function'){document.getElementById('page-title').textContent='Payment Receipts';renderReceiptRegister();}
   closeMobileSidebar();
 }
 
@@ -5101,7 +5105,7 @@ const modalNavExcluded = new Set(['confirm-modal','validation-dialog','template-
    finished, so it must never become a "Back" target: the screen opened right after it (e.g. the Sales Order
    refreshed after saving an invoice) must not record it as the screen to return to, and any return entry that
    points back to it is dropped. Otherwise closing the next screens would reopen the already-saved form. */
-const modalNavEntryScreens = new Set(['so-create-modal','so-delivery-modal','dn-confirm-modal','dn-dispatch-action-modal','so-invoice-modal','so-payment-modal','inv-issue-modal','cn-issue-modal']);
+const modalNavEntryScreens = new Set(['so-create-modal','so-delivery-modal','dn-confirm-modal','dn-dispatch-action-modal','so-invoice-modal','so-payment-modal','inv-issue-modal','cn-issue-modal','rct-new-modal','rct-apply-modal']);
 function forgetFinishedEntryScreen(id){
   if(!modalNavEntryScreens.has(id)) return;
   for(let i=modalNavHistory.length-1;i>=0;i--){ if(modalNavHistory[i].from===id) modalNavHistory.splice(i,1); }
@@ -5113,9 +5117,10 @@ function modalFriendlyName(modalId) {
     'quote-modal':'Quotation','view-modal':'Quotation','so-view-modal':'Sales Order','so-create-modal':'Sales Order',
     'cust-view-modal':'Customer','cust-modal':'Customer','sup-modal':'Supplier','prod-modal':'Product','prod-view-modal':'Product',
     'so-delivery-modal':'Sales Order','dn-print-modal':'Delivery Note','so-invoice-modal':'Sales Order','so-payment-modal':'Sales Order',
-    'inv-view-modal':'Invoice','inv-issue-modal':'Invoice','cn-issue-modal':'Credit Note','dn-confirm-modal':'Delivery Note','dn-dispatch-action-modal':'Delivery Note'
+    'inv-view-modal':'Invoice','inv-issue-modal':'Invoice','cn-issue-modal':'Credit Note','rct-new-modal':'Receipt','rct-apply-modal':'Receipt','dn-confirm-modal':'Delivery Note','dn-dispatch-action-modal':'Delivery Note'
   };
   if(modalId==='inv-view-modal' && document.getElementById(modalId)?._kind==='credit') return 'Credit Note';
+  if(modalId==='inv-view-modal' && document.getElementById(modalId)?._kind==='receipt') return 'Receipt';
   return names[modalId]||'Previous screen';
 }
 
@@ -7207,7 +7212,7 @@ function applyRFQMonitorFilter(status, btn) {
 }
 function moduleMonitorStorageKey(moduleKey){ return `bizcore-${moduleKey}-monitor-collapsed`; }
 function getModuleMonitorWorkspace(moduleKey){
-  const ids={rfq:'rfq-main-workspace',quotations:'quotation-main-workspace',pricing:'pricing-main-workspace',salesorders:'salesorders-main-workspace',deliverynotes:'deliverynotes-main-workspace',customerinvoices:'customerinvoices-main-workspace'};
+  const ids={rfq:'rfq-main-workspace',quotations:'quotation-main-workspace',pricing:'pricing-main-workspace',salesorders:'salesorders-main-workspace',deliverynotes:'deliverynotes-main-workspace',customerinvoices:'customerinvoices-main-workspace',receipts:'receipts-main-workspace'};
   return document.getElementById(ids[moduleKey]||'');
 }
 function setModuleMonitorState(moduleKey, collapsed, persist=true){
@@ -9761,10 +9766,16 @@ function nextInvNo() {
   return prefix + String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3,'0');
 }
 
+/* V266: money received on a Sales Order. With Payment Receipts (independent invoices) it is the sum paid on the
+   order's invoices; otherwise the payments recorded on the order (legacy). */
+function soPaidTotal(so){
+  if (typeof receiptsActive==='function' && receiptsActive() && typeof receiptPaidForSO==='function') return receiptPaidForSO(so);
+  return (so&&so.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+}
 /* ── SO Status helper ── */
 function getSOStatus(so) {
   if (!so) return 'Confirmed';
-  const totalPaid = (so.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+  const totalPaid = soPaidTotal(so);
   const hasInvoice = (so.invoices||[]).length > 0;
   const deliveries = (so.deliveries||[]).filter(d=>!d.voided);
   const hasAnyDelivery = deliveries.some(d=>!d.voided);
@@ -9969,7 +9980,7 @@ function renderSOPage() {
   const totalOrderValue=scope.reduce((sum,s)=>sum+(parseFloat(s.total)||0),0);
   const outstandingReceivables=scope.reduce((sum,s)=>{
     if(!(s.invoices||[]).length)return sum;
-    const paid=(s.payments||[]).reduce((p,x)=>p+(parseFloat(x.amount)||0),0);
+    const paid=soPaidTotal(s);
     return sum+Math.max((parseFloat(s.total)||0)-paid,0);
   },0);
 
@@ -10011,7 +10022,7 @@ function renderSOPage() {
   else if(soKpiFilter==='pending-invoice') list=list.filter(s=>soHasInvoiceableQty(s));
   else if(soKpiFilter==='receivables') list=list.filter(s=>{
     if(!(s.invoices||[]).length)return false;
-    const paid=(s.payments||[]).reduce((p,x)=>p+(parseFloat(x.amount)||0),0);
+    const paid=soPaidTotal(s);
     return Math.max((parseFloat(s.total)||0)-paid,0)>0;
   });
 
@@ -10387,7 +10398,7 @@ function viewSO(soId, opts = {}) {
      </div>${pipeline}`;
 
   // Body
-  const totalPaid = (so.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+  const totalPaid = soPaidTotal(so);
   const outstanding = so.total - totalPaid;
 
   // Integrated order-item + delivery progress data
@@ -10499,8 +10510,9 @@ function viewSO(soId, opts = {}) {
         </div>`).join('')
     : '<p style="font-size:12px;color:var(--gray)">No invoice created yet.</p>';
 
-  // Payments
-  const paymentsHtml = (so.payments||[]).length
+  // Payments (V266: Payment Receipts when active)
+  const rctOn = typeof receiptsActive==='function' && receiptsActive();
+  const paymentsHtml = rctOn ? soReceiptsHtml(so) : (so.payments||[]).length
     ? (so.payments||[]).map(p=>`
         <div class="pay-card">
           <div><span style="font-weight:600">${fmt(p.amount)}</span> · ${p.method} · ${fmtDate(p.date)}</div>
@@ -10541,7 +10553,7 @@ function viewSO(soId, opts = {}) {
         <div class="section-title" style="margin-top:0">Progress</div>
         <div class="detail-row"><span class="dk">Deliveries</span><span>${(so.deliveries||[]).length} made</span></div>
         <div class="detail-row"><span class="dk">Invoices</span><span>${(so.invoices||[]).length} issued</span></div>
-        <div class="detail-row"><span class="dk">Payments</span><span>${(so.payments||[]).length} received</span></div>
+        <div class="detail-row"><span class="dk">Payments</span><span>${rctOn?soReceiptCount(so):(so.payments||[]).length} received</span></div>
       </div>
     </div>
 
@@ -10625,7 +10637,9 @@ function viewSO(soId, opts = {}) {
   if (canInvoiceV264===null ? soHasInvoiceableQty(so) : canInvoiceV264) { // V260: also after a partial invoice, while accepted quantity remains un-invoiced
     fBtns.push(`<button class="btn btn-secondary" data-sid="${so.id}" onclick="openCreateInvoice(this.dataset.sid)"><i class="ti ti-file-invoice"></i>${(so.invoices||[]).length?'Invoice remaining':'Create invoice'}</button>`);
   }
-  if ((so.invoices||[]).length > 0 && outstanding > 0.01) {
+  if (rctOn) { // V266: the old "Record payment" is replaced by Payment Receipts
+    if (soHasOpenInvoices(so)) fBtns.push(`<button class="btn btn-success" id="so-new-receipt-btn" data-sid="${so.id}" onclick="openNewReceipt({soId:this.dataset.sid})"><i class="ti ti-cash"></i>New Receipt</button>`);
+  } else if ((so.invoices||[]).length > 0 && outstanding > 0.01) {
     fBtns.push(`<button class="btn btn-success" data-sid="${so.id}" onclick="openRecordPayment(this.dataset.sid)"><i class="ti ti-cash"></i>Record payment</button>`);
   }
   document.getElementById('so-view-footer').innerHTML = fBtns.join('');
@@ -14213,7 +14227,7 @@ if (_origSaveRFQ) {
   };
 })();
 
-console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1 · registers 1 · date filter A · compact views 1 · delivered by 1 · confirm open 1 · deliveries 3)');
+console.log('Document locking system active ✅ (V264 · lock fix 2 · offline numbers 3 · invoice view 1 · zoho no. 1 · back nav 1 · so refresh 1 · registers 1 · date filter A · compact views 1 · delivered by 1 · confirm open 1 · deliveries 3 · receipts 1)');
 
 /* ═══════════════════════════════════════════════════════════════════
    ADMINISTRATION → DOCUMENT LOCKING / ACTIVE LOCKS

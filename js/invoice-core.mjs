@@ -23,7 +23,7 @@
  *   5. Accepted quantity may never fall below the quantity invoiced by delivery invoices
  *      (enforced by the Delivery Note service).
  */
-import { ERR as DN_ERR, DeliveryError, roundQty, soLineIndex, isSafeId, operationKey } from './delivery-core.mjs?v=265.3';
+import { ERR as DN_ERR, DeliveryError, roundQty, soLineIndex, isSafeId, operationKey } from './delivery-core.mjs?v=266.0';
 
 export const INVOICE_COLLECTIONS = Object.freeze({
   invoices: 'customerInvoices',

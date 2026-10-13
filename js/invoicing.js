@@ -966,6 +966,13 @@ function renderInvoiceView(doc, kind){
     rows = row('Status', invStatusBadge(doc.status) || '<span style="background:#ECFDF5;color:#0F766E;border:1px solid #99F6E4;border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:700">Issued</span>')
       + row('Type', invTypeBadge(doc.type)) + row('Payment due', dueText(doc.dueDate)) + row('Zoho invoice', invEsc(doc.zohoNo || '—')) + row('Created by', invEsc(doc.createdBy || '—'));
     note = '<div class="bc-kpi-note"><i class="ti ti-info-circle"></i> Payments are recorded on the Sales Order, not per invoice.</div>';
+    // V266: Payment Receipts — Paid / Balance due on the invoice itself
+    if (typeof receiptsActive === 'function' && receiptsActive()) {
+      const paidAmt = invoicePaidOf(doc), bal = invoiceBalanceOf(doc), pst = invoicePayStatusOf(doc);
+      kpis = [kpis[0], kpis[1], { label: 'Paid', value: f(paidAmt), tone: paidAmt > 0.005 ? 'green' : 'muted' }, { label: bal < -0.005 ? 'Overpaid' : 'Balance due', value: f(Math.abs(bal)), tone: bal > 0.005 ? 'red' : 'muted' }];
+      rows = row('Payment', rctPayPill(pst)) + rows + (invNum(t.deductionSubtotal) && doc.type !== 'advance' ? row('Advance deducted', f(t.deductionSubtotal)) : '');
+      note = bal < -0.005 ? '<div class="bc-kpi-note"><i class="ti ti-alert-triangle"></i> A credit note was issued after payment — the customer has paid more than the invoice now asks.</div>' : '';
+    }
   }
   const summary = `${bcKpiGrid(kpis)}<div class="bc-kpi-rows">${rows}</div>${note}`;
   // Document flow (one line): Quotation › Sales Order › (advance) › this document › credit notes
@@ -976,12 +983,14 @@ function renderInvoiceView(doc, kind){
   if (cn && inv) flow.push({ label: inv.type === 'advance' ? 'Advance invoice' : 'Invoice', text: inv.invNo, onclick: `openInvoiceView('${inv.id}')` });
   flow.push({ label: cn ? 'Credit note' : (doc.type === 'advance' ? 'Advance invoice' : 'Invoice'), text: cn ? doc.cnNo : doc.invNo, state: 'current' });
   cns.forEach(c => flow.push({ label: `Credit note · − ${n(c.total)}`, text: c.cnNo, cls: 'cn', onclick: `openCreditNoteView('${c.id}')` }));
+  if (!cn && typeof receiptsForInvoice === 'function') receiptsForInvoice(doc.id).filter(r => r.status !== 'Voided').forEach(r => { const a = (r.allocations || []).find(x => x.invoiceId === doc.id) || {}; flow.push({ label: `Receipt · ${n(a.amount)}`, tag: 'Rct.', text: r.rctNo, cls: 'rct', onclick: `openReceiptView('${r.id}')` }); });
   if (!cn && doc.type === 'advance') invoicesCache.filter(i => (i.deductions || []).some(d => d.advanceInvoiceId === doc.id))
     .forEach(i => flow.push({ label: 'Deducted on', tag: 'Ded.', text: i.invNo, onclick: `openInvoiceView('${i.id}')` }));
   // Activity
   const who = doc.createdBy ? ` by ${doc.createdBy}` : '';
   const act = [[(cn ? 'Credit note issued' : 'Invoice issued') + who, doc.created || doc.date]];
   cns.forEach(c => act.push([`Credited by ${c.cnNo}`, c.created || c.date]));
+  if (!cn && typeof receiptsForInvoice === 'function') receiptsForInvoice(doc.id).forEach(r => { const a = (r.allocations || []).find(x => x.invoiceId === doc.id) || {}; act.push([`${r.rctNo}: ${formatNumber(invNum(a.amount), 2)} received${r.status === 'Voided' ? ' (voided)' : ''}`, r.created || r.date]); });
   if (!cn && doc.migratedFrom) act.push(['Migrated from the Sales Order', doc.created || doc.date]);
   const panel = `<aside class="qv-erp-panel inv-view-panel" aria-label="${cn ? 'Credit note' : 'Invoice'} information">
     <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ${cn ? 'ti-receipt-refund' : 'ti-file-invoice'}"></i>${cn ? 'Credit status' : 'Billing status'}</span><span class="qv-screen-only">Staff only</span></div>${summary}</section>
@@ -990,6 +999,7 @@ function renderInvoiceView(doc, kind){
   </aside>`;
   m._kind = kind; m._docId = doc.id;
   m.querySelector('.modal').classList.toggle('inv-view-cn', cn);
+  m.querySelector('.modal').classList.remove('inv-view-rct');
   document.getElementById('inv-view-title').textContent = cn ? `${doc.cnNo} — Credit Note` : `${doc.invNo} — ${invTypeLabel(doc.type)}`;
   document.getElementById('inv-view-body').innerHTML = `<div class="dn-view-workspace inv-view-workspace"><div class="dn-view-document">${invoiceDocumentHtml(doc, kind, true)}</div>${panel}</div>`;
   const canCredit = !cn && permState(window.BizCoreInv.settings.allowCreditNotes, !!window.BizCoreInv.isAdministrator).ok && doc.status !== 'Credited';
@@ -998,6 +1008,7 @@ function renderInvoiceView(doc, kind){
   b.push(`<button class="btn btn-secondary" onclick="closeViewWithReturn('inv-view-modal')"><i class="ti ti-x"></i><span>Close</span></button>`);
   if (so) b.push(`<button class="btn btn-secondary" id="inv-view-so-btn" onclick="${invViewGo(`viewSO('${so.id}')`)}"><i class="ti ti-file-description"></i><span>Sales Order</span></button>`);
   if (cn && inv) b.push(`<button class="btn btn-secondary" onclick="openInvoiceView('${inv.id}')"><i class="ti ti-file-invoice"></i><span>${invEsc(inv.invNo)}</span></button>`);
+  if (!cn && typeof receiptsActive === 'function' && receiptsActive() && invoiceBalanceOf(doc) > 0.005) b.push(`<button class="btn btn-success" id="inv-view-receipt-btn" onclick="${invViewGo(`openNewReceipt({invoiceId:'${doc.id}'})`)}"><i class="ti ti-cash"></i><span>New Receipt</span></button>`);
   if (canCredit) b.push(`<button class="btn btn-danger" id="inv-view-credit-btn" onclick="${invViewGo(`openIssueCreditNote('${doc.salesOrderId}','${doc.id}')`)}"><i class="ti ti-receipt-refund"></i><span>Credit Note</span></button>`);
   b.push(`<button class="btn btn-primary" id="inv-view-print-btn" onclick="${cn ? `printCreditNote('${doc.id}')` : `printCustomerInvoice('${doc.id}')`}"><i class="ti ti-printer"></i><span>Print / PDF</span></button>`);
   document.getElementById('inv-view-actions').innerHTML = b.join('');
@@ -1088,7 +1099,9 @@ let _invRegKpi = 'all';
 function invoiceRegisterRows(){
   const rows = [];
   if (invIndependentMode()) {
-    invoicesCache.forEach(i => rows.push({ kind: 'invoice', id: i.id, soId: i.salesOrderId, no: i.invNo, type: i.type, date: i.date, customer: i.customer, soNo: i.soNo, status: i.status || 'Issued', total: invNum(i.totals?.total), ref: i.zohoNo ? 'Zoho ' + i.zohoNo : (i.reason || ''), updated: i.updatedAt || i.created || '' }));
+    const pay = typeof receiptsActive === 'function' && receiptsActive();
+    invoicesCache.forEach(i => rows.push({ kind: 'invoice', id: i.id, soId: i.salesOrderId, no: i.invNo, type: i.type, date: i.date, customer: i.customer, soNo: i.soNo, status: i.status || 'Issued', total: invNum(i.totals?.total), ref: i.zohoNo ? 'Zoho ' + i.zohoNo : (i.reason || ''), updated: i.updatedAt || i.created || '',
+      paid: pay ? invoicePaidOf(i) : null, balance: pay ? invoiceBalanceOf(i) : null, payStatus: pay ? invoicePayStatusOf(i) : '', dueDate: i.dueDate || '' }));
     creditNotesCache.forEach(c => rows.push({ kind: 'credit', id: c.id, soId: c.salesOrderId, no: c.cnNo, type: 'credit', date: c.date, customer: c.customer, soNo: c.soNo, status: 'Credit note', total: -invNum(c.total), ref: 'Against ' + c.invNo + (c.reason ? ' · ' + c.reason : ''), updated: c.created || '' }));
   } else {
     (salesOrders || []).forEach(so => (so.invoices || []).forEach((i, idx) => rows.push({ kind: 'legacy', idx, soId: so.id, no: i.invNo, type: 'delivery', date: i.date, customer: so.customer, soNo: so.soNo, status: 'Issued', total: invNum(i.total), ref: i.zohoNo ? 'Zoho ' + i.zohoNo : '' })));
@@ -1120,7 +1133,18 @@ function renderInvoiceRegister(){
   setT('invreg-k-total', scope.length); ['delivery', 'order', 'advance', 'credit'].forEach(t => setT('invreg-k-' + t, count(t)));
   setT('invreg-a-invoiced', formatNumber(sum(r => r.kind !== 'credit'), 2)); setT('invreg-a-credited', formatNumber(Math.abs(sum(r => r.kind === 'credit')), 2)); setT('invreg-a-net', formatNumber(sum(() => true), 2));
   document.querySelectorAll('#page-customerinvoices [data-inv-kpi]').forEach(e => { const on = e.dataset.invKpi === _invRegKpi; e.classList.toggle('active', on); e.setAttribute('aria-pressed', on ? 'true' : 'false'); });
-  let rows = scope.filter(r => _invRegKpi === 'all' || r.type === _invRegKpi);
+  // V266: payment rows (Unpaid / Partially paid / Overdue / Paid) and "due in 7 days"
+  const payOn = typeof receiptsActive === 'function' && receiptsActive();
+  const today = new Date(), iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const in7 = iso(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7)), tIso = iso(today);
+  const payMatch = (r, k) => r.kind === 'invoice' && (k === 'pay-unpaid' ? r.payStatus === 'Unpaid' : k === 'pay-partial' ? r.payStatus === 'Partially paid' : k === 'pay-overdue' ? r.payStatus === 'Overdue'
+    : k === 'pay-paid' ? r.payStatus === 'Paid' : k === 'pay-duesoon' ? (r.balance > 0.005 && r.dueDate && r.dueDate >= tIso && r.dueDate <= in7) : false);
+  const payBox = document.getElementById('invreg-pay-section'); if (payBox) payBox.hidden = !payOn;
+  ['pay-unpaid', 'pay-partial', 'pay-overdue', 'pay-paid', 'pay-duesoon'].forEach(k => setT('invreg-k-' + k, scope.filter(r => payMatch(r, k)).length));
+  setT('invreg-a-received', formatNumber(scope.reduce((s, r) => s + (r.kind === 'invoice' ? invNum(r.paid) : 0), 0), 2));
+  setT('invreg-a-balance', formatNumber(scope.reduce((s, r) => s + (r.kind === 'invoice' ? Math.max(0, invNum(r.balance)) : 0), 0), 2));
+  document.querySelectorAll('#invreg-table .inv-pay-col').forEach(e => { e.hidden = !payOn; });
+  let rows = scope.filter(r => _invRegKpi === 'all' || (String(_invRegKpi).startsWith('pay-') ? payMatch(r, _invRegKpi) : r.type === _invRegKpi));
   if (sort === 'date-asc') rows.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.no || '').localeCompare(b.no || '', undefined, { numeric: true }));
   else if (sort === 'no-asc') rows.sort((a, b) => (a.no || '').localeCompare(b.no || '', undefined, { numeric: true }));
   else if (sort === 'customer-asc') rows.sort((a, b) => (a.customer || '').localeCompare(b.customer || ''));
@@ -1134,6 +1158,6 @@ function renderInvoiceRegister(){
     : r.status === 'Credited' ? '<span class="badge inv-badge-credited">Credited</span>' : r.status === 'Partially credited' ? '<span class="badge inv-badge-partcredit">Partly credited</span>' : '<span class="badge inv-badge-issued">Issued</span>';
   const typeBadge = r => r.kind === 'credit' ? '<span class="inv-type-pill credit">Credit note</span>' : `<span class="inv-type-pill ${r.type}">${invTypeShort(r.type)}</span>`;
   const open = r => r.kind === 'credit' ? `openCreditNoteDocument('${r.id}')` : r.kind === 'invoice' ? `openIndependentInvoiceDocument('${r.soId}','${r.id}')` : `openInvoiceDocument('${r.soId}',${r.idx})`;
-  body.innerHTML = rows.length ? rows.map(r => `<tr class="quotation-clickable-row" tabindex="0" role="button" onclick="${open(r)}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${open(r)}}"><td>${invEsc(r.no || '—')}</td><td>${typeBadge(r)}</td><td>${fmtDate(r.date)}</td><td>${invEsc(r.customer || '—')}</td><td>${invEsc(r.soNo || '—')}</td><td class="inv-reg-ref">${invEsc(r.ref || '—')}</td><td class="num${r.total < 0 ? ' neg' : ''}">${formatNumber(r.total, 2)}</td><td>${statusBadge(r)}</td></tr>`).join('')
-    : '<tr><td colspan="8"><div class="empty-state"><i class="ti ti-file-invoice"></i><strong>No invoices found</strong><p>Invoices are created from the Sales Order (Create invoice). Adjust the filters to see other documents.</p></div></td></tr>';
+  body.innerHTML = rows.length ? rows.map(r => `<tr class="quotation-clickable-row" tabindex="0" role="button" onclick="${open(r)}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${open(r)}}"><td>${invEsc(r.no || '—')}</td><td>${typeBadge(r)}</td><td>${fmtDate(r.date)}</td><td>${invEsc(r.customer || '—')}</td><td>${invEsc(r.soNo || '—')}</td><td class="inv-reg-ref">${invEsc(r.ref || '—')}</td><td class="num${r.total < 0 ? ' neg' : ''}">${formatNumber(r.total, 2)}</td>${payOn ? `<td class="num inv-pay-col">${r.kind === 'invoice' ? formatNumber(r.paid, 2) : '—'}</td><td class="num inv-pay-col${r.payStatus === 'Overdue' ? ' neg' : ''}">${r.kind === 'invoice' ? formatNumber(r.balance, 2) : '—'}</td>` : ''}<td>${statusBadge(r)}${payOn && r.kind === 'invoice' ? ' ' + rctPayPill(r.payStatus) : ''}</td></tr>`).join('')
+    : `<tr><td colspan="${payOn ? 10 : 8}"><div class="empty-state"><i class="ti ti-file-invoice"></i><strong>No invoices found</strong><p>Invoices are created from the Sales Order (Create invoice). Adjust the filters to see other documents.</p></div></td></tr>`;
 }

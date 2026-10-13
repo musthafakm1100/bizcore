@@ -21,8 +21,8 @@ import {
   ledgerDeltasBetween, buildDNItem, validateDispatchLines, validateAcceptanceLines, requireReason,
   requireDate, cleanText, cleanDeliveredBy, assertSize, dnStatus, dispatchSnapshot, acceptanceSnapshot, roundQty,
   invoicedQtyByLine,
-} from './delivery-core.mjs?v=265.3';
-import { LOCK_COLLECTION, LOCK_TYPES, lockId, lockHeldBy } from './lock-service.mjs?v=265.3';
+} from './delivery-core.mjs?v=266.0';
+import { LOCK_COLLECTION, LOCK_TYPES, lockId, lockHeldBy } from './lock-service.mjs?v=266.0';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
 const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, details); };
