@@ -253,12 +253,32 @@ async function openIssueInvoice(soId, opts = {}){
   document.getElementById('ii-date').value = today; document.getElementById('ii-due').value = due.toISOString().split('T')[0];
   ['ii-zoho', 'ii-notes', 'ii-reason'].forEach(id => { document.getElementById(id).value = ''; });
   document.querySelector('input[name="ii-adv-method"][value="percentOrder"]').checked = true; document.getElementById('ii-adv-pct').value = '50';
-  m._fromDn = null;
+  m._fromDn = null; m._reissueOf = null;
   renderIssueInvoiceTypes();
   issueInvoiceStep(1);
   if (opts && opts.fromDnId) issueInvoiceFromDN(m, so, opts.fromDnId);
+  if (opts && opts.reissue) issueInvoiceFromReissue(m, opts.reissue);
   openModalWithSize('inv-issue-modal');
   return true;
+}
+/** V266.3 Cancel and re-issue: the new invoice starts as a copy of the cancelled one (type, quantities, texts) — correct it, enter the new Zoho no., save. */
+function issueInvoiceFromReissue(m, old){
+  m._reissueOf = { id: old.id, invNo: old.invNo };
+  const card = document.querySelector(`#ii-types [data-inv-type="${old.type}"]`);
+  if (!card || card.disabled) { showToast(`A ${invTypeShort(old.type).toLowerCase()} invoice cannot be created for this order right now — choose the type.`, 'warning', 'Re-issue'); return; }
+  m._type = old.type;
+  document.getElementById('ii-subtitle').textContent += ' · Re-issue of ' + old.invNo;
+  if (old.dueDate) document.getElementById('ii-due').value = old.dueDate;
+  document.getElementById('ii-notes').value = old.notes || '';
+  document.getElementById('ii-reason').value = old.reason || '';
+  if (old.type === 'advance' && old.advance) {
+    const a = old.advance, radio = document.querySelector(`input[name="ii-adv-method"][value="${a.method}"]`); if (radio) radio.checked = true;
+    if (a.percent) document.getElementById('ii-adv-pct').value = String(a.percent);
+  }
+  issueInvoiceStep(2);
+  if (old.type === 'advance') (m._rows || []).forEach((r, i) => { const e = document.getElementById('ii-sel-' + i); if (e) e.checked = ((old.advance || {}).lineIds || []).includes(r.lineId); });
+  else (m._rows || []).forEach((r, i) => { const e = document.getElementById('ii-qty-' + i); if (!e) return; const l = (old.lines || []).find(x => x.lineId === r.lineId); e.value = l ? Math.min(l.qty, old.type === 'delivery' ? r.availableDelivery : r.availableOrder) : 0; });
+  recalcIssueInvoice();
 }
 /** Opened from a Delivery Note: delivery invoice, quantities = what that DN's customer accepted (within what is still uninvoiced). */
 function issueInvoiceFromDN(m, so, dnId){
@@ -542,6 +562,7 @@ async function _saveIssueInvoiceCore(m){
     operationId: m._opId, salesOrderId: so.id, type: r.type, date, dueDate: document.getElementById('ii-due').value || '',
     zohoNo: document.getElementById('ii-zoho').value.trim(), notes: document.getElementById('ii-notes').value.trim(),
     reason: document.getElementById('ii-reason').value.trim(), numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix },
+    ...(m._reissueOf ? { reissueOf: m._reissueOf } : {}),
   };
   if (r.type === 'advance') input.advance = r.advance; else { input.lines = r.lines; if (r.limits && r.limits.remaining > 0.004) input.deduction = r.deduction; }
   try {
@@ -614,7 +635,7 @@ async function openIssueCreditNote(soId, invoiceId){
   let ledger;
   try { ledger = await window.BizCoreInv.getLedger(soId); } catch (e) { showToast('Could not read the latest order balances. Please try again.', 'error'); return false; }
   const C = invLib(), m = ensureCreditNoteModal();
-  Object.assign(m, { _soId: soId, _invoiceId: invoiceId, _invoice: inv, _ledger: ledger, _opId: newDeliveryOperationId('credit', soId) });
+  Object.assign(m, { _soId: soId, _invoiceId: invoiceId, _invoice: inv, _ledger: ledger, _opId: newDeliveryOperationId('credit', soId), _reissue: null });
   document.getElementById('cn-title').textContent = 'Credit Note — ' + inv.invNo;
   document.getElementById('cn-subtitle').textContent = `${invTypeLabel(inv.type)} · ${inv.customer || ''} · ${inv.soNo || ''}`;
   document.getElementById('cn-date').value = new Date().toISOString().split('T')[0];
@@ -725,6 +746,12 @@ async function _saveCreditNoteCore(m){
     closeModal('cn-issue-modal');
     showToast(res.alreadyApplied ? `${res.creditNote.cnNo} was already saved.` : `Credit note ${res.creditNote.cnNo} issued against ${inv.invNo}`, res.alreadyApplied ? 'info' : 'success');
     if (typeof renderSOPage === 'function') renderSOPage();
+    // V266.3 Cancel and re-issue: continue with the new invoice, prefilled from the cancelled one
+    if (m._reissue) {
+      const old = m._reissue; m._reissue = null;
+      setTimeout(() => { if (typeof viewSO === 'function') viewSO(m._soId); openCreateInvoice(m._soId, { reissue: old }); }, 50);
+      return res.creditNote;
+    }
     // Show the saved credit note; Back returns to the (refreshed) Sales Order.
     if (typeof viewSO === 'function') viewSO(m._soId);
     openCreditNoteView(res.creditNote.id);
@@ -968,7 +995,8 @@ function renderInvoiceView(doc, kind){
       kpis.push({ label: 'Net after credit', value: f(invNum(t.total) - credited), tone: 'green' }, { label: 'Advance deducted', value: f(t.deductionSubtotal), tone: invNum(t.deductionSubtotal) ? '' : 'muted' });
     }
     rows = row('Status', invStatusBadge(doc.status) || '<span style="background:#ECFDF5;color:#0F766E;border:1px solid #99F6E4;border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:700">Issued</span>')
-      + row('Type', invTypeBadge(doc.type)) + row('Payment due', dueText(doc.dueDate)) + row('Zoho invoice', invEsc(doc.zohoNo || '—')) + row('Created by', invEsc(doc.createdBy || '—'));
+      + row('Type', invTypeBadge(doc.type)) + row('Payment due', dueText(doc.dueDate)) + row('Zoho invoice', invEsc(doc.zohoNo || '—')) + row('Created by', invEsc(doc.createdBy || '—'))
+      + (doc.editCount ? row('Revised', `${doc.editCount}× · ${invEsc(doc.revisedBy || '')}`) : '');
     note = '<div class="bc-kpi-note"><i class="ti ti-info-circle"></i> Payments are recorded on the Sales Order, not per invoice.</div>';
     // V266: Payment Receipts — Paid / Balance due on the invoice itself
     if (typeof receiptsActive === 'function' && receiptsActive()) {
@@ -996,6 +1024,8 @@ function renderInvoiceView(doc, kind){
   cns.forEach(c => act.push([`Credited by ${c.cnNo}`, c.created || c.date]));
   if (!cn && typeof receiptsForInvoice === 'function') receiptsForInvoice(doc.id).forEach(r => { const a = (r.allocations || []).find(x => x.invoiceId === doc.id) || {}; act.push([`${r.rctNo}: ${formatNumber(invNum(a.amount), 2)} received${r.status === 'Voided' ? ' (voided)' : ''}`, r.created || r.date]); });
   if (!cn && doc.migratedFrom) act.push(['Migrated from the Sales Order', doc.created || doc.date]);
+  if (!cn && doc.editCount) act.push([`Edited by ${doc.revisedBy || '—'} — ${doc.lastEditReason || ''}${doc.editCount > 1 ? ` (${doc.editCount} edits)` : ''}`, doc.revisedAt]);
+  if (!cn && doc.reissueOf) act.push([`Re-issue of ${doc.reissueOf.invNo}`, doc.created || doc.date]);
   const panel = `<aside class="qv-erp-panel inv-view-panel" aria-label="${cn ? 'Credit note' : 'Invoice'} information">
     <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ${cn ? 'ti-receipt-refund' : 'ti-file-invoice'}"></i>${cn ? 'Credit status' : 'Billing status'}</span><span class="qv-screen-only">Staff only</span></div>${summary}</section>
     <section class="qv-side-card"><div class="qv-side-head"><span><i class="ti ti-route"></i>Document flow</span></div>${bcFlowChips(flow)}</section>
@@ -1013,6 +1043,11 @@ function renderInvoiceView(doc, kind){
   if (so) b.push(`<button class="btn btn-secondary" id="inv-view-so-btn" onclick="${invViewGo(`viewSO('${so.id}')`)}"><i class="ti ti-file-description"></i><span>Sales Order</span></button>`);
   if (cn && inv) b.push(`<button class="btn btn-secondary" onclick="openInvoiceView('${inv.id}')"><i class="ti ti-file-invoice"></i><span>${invEsc(inv.invNo)}</span></button>`);
   if (!cn && typeof receiptsActive === 'function' && receiptsActive() && invoiceBalanceOf(doc) > 0.005) b.push(`<button class="btn btn-success" id="inv-view-receipt-btn" onclick="${invViewGo(`openNewReceipt({invoiceId:'${doc.id}'})`)}"><i class="ti ti-cash"></i><span>New Receipt</span></button>`);
+  if (!cn) {
+    const er = invoiceEditRightsOf(doc);
+    if (er.shown) b.push(`<button class="btn btn-secondary" id="inv-view-edit-btn" ${er.ok ? '' : `disabled title="${invEsc(er.why)}"`} onclick="${invViewGo(`openEditInvoice('${doc.salesOrderId}','${doc.id}')`)}"><i class="ti ti-pencil"></i><span>Edit</span></button>`);
+    if (canCredit && doc.status === 'Issued') b.push(`<button class="btn btn-secondary" id="inv-view-reissue-btn" onclick="${invViewGo(`openCancelReissue('${doc.salesOrderId}','${doc.id}')`)}"><i class="ti ti-refresh"></i><span>Cancel &amp; re-issue</span></button>`);
+  }
   if (canCredit) b.push(`<button class="btn btn-danger" id="inv-view-credit-btn" onclick="${invViewGo(`openIssueCreditNote('${doc.salesOrderId}','${doc.id}')`)}"><i class="ti ti-receipt-refund"></i><span>Credit Note</span></button>`);
   b.push(`<button class="btn btn-primary" id="inv-view-print-btn" onclick="${cn ? `printCreditNote('${doc.id}')` : `printCustomerInvoice('${doc.id}')`}"><i class="ti ti-printer"></i><span>Print / PDF</span></button>`);
   document.getElementById('inv-view-actions').innerHTML = b.join('');
@@ -1164,4 +1199,132 @@ function renderInvoiceRegister(){
   const open = r => r.kind === 'credit' ? `openCreditNoteDocument('${r.id}')` : r.kind === 'invoice' ? `openIndependentInvoiceDocument('${r.soId}','${r.id}')` : `openInvoiceDocument('${r.soId}',${r.idx})`;
   body.innerHTML = rows.length ? rows.map(r => `<tr class="quotation-clickable-row" tabindex="0" role="button" onclick="${open(r)}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${open(r)}}"><td>${invEsc(r.no || '—')}</td><td>${typeBadge(r)}</td><td>${fmtDate(r.date)}</td><td>${invEsc(r.customer || '—')}</td><td>${invEsc(r.soNo || '—')}</td><td class="inv-reg-ref">${invEsc(r.ref || '—')}</td><td class="num${r.total < 0 ? ' neg' : ''}">${formatNumber(r.total, 2)}</td>${payOn ? `<td class="num inv-pay-col">${r.kind === 'invoice' ? formatNumber(r.paid, 2) : '—'}</td><td class="num inv-pay-col${r.payStatus === 'Overdue' ? ' neg' : ''}">${r.kind === 'invoice' ? formatNumber(r.balance, 2) : '—'}</td>` : ''}<td>${statusBadge(r)}${payOn && r.kind === 'invoice' ? ' ' + rctPayPill(r.payStatus) : ''}</td></tr>`).join('')
     : `<tr><td colspan="${payOn ? 10 : 8}"><div class="empty-state"><i class="ti ti-file-invoice"></i><strong>No invoices found</strong><p>Invoices are created from the Sales Order (Create invoice). Adjust the filters to see other documents.</p></div></td></tr>`;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   V266.3 — INVOICE LIMITED EDIT + CANCEL AND RE-ISSUE
+   A tax invoice's figures are never edited (ZATCA): only due date, customer PO no., description, notes and the
+   Zoho no. Everything else is corrected with "Cancel and re-issue" = full credit note + a new invoice prefilled
+   from the old one. Both run under the Sales Order lock, like credit notes.
+═══════════════════════════════════════════════════════════════════ */
+function invoiceEditRightsOf(inv){
+  const R = window.BizCoreRct; if (!R) return { shown: false, ok: false, why: '' };
+  const t = new Date(), today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+  const r = R.core.invoiceEditRights(inv, R.settings, !!R.isAdministrator, today);
+  return { shown: R.settings.editInvoices !== 'none', ok: r.ok, why: r.why };
+}
+function ensureInvoiceEditModal(){
+  let m = document.getElementById('inv-edit-modal'); if (m) return m;
+  m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'inv-edit-modal';
+  m.innerHTML = `<div class="modal inv-edit-box">
+    <div class="modal-header"><div><h2 id="ie-title">Edit invoice</h2><div class="so-create-subtitle" id="ie-subtitle"></div></div><button class="close-btn" onclick="closeModal('inv-edit-modal')">✕</button></div>
+    <div class="modal-body">
+      <div class="inv-edit-facts" id="ie-facts"></div>
+      <div class="inv-edit-fields">
+        <div class="form-group"><label for="ie-zoho">Zoho invoice no. *</label><input id="ie-zoho" maxlength="100" autocomplete="off" oninput="recalcEditInvoice()"/><div class="inv-field-msg" id="ie-zoho-msg" hidden></div></div>
+        <div class="form-group"><label for="ie-due">Payment due date</label><input id="ie-due" type="date" onchange="recalcEditInvoice()"/></div>
+        <div class="form-group"><label for="ie-po">Customer PO no.</label><input id="ie-po" maxlength="200" autocomplete="off" oninput="recalcEditInvoice()"/></div>
+        <div class="form-group inv-span-2"><label for="ie-reason" id="ie-reason-label">Description</label><input id="ie-reason" maxlength="300" oninput="recalcEditInvoice()"/></div>
+        <div class="form-group inv-span-2"><label for="ie-notes">Notes</label><textarea id="ie-notes" class="inv-notes" oninput="recalcEditInvoice()"></textarea></div>
+        <div class="form-group inv-span-2 inv-edit-why"><label for="ie-why">Reason for the change *</label><input id="ie-why" maxlength="300" placeholder="e.g. customer asked for 30 days, Zoho number typed wrong…" oninput="recalcEditInvoice()"/></div>
+      </div>
+      <div class="inv-edit-note"><i class="ti ti-info-circle"></i> Quantities, prices, VAT, date and customer of a tax invoice cannot be changed. Use <b>Cancel &amp; re-issue</b> for those.</div>
+    </div>
+    <div class="modal-footer"><div class="inv-ready" id="ie-ready"></div><button class="btn btn-secondary" onclick="closeModal('inv-edit-modal')">Cancel</button><button class="btn btn-primary" id="ie-save" onclick="saveEditInvoice()" disabled><i class="ti ti-device-floppy"></i><span id="ie-save-text">Save Changes</span></button></div>
+  </div>`;
+  document.body.appendChild(m); return m;
+}
+async function openEditInvoice(soId, invoiceId){
+  const inv = invoicesCache.find(i => i.id === invoiceId); if (!inv) { showToast('Invoice not found', 'error'); return false; }
+  const er = invoiceEditRightsOf(inv);
+  if (!er.ok) { showToast(er.why || 'This invoice cannot be edited.', 'warning', 'Not Allowed'); return false; }
+  if (!navigator.onLine) { showToast('Invoices are saved directly to the cloud database. Please reconnect and try again.', 'error', 'Offline'); return false; }
+  const m = ensureInvoiceEditModal();
+  Object.assign(m, { _soId: soId, _invoice: inv, _opId: newDeliveryOperationId('invedit', soId) });
+  document.getElementById('ie-title').textContent = 'Edit ' + inv.invNo;
+  document.getElementById('ie-subtitle').textContent = `${invTypeLabel(inv.type)} · ${inv.customer || ''} · ${inv.soNo || ''}`;
+  const f = (k, v) => `<div><span>${k}</span><strong>${v}</strong></div>`;
+  document.getElementById('ie-facts').innerHTML = f('Invoice date', fmtDate(inv.date)) + f('Total', invMoney((inv.totals || {}).total)) + f('Status', invEsc(inv.status || 'Issued')) + f('Revision', String(inv.revision || 1));
+  document.getElementById('ie-zoho').value = inv.zohoNo || '';
+  document.getElementById('ie-due').value = inv.dueDate || '';
+  document.getElementById('ie-po').value = inv.poNo || '';
+  document.getElementById('ie-reason').value = inv.reason || '';
+  document.getElementById('ie-reason-label').textContent = inv.type === 'order' ? 'Reason for billing ahead *' : 'Description';
+  document.getElementById('ie-notes').value = inv.notes || '';
+  document.getElementById('ie-why').value = '';
+  openModalWithSize('inv-edit-modal');
+  recalcEditInvoice();
+  setTimeout(() => { const e = document.getElementById('ie-why'); if (e && window.innerWidth > 760) e.focus(); }, 60);
+  return true;
+}
+function readEditInvoice(){
+  const m = document.getElementById('inv-edit-modal'), inv = m._invoice, C = invLib();
+  const v = { zohoNo: document.getElementById('ie-zoho').value.trim(), dueDate: document.getElementById('ie-due').value, poNo: document.getElementById('ie-po').value.trim(),
+    reason: document.getElementById('ie-reason').value.trim(), notes: document.getElementById('ie-notes').value.trim() };
+  const labels = { zohoNo: 'Zoho invoice no.', dueDate: 'Payment due date', poNo: 'Customer PO no.', reason: inv.type === 'order' ? 'Reason for billing ahead' : 'Description', notes: 'Notes' };
+  const changes = Object.keys(v).filter(k => v[k] !== String(inv[k] || '')).map(k => ({ field: k, label: labels[k], before: k === 'dueDate' ? fmtDate(inv[k]) : (inv[k] || '—'), after: k === 'dueDate' ? (v[k] ? fmtDate(v[k]) : '—') : (v[k] || '—') }));
+  const key = C.normalizeZohoNo(v.zohoNo);
+  const dup = key && key !== C.normalizeZohoNo(inv.zohoNo) ? invoicesCache.find(i => i.id !== inv.id && i.zohoNo && C.normalizeZohoNo(i.zohoNo) === key) : null;
+  const why = document.getElementById('ie-why').value.trim();
+  const checks = [{ ok: changes.length > 0, text: 'Change something' }, { ok: !!v.zohoNo && !dup, text: dup ? `Zoho no. (already used on ${dup.invNo})` : 'Zoho invoice no.' },
+    ...(inv.type === 'order' ? [{ ok: v.reason.length >= 3, text: 'Reason for billing ahead' }] : []), { ok: why.length >= 5, text: 'Reason for the change' }];
+  return { v, changes, dup, why, checks, errors: checks.filter(c => !c.ok).map(c => c.text) };
+}
+function recalcEditInvoice(){
+  const m = document.getElementById('inv-edit-modal'); if (!m || !m._invoice) return;
+  const r = readEditInvoice();
+  const msg = document.getElementById('ie-zoho-msg'); msg.hidden = !r.dup; msg.innerHTML = r.dup ? '<i class="ti ti-alert-circle"></i> Already used on ' + invEsc(r.dup.invNo) : '';
+  document.getElementById('ie-save').disabled = r.errors.length > 0; document.getElementById('ie-save').title = r.errors[0] || '';
+  document.getElementById('ie-ready').innerHTML = invReadyHtml(r.checks, 'Ready — check the changes, then save');
+}
+async function saveEditInvoice(){
+  const m = document.getElementById('inv-edit-modal'); if (!m || !m._invoice) return null;
+  const r = readEditInvoice(), inv = m._invoice;
+  if (r.errors.length) { showToast(r.errors[0], 'error', 'Check the Changes'); return null; }
+  const details = {};
+  r.changes.forEach(c => { details[invEsc(c.label)] = `<span class="rct-before">${invEsc(c.before)}</span> → <b>${invEsc(c.after)}</b>`; });
+  details['Reason'] = invEsc(r.why);
+  const ok = await invConfirm({ icon: '✏️', title: `Save changes to ${inv.invNo}?`, message: 'The invoice figures stay the same; the change and its reason are recorded in the history. Remember to make the same change in Zoho Books.', details, confirmText: 'Yes, save changes' });
+  if (!ok) return null;
+  return runProtectedDocumentSave({ key: 'invoice-edit:' + m._opId, message: 'Saving changes…', buttonId: 'ie-save', buttonTextId: 'ie-save-text', busyText: 'Saving…',
+    action: async () => {
+      const x = readEditInvoice(), changes = {};
+      x.changes.forEach(c => { changes[c.field] = x.v[c.field]; });
+      try {
+        const res = await window.BizCoreInv.service.editInvoice({ operationId: m._opId, salesOrderId: m._soId, invoiceId: inv.id, expectedRevision: inv.revision, reason: x.why, changes });
+        upsertInvoiceCache(res.invoice); refreshAfterInvoiceChange();
+        closeModal('inv-edit-modal');
+        showToast(`${res.invoice.invNo} updated`, 'success');
+        openInvoiceView(res.invoice.id);
+        return res.invoice;
+      } catch (e) { console.error('[BizCore invoice edit]', e); showValidationDialog('Changes Not Saved', invoiceErrorMessage(e), '', ''); return null; }
+    }, ready: v => !v || !isModalOpen('inv-edit-modal') });
+}
+/** Cancel and re-issue: full credit note first (its screen, prefilled), then the new invoice prefilled from the old one. */
+async function openCancelReissue(soId, invoiceId){
+  const inv = invoicesCache.find(i => i.id === invoiceId); if (!inv) return false;
+  if (inv.status !== 'Issued') { showToast(`${inv.invNo} already has a credit note. Use Credit Note for further corrections.`, 'warning', 'Not Possible'); return false; }
+  const paid = typeof invoicePaidOf === 'function' ? invoicePaidOf(inv) : 0;
+  if (paid > 0.005) {
+    const rcts = typeof receiptsForInvoice === 'function' ? receiptsForInvoice(inv.id).filter(r => r.status !== 'Voided').map(r => r.rctNo).join(', ') : '';
+    showValidationDialog('Remove the payments first', `${inv.invNo} has payments (${formatNumber(paid, 2)}${rcts ? ' — ' + rcts : ''}). Edit those receipts to take this invoice off (the money stays on account), then cancel and re-issue it and apply the money to the new invoice.`, '', '');
+    return false;
+  }
+  if (inv.type === 'advance' && invoicesCache.some(i => (i.deductions || []).some(d => d.advanceInvoiceId === inv.id))) {
+    showValidationDialog('Advance already deducted', `${inv.invNo} has been deducted on later invoices, so it cannot be cancelled as a whole. Use a credit note for the part that is not deducted.`, '', '');
+    return false;
+  }
+  const ok = await invConfirm({ icon: '🔁', title: `Cancel and re-issue ${inv.invNo}?`, message: 'Step 1: a credit note for the whole invoice (you confirm it on the next screen). Step 2: a new invoice opens prefilled from this one — correct it, enter the new Zoho no. and save. Do the same in Zoho Books.',
+    details: { Invoice: invEsc(inv.invNo) + ' · ' + fmtDate(inv.date), Customer: invEsc(inv.customer || '—'), Total: invMoney((inv.totals || {}).total) }, confirmText: 'Continue', confirmClass: 'btn-primary' });
+  if (!ok) return false;
+  const opened = await openIssueCreditNote(soId, invoiceId);
+  const m = document.getElementById('cn-issue-modal');
+  if (!opened || !m || !m.classList.contains('open')) return false;
+  m._reissue = inv;
+  if (inv.type !== 'advance') creditNoteFill(true);
+  document.getElementById('cn-reason').value = 'Cancelled — re-issued as a new invoice';
+  document.getElementById('cn-title').textContent = 'Cancel ' + inv.invNo + ' — step 1 of 2: credit note';
+  recalcCreditNote();
+  return true;
 }

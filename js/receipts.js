@@ -222,6 +222,7 @@ function ensureNewReceiptModal(){
             <div class="form-group rct-f-ref"><label for="rn-ref">Payment reference</label><input id="rn-ref" maxlength="200" autocomplete="off" placeholder="Bank ref., cheque no.…"/></div>
             <div class="form-group rct-f-zoho"><label for="rn-zoho" id="rn-zoho-label">Zoho payment no.</label><input id="rn-zoho" maxlength="100" autocomplete="off" placeholder="e.g. PMT-00231" oninput="recalcNewReceipt()"/><div class="inv-field-msg" id="rn-zoho-msg" hidden></div></div>
             <div class="form-group rct-f-notes"><label for="rn-notes">Notes</label><input id="rn-notes" maxlength="2000" autocomplete="off" placeholder="Internal note (optional)…"/></div>
+            <div class="form-group rct-f-why" id="rn-why-wrap" hidden><label for="rn-why">Reason for the change *</label><input id="rn-why" maxlength="300" autocomplete="off" placeholder="e.g. wrong invoice picked, typing mistake in the amount…" oninput="recalcNewReceipt()"/><div class="rct-hint" id="rn-edit-hint"></div></div>
           </div>
         </section>
         <section class="so-entry-card rct-inv-card">
@@ -266,7 +267,8 @@ async function openNewReceipt(opts = {}){
   if (!navigator.onLine) { showToast('Receipts are saved directly to the cloud database. Please reconnect and try again.', 'error', 'Offline'); return; }
   const C = rctLib(), m = ensureNewReceiptModal();
   m._opId = 'rct-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
-  m._alloc = new Map(); m._touched = false; m._custKey = '';
+  m._alloc = new Map(); m._touched = false; m._custKey = ''; m._edit = null;
+  rctSetEditMode(m, null);
   const custs = receiptCustomerOptions(); m._custs = custs;
   // Opened from a Sales Order or an invoice: that customer, its invoices first in focus
   let pre = '';
@@ -357,7 +359,7 @@ function rctPickerShowChosen(){
   const m = document.getElementById('rct-new-modal'), chosen = document.getElementById('rn-chosen'), search = document.getElementById('rn-pick-search');
   const c = (m._custs || []).find(x => x.key === m._custKey);
   if (!c) { chosen.hidden = true; search.hidden = false; return; }
-  chosen.innerHTML = `${rctAvatar(c)}<span class="rct-pick-txt"><b>${rctEsc(c.customer)}${c.overdue ? '<span class="rct-due overdue">overdue</span>' : ''}</b><small>${c.open ? `${c.open} open · <b>${rctF(c.due)}</b> due` : 'No open invoices · money kept on account'}</small></span><button type="button" class="rct-pick-change" id="rn-cust-change" onclick="rctPickerChange()">Change</button>`;
+  chosen.innerHTML = `${rctAvatar(c)}<span class="rct-pick-txt"><b>${rctEsc(c.customer)}${c.overdue ? '<span class="rct-due overdue">overdue</span>' : ''}</b><small>${c.open ? `${c.open} open · <b>${rctF(c.due)}</b> due` : 'No open invoices · money kept on account'}</small></span>${m._edit && !m._edit.rights.full ? '<span class="rct-pick-lock" title="Only a full edit may change the customer"><i class="ti ti-lock"></i></span>' : '<button type="button" class="rct-pick-change" id="rn-cust-change" onclick="rctPickerChange()">Change</button>'}`;
   chosen.hidden = false; search.hidden = true;
 }
 function rctPickerChange(){
@@ -376,7 +378,12 @@ function newReceiptCustomerChanged(initial){
 function newReceiptOpenList(m){
   const C = rctLib();
   if (!m._custKey) return [];
-  const list = C.openInvoicesFor(m._custKey, typeof invoicesCache !== 'undefined' ? invoicesCache : [], invoicePaymentsCache);
+  let pays = invoicePaymentsCache;
+  if (m._edit) { // editing: this receipt's own amounts count back into the balances
+    pays = new Map(invoicePaymentsCache);
+    (m._edit.rct.allocations || []).forEach(a => { const p = pays.get(a.invoiceId) || { paid: 0 }; pays.set(a.invoiceId, { ...p, paid: rctR2(rctNum(p.paid) - rctNum(a.amount)) }); });
+  }
+  const list = C.openInvoicesFor(m._custKey, typeof invoicesCache !== 'undefined' ? invoicesCache : [], pays);
   // invoices already in the allocation stay listed even if another user paid them meanwhile
   return list;
 }
@@ -401,7 +408,7 @@ function renderNewReceiptInvoices(resetFocus){
       <label class="rct-inv-check"><input type="checkbox" ${a > 0 ? 'checked' : ''} onchange="newReceiptToggle('${rctEsc(i.id)}',this.checked)" aria-label="Apply to ${rctEsc(i.invNo)}"/></label>
       <span class="rct-inv-no"><button type="button" class="rct-link" onclick="openInvoiceView('${rctEsc(i.id)}')" title="View ${rctEsc(i.invNo)}">${rctEsc(i.invNo)}</button></span>
       <span class="rct-inv-zoho">${rctEsc(i.zohoNo || '—')}</span><span class="rct-inv-date">${rctShortDate(i.date)}</span><span class="rct-inv-due">${duePill}</span>
-      <span class="rct-inv-so">${rctEsc(i.soNo || '—')}</span><span class="num rct-inv-total">${rctF(invoiceNetOf(i))}</span><span class="num rct-inv-paid">${rctF(invoicePaidOf(i))}</span>
+      <span class="rct-inv-so">${rctEsc(i.soNo || '—')}</span><span class="num rct-inv-total">${rctF(invoiceNetOf(i))}</span><span class="num rct-inv-paid">${rctF(rctNum((x.payment || {}).paid))}</span>
       <span class="num rct-inv-bal"><small>Due </small>${rctF(x.balance)}</span>
       <span class="rct-inv-apply"><input type="number" class="bc-num-input rct-apply-input" min="0" max="${x.balance.toFixed(2)}" step="0.01" inputmode="decimal" value="${a > 0 ? a.toFixed(2) : ''}" placeholder="0.00" oninput="newReceiptApplyInput('${rctEsc(i.id)}',this)" aria-label="Amount applied to ${rctEsc(i.invNo)}"/><button type="button" class="btn btn-secondary btn-sm rct-full" onclick="newReceiptFull('${rctEsc(i.id)}')" title="Settle in full">Full</button><small class="rct-left" id="rn-left-${rctEsc(i.id)}"></small></span>
     </div>`;
@@ -456,7 +463,7 @@ function readNewReceipt(){
   const m = document.getElementById('rct-new-modal'), C = rctLib(), s = rctSettings();
   const amount = rctR2(rctMoneyVal('rn-amount'));
   const zoho = document.getElementById('rn-zoho').value.trim(), zKey = zoho ? C.zohoNoKey(zoho) : '';
-  const dup = zKey ? receiptsCache.find(r => r.zohoPaymentNoKey === zKey) : null;
+  const dup = zKey ? receiptsCache.find(r => r.zohoPaymentNoKey === zKey && (!m._edit || r.id !== m._edit.rct.id)) : null;
   const account = (document.getElementById('rn-account')?.value || '').trim();
   const charges = rctR2(rctMoneyVal('rn-charges'));
   const allocations = [...m._alloc.entries()].filter(([, v]) => v > 0.005).map(([invoiceId, amount]) => ({ invoiceId, amount: rctR2(amount) }));
@@ -466,13 +473,20 @@ function readNewReceipt(){
     { ok: !!m._custKey, text: 'Choose the customer' },
     { ok: amount > 0.005, text: 'Enter the amount received' },
   ];
-  if (s.accounts.length) checks.push({ ok: !!account, text: 'Choose the account' });
-  if (s.zohoPaymentNo === 'mandatory' || zoho) checks.push({ ok: !!zKey && !dup, text: dup ? `Zoho payment no. (already used on ${dup.rctNo})` : 'Enter the Zoho payment no.' });
+  const sameAsBefore = (v, k) => !!m._edit && v === (m._edit.rct[k] || '');
+  if (s.accounts.length && !sameAsBefore(account, 'account')) checks.push({ ok: !!account, text: 'Choose the account' });
+  if ((s.zohoPaymentNo === 'mandatory' && !sameAsBefore(zoho, 'zohoPaymentNo')) || zoho) checks.push({ ok: !!zKey && !dup, text: dup ? `Zoho payment no. (already used on ${dup.rctNo})` : 'Enter the Zoho payment no.' });
   if (over.length) checks.push({ ok: false, text: `Reduce ${over[0]} to its balance due` });
   if (applied > amount + 0.005) checks.push({ ok: false, text: 'Applied is more than the amount received' });
   if (charges < 0 || (charges > 0 && charges >= amount)) checks.push({ ok: false, text: 'Bank charges must be less than the amount received' });
   const cust = (m._custs || []).find(c => c.key === m._custKey);
-  return { amount, charges: Math.max(0, charges), zoho, dup, account, allocations, applied, unapplied: rctR2(amount - applied), checks, errors: checks.filter(c => !c.ok).map(c => c.text), cust };
+  let changes = null;
+  if (m._edit) {
+    changes = rctEditChanges(m, { amount, charges: Math.max(0, charges), zoho, account, allocations, cust });
+    checks.push({ ok: changes.length > 0, text: 'Change something' });
+    checks.push({ ok: (document.getElementById('rn-why').value || '').trim().length >= 5, text: 'Reason for the change' });
+  }
+  return { changes, amount, charges: Math.max(0, charges), zoho, dup, account, allocations, applied, unapplied: rctR2(amount - applied), checks, errors: checks.filter(c => !c.ok).map(c => c.text), cust };
 }
 function recalcNewReceipt(){
   const m = document.getElementById('rct-new-modal'); if (!m || !m._custs) return;
@@ -506,11 +520,12 @@ function recalcNewReceipt(){
   document.getElementById('rn-foot-figs').innerHTML = `<span>Applied <b>${rctF(r.applied)}</b></span><span>Unapplied <b>${rctF(Math.max(0, r.unapplied))}</b></span>`;
   const save = document.getElementById('rn-save');
   save.disabled = r.errors.length > 0; save.title = r.errors[0] || '';
-  document.getElementById('rn-ready').innerHTML = invReadyHtml(r.checks, 'Ready — check the summary, then save the receipt');
+  document.getElementById('rn-ready').innerHTML = invReadyHtml(r.checks, m._edit ? 'Ready — check the changes, then save' : 'Ready — check the summary, then save the receipt');
   m._preview = r;
 }
 async function saveNewReceipt(){
   const m = document.getElementById('rct-new-modal'); if (!m) return null;
+  if (m._edit) return saveEditReceipt(m);
   const r = readNewReceipt();
   if (r.errors.length) { showToast(r.errors[0], 'error', 'Check the Receipt'); return null; }
   const details = { Customer: rctEsc(r.cust ? r.cust.customer : ''), 'Receipt date': fmtDate(document.getElementById('rn-date').value), Method: rctEsc(document.getElementById('rn-method').value) };
@@ -520,7 +535,7 @@ async function saveNewReceipt(){
   details['Applied'] = r.allocations.length ? r.allocations.map(a => `${rctEsc(((m._open || []).find(o => o.invoice.id === a.invoiceId) || { invoice: {} }).invoice.invNo || '')} ${rctF(a.amount)}`).join('<br>') : '—';
   if (r.unapplied > 0.005) details['Unapplied (on account)'] = rctF(r.unapplied);
   details['Amount received'] = '<b>SAR ' + rctF(r.amount) + '</b>';
-  const ok = await invConfirm({ icon: '💵', title: 'Save this receipt?', message: 'Please check the details. A saved receipt cannot be edited; a mistake is corrected by voiding it.', details, confirmText: 'Yes, save receipt', confirmClass: 'btn-success' });
+  const ok = await invConfirm({ icon: '💵', title: 'Save this receipt?', message: 'Please check the details. Later corrections are made with Edit (as allowed in Administration) or Void, and are recorded in the history.', details, confirmText: 'Yes, save receipt', confirmClass: 'btn-success' });
   if (!ok) return null;
   return runProtectedDocumentSave({ key: 'receipt:' + m._opId, message: 'Saving receipt…', buttonId: 'rn-save', buttonTextId: 'rn-save-text', busyText: 'Saving…',
     action: () => _saveNewReceiptCore(m), ready: x => !x || !isModalOpen('rct-new-modal') });
@@ -628,6 +643,7 @@ function renderReceiptView(r){
   const rows = kr('Status', v ? '<span class="rct-status voided">Voided</span>' : '<span class="rct-status posted">Posted</span>') + kr('Zoho payment', rctEsc(r.zohoPaymentNo || '—'))
     + (r.account ? kr('Deposited to', rctEsc(r.account)) : '')
     + (rctNum(r.bankCharges) > 0.005 ? kr('Bank charges', rctF(r.bankCharges)) + kr('Reached the bank', rctF(rctNum(r.amount) - rctNum(r.bankCharges))) : '') + kr('Recorded by', rctEsc(r.createdBy || '—')) + kr('Customer open now', rctF(custOpen))
+    + (r.editCount ? kr('Revised', `${r.editCount}× · ${rctEsc(r.revisedBy || '')}`) : '')
     + (v ? kr('Void reason', rctEsc(r.voidReason || '—')) : '');
   const flow = [];
   const sos = [...new Map((r.allocations || []).filter(a => a.salesOrderId).map(a => [a.salesOrderId, a])).values()];
@@ -647,15 +663,18 @@ function renderReceiptView(r){
   document.getElementById('inv-view-title').textContent = `${r.rctNo} — Payment Receipt`;
   document.getElementById('inv-view-body').innerHTML = `<div class="dn-view-workspace inv-view-workspace"><div class="dn-view-document">${receiptDocumentHtml(r, true)}</div>${panel}</div>`;
   const b = ['<div class="dn-view-actionbar-spacer"></div>', `<button class="btn btn-secondary" onclick="closeViewWithReturn('inv-view-modal')"><i class="ti ti-x"></i><span>Close</span></button>`];
-  if (!v && rctNum(r.unapplied) > 0.005 && rctCan('allowRecord')) b.push(`<button class="btn btn-secondary" id="rct-view-apply-btn" onclick="openApplyReceipt('${rctEsc(r.id)}')"><i class="ti ti-arrows-join"></i><span>Apply ${rctF(r.unapplied)}</span></button>`);
-  if (!v && rctCan('allowVoid')) b.push(`<button class="btn btn-danger" id="rct-view-void-btn" onclick="openVoidReceipt('${rctEsc(r.id)}')"><i class="ti ti-ban"></i><span>Void…</span></button>`);
+  const er = rctEditRightsOf(r);
+  if (!v && rctSettings().editReceipts !== 'none') b.push(`<button class="btn btn-secondary" id="rct-view-edit-btn" ${er.limited || er.full ? '' : `disabled title="${rctEsc(er.why)}"`} onclick="rctEditClick('${rctEsc(r.id)}')"><i class="ti ti-pencil"></i><span>Edit</span></button>`);
+  if (!v && rctNum(r.unapplied) > 0.005 && rctCan('allowRecord')) b.push(`<button class="btn btn-secondary" id="rct-view-apply-btn" onclick="rctApplyClick('${rctEsc(r.id)}')"><i class="ti ti-arrows-join"></i><span>Apply ${rctF(r.unapplied)}</span></button>`);
+  if (!v && rctCan('allowVoid')) b.push(`<button class="btn btn-danger" id="rct-view-void-btn" onclick="rctVoidClick('${rctEsc(r.id)}')"><i class="ti ti-ban"></i><span>Void…</span></button>`);
   b.push(`<button class="btn btn-success" id="rct-view-print-btn" onclick="printReceipt('${rctEsc(r.id)}')"><i class="ti ti-printer"></i><span>Print / PDF</span></button>`);
   document.getElementById('inv-view-actions').innerHTML = b.join('');
   if (!m.classList.contains('open')) openModalWithSize('inv-view-modal');
   // Full history (applied later …) from the event log
   if (window.BizCoreRct && window.BizCoreRct.loadEvents) window.BizCoreRct.loadEvents(r.id).then(evs => {
     if (m._docId !== r.id) return;
-    const rowsA = evs.map(e => e.kind === 'posted' ? [`Receipt posted by ${e.actor || '—'}`, e.at] : e.kind === 'applied' ? [`${(e.allocations || []).map(a => a.invNo).join(', ')} applied (${rctF((e.allocations || []).reduce((s, a) => s + rctNum(a.amount), 0))}) by ${e.actor || '—'}`, e.at] : e.kind === 'voided' ? [`Voided by ${e.actor || '—'} — ${e.reason || ''}`, e.at] : null).filter(Boolean);
+    const rowsA = evs.map(e => e.kind === 'posted' ? [`Receipt posted by ${e.actor || '—'}`, e.at] : e.kind === 'applied' ? [`${(e.allocations || []).map(a => a.invNo).join(', ')} applied (${rctF((e.allocations || []).reduce((s, a) => s + rctNum(a.amount), 0))}) by ${e.actor || '—'}`, e.at] : e.kind === 'voided' ? [`Voided by ${e.actor || '—'} — ${e.reason || ''}`, e.at]
+      : e.kind === 'edited' ? [`Edited by ${e.actor || '—'} — ${e.reason || ''} (${(e.changes || []).map(c => c.label).join(', ')})`, e.at] : null).filter(Boolean);
     const box = document.getElementById('rct-activity'); if (box && rowsA.length) box.innerHTML = bcActivityList(rowsA);
   }).catch(() => {});
 }
@@ -692,7 +711,7 @@ async function saveVoidReceipt(){
         const res = await window.BizCoreRct.service.voidReceipt({ operationId: m._opId, receiptId: m._id, reason, expectedRevision: m._rev });
         upsertReceiptCache(res.receipt);
         (res.receipt.allocations || []).forEach(a => { const p = invoicePaymentsCache.get(a.invoiceId); if (p && (p.receipts || {})[res.receipt.id]) { const rc = { ...p.receipts }; delete rc[res.receipt.id]; invoicePaymentsCache.set(a.invoiceId, { ...p, receipts: rc, paid: rctR2(rctNum(p.paid) - rctNum(a.amount)) }); } });
-        m.classList.remove('open');
+        closeModal('rct-void-modal');
         showToast(`${res.receipt.rctNo} voided`, 'success');
         refreshAfterReceiptChange(); renderReceiptView(res.receipt);
         return res.receipt;
@@ -769,6 +788,11 @@ function renderReceiptSettings(){
       <div class="form-group"><label for="rs-zoho">Zoho payment no. on receipts</label>${sel('rs-zoho', s.zohoPaymentNo, [['mandatory', 'Mandatory'], ['optional', 'Optional']])}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">When given, a Zoho payment no. can be used only once, whatever this setting.</div></div>
       <div class="form-group"><label for="rs-record">Who may record receipts</label>${sel('rs-record', s.allowRecord, who)}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Also applies to applying unapplied money later.</div></div>
       <div class="form-group"><label for="rs-void">Who may void receipts</label>${sel('rs-void', s.allowVoid, who)}</div>
+      <div class="form-group"><label for="rs-edit-rct">Editing receipts</label>${sel('rs-edit-rct', s.editReceipts, [['none', 'Nobody — corrections by Void only'], ['limited', 'Limited edit for all users'], ['limited-admin-full', 'Limited for all users, full for administrators'], ['full', 'Full edit for all users']])}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Limited: reference, notes, account, method, Zoho no. and the invoices applied. Full: also customer, date, amount and bank charges.</div></div>
+      <div class="form-group"><label for="rs-edit-inv">Editing invoices (limited)</label>${sel('rs-edit-inv', s.editInvoices, [['none', 'Nobody'], ['admin', 'Administrators only'], ['all', 'All users']])}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Due date, customer PO no., description, notes and Zoho no. Invoice figures are never edited — use Cancel and re-issue (a credit note and a new invoice).</div></div>
+      <div class="form-group"><label for="rs-edit-limit">Edit time limit</label><div style="display:flex;gap:8px;align-items:center">${sel('rs-edit-limit', s.editLimit, [['month', 'Current month only'], ['days', 'Within a number of days'], ['none', 'No limit']]).replace('<select', '<select onchange="document.getElementById(\'rs-edit-days-wrap\').hidden=this.value!==\'days\'"')}<span id="rs-edit-days-wrap" ${s.editLimit === 'days' ? '' : 'hidden'}><input id="rs-edit-days" type="number" min="1" max="365" step="1" value="${s.editDays}" ${dis} style="width:80px"/> days</span></div>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-weight:500;text-transform:none;letter-spacing:0"><input type="checkbox" id="rs-admin-after" ${s.adminsAfterLimit ? 'checked' : ''} ${dis}/> Administrators may still edit after the limit</label>
+        <div style="font-size:11.5px;color:var(--gray);margin-top:4px">Counted from the receipt / invoice date. After the limit: Void (receipt) or credit note (invoice).</div></div>
       <div class="form-group"><label for="rs-accounts">Deposit accounts (one per line)</label><textarea id="rs-accounts" ${dis} rows="4" placeholder="e.g. SNB Current ••4410&#10;Al Rajhi ••2201&#10;Cash box">${rctEsc((s.accounts || []).join('\n'))}</textarea><div style="font-size:11.5px;color:var(--gray);margin-top:4px">When the list is filled, "Deposited to" is a mandatory choice on every receipt. Leave empty to keep it optional free text.</div></div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;flex-wrap:wrap">
@@ -780,9 +804,125 @@ async function saveReceiptSettings(){
   const v = id => document.getElementById(id).value;
   const btn = document.getElementById('rs-save'); if (btn) btn.disabled = true;
   try {
-    await window.BizCoreRct.saveSettings({ zohoPaymentNo: v('rs-zoho'), allowRecord: v('rs-record'), allowVoid: v('rs-void'), accounts: v('rs-accounts').split('\n') });
+    await window.BizCoreRct.saveSettings({ zohoPaymentNo: v('rs-zoho'), allowRecord: v('rs-record'), allowVoid: v('rs-void'), accounts: v('rs-accounts').split('\n'),
+      editReceipts: v('rs-edit-rct'), editInvoices: v('rs-edit-inv'), editLimit: v('rs-edit-limit'), editDays: parseInt(v('rs-edit-days'), 10) || 7, adminsAfterLimit: document.getElementById('rs-admin-after').checked });
     showToast('Receipt settings saved.', 'success', 'Settings Saved');
   } catch (e) { showToast(e.code === 'permission-denied' ? 'Only an administrator can change these settings (or the receipt rules are not published yet).' : e.message, 'error', 'Not Saved'); }
   finally { if (btn) btn.disabled = false; }
 }
-console.log('Payment receipts V266.2 ✅ (bank charges · customer picker · A4 table header · picker on click · amount format)');
+/* ═══════════════════════════════════════════════════════════════════
+   V266.3 — EDIT RECEIPT (limited / full, Administration settings) + receipt lock
+═══════════════════════════════════════════════════════════════════ */
+const RCT_LOCK_MODALS = ['rct-new-modal', 'rct-apply-modal', 'rct-void-modal'];
+/** Runs open() while this user holds the receipt lock; the lock stays with the screen that open() shows. */
+async function rctWithLock(id, activity, open){
+  const r = receiptsCache.find(x => x.id === id); if (!r) return false;
+  if (typeof acquireDocLock !== 'function') return open();
+  if (typeof beginScreenTransition === 'function') beginScreenTransition('Opening ' + r.rctNo + '…');
+  try {
+    const ok = await acquireDocLock('receipt', id, r.rctNo, activity);
+    if (!ok) return false;
+    const before = new Set(typeof openOverlayIds === 'function' ? openOverlayIds() : []);
+    let res;
+    try { res = await open(); } catch (e) { await releaseLock(); throw e; }
+    const opened = (typeof openOverlayIds === 'function' ? openOverlayIds() : []).filter(x => RCT_LOCK_MODALS.includes(x) && !before.has(x));
+    if (opened.length && typeof _activeLock !== 'undefined' && _activeLock) _activeLock.modalId = opened[opened.length - 1];
+    else await releaseLock();
+    return res;
+  } finally { if (typeof endScreenTransition === 'function') endScreenTransition(); }
+}
+function rctEditRightsOf(r){ return rctLib().receiptEditRights(r, rctSettings(), rctIsAdmin(), rctToday()); }
+function rctEditClick(id){ const r = receiptsCache.find(x => x.id === id); return rctWithLock(id, 'Editing ' + (r ? r.rctNo : 'the receipt'), () => openEditReceipt(id)); }
+function rctApplyClick(id){ return rctWithLock(id, 'Applying unapplied money', () => openApplyReceipt(id)); }
+function rctVoidClick(id){ return rctWithLock(id, 'Voiding the receipt', () => openVoidReceipt(id)); }
+
+function rctSetEditMode(m, edit){
+  const on = !!edit, full = on && edit.rights.full;
+  document.getElementById('rn-why-wrap').hidden = !on;
+  document.getElementById('rn-why').value = '';
+  document.getElementById('rn-save-text').textContent = on ? 'Save Changes' : 'Save Receipt';
+  m.querySelector('.modal').classList.toggle('rct-editing', on);
+  ['rn-date', 'rn-amount', 'rn-charges'].forEach(id => { const e = document.getElementById(id); e.disabled = on && !full; e.title = on && !full ? 'Only a full edit (administrator) may change this' : ''; });
+  if (on) document.getElementById('rn-edit-hint').textContent = full ? 'Full edit: every field can be changed.' : 'Limited edit: customer, date, amount and bank charges stay as they are.';
+}
+async function openEditReceipt(id){
+  const r = receiptsCache.find(x => x.id === id); if (!r) return false;
+  const rights = rctEditRightsOf(r);
+  if (!rights.limited && !rights.full) { showToast(rights.why || 'This receipt cannot be edited.', 'warning', 'Not Allowed'); return false; }
+  if (!navigator.onLine) { showToast('Receipts are saved directly to the cloud database. Please reconnect and try again.', 'error', 'Offline'); return false; }
+  const C = rctLib(), m = ensureNewReceiptModal();
+  ['view-modal', 'inv-view-modal'].forEach(mid => { if (isModalOpen(mid)) closeModal(mid); });
+  m._opId = 'edit-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  m._edit = { rct: r, rights }; m._touched = true; m._focusSO = ''; m._focusInv = ''; m._returnSO = '';
+  m._custs = receiptCustomerOptions();
+  const key = r.custKey || C.customerKeyOf(r);
+  if (!m._custs.some(c => c.key === key)) m._custs.push({ key, custId: r.custId || '', customer: r.customer, open: 0, due: 0, overdue: false, oldest: '' });
+  rctSetEditMode(m, m._edit);
+  document.getElementById('rn-title').textContent = 'Edit ' + r.rctNo;
+  document.getElementById('rn-subtitle').textContent = `${r.customer} · ${fmtDate(r.date)} · revision ${r.revision}${r.editCount ? ' · edited ' + r.editCount + '×' : ''}`;
+  document.getElementById('rn-cust').value = key; document.getElementById('rn-cust-q').value = ''; rctPickerClose();
+  document.getElementById('rn-date').value = r.date;
+  const money = v => rctNum(v) ? rctNum(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+  document.getElementById('rn-amount').value = money(r.amount);
+  document.getElementById('rn-charges').value = money(r.bankCharges);
+  document.getElementById('rn-method').innerHTML = C.PAYMENT_METHODS.map(x => `<option>${rctEsc(x)}</option>`).join('');
+  document.getElementById('rn-method').value = r.method;
+  const s = rctSettings(), accs = s.accounts.includes(r.account || '') || !r.account ? s.accounts : [r.account, ...s.accounts];
+  document.getElementById('rn-account-label').textContent = 'Deposited to (account)' + (s.accounts.length ? ' *' : '');
+  document.getElementById('rn-account-wrap').innerHTML = s.accounts.length
+    ? `<select id="rn-account" onchange="recalcNewReceipt()"><option value="">Choose the account…</option>${accs.map(a => `<option>${rctEsc(a)}</option>`).join('')}</select>`
+    : '<input id="rn-account" maxlength="60" autocomplete="off" placeholder="Bank / account (optional)" oninput="recalcNewReceipt()"/>';
+  document.getElementById('rn-account').value = r.account || '';
+  document.getElementById('rn-zoho-label').textContent = 'Zoho payment no.' + (s.zohoPaymentNo === 'mandatory' ? ' *' : '');
+  document.getElementById('rn-zoho').value = r.zohoPaymentNo || ''; document.getElementById('rn-ref').value = r.reference || ''; document.getElementById('rn-notes').value = r.notes || '';
+  ['rn-ref', 'rn-notes'].forEach(id => { document.getElementById(id).oninput = recalcNewReceipt; });
+  m._custKey = key; rctPickerShowChosen();
+  m._alloc = new Map((r.allocations || []).map(a => [a.invoiceId, rctNum(a.amount)]));
+  renderNewReceiptInvoices(false);
+  openModalWithSize('rct-new-modal');
+  setTimeout(() => { const f = document.getElementById('rn-why'); if (f && window.innerWidth > 760) f.focus(); }, 60);
+  return true;
+}
+/** [{ label, before, after }] between the receipt and the screen. */
+function rctEditChanges(m, r){
+  const o = m._edit.rct, out = [], add = (label, a, b) => { if (String(a) !== String(b)) out.push({ label, before: a === '' ? '—' : a, after: b === '' ? '—' : b }); };
+  add('Customer', o.customer, r.cust ? r.cust.customer : '');
+  add('Receipt date', fmtDate(o.date), fmtDate(document.getElementById('rn-date').value));
+  add('Amount received', rctF(o.amount), rctF(r.amount));
+  add('Bank charges', rctF(o.bankCharges || 0), rctF(r.charges));
+  add('Method', o.method, document.getElementById('rn-method').value);
+  add('Deposited to', o.account || '', r.account);
+  add('Payment reference', o.reference || '', document.getElementById('rn-ref').value.trim());
+  add('Zoho payment no.', o.zohoPaymentNo || '', r.zoho);
+  add('Notes', o.notes || '', document.getElementById('rn-notes').value.trim());
+  const name = id => ((invoicesCache || []).find(i => i.id === id) || (o.allocations || []).find(a => a.invoiceId === id) || {}).invNo || id;
+  const fmtA = list => list.length ? list.map(a => `${name(a.invoiceId)} ${rctF(a.amount)}`).join(', ') : '—';
+  add('Invoices applied', fmtA((o.allocations || []).map(a => ({ invoiceId: a.invoiceId, amount: rctR2(a.amount) })).sort((a, b) => a.invoiceId.localeCompare(b.invoiceId))), fmtA([...r.allocations].sort((a, b) => a.invoiceId.localeCompare(b.invoiceId))));
+  return out;
+}
+async function saveEditReceipt(m){
+  const r = readNewReceipt();
+  if (r.errors.length) { showToast(r.errors[0], 'error', 'Check the Changes'); return null; }
+  const details = {};
+  r.changes.forEach(c => { details[rctEsc(c.label)] = `<span class="rct-before">${rctEsc(c.before)}</span> → <b>${rctEsc(c.after)}</b>`; });
+  details['Reason'] = rctEsc(document.getElementById('rn-why').value.trim());
+  const ok = await invConfirm({ icon: '✏️', title: `Save changes to ${m._edit.rct.rctNo}?`, message: 'The receipt keeps its number; the change and its reason are recorded in the history. Remember to make the same change in Zoho Books.', details, confirmText: 'Yes, save changes', confirmClass: 'btn-success' });
+  if (!ok) return null;
+  return runProtectedDocumentSave({ key: 'receipt-edit:' + m._opId, message: 'Saving changes…', buttonId: 'rn-save', buttonTextId: 'rn-save-text', busyText: 'Saving…',
+    action: async () => {
+      const x = readNewReceipt(), o = m._edit.rct;
+      const changes = { reference: document.getElementById('rn-ref').value.trim(), notes: document.getElementById('rn-notes').value.trim(), method: document.getElementById('rn-method').value,
+        account: x.account, zohoPaymentNo: x.zoho, allocations: x.allocations };
+      if (m._edit.rights.full) Object.assign(changes, { customer: x.cust.customer, custId: x.cust.custId || '', date: document.getElementById('rn-date').value, amount: x.amount, bankCharges: x.charges });
+      try {
+        const res = await window.BizCoreRct.service.editReceipt({ operationId: m._opId, receiptId: o.id, expectedRevision: o.revision, reason: document.getElementById('rn-why').value.trim(), today: rctToday(), changes });
+        upsertReceiptCache(res.receipt);
+        closeModal('rct-new-modal');
+        showToast(`${res.receipt.rctNo} updated`, 'success');
+        refreshAfterReceiptChange(); openReceiptView(res.receipt.id);
+        return res.receipt;
+      } catch (e) { console.error('[BizCore receipt edit]', e); showValidationDialog('Changes Not Saved', receiptErrorMessage(e), '', ''); return null; }
+    }, ready: v => !v || !isModalOpen('rct-new-modal') });
+}
+
+console.log('Payment receipts V266.3 ✅ (bank charges · customer picker · A4 table header · edit receipts & invoices · cancel and re-issue · receipt lock)');

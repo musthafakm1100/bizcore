@@ -21,6 +21,7 @@ import {
   COLLECTIONS, SCHEMA_VERSION, DeliveryError, isSafeId, eventIdForOperation, emptyLedger, requireDate, requireReason, cleanText, assertSize,
 } from './delivery-core.mjs?v=266.0';
 import { LOCK_COLLECTION, LOCK_TYPES, lockId, lockHeldBy } from './lock-service.mjs?v=266.0';
+import { RECEIPT_SETTINGS_PATH, effectiveReceiptSettings, invoiceEditRights } from './receipt-core.mjs?v=266.3';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
 const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, details); };
@@ -50,6 +51,7 @@ export function createInvoiceService(fs, options = {}) {
     lock: soId => doc(db, LOCK_COLLECTION, lockId(LOCK_TYPES.salesOrder, soId)),
     settings: () => doc(db, ...BILLING_SETTINGS_PATH),
     access: () => doc(db, 'system', 'accessControl'),
+    editSettings: () => doc(db, ...RECEIPT_SETTINGS_PATH),
   };
   const stamp = () => (serverTimestamp ? { recordedAt: serverTimestamp() } : {});
   const CONTENTION = new Set(['aborted', 'failed-precondition', 'permission-denied']);
@@ -158,6 +160,7 @@ export function createInvoiceService(fs, options = {}) {
         customer: so.customer || '', custId: so.custId || '', poNo: so.poNo || '', quotationId: so.quotationId || '',
         date, dueDate, zohoNo, zohoNoKey: zKey, notes: cleanText(input.notes, 2000), reason,
         lines, deductions, advance, totals, credited: {}, creditNotes: [], status: 'Issued',
+        ...(input.reissueOf && isSafeId(input.reissueOf.id) ? { reissueOf: { id: input.reissueOf.id, invNo: cleanText(input.reissueOf.invNo, 100) } } : {}),
         revision: 1, lastEventId: eventId, creationOperationId: operationId,
         created: at, createdBy: actor.name, createdByUid: actor.uid, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid,
       };
@@ -234,5 +237,61 @@ export function createInvoiceService(fs, options = {}) {
     });
   }
 
-  return { issueInvoice, issueCreditNote };
+  /* ───────── V266.3 limited edit (due date, PO no., description, notes, Zoho no.) ─────────
+     Invoice figures (lines, prices, VAT, date, customer) are never edited: a tax invoice is corrected with a credit
+     note ("Cancel and re-issue"). The edit is done by the holder of the Sales Order lock, like credit notes. */
+  async function editInvoice(input) {
+    const { operationId, salesOrderId, invoiceId } = input || {};
+    ensure(isSafeId(salesOrderId) && isSafeId(invoiceId), ERR.INVALID_INPUT, 'Invoice reference required');
+    const eventId = eventIdForOperation('edit', operationId);
+    const editReason = requireReason(input.reason);
+    const ch = input.changes || {};
+    const actor = actorOf(), at = now();
+    const t = new Date(), today = input.today || `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    const newZoho = ch.zohoNo === undefined ? null : cleanText(ch.zohoNo, 100);
+    const newKey = newZoho == null ? null : zohoNoKey(newZoho);
+    if (newZoho != null) ensure(newKey && newKey.length <= 600, ERR.INVALID_INPUT, 'Enter the Zoho invoice number.');
+    return transact(async tx => {
+      const ctx = await readContext(tx, salesOrderId, [refs.invoice(invoiceId), refs.invoiceEvent(invoiceId, eventId), refs.editSettings(), ...(newKey ? [refs.zohoNo(newKey)] : [])]);
+      const [invSnap, evSnap, esSnap, zSnap] = ctx.rest;
+      const oldKeySnap = newKey && invSnap.exists() && invSnap.data().zohoNoKey && invSnap.data().zohoNoKey !== newKey ? await tx.get(refs.zohoNo(invSnap.data().zohoNoKey)) : null;
+      ensure(invSnap.exists(), ERR.NOT_FOUND, 'Invoice not found');
+      const inv = invSnap.data();
+      if (evSnap.exists()) return { alreadyApplied: true, invoice: inv };
+      ensure(inv.salesOrderId === salesOrderId, ERR.INVALID_INPUT, 'The invoice does not belong to this Sales Order');
+      const { isAdmin } = checkContext(ctx, salesOrderId, actor);
+      if (input.expectedRevision != null) ensure(inv.revision === input.expectedRevision, ERR.STALE_REVISION, `${inv.invNo} was changed meanwhile. The latest version has been loaded — please review and try again.`);
+      const rights = invoiceEditRights(inv, effectiveReceiptSettings(esSnap.exists() ? esSnap.data() : null), isAdmin, today);
+      ensure(rights.ok, ERR.PERMISSION, rights.why);
+      const nv = {
+        dueDate: ch.dueDate === undefined ? (inv.dueDate || '') : (ch.dueDate ? requireDate(ch.dueDate) : ''),
+        poNo: ch.poNo === undefined ? (inv.poNo || '') : cleanText(ch.poNo, 200),
+        reason: ch.reason === undefined ? (inv.reason || '') : (inv.type === INVOICE_TYPES.order ? requireReason(ch.reason) : cleanText(ch.reason, 1000)),
+        notes: ch.notes === undefined ? (inv.notes || '') : cleanText(ch.notes, 2000),
+        zohoNo: newZoho == null ? (inv.zohoNo || '') : newZoho,
+      };
+      const labels = { dueDate: 'Payment due date', poNo: 'Customer PO no.', reason: inv.type === INVOICE_TYPES.order ? 'Reason for billing ahead' : 'Description', notes: 'Notes', zohoNo: 'Zoho invoice no.' };
+      const changes = Object.keys(nv).filter(k => String(nv[k]) !== String(inv[k] || '')).map(k => ({ field: k, label: labels[k], before: inv[k] || '', after: nv[k] }));
+      ensure(changes.length > 0, ERR.INVALID_INPUT, 'Nothing was changed.');
+      const zohoChanged = newKey && newKey !== inv.zohoNoKey;
+      if (zohoChanged && zSnap && zSnap.exists()) {
+        const z = zSnap.data() || {};
+        ensure(z.invoiceId === invoiceId, ERR.DUPLICATE_ZOHO, `Zoho invoice no. ${newZoho} is already used on ${z.invNo || 'another invoice'}${z.soNo ? ' (' + z.soNo + ')' : ''}. Check the number in Zoho Books.`);
+      }
+      const revision = inv.revision + 1;
+      const next = { ...inv, ...nv, ...(zohoChanged ? { zohoNoKey: newKey } : {}), revision, lastEventId: eventId, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid,
+        revisedAt: at, revisedBy: actor.name, revisedByUid: actor.uid, editCount: (Number(inv.editCount) || 0) + 1, lastEditReason: editReason };
+      assertSize(next, INVOICE_BYTES, 'Invoice');
+      tx.set(refs.invoice(invoiceId), next);
+      tx.set(refs.invoiceEvent(invoiceId, eventId), { id: eventId, kind: 'edited', invoiceId, invNo: inv.invNo, salesOrderId, operationId, fromRevision: inv.revision, toRevision: revision,
+        reason: editReason, changes, actor: actor.name, actorUid: actor.uid, at, ...stamp() });
+      if (zohoChanged) {
+        tx.set(refs.zohoNo(newKey), { id: newKey, zohoNo: newZoho, invoiceId, invNo: inv.invNo, salesOrderId, soNo: inv.soNo || '', created: at, createdByUid: actor.uid });
+        if (oldKeySnap && oldKeySnap.exists() && (oldKeySnap.data() || {}).invoiceId === invoiceId) tx.delete(refs.zohoNo(inv.zohoNoKey));
+      }
+      return { alreadyApplied: false, invoice: next, changes };
+    });
+  }
+
+  return { issueInvoice, issueCreditNote, editInvoice };
 }

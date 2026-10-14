@@ -5105,7 +5105,7 @@ const modalNavExcluded = new Set(['confirm-modal','validation-dialog','template-
    finished, so it must never become a "Back" target: the screen opened right after it (e.g. the Sales Order
    refreshed after saving an invoice) must not record it as the screen to return to, and any return entry that
    points back to it is dropped. Otherwise closing the next screens would reopen the already-saved form. */
-const modalNavEntryScreens = new Set(['so-create-modal','so-delivery-modal','dn-confirm-modal','dn-dispatch-action-modal','so-invoice-modal','so-payment-modal','inv-issue-modal','cn-issue-modal','rct-new-modal','rct-apply-modal']);
+const modalNavEntryScreens = new Set(['so-create-modal','so-delivery-modal','dn-confirm-modal','dn-dispatch-action-modal','so-invoice-modal','so-payment-modal','inv-issue-modal','cn-issue-modal','rct-new-modal','rct-apply-modal','inv-edit-modal']);
 function forgetFinishedEntryScreen(id){
   if(!modalNavEntryScreens.has(id)) return;
   for(let i=modalNavHistory.length-1;i>=0;i--){ if(modalNavHistory[i].from===id) modalNavHistory.splice(i,1); }
@@ -5117,7 +5117,7 @@ function modalFriendlyName(modalId) {
     'quote-modal':'Quotation','view-modal':'Quotation','so-view-modal':'Sales Order','so-create-modal':'Sales Order',
     'cust-view-modal':'Customer','cust-modal':'Customer','sup-modal':'Supplier','prod-modal':'Product','prod-view-modal':'Product',
     'so-delivery-modal':'Sales Order','dn-print-modal':'Delivery Note','so-invoice-modal':'Sales Order','so-payment-modal':'Sales Order',
-    'inv-view-modal':'Invoice','inv-issue-modal':'Invoice','cn-issue-modal':'Credit Note','rct-new-modal':'Receipt','rct-apply-modal':'Receipt','dn-confirm-modal':'Delivery Note','dn-dispatch-action-modal':'Delivery Note'
+    'inv-view-modal':'Invoice','inv-issue-modal':'Invoice','cn-issue-modal':'Credit Note','rct-new-modal':'Receipt','rct-apply-modal':'Receipt','inv-edit-modal':'Invoice','dn-confirm-modal':'Delivery Note','dn-dispatch-action-modal':'Delivery Note'
   };
   if(modalId==='inv-view-modal' && document.getElementById(modalId)?._kind==='credit') return 'Credit Note';
   if(modalId==='inv-view-modal' && document.getElementById(modalId)?._kind==='receipt') return 'Receipt';
@@ -5153,6 +5153,8 @@ function smartModalBack(currentId) {
   const entry=modalNavHistory.splice(idx,1)[0];
   const current=document.getElementById(currentId);
   current?.classList.remove('open','modal-fs-overlay');
+  // V266.3: leaving a locked screen with "Back" releases its lock too (as Close / Cancel do)
+  try{ if(typeof _activeLock!=='undefined'&&_activeLock&&_activeLock.modalId===currentId) releaseLock(); }catch(e){}
   const previous=document.getElementById(entry.from);
   if(previous){previous.classList.add('open');setModalSize(entry.from,modalSizes[entry.from]||'normal');ensureSmartBackButton(entry.from);if(entry.from==='so-view-modal')refreshOpenSalesOrderView();}
   else updateFullscreenShellState();
@@ -13819,7 +13821,9 @@ let _idleReleaseTimer= null;
 let _lockWatcher     = null;
 let _lastActivity    = Date.now();
 let _lockReleasePromise = null;
-const SO_LOCK_MODALS = new Set(['so-create-modal', 'so-delivery-modal', 'dn-confirm-modal', 'dn-dispatch-action-modal', 'so-invoice-modal', 'so-payment-modal', 'inv-issue-modal', 'cn-issue-modal']);
+const SO_LOCK_MODALS = new Set(['so-create-modal', 'so-delivery-modal', 'dn-confirm-modal', 'dn-dispatch-action-modal', 'so-invoice-modal', 'so-payment-modal', 'inv-issue-modal', 'cn-issue-modal', 'inv-edit-modal']);
+/* V266.3: documents whose lock is required to save (a screen without the lock is closed / refused) */
+const STRICT_LOCK_TYPES = new Set(['salesOrder', 'receipt']);
 const EDITOR_LOCK_MODALS = new Set(['quote-modal', 'rfq-modal']);
 
 function lockSettings(){
@@ -13831,7 +13835,7 @@ function lockingEnabledFor(docType){
   if (docType === 'rfq') return s.lockRFQs !== false;
   return true;
 }
-function lockTypeLabel(docType){ return ({ salesOrder: 'Sales Order', quotation: 'Quotation', rfq: 'RFQ' })[docType] || 'Document'; }
+function lockTypeLabel(docType){ return ({ salesOrder: 'Sales Order', quotation: 'Quotation', rfq: 'RFQ', receipt: 'Payment Receipt' })[docType] || 'Document'; }
 function fmtLockTime(ms){ return ms ? new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'; }
 
 /* ── user activity keeps the lock alive (idle timers) ── */
@@ -13873,7 +13877,7 @@ async function releaseForIdle(){
   document.getElementById('lock-idle-modal')?.remove();
   const lock = _activeLock; if (!lock) return;
   const minutes = lockSettings().idleMinutes;
-  if (lock.docType === 'salesOrder') {
+  if (STRICT_LOCK_TYPES.has(lock.docType)) {
     await releaseLock();
     if (lock.modalId) closeModal(lock.modalId);
     showValidationDialog('Released after inactivity', `${lock.label || lock.docId} was released after ${minutes} minutes without activity so other users can work on it. Please open it again to continue.`, '', '');
@@ -13899,7 +13903,7 @@ async function acquireDocLock(docType, docId, docLabel, activity) {
   }
   if (r && r.holder) { showLockConflict(docType, docId, docLabel, r.holder); return false; }
   // Could not reach the database. Quotation/RFQ editing stays available (as before); order changes need the lock.
-  if (docType !== 'salesOrder') { console.warn('Lock unavailable — continuing without a lock', r && r.error); return true; }
+  if (!STRICT_LOCK_TYPES.has(docType)) { console.warn('Lock unavailable — continuing without a lock', r && r.error); return true; }
   showValidationDialog('Could not open for editing', `${docLabel || 'This Sales Order'} could not be locked for editing (${(r && r.error && r.error.message) || 'no connection'}). Check your connection and try again.`, '', '');
   return false;
 }
@@ -13957,7 +13961,7 @@ function handleLockLost(lock, holder){
   const msg = who
     ? `${lock.label || lock.docId} is now being worked on by ${who}${holder.activity ? ' (' + holder.activity + ')' : ''}.`
     : `Your editing lock on ${lock.label || lock.docId} was released (expired or released by an administrator).`;
-  if (lock.docType === 'salesOrder') {
+  if (STRICT_LOCK_TYPES.has(lock.docType)) {
     if (lock.modalId && !document.getElementById(lock.modalId)?._saving) closeModal(lock.modalId);
     showValidationDialog('Editing lock lost', msg + ' Nothing more can be saved from that window — please open it again.', '', '');
   } else {
@@ -14157,6 +14161,7 @@ wrapOrderAction('openDNDispatchAction', () => document.getElementById('dn-print-
   mode => (mode === 'void' ? 'Voiding ' : 'Correcting dispatch, ') + (dnForModal(document.getElementById('dn-print-modal'))?.dnNo || 'Delivery Note'));
 wrapOrderAction('openCreateInvoice', soId => soId, 'Creating an invoice');
 wrapOrderAction('openRecordPayment', soId => soId, 'Recording a payment');
+wrapOrderAction('openEditInvoice', soId => soId, (soId, invoiceId) => 'Editing invoice' + (typeof invoicesCache !== 'undefined' ? ' ' + ((invoicesCache.find(i => i.id === invoiceId) || {}).invNo || '') : ''));
 wrapOrderAction('openIssueCreditNote', soId => soId, (soId, invoiceId) => 'Issuing a credit note' + (typeof invoicesCache !== 'undefined' ? ', ' + ((invoicesCache.find(i => i.id === invoiceId) || {}).invNo || '') : ''));
 
 /* ═══════════════════════════════════════════════════════════════════
