@@ -38,20 +38,20 @@
   function sheet(id) {
     let s = document.getElementById(id);
     if (!s) {
-      s = document.createElement('div'); s.id = id; s.className = 'bc-sheet'; s.hidden = true;
-      s.innerHTML = '<div class="bc-sheet-dim"></div><div class="bc-sheet-panel" role="dialog" aria-modal="true"><div class="bc-sheet-handle"></div><div class="bc-sheet-body"></div></div>';
-      s.querySelector('.bc-sheet-dim').addEventListener('click', () => closeSheet(s));
+      s = document.createElement('div'); s.id = id; s.className = 'bcr-sheet'; s.hidden = true;
+      s.innerHTML = '<div class="bcr-sheet-dim"></div><div class="bcr-sheet-panel" role="dialog" aria-modal="true"><div class="bcr-sheet-handle"></div><div class="bcr-sheet-body"></div></div>';
+      s.querySelector('.bcr-sheet-dim').addEventListener('click', () => closeSheet(s));
       document.body.appendChild(s);
     }
     return s;
   }
-  function openSheet(s) { s.hidden = false; requestAnimationFrame(() => s.classList.add('open')); document.body.classList.add('bc-sheet-lock'); }
+  function openSheet(s) { s.hidden = false; requestAnimationFrame(() => s.classList.add('open')); document.body.classList.add('bcr-sheet-lock'); }
   function closeSheet(s) {
     if (!s || s.hidden) return;
-    s.classList.remove('open'); document.body.classList.remove('bc-sheet-lock');
+    s.classList.remove('open'); document.body.classList.remove('bcr-sheet-lock');
     setTimeout(() => { s.hidden = true; if (s._onClose) s._onClose(); }, 180);
   }
-  window.bcCloseSheets = () => document.querySelectorAll('.bc-sheet:not([hidden])').forEach(closeSheet);
+  window.bcCloseSheets = () => document.querySelectorAll('.bcr-sheet:not([hidden])').forEach(closeSheet);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') window.bcCloseSheets(); });
 
   /* ───────────── registers ───────────── */
@@ -117,12 +117,12 @@
   }
   // Summary: the real monitor, shown as a slide-up panel
   function openSummary(key, x) {
-    const s = sheet('bc-summary-sheet'), body = s.querySelector('.bc-sheet-body');
+    const s = sheet('bc-summary-sheet'), body = s.querySelector('.bcr-sheet-body');
     const mon = x.monitor; if (!mon) return;
     s._home = { parent: mon.parentElement, next: mon.nextSibling, mon };
     body.innerHTML = '';
     body.appendChild(mon); mon.classList.add('bc-in-sheet');
-    s.querySelector('.bc-sheet-panel').setAttribute('aria-label', (mon.getAttribute('aria-label') || 'Summary'));
+    s.querySelector('.bcr-sheet-panel').setAttribute('aria-label', (mon.getAttribute('aria-label') || 'Summary'));
     const onPick = e => { if (e.target.closest('.dn-overview-total, .dn-overview-row')) setTimeout(() => closeSheet(s), 120); if (e.target.closest('.module-monitor-collapse')) { e.stopPropagation(); e.preventDefault(); closeSheet(s); } };
     mon.addEventListener('click', onPick, true);
     s._onClose = () => { mon.removeEventListener('click', onPick, true); mon.classList.remove('bc-in-sheet'); const h = s._home; if (h && h.parent) h.parent.insertBefore(h.mon, h.next); s._onClose = null; refreshChips(key, x); };
@@ -150,27 +150,27 @@
   }
   function opts(sel) { return sel ? [...sel.options].map(o => ({ v: o.value, t: o.textContent.trim(), on: o.value === sel.value })) : []; }
   function openFilters(key, x) {
-    const s = sheet('bc-filter-sheet'), body = s.querySelector('.bc-sheet-body');
-    s.querySelector('.bc-sheet-panel').setAttribute('aria-label', 'Filters');
+    const s = sheet('bc-filter-sheet'), body = s.querySelector('.bcr-sheet-body');
+    s.querySelector('.bcr-sheet-panel').setAttribute('aria-label', 'Filters');
     const render = () => {
       const dateItems = x.date ? [...x.date.querySelectorAll('.bc-date-item')] : [];
       const custom = x.date && x.date.querySelector('.bc-date-custom.on');
       const resultText = (x.count && x.count.textContent.trim()) || '';
       body.innerHTML = `
-        <div class="bc-sheet-head"><h3>Filters</h3><button type="button" class="bc-sheet-link" data-act="clear">Clear all</button></div>
-        ${x.customer ? `<div class="bc-sheet-label">Customer</div><select class="bc-sheet-select" data-ctl="customer">${opts(x.customer).map(o => `<option value="${esc(o.v)}"${o.on ? ' selected' : ''}>${esc(o.t)}</option>`).join('')}</select>` : ''}
-        ${x.status ? `<div class="bc-sheet-label">Status</div><div class="bc-sheet-chips">${opts(x.status).map(o => `<button type="button" class="bc-chip${o.on ? ' on' : ''}" data-status="${esc(o.v)}">${esc(o.v ? o.t : 'All')}</button>`).join('')}</div>` : ''}
-        ${dateItems.length ? `<div class="bc-sheet-label">Date</div><div class="bc-sheet-chips">${dateItems.map((d, i) => `<button type="button" class="bc-chip${d.classList.contains('on') ? ' on' : ''}" data-date="${i}">${esc(d.querySelector('span:not(.bc-date-tick)')?.textContent.trim() || '')}</button>`).join('')}<button type="button" class="bc-chip${custom ? ' on' : ''}" data-date="custom"><i class="ti ti-calendar" aria-hidden="true"></i>Custom…</button></div>
-          <div class="bc-sheet-custom"${custom ? '' : ' hidden'}><input type="date" data-from value="${esc(x.date.querySelector('.bc-date-from').value)}" aria-label="From date"><span>→</span><input type="date" data-to value="${esc(x.date.querySelector('.bc-date-to').value)}" aria-label="To date"><button type="button" class="btn btn-primary btn-sm" data-act="apply-date">Apply</button></div>` : ''}
-        ${x.sort ? `<div class="bc-sheet-label">Sort</div><select class="bc-sheet-select" data-ctl="sort">${opts(x.sort).map(o => `<option value="${esc(o.v)}"${o.on ? ' selected' : ''}>${esc(o.t)}</option>`).join('')}</select>` : ''}
-        <div class="bc-sheet-actions"><button type="button" class="btn btn-secondary" data-act="close">Close</button><button type="button" class="btn btn-primary" data-act="close">${esc(resultText ? 'Show ' + resultText : 'Show results')}</button></div>`;
+        <div class="bcr-sheet-head"><h3>Filters</h3><button type="button" class="bcr-sheet-link" data-act="clear">Clear all</button></div>
+        ${x.customer ? `<div class="bcr-sheet-label">Customer</div><select class="bcr-sheet-select" data-ctl="customer">${opts(x.customer).map(o => `<option value="${esc(o.v)}"${o.on ? ' selected' : ''}>${esc(o.t)}</option>`).join('')}</select>` : ''}
+        ${x.status ? `<div class="bcr-sheet-label">Status</div><div class="bcr-sheet-chips">${opts(x.status).map(o => `<button type="button" class="bc-chip${o.on ? ' on' : ''}" data-status="${esc(o.v)}">${esc(o.v ? o.t : 'All')}</button>`).join('')}</div>` : ''}
+        ${dateItems.length ? `<div class="bcr-sheet-label">Date</div><div class="bcr-sheet-chips">${dateItems.map((d, i) => `<button type="button" class="bc-chip${d.classList.contains('on') ? ' on' : ''}" data-date="${i}">${esc(d.querySelector('span:not(.bc-date-tick)')?.textContent.trim() || '')}</button>`).join('')}<button type="button" class="bc-chip${custom ? ' on' : ''}" data-date="custom"><i class="ti ti-calendar" aria-hidden="true"></i>Custom…</button></div>
+          <div class="bcr-sheet-custom"${custom ? '' : ' hidden'}><input type="date" data-from value="${esc(x.date.querySelector('.bc-date-from').value)}" aria-label="From date"><span>→</span><input type="date" data-to value="${esc(x.date.querySelector('.bc-date-to').value)}" aria-label="To date"><button type="button" class="btn btn-primary btn-sm" data-act="apply-date">Apply</button></div>` : ''}
+        ${x.sort ? `<div class="bcr-sheet-label">Sort</div><select class="bcr-sheet-select" data-ctl="sort">${opts(x.sort).map(o => `<option value="${esc(o.v)}"${o.on ? ' selected' : ''}>${esc(o.t)}</option>`).join('')}</select>` : ''}
+        <div class="bcr-sheet-actions"><button type="button" class="btn btn-secondary" data-act="close">Close</button><button type="button" class="btn btn-primary" data-act="close">${esc(resultText ? 'Show ' + resultText : 'Show results')}</button></div>`;
     };
     const after = () => setTimeout(() => { render(); paintFilterBadge(x); }, 30);
     body.onclick = e => {
       const t = e.target.closest('button'); if (!t) return;
       if (t.dataset.status !== undefined) { setSelect(x.status, t.dataset.status); return after(); }
       if (t.dataset.date !== undefined) {
-        if (t.dataset.date === 'custom') { body.querySelector('.bc-sheet-custom').hidden = false; body.querySelectorAll('[data-date]').forEach(c => c.classList.toggle('on', c === t)); return; }
+        if (t.dataset.date === 'custom') { body.querySelector('.bcr-sheet-custom').hidden = false; body.querySelectorAll('[data-date]').forEach(c => c.classList.toggle('on', c === t)); return; }
         const item = x.date.querySelectorAll('.bc-date-item')[+t.dataset.date]; if (item) item.click(); return after();
       }
       const act = t.dataset.act;
@@ -197,7 +197,14 @@
   function col(heads, name) { if (!name) return -1; return heads.findIndex(h => h === name); }
   function buildCards(key, x) {
     const cfg = REG[key]; if (!cfg) return;
-    const table = x.P.querySelector('.dn-register-card table, .card table, table'); if (!table || !table.tBodies[0]) return;
+    const table = x.P.querySelector('.dn-register-card table, .card table, table');
+    // some registers (RFQs) draw a new table on every refresh: set it up again whenever that happens
+    if (!x.P._bcWait) {
+      x.P._bcWait = new MutationObserver(() => { clearTimeout(x.P._bcWT); x.P._bcWT = setTimeout(() => { const t = x.P.querySelector('.dn-register-card table, .card table, table'); if (t && t.tBodies[0] && !t.parentElement.classList.contains('bc-table-wrap')) { buildCards(key, x); tabletColumns(key, x); } }, 30); });
+      x.P._bcWait.observe(x.P, { childList: true, subtree: true });
+    }
+    if (!table || !table.tBodies[0]) return;
+    if (table.parentElement.classList.contains('bc-table-wrap') && table.parentElement.parentElement.querySelector(':scope > .bc-cards')) { renderCards(key, table, table.parentElement.parentElement.querySelector(':scope > .bc-cards')); return; }
     const wrap = table.parentElement;
     if (cfg.ownCards) { wrap.classList.add('bc-table-wrap'); return; }
     wrap.classList.add('bc-cards-wrap', 'bc-table-wrap');
@@ -315,15 +322,35 @@
   function fitDocuments(m) {
     m.querySelectorAll('.qdoc-sheet, .dn-a4').forEach(doc => {
       const host = doc.parentElement; if (!host) return;
-      if (!isPhone()) { doc.style.zoom = ''; host.style.overflowX = ''; return; }
+      if (window.innerWidth > TAB_MAX || m.id === 'dn-print-modal') { if (m.id !== 'dn-print-modal') { doc.style.zoom = ''; host.style.overflowX = ''; } return; }
       doc.style.zoom = '';
       const avail = host.clientWidth - 4, w = doc.offsetWidth;
       if (w > avail && avail > 100) { doc.style.zoom = (avail / w).toFixed(3); host.style.overflowX = 'hidden'; }
     });
   }
+  // Quotation / Invoice / Payment Receipt views below 900 px: "Document" and "Details" tabs, like the Delivery Note view
+  const TAB_MAX = 899;
+  function viewTabs(m) {
+    const ws = m.querySelector('.qv-document-workspace, .inv-view-workspace'); if (!ws) return;
+    const body = ws.parentElement;
+    let tabs = body.querySelector(':scope > .bcv-tabs');
+    if (window.innerWidth > TAB_MAX) { if (tabs) tabs.hidden = true; ws.removeAttribute('data-bctab'); return; }
+    if (!tabs) {
+      tabs = document.createElement('div'); tabs.className = 'bcv-tabs'; tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'View');
+      tabs.innerHTML = '<button type="button" role="tab" data-bct="details">Details</button><button type="button" role="tab" data-bct="doc">Document</button>';
+      tabs.addEventListener('click', e => { const b = e.target.closest('[data-bct]'); if (!b) return; const w = body.querySelector('.qv-document-workspace, .inv-view-workspace'); if (!w) return; w.dataset.bctab = b.dataset.bct; paintTabs(tabs, w); body.scrollTop = 0; requestAnimationFrame(() => fitDocuments(m)); });
+      body.insertBefore(tabs, body.firstChild);
+    }
+    tabs.hidden = false;
+    if (!ws.dataset.bctab) ws.dataset.bctab = window.innerWidth < 700 ? 'details' : 'doc';
+    if (tabs.nextElementSibling !== ws && tabs.parentElement === body) body.insertBefore(tabs, body.firstChild);
+    paintTabs(tabs, ws);
+  }
+  function paintTabs(tabs, ws) { tabs.querySelectorAll('[data-bct]').forEach(b => { const on = b.dataset.bct === ws.dataset.bctab; b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); }); }
   function enhanceModal(m) {
     if (!m || !m.classList.contains('open')) return;
     m.querySelectorAll(FOOT).forEach(enhanceFooter);
+    viewTabs(m);
     enhanceProgress(m);
     fitDocuments(m);
     setTimeout(() => fitDocuments(m), 350);
@@ -334,7 +361,7 @@
   function landscapeDefaults() {
     // Sidebar and monitors follow the screen size until the user picks a state (their choice is remembered)
     const w = window.innerWidth; if (w <= 900) return;
-    let saved = null; try { saved = localStorage.getItem('bc_sidebar_collapsed'); } catch (e) {}
+    let saved = null; try { saved = localStorage.getItem('bc_sidebar_pref'); } catch (e) {}
     const sb = document.querySelector('.sidebar');
     if (saved === null && sb && typeof window.toggleSidebarCollapse === 'function') {
       const want = w < 1280;

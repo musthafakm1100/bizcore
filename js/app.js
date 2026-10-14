@@ -3919,7 +3919,7 @@ function toggleSidebarCollapse(force){
     btn.innerHTML=collapsed?'<i class="ti ti-chevron-right"></i>':'<i class="ti ti-chevron-left"></i>';
   }
   // V266.7: only a click on the button is the user's choice; automatic states (tablet default) are not saved
-  if(typeof force!=='boolean'){try{localStorage.setItem('bc_sidebar_collapsed',collapsed?'1':'0');}catch(e){}}
+  if(typeof force!=='boolean'){try{localStorage.setItem('bc_sidebar_pref',collapsed?'1':'0');}catch(e){}}
 }
 function getVisibleNavControls(){
   return Array.from(document.querySelectorAll('.nav-item.nav-root,.nav-group-toggle,.nav-group.open .nav-submenu .nav-item'))
@@ -4050,7 +4050,7 @@ function initPremiumSidebar(){
   sidebar.addEventListener('keydown',handleSidebarKeydown);
   initCollapsedNavFlyout();
   let savedGroup=''; let collapsed=false;
-  try{savedGroup=localStorage.getItem('bc_nav_open_group')||'';const sv=localStorage.getItem('bc_sidebar_collapsed');collapsed=sv===null?(window.innerWidth>900&&window.innerWidth<1280):sv==='1';}catch(e){}
+  try{savedGroup=localStorage.getItem('bc_nav_open_group')||'';const sv=localStorage.getItem('bc_sidebar_pref');collapsed=sv===null?(window.innerWidth>900&&window.innerWidth<1280):sv==='1';}catch(e){}
   const activeGroup=document.querySelector('.nav-item.active')?.closest('.nav-group');
   const desired=activeGroup?.dataset.group||savedGroup||'sales';
   getNavGroups().forEach(g=>setNavGroupState(g,g.dataset.group===desired,false));
@@ -12666,6 +12666,7 @@ loadThemeAndFont();
 if (window.currentUser) loadUserTheme();   // V266.5: theme saved with the user (app.js loads after sign-in)
 console.log('Theme V266.5 ✅ (whole screen follows the theme · saved with the user · 6 themes · fixed status colours)');
 console.log('Screens V266.6 ✅ (no page header · one-line toolbar · top bar · breadcrumb · collapse button · labels · dates)');
+console.log('Phone & tablet V266.7 ✅ (chips · filter panel · cards · Document/Details tabs · tablet rail · monitor scroll)' + (window.BizCoreResponsive ? '' : ' — responsive.js NOT loaded'));
 initPremiumSidebar();
 initPremiumTopbar();
 loadRecycleBin();

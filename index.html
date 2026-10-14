@@ -21,15 +21,15 @@
 <link href="css/administration-typography.css?v=247" rel="stylesheet"/>
 <link href="css/numbering-controls.css?v=266.5" rel="stylesheet"/>
 <link href="css/invoicing.css?v=266.5" rel="stylesheet"/>
-<link href="css/register-standard.css?v=266.7" rel="stylesheet"/>
+<link href="css/register-standard.css?v=266.71" rel="stylesheet"/>
 <link href="css/doc-view.css?v=266.5" rel="stylesheet"/>
 <link href="css/delivery-compact.css?v=266.5" rel="stylesheet"/>
 <link href="css/receipts.css?v=266.5" rel="stylesheet"/>
 <link href="css/shell.css?v=266.61" rel="stylesheet"/>
-<link href="css/responsive.css?v=266.7" rel="stylesheet"/>
+<link href="css/responsive.css?v=266.71" rel="stylesheet"/>
 <link href="css/theme.css?v=266.5" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=265.2" defer></script>
-<script src="js/responsive.js?v=266.7" defer></script>
+<script src="js/responsive.js?v=266.71" defer></script>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
 .quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
@@ -3033,7 +3033,7 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=266.7';
+      s.src = 'js/app.js?v=266.71';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d); };
       document.body.appendChild(s);
