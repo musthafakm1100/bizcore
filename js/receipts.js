@@ -154,6 +154,7 @@ function renderReceiptRegister(){
   setT('rctreg-k-unapplied', unapplied.length); setT('rctreg-k-overdue', inv.overdue); setT('rctreg-k-duesoon', inv.dueSoon);
   setT('rctreg-a-received', rctF(posted.reduce((s, r) => s + rctNum(r.amount), 0)));
   setT('rctreg-a-receivable', rctF(inv.receivable));
+  setT('rctreg-a-charges', rctF(posted.reduce((s, r) => s + rctNum(r.bankCharges), 0)));
   setT('rctreg-a-unapplied', rctF(receiptsCache.filter(r => r.status !== 'Voided').reduce((s, r) => s + Math.max(0, rctNum(r.unapplied)), 0)));
   document.querySelectorAll('#page-receipts [data-rct-kpi]').forEach(e => { const on = e.dataset.rctKpi === _rctKpi; e.classList.toggle('active', on); e.setAttribute('aria-pressed', on ? 'true' : 'false'); });
   const st = document.getElementById('rctreg-status'); if (st) st.value = _rctKpi === 'all' ? '' : _rctKpi;
@@ -178,7 +179,7 @@ function renderReceiptRegister(){
   const open = r => `openReceiptView('${rctEsc(r.id)}')`;
   body.innerHTML = rows.length ? rows.map(r => `<tr class="quotation-clickable-row${r.status === 'Voided' ? ' rct-row-voided' : ''}" tabindex="0" role="button" data-rct="${rctEsc(r.id)}" onclick="${open(r)}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${open(r)}}">
       <td class="rct-no">${rctEsc(r.rctNo)}</td><td>${fmtDate(r.date)}</td><td>${rctEsc(r.customer || '—')}</td><td>${rctEsc(r.method || '—')}</td><td>${rctEsc(r.reference || '—')}</td><td>${rctEsc(r.zohoPaymentNo || '—')}</td>
-      <td class="rct-applied">${chips(r)}</td><td class="num"><b>${r.status === 'Voided' ? '<s>' + rctF(r.amount) + '</s>' : rctF(r.amount)}</b></td><td>${status(r)}</td></tr>`).join('')
+      <td class="rct-applied">${chips(r)}</td><td class="num"><b>${r.status === 'Voided' ? '<s>' + rctF(r.amount) + '</s>' : rctF(r.amount)}</b>${rctNum(r.bankCharges) > 0.005 ? `<small class="rct-bc">${rctF(r.bankCharges)} bank charges</small>` : ''}</td><td>${status(r)}</td></tr>`).join('')
     : `<tr><td colspan="9"><div class="empty-state"><i class="ti ti-cash"></i><strong>No receipts found</strong><p>${receiptsCache.length ? 'Adjust the filters to see other receipts.' : 'Record money received with New Receipt.'}</p></div></td></tr>`;
   const cards = document.getElementById('rctreg-cards');
   if (cards) cards.innerHTML = rows.length ? rows.map(r => {
@@ -203,13 +204,20 @@ function ensureNewReceiptModal(){
       <div class="rct-entry-main">
         <section class="so-entry-card"><div class="so-entry-card-title"><i class="ti ti-user"></i>Customer &amp; payment</div>
           <div class="rct-fields">
-            <div class="form-group rct-f-cust"><label for="rn-cust">Customer *</label><select id="rn-cust" onchange="newReceiptCustomerChanged()"></select></div>
+            <div class="form-group rct-f-cust"><label for="rn-cust-q">Customer *</label><input type="hidden" id="rn-cust"/>
+              <div class="rct-picker" id="rn-picker">
+                <div class="rct-pick-chosen" id="rn-chosen" hidden></div>
+                <div class="rct-pick-search" id="rn-pick-search"><i class="ti ti-search"></i><input id="rn-cust-q" autocomplete="off" placeholder="Search customer…" role="combobox" aria-expanded="false" aria-controls="rn-cust-list" oninput="rctPickerFilter()" onfocus="rctPickerOpen()" onblur="rctPickerBlur()" onkeydown="rctPickerKey(event)"/></div>
+                <div class="rct-pick-list" id="rn-cust-list" role="listbox" hidden onmousedown="event.preventDefault()"></div>
+              </div></div>
             <div class="form-group rct-f-date"><label for="rn-date">Receipt date *</label><input id="rn-date" type="date" onchange="recalcNewReceipt()"/></div>
             <div class="form-group rct-f-amt"><label for="rn-amount">Amount received (SAR) *</label><input id="rn-amount" class="rct-amount-input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00" oninput="newReceiptAmountChanged()"/></div>
             <div class="form-group rct-f-method"><label for="rn-method">Method *</label><select id="rn-method" onchange="recalcNewReceipt()"></select></div>
             <div class="form-group rct-f-acct"><label for="rn-account" id="rn-account-label">Deposited to (account)</label><span id="rn-account-wrap"></span></div>
+            <div class="form-group rct-f-chg"><label for="rn-charges">Bank charges</label><input id="rn-charges" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00" oninput="recalcNewReceipt()"/><div class="rct-hint" id="rn-charges-hint">Fee kept by our bank (if any)</div></div>
             <div class="form-group rct-f-ref"><label for="rn-ref">Payment reference</label><input id="rn-ref" maxlength="200" autocomplete="off" placeholder="Bank ref., cheque no.…"/></div>
             <div class="form-group rct-f-zoho"><label for="rn-zoho" id="rn-zoho-label">Zoho payment no.</label><input id="rn-zoho" maxlength="100" autocomplete="off" placeholder="e.g. PMT-00231" oninput="recalcNewReceipt()"/><div class="inv-field-msg" id="rn-zoho-msg" hidden></div></div>
+            <div class="form-group rct-f-notes"><label for="rn-notes">Notes</label><input id="rn-notes" maxlength="2000" autocomplete="off" placeholder="Internal note (optional)…"/></div>
           </div>
         </section>
         <section class="so-entry-card rct-inv-card">
@@ -217,7 +225,6 @@ function ensureNewReceiptModal(){
           <div class="rct-inv-head"><span></span><span>Invoice</span><span>Zoho No.</span><span>Date</span><span>Due</span><span>Sales Order</span><span class="num">Total</span><span class="num">Paid</span><span class="num">Balance due</span><span class="num">Apply now</span></div>
           <div id="rn-invoices"></div>
         </section>
-        <section class="so-entry-card"><div class="so-entry-card-title"><i class="ti ti-message"></i>Notes</div><div class="form-group" style="margin:0"><textarea id="rn-notes" class="inv-notes" maxlength="2000" placeholder="Internal note (optional)…"></textarea></div></section>
       </div>
       <aside class="rct-entry-side">
         <section class="so-entry-card so-summary-card"><div class="so-entry-card-title"><i class="ti ti-calculator"></i>Receipt summary</div><div id="rn-summary"></div></section>
@@ -238,14 +245,14 @@ function receiptCustomerOptions(){
   const C = rctLib(), map = new Map();
   (typeof invoicesCache !== 'undefined' ? invoicesCache : []).forEach(i => {
     const k = C.customerKeyOf(i); const bal = invoiceBalanceOf(i);
-    const e = map.get(k) || { key: k, custId: i.custId || '', customer: i.customer || '', open: 0, due: 0 };
-    if (bal > 0.005) { e.open++; e.due = rctR2(e.due + bal); }
+    const e = map.get(k) || { key: k, custId: i.custId || '', customer: i.customer || '', open: 0, due: 0, overdue: false, oldest: '' };
+    if (bal > 0.005) { e.open++; e.due = rctR2(e.due + bal); if (!e.oldest || String(i.date || '') < e.oldest) e.oldest = String(i.date || ''); if (i.dueDate && i.dueDate < rctToday()) e.overdue = true; }
     map.set(k, e);
   });
   (typeof customers !== 'undefined' ? customers : []).forEach(c => {
     const name = (c.company || c.name || '').trim(); if (!name) return;
     const k = C.customerKeyOf({ custId: c.id, customer: name });
-    if (!map.has(k) && !map.has(C.customerKeyOf({ customer: name }))) map.set(k, { key: k, custId: c.id || '', customer: name, open: 0, due: 0 });
+    if (!map.has(k) && !map.has(C.customerKeyOf({ customer: name }))) map.set(k, { key: k, custId: c.id || '', customer: name, open: 0, due: 0, overdue: false, oldest: '' });
   });
   return [...map.values()].sort((a, b) => (b.open > 0) - (a.open > 0) || a.customer.localeCompare(b.customer));
 }
@@ -265,12 +272,8 @@ async function openNewReceipt(opts = {}){
   else if (so) { const i = (invoicesCache || []).find(x => x.salesOrderId === so.id); pre = i ? C.customerKeyOf(i) : C.customerKeyOf({ custId: so.custId || so.customerId, customer: so.customer }); }
   m._focusSO = so ? so.id : (inv ? inv.salesOrderId : ''); m._focusInv = inv ? inv.id : '';
   m._returnSO = so ? so.id : (inv && isModalOpen('inv-view-modal') ? inv.salesOrderId : '');
-  const withOpen = custs.filter(c => c.open), rest = custs.filter(c => !c.open);
-  const opt = c => `<option value="${rctEsc(c.key)}">${rctEsc(c.customer)}${c.open ? ` — ${c.open} open · ${rctF(c.due)}` : ''}</option>`;
-  document.getElementById('rn-cust').innerHTML = '<option value="">Choose the customer…</option>'
-    + (withOpen.length ? `<optgroup label="With open invoices">${withOpen.map(opt).join('')}</optgroup>` : '')
-    + (rest.length ? `<optgroup label="Other customers">${rest.map(opt).join('')}</optgroup>` : '');
   document.getElementById('rn-cust').value = custs.some(c => c.key === pre) ? pre : '';
+  document.getElementById('rn-cust-q').value = ''; rctPickerClose();
   document.getElementById('rn-date').value = rctToday();
   document.getElementById('rn-amount').value = '';
   document.getElementById('rn-method').innerHTML = C.PAYMENT_METHODS.map(x => `<option>${rctEsc(x)}</option>`).join('');
@@ -282,16 +285,86 @@ async function openNewReceipt(opts = {}){
     : '<input id="rn-account" maxlength="60" autocomplete="off" placeholder="Bank / account (optional)" oninput="recalcNewReceipt()"/>';
   if (s.accounts.length === 1) document.getElementById('rn-account').value = s.accounts[0];
   document.getElementById('rn-zoho-label').textContent = 'Zoho payment no.' + (s.zohoPaymentNo === 'mandatory' ? ' *' : '');
-  document.getElementById('rn-zoho').value = ''; document.getElementById('rn-ref').value = ''; document.getElementById('rn-notes').value = '';
+  document.getElementById('rn-zoho').value = ''; document.getElementById('rn-ref').value = ''; document.getElementById('rn-charges').value = ''; document.getElementById('rn-notes').value = '';
   const x = docNumberParts('paymentReceipt');
   document.getElementById('rn-subtitle').textContent = `Number assigned on save · ${x.displayPrefix}…`;
   newReceiptCustomerChanged(true);
   openModalWithSize('rct-new-modal');
-  setTimeout(() => { const f = document.getElementById(document.getElementById('rn-cust').value ? 'rn-amount' : 'rn-cust'); if (f && window.innerWidth > 760) f.focus(); }, 60);
+  setTimeout(() => { const f = document.getElementById(document.getElementById('rn-cust').value ? 'rn-amount' : 'rn-cust-q'); if (f && window.innerWidth > 760) f.focus(); }, 60);
+}
+/* ───────── customer picker (search list, approved option 1) ───────── */
+const RCT_AV_COLORS = ['#2E75B6', '#0f766e', '#6f42c1', '#b45309', '#1d4ed8', '#be185d', '#047857', '#7c3aed'];
+function rctInitials(name){ const w = String(name || '').replace(/[^A-Za-z0-9؀-ۿ ]/g, ' ').trim().split(/\s+/).filter(Boolean); return ((w[0] || '?')[0] + (w[1] ? w[1][0] : ((w[0] || '')[1] || ''))).toUpperCase(); }
+function rctAvatar(c){
+  let h = 0; for (const ch of String(c.customer || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const bg = !c.open ? '#94a3b8' : c.overdue ? '#b42318' : RCT_AV_COLORS[h % RCT_AV_COLORS.length];
+  return `<span class="rct-av" style="background:${bg}">${rctEsc(rctInitials(c.customer))}</span>`;
+}
+function rctPickerItems(){
+  const m = document.getElementById('rct-new-modal'); if (!m || !m._custs) return [];
+  const q = (document.getElementById('rn-cust-q').value || '').trim().toLowerCase();
+  return m._custs.filter(c => !q || c.customer.toLowerCase().includes(q));
+}
+function rctPickerRender(){
+  const m = document.getElementById('rct-new-modal'), box = document.getElementById('rn-cust-list'); if (!m || !box) return;
+  const items = rctPickerItems(); m._pickItems = items;
+  if (m._pickIdx == null || m._pickIdx >= items.length) m._pickIdx = items.length ? 0 : -1;
+  const open = items.filter(c => c.open), rest = items.filter(c => !c.open);
+  const opt = (c, i) => `<div class="rct-pick-opt${i === m._pickIdx ? ' on' : ''}${c.open ? '' : ' quiet'}" role="option" id="rn-opt-${i}" data-key="${rctEsc(c.key)}" aria-selected="${i === m._pickIdx}" onclick="rctPickerChoose(${i})" onmousemove="rctPickerHover(${i})">
+      ${rctAvatar(c)}<span class="rct-pick-txt"><b>${rctEsc(c.customer)}${c.overdue ? '<span class="rct-due overdue">overdue</span>' : ''}</b><small>${c.open ? `${c.open} open invoice${c.open === 1 ? '' : 's'} · oldest ${rctShortDate(c.oldest)}` : 'No open invoices · money kept on account'}</small></span>
+      <span class="rct-pick-amt">${c.open ? rctF(c.due) : '—'}</span></div>`;
+  let i = 0;
+  box.innerHTML = !items.length ? '<div class="rct-pick-empty">No customer matches. Check the spelling, or add the customer in Master Data.</div>'
+    : (open.length ? `<div class="rct-pick-grp"><span>With open invoices · ${open.length}</span><span>Due (SAR)</span></div>${open.map(c => opt(c, i++)).join('')}` : '')
+    + (rest.length ? `<div class="rct-pick-grp"><span>Other customers · ${rest.length}</span><span></span></div>${rest.map(c => opt(c, i++)).join('')}` : '');
+}
+function rctPickerOpen(){
+  const box = document.getElementById('rn-cust-list'); if (!box) return;
+  rctPickerRender(); box.hidden = false; document.getElementById('rn-cust-q').setAttribute('aria-expanded', 'true');
+  document.getElementById('rn-picker').classList.add('open');
+}
+function rctPickerClose(){
+  const box = document.getElementById('rn-cust-list'); if (!box) return;
+  box.hidden = true; document.getElementById('rn-cust-q').setAttribute('aria-expanded', 'false');
+  document.getElementById('rn-picker').classList.remove('open');
+}
+function rctPickerBlur(){ setTimeout(() => { if (document.activeElement !== document.getElementById('rn-cust-q')) { rctPickerClose(); const m = document.getElementById('rct-new-modal'); if (m && m._custKey) rctPickerShowChosen(); } }, 150); }
+function rctPickerFilter(){ const m = document.getElementById('rct-new-modal'); if (m) m._pickIdx = 0; rctPickerOpen(); }
+function rctPickerHover(i){ const m = document.getElementById('rct-new-modal'); if (!m || m._pickIdx === i) return; m._pickIdx = i; document.querySelectorAll('#rn-cust-list .rct-pick-opt').forEach((e, j) => e.classList.toggle('on', j === i)); }
+function rctPickerKey(e){
+  const m = document.getElementById('rct-new-modal'); if (!m) return;
+  const n = (m._pickItems || []).length;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault(); if (document.getElementById('rn-cust-list').hidden) { rctPickerOpen(); return; }
+    m._pickIdx = n ? (m._pickIdx + (e.key === 'ArrowDown' ? 1 : -1) + n) % n : -1; rctPickerRender();
+    const el = document.getElementById('rn-opt-' + m._pickIdx); if (el) el.scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') { e.preventDefault(); if (m._pickIdx >= 0) rctPickerChoose(m._pickIdx); }
+  else if (e.key === 'Escape') { if (!document.getElementById('rn-cust-list').hidden) { e.preventDefault(); e.stopPropagation(); rctPickerClose(); if (m._custKey) rctPickerShowChosen(); } }
+}
+function rctPickerChoose(i){
+  const m = document.getElementById('rct-new-modal'); const c = (m._pickItems || [])[i]; if (!c) return;
+  document.getElementById('rn-cust').value = c.key;
+  rctPickerClose(); newReceiptCustomerChanged();
+  setTimeout(() => { const a = document.getElementById('rn-amount'); if (a && window.innerWidth > 760) a.focus(); }, 30);
+}
+/** Chooses a customer by its key (used when opening from an order / invoice, and by the tests). */
+function rctPickerSelectKey(key){ document.getElementById('rn-cust').value = key; rctPickerClose(); newReceiptCustomerChanged(); }
+function rctPickerShowChosen(){
+  const m = document.getElementById('rct-new-modal'), chosen = document.getElementById('rn-chosen'), search = document.getElementById('rn-pick-search');
+  const c = (m._custs || []).find(x => x.key === m._custKey);
+  if (!c) { chosen.hidden = true; search.hidden = false; return; }
+  chosen.innerHTML = `${rctAvatar(c)}<span class="rct-pick-txt"><b>${rctEsc(c.customer)}${c.overdue ? '<span class="rct-due overdue">overdue</span>' : ''}</b><small>${c.open ? `${c.open} open · <b>${rctF(c.due)}</b> due` : 'No open invoices · money kept on account'}</small></span><button type="button" class="rct-pick-change" id="rn-cust-change" onclick="rctPickerChange()">Change</button>`;
+  chosen.hidden = false; search.hidden = true;
+}
+function rctPickerChange(){
+  document.getElementById('rn-chosen').hidden = true; document.getElementById('rn-pick-search').hidden = false;
+  const q = document.getElementById('rn-cust-q'); q.value = ''; q.focus(); rctPickerOpen();
 }
 function newReceiptCustomerChanged(initial){
   const m = document.getElementById('rct-new-modal'); if (!m) return;
   m._custKey = document.getElementById('rn-cust').value;
+  rctPickerShowChosen();
+
   m._alloc = new Map(); m._touched = false;
   renderNewReceiptInvoices(true);
   if (!initial && rctNum(document.getElementById('rn-amount').value) > 0) newReceiptAutoApply(true);
@@ -381,6 +454,7 @@ function readNewReceipt(){
   const zoho = document.getElementById('rn-zoho').value.trim(), zKey = zoho ? C.zohoNoKey(zoho) : '';
   const dup = zKey ? receiptsCache.find(r => r.zohoPaymentNoKey === zKey) : null;
   const account = (document.getElementById('rn-account')?.value || '').trim();
+  const chargesRaw = document.getElementById('rn-charges').value, charges = rctR2(chargesRaw);
   const allocations = [...m._alloc.entries()].filter(([, v]) => v > 0.005).map(([invoiceId, amount]) => ({ invoiceId, amount: rctR2(amount) }));
   const applied = rctR2(allocations.reduce((t, a) => t + a.amount, 0));
   const over = allocations.map(a => { const x = (m._open || []).find(o => o.invoice.id === a.invoiceId); return x && a.amount > x.balance + 0.005 ? x.invoice.invNo : null; }).filter(Boolean);
@@ -392,8 +466,9 @@ function readNewReceipt(){
   if (s.zohoPaymentNo === 'mandatory' || zoho) checks.push({ ok: !!zKey && !dup, text: dup ? `Zoho payment no. (already used on ${dup.rctNo})` : 'Enter the Zoho payment no.' });
   if (over.length) checks.push({ ok: false, text: `Reduce ${over[0]} to its balance due` });
   if (applied > amount + 0.005) checks.push({ ok: false, text: 'Applied is more than the amount received' });
+  if (charges < 0 || (charges > 0 && charges >= amount)) checks.push({ ok: false, text: 'Bank charges must be less than the amount received' });
   const cust = (m._custs || []).find(c => c.key === m._custKey);
-  return { amount, zoho, dup, account, allocations, applied, unapplied: rctR2(amount - applied), checks, errors: checks.filter(c => !c.ok).map(c => c.text), cust };
+  return { amount, charges: Math.max(0, charges), zoho, dup, account, allocations, applied, unapplied: rctR2(amount - applied), checks, errors: checks.filter(c => !c.ok).map(c => c.text), cust };
 }
 function recalcNewReceipt(){
   const m = document.getElementById('rct-new-modal'); if (!m || !m._custs) return;
@@ -411,7 +486,11 @@ function recalcNewReceipt(){
   const n = r.allocations.length;
   const partial = r.allocations.map(a => { const x = (m._open || []).find(o => o.invoice.id === a.invoiceId); return x && a.amount < x.balance - 0.005 ? `${x.invoice.invNo} stays <b>Partially paid</b> (${rctF(x.balance - a.amount)} due).` : null; }).filter(Boolean);
   const row = (k, v, cls = 'so-summary-row') => `<div class="${cls}"><span>${k}</span><span>${v}</span></div>`;
-  document.getElementById('rn-summary').innerHTML = row('Amount received', rctF(r.amount)) + row(`Applied to ${n} invoice${n === 1 ? '' : 's'}`, rctF(r.applied))
+  const hint = document.getElementById('rn-charges-hint');
+  if (hint) hint.textContent = r.charges > 0 && r.amount > r.charges ? `Reached the bank: ${rctF(r.amount - r.charges)}` : 'Fee kept by our bank (if any)';
+  document.getElementById('rn-summary').innerHTML = row('Amount received', rctF(r.amount))
+    + (r.charges > 0 ? row('Bank charges', `<span class="rct-warn-txt">− ${rctF(r.charges)}</span>`) + row('Reached the bank', rctF(r.amount - r.charges), 'so-summary-row rct-sum-sep') : '')
+    + row(`Applied to ${n} invoice${n === 1 ? '' : 's'}`, rctF(r.applied))
     + row('Unapplied (on account)', `<span class="${r.unapplied > 0.005 ? 'rct-warn-txt' : ''}">${rctF(Math.max(0, r.unapplied))}</span>`)
     + `<div class="so-summary-total rct-total"><span>Receipt total</span><span>SAR ${rctF(r.amount)}</span></div>`
     + (partial.length ? `<div class="rct-note">${partial.join('<br>')}</div>` : '')
@@ -433,6 +512,7 @@ async function saveNewReceipt(){
   const details = { Customer: rctEsc(r.cust ? r.cust.customer : ''), 'Receipt date': fmtDate(document.getElementById('rn-date').value), Method: rctEsc(document.getElementById('rn-method').value) };
   if (r.account) details['Deposited to'] = rctEsc(r.account);
   if (r.zoho) details['Zoho payment no.'] = '<b>' + rctEsc(r.zoho) + '</b>';
+  if (r.charges > 0) details['Bank charges'] = rctF(r.charges) + ` (reached the bank: ${rctF(r.amount - r.charges)})`;
   details['Applied'] = r.allocations.length ? r.allocations.map(a => `${rctEsc(((m._open || []).find(o => o.invoice.id === a.invoiceId) || { invoice: {} }).invoice.invNo || '')} ${rctF(a.amount)}`).join('<br>') : '—';
   if (r.unapplied > 0.005) details['Unapplied (on account)'] = rctF(r.unapplied);
   details['Amount received'] = '<b>SAR ' + rctF(r.amount) + '</b>';
@@ -448,7 +528,7 @@ async function _saveNewReceiptCore(m){
   const date = document.getElementById('rn-date').value;
   const x = docNumberParts('paymentReceipt', new Date((date || rctToday()) + 'T00:00:00'));
   const input = { operationId: m._opId, customer: r.cust.customer, custId: r.cust.custId || '', date, amount: r.amount,
-    method: document.getElementById('rn-method').value, account: r.account, reference: document.getElementById('rn-ref').value.trim(),
+    method: document.getElementById('rn-method').value, account: r.account, bankCharges: r.charges, reference: document.getElementById('rn-ref').value.trim(),
     zohoPaymentNo: r.zoho, notes: document.getElementById('rn-notes').value.trim(), allocations: r.allocations,
     numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix } };
   try {
@@ -487,6 +567,7 @@ const RCT_DOC_CSS = `
 .rct-a4{position:relative}
 .rct-a4 .rct-onacc td{color:#9a3412;font-style:italic}
 .rct-a4 .dn-items th{white-space:nowrap}
+.rct-a4 .rct-charges{margin-top:6px}
 .rct-a4 .dn-items td{white-space:nowrap}
 .rct-a4 .dn-items td[colspan]{white-space:normal}
 `;
@@ -507,7 +588,9 @@ function receiptDocumentHtml(r, screenMode){
     + (rctNum(r.unapplied) > 0.005 ? `<tr class="rct-onacc"><td class="c">${(r.allocations || []).length + 1}</td><td colspan="4">Received on account (not yet applied to an invoice)</td><td class="num">${rctF(r.unapplied)}</td><td class="num">—</td></tr>` : '')
     || '<tr><td colspan="7" style="text-align:center;color:#64748b">Received on account</td></tr>';
   const tr = (k, val, cls = '') => `<div${cls ? ` class="${cls}"` : ''}><span>${k}</span><strong>${val}</strong></div>`;
+  const bc = rctNum(r.bankCharges);
   const totals = tr('Applied to invoices', rctF(r.applied)) + tr('On account', rctF(Math.max(0, rctNum(r.unapplied)))) + tr('Total received (SAR)', rctF(r.amount), 'grand');
+  const charges = bc > 0.005 ? `<div class="inv-doc-totals rct-charges">${tr('Less: bank charges', '− ' + rctF(bc), 'ded')}${tr('Net deposited to bank', rctF(rctNum(r.amount) - bc))}</div>` : '';
   const notes = [r.notes ? `<p><b>Notes</b>${rctEsc(r.notes)}</p>` : '', v ? `<p><b>Voided</b>${rctEsc(r.voidReason || '')} — ${rctEsc(r.voidedBy || '')}, ${fmtDate(String(r.voidedAt || '').slice(0, 10))}</p>` : ''].filter(Boolean).join('') || '<p><b>Notes</b>—</p>';
   const chip = screenMode ? `<div class="dn-screen-status-row inv-status-row"><span class="inv-status-chip ${v ? 'credited' : 'issued'}"><i></i>${v ? 'Voided' : 'Posted'}</span></div>` : '';
   const style = typeof invDnBaseCss === 'function' ? invDnBaseCss() + INV_DOC_CSS : '';
@@ -518,7 +601,7 @@ function receiptDocumentHtml(r, screenMode){
   <div class="dn-two"><div class="dn-box"><h3>Received From</h3><div class="content">${from}</div></div><div class="dn-box"><h3>Payment Details</h3><div class="content">${pay}</div></div></div>
   <div class="dn-ref">${refs.map(([k, val]) => `<div><small>${k}</small><strong>${val}</strong></div>`).join('')}</div>
   <table class="dn-items"><thead><tr><th>#</th><th>Invoice No.</th><th>Invoice Date</th><th>Sales Order</th><th class="num">Invoice Total</th><th class="num">Amount Applied</th><th class="num">Balance After</th></tr></thead><tbody>${rows}</tbody></table>
-  <div class="inv-doc-sum"><div class="inv-doc-notes">${notes}</div><div><div class="inv-doc-totals">${totals}</div></div></div>
+  <div class="inv-doc-sum"><div class="inv-doc-notes">${notes}</div><div><div class="inv-doc-totals">${totals}</div>${charges}</div></div>
   <div class="rct-words"><b>Amount in words:</b> ${rctEsc(rctLib() ? rctLib().amountInWords(r.amount) : '')}</div>
   <div class="dn-bottom"><div class="dn-sign"><h4>Received By</h4><div>Name: ${rctEsc(r.createdBy || '________________')}<br>Date: ${fmtDate(r.date)}<br>Signature: <span class="dn-line"></span></div></div><div class="dn-sign"><h4>Authorised Signature &amp; Stamp</h4><div>Name: ________________<br>Date: ________________<br>Signature: <span class="dn-line"></span></div></div><div class="dn-doc-qr-slot"></div></div>
   <div class="dn-foot"><div>${contactParts.join(' &nbsp; | &nbsp; ')}</div></div></div>`;
@@ -539,7 +622,8 @@ function renderReceiptView(r){
     { label: 'Unapplied', value: rctF(Math.max(0, rctNum(r.unapplied))), tone: rctNum(r.unapplied) > 0.005 && !v ? 'red' : 'muted' }, { label: 'Invoices', value: String(n) }];
   const custOpen = (typeof invoicesCache !== 'undefined' ? invoicesCache : []).filter(i => rctLib().customerKeyOf(i) === (r.custKey || rctLib().customerKeyOf(r))).reduce((s, i) => s + Math.max(0, invoiceBalanceOf(i)), 0);
   const rows = kr('Status', v ? '<span class="rct-status voided">Voided</span>' : '<span class="rct-status posted">Posted</span>') + kr('Zoho payment', rctEsc(r.zohoPaymentNo || '—'))
-    + (r.account ? kr('Deposited to', rctEsc(r.account)) : '') + kr('Recorded by', rctEsc(r.createdBy || '—')) + kr('Customer open now', rctF(custOpen))
+    + (r.account ? kr('Deposited to', rctEsc(r.account)) : '')
+    + (rctNum(r.bankCharges) > 0.005 ? kr('Bank charges', rctF(r.bankCharges)) + kr('Reached the bank', rctF(rctNum(r.amount) - rctNum(r.bankCharges))) : '') + kr('Recorded by', rctEsc(r.createdBy || '—')) + kr('Customer open now', rctF(custOpen))
     + (v ? kr('Void reason', rctEsc(r.voidReason || '—')) : '');
   const flow = [];
   const sos = [...new Map((r.allocations || []).filter(a => a.salesOrderId).map(a => [a.salesOrderId, a])).values()];
@@ -697,3 +781,4 @@ async function saveReceiptSettings(){
   } catch (e) { showToast(e.code === 'permission-denied' ? 'Only an administrator can change these settings (or the receipt rules are not published yet).' : e.message, 'error', 'Not Saved'); }
   finally { if (btn) btn.disabled = false; }
 }
+console.log('Payment receipts V266.1 ✅ (bank charges · customer picker · A4 table header)');

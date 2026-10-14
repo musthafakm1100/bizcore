@@ -818,6 +818,10 @@ const INV_DOC_CSS = `
 .inv-a4 .dn-ref>div{background:var(--ia-tint);border-color:var(--ia-soft)}
 .inv-a4 .dn-items th{background:var(--ia);border-color:var(--ia)}
 .inv-a4 .dn-items .num{text-align:right}
+.inv-a4 .dn-items th{font-size:8.5px!important;font-weight:700!important;text-transform:uppercase!important;letter-spacing:.04em!important;line-height:1.25!important;padding:7px 6px!important;white-space:nowrap;vertical-align:middle}
+.inv-a4 .dn-items td{font-size:9.5px!important;line-height:1.35!important;padding:6px 6px!important;vertical-align:top}
+.inv-a4 .dn-items th.num{text-align:right}
+.inv-a4 .dn-items td.desc{white-space:normal}
 .inv-a4 .dn-items td.c{text-align:center}
 .inv-a4 .dn-items td small{display:block;color:#b42318;font-size:8px;margin-top:2px}
 .inv-a4 .dn-foot{border-top-color:var(--ia)}

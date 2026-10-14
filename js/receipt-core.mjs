@@ -163,7 +163,11 @@ export function checkReceiptHeader(input, settings) {
   const key = zohoPaymentNo ? zohoNoKey(zohoPaymentNo) : '';
   if (settings.zohoPaymentNo === 'mandatory') ensure(!!key, ERR.INVALID_INPUT, 'Enter the Zoho payment no. (record the payment in Zoho Books first).');
   ensure(!key || key.length <= 600, ERR.INVALID_INPUT, 'The Zoho payment no. is too long');
-  return { amount, method: input.method, account, zohoPaymentNo, zohoPaymentNoKey: key };
+  // V266.1: fee kept by OUR bank. The customer paid the full amount (it settles the invoices); the fee is our expense.
+  const bankCharges = input?.bankCharges == null || input.bankCharges === '' ? 0 : r2(input.bankCharges);
+  ensure(Number.isFinite(Number(input?.bankCharges ?? 0)) && bankCharges >= 0, ERR.INVALID_INPUT, 'Bank charges cannot be negative');
+  ensure(bankCharges === 0 || bankCharges < amount, ERR.INVALID_INPUT, 'Bank charges must be less than the amount received');
+  return { amount, method: input.method, account, zohoPaymentNo, zohoPaymentNoKey: key, bankCharges };
 }
 
 /* ───────────────────────── invoicePayments records ───────────────────────── */

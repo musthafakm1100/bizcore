@@ -12,7 +12,7 @@ import {
   RECEIPT_COLLECTIONS, RECEIPT_SCHEMA_VERSION, RECEIPT_SETTINGS_PATH, RECEIPT_STATUS, ERR,
   receiptIdForOperation, effectiveReceiptSettings, permitted, checkReceiptHeader, checkAllocations,
   applyToPayment, receiptTotals, mergeAllocations, customerKeyOf, r2, MONEY_EPSILON, zohoNoKey,
-} from './receipt-core.mjs?v=266.0';
+} from './receipt-core.mjs?v=266.1';
 import { COLLECTIONS, DeliveryError, isSafeId, eventIdForOperation, requireDate, requireReason, cleanText, assertSize } from './delivery-core.mjs?v=266.0';
 import { INVOICE_COLLECTIONS } from './invoice-core.mjs?v=266.0';
 
@@ -115,7 +115,7 @@ export function createReceiptService(fs, options = {}) {
         id: rctId, schemaVersion: RECEIPT_SCHEMA_VERSION, rctNo, custId, customer, custKey, date,
         method: head.method, account: head.account, reference: cleanText(input.reference, 200),
         zohoPaymentNo: head.zohoPaymentNo, zohoPaymentNoKey: head.zohoPaymentNoKey,
-        amount: head.amount, allocations, applied: totals.applied, unapplied: totals.unapplied,
+        amount: head.amount, bankCharges: head.bankCharges, allocations, applied: totals.applied, unapplied: totals.unapplied,
         invoiceIds: allocations.map(a => a.invoiceId), notes: cleanText(input.notes, 2000),
         status: RECEIPT_STATUS.posted, revision: 1, lastEventId: eventId, creationOperationId: operationId,
         created: at, createdBy: actor.name, createdByUid: actor.uid, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid,
