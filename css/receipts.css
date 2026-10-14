@@ -289,3 +289,14 @@
   .rct-pick-search{height:44px}.rct-pick-search input{font-size:15px}
 }
 .rct-pick-search[hidden],.rct-pick-chosen[hidden],.rct-pick-list[hidden]{display:none!important}
+
+/* V266.2: lighter, cleaner names in the picker; money fields right-aligned */
+.rct-pick-txt b{font-weight:500!important;color:#1e293b!important;font-size:13.5px!important;letter-spacing:0}
+.rct-pick-txt small{color:#7b8a9b}
+.rct-pick-amt{font-weight:600!important;color:#1e293b!important}
+.rct-av{font-weight:600!important;font-size:11px!important}
+.rct-pick-grp{font-weight:600!important;letter-spacing:.06em!important}
+.rct-pick-chosen .rct-pick-txt b{font-weight:500!important}
+.rct-pick-chosen .rct-pick-txt small b{font-weight:600!important}
+#rct-new-modal .rct-money{text-align:right;font-variant-numeric:tabular-nums}
+#rct-new-modal .rct-amount-input{font-weight:600!important}

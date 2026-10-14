@@ -20,6 +20,10 @@ const rctEsc = v => (typeof escapeHtml === 'function' ? escapeHtml(v == null ? '
 const rctNum = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const rctR2 = n => Math.round((rctNum(n) + Number.EPSILON) * 100) / 100;
 const rctF = v => formatNumber(rctNum(v), 2);
+/* Money fields: typed as plain numbers, shown with thousands separators when the field is left (V266.2). */
+const rctMoneyVal = id => { const e = document.getElementById(id); return e ? rctNum(String(e.value || '').replace(/[,\s]/g, '')) : 0; };
+function rctMoneyFocus(el){ const v = String(el.value || '').replace(/[,\s]/g, ''); el.value = v; try { el.select(); } catch (e) {} }
+function rctMoneyBlur(el){ const raw = String(el.value || '').replace(/[,\s]/g, ''); if (raw === '') return; const n = Number(raw); el.value = Number.isFinite(n) ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : el.value; }
 const RCT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const rctShortDate = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? `${+m[3]} ${RCT_MONTHS[+m[2] - 1]}` : '—'; };
 const rctToday = () => { const t = new Date(), p = n => String(n).padStart(2, '0'); return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`; };
@@ -207,14 +211,14 @@ function ensureNewReceiptModal(){
             <div class="form-group rct-f-cust"><label for="rn-cust-q">Customer *</label><input type="hidden" id="rn-cust"/>
               <div class="rct-picker" id="rn-picker">
                 <div class="rct-pick-chosen" id="rn-chosen" hidden></div>
-                <div class="rct-pick-search" id="rn-pick-search"><i class="ti ti-search"></i><input id="rn-cust-q" autocomplete="off" placeholder="Search customer…" role="combobox" aria-expanded="false" aria-controls="rn-cust-list" oninput="rctPickerFilter()" onfocus="rctPickerOpen()" onblur="rctPickerBlur()" onkeydown="rctPickerKey(event)"/></div>
+                <div class="rct-pick-search" id="rn-pick-search"><i class="ti ti-search"></i><input id="rn-cust-q" autocomplete="off" placeholder="Search customer…" role="combobox" aria-expanded="false" aria-controls="rn-cust-list" oninput="rctPickerFilter()" onclick="rctPickerOpen()" onblur="rctPickerBlur()" onkeydown="rctPickerKey(event)"/></div>
                 <div class="rct-pick-list" id="rn-cust-list" role="listbox" hidden onmousedown="event.preventDefault()"></div>
               </div></div>
             <div class="form-group rct-f-date"><label for="rn-date">Receipt date *</label><input id="rn-date" type="date" onchange="recalcNewReceipt()"/></div>
-            <div class="form-group rct-f-amt"><label for="rn-amount">Amount received (SAR) *</label><input id="rn-amount" class="rct-amount-input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00" oninput="newReceiptAmountChanged()"/></div>
+            <div class="form-group rct-f-amt"><label for="rn-amount">Amount received (SAR) *</label><input id="rn-amount" class="rct-amount-input rct-money" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" oninput="newReceiptAmountChanged()" onfocus="rctMoneyFocus(this)" onblur="rctMoneyBlur(this)"/></div>
             <div class="form-group rct-f-method"><label for="rn-method">Method *</label><select id="rn-method" onchange="recalcNewReceipt()"></select></div>
             <div class="form-group rct-f-acct"><label for="rn-account" id="rn-account-label">Deposited to (account)</label><span id="rn-account-wrap"></span></div>
-            <div class="form-group rct-f-chg"><label for="rn-charges">Bank charges</label><input id="rn-charges" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00" oninput="recalcNewReceipt()"/><div class="rct-hint" id="rn-charges-hint">Fee kept by our bank (if any)</div></div>
+            <div class="form-group rct-f-chg"><label for="rn-charges">Bank charges</label><input id="rn-charges" class="rct-money" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" oninput="recalcNewReceipt()" onfocus="rctMoneyFocus(this)" onblur="rctMoneyBlur(this)"/><div class="rct-hint" id="rn-charges-hint">Fee kept by our bank (if any)</div></div>
             <div class="form-group rct-f-ref"><label for="rn-ref">Payment reference</label><input id="rn-ref" maxlength="200" autocomplete="off" placeholder="Bank ref., cheque no.…"/></div>
             <div class="form-group rct-f-zoho"><label for="rn-zoho" id="rn-zoho-label">Zoho payment no.</label><input id="rn-zoho" maxlength="100" autocomplete="off" placeholder="e.g. PMT-00231" oninput="recalcNewReceipt()"/><div class="inv-field-msg" id="rn-zoho-msg" hidden></div></div>
             <div class="form-group rct-f-notes"><label for="rn-notes">Notes</label><input id="rn-notes" maxlength="2000" autocomplete="off" placeholder="Internal note (optional)…"/></div>
@@ -367,7 +371,7 @@ function newReceiptCustomerChanged(initial){
 
   m._alloc = new Map(); m._touched = false;
   renderNewReceiptInvoices(true);
-  if (!initial && rctNum(document.getElementById('rn-amount').value) > 0) newReceiptAutoApply(true);
+  if (!initial && rctMoneyVal('rn-amount') > 0) newReceiptAutoApply(true);
 }
 function newReceiptOpenList(m){
   const C = rctLib();
@@ -410,13 +414,13 @@ function newReceiptAmountChanged(){
 }
 function newReceiptAutoApply(silent){
   const m = document.getElementById('rct-new-modal'); if (!m) return;
-  const amt = rctNum(document.getElementById('rn-amount').value);
+  const amt = rctMoneyVal('rn-amount');
   m._alloc = new Map((rctLib().autoApply(amt, m._open || [])).map(a => [a.invoiceId, a.amount]));
   if (silent !== true) m._touched = true;
   syncNewReceiptInputs(); recalcNewReceipt();
 }
 function newReceiptClear(){ const m = document.getElementById('rct-new-modal'); if (!m) return; m._alloc = new Map(); m._touched = true; syncNewReceiptInputs(); recalcNewReceipt(); }
-function newReceiptLeft(m){ return rctR2(rctNum(document.getElementById('rn-amount').value) - [...m._alloc.values()].reduce((s, v) => s + v, 0)); }
+function newReceiptLeft(m){ return rctR2(rctMoneyVal('rn-amount') - [...m._alloc.values()].reduce((s, v) => s + v, 0)); }
 function newReceiptToggle(id, on){
   const m = document.getElementById('rct-new-modal'); if (!m) return;
   const x = (m._open || []).find(o => o.invoice.id === id); if (!x) return;
@@ -450,11 +454,11 @@ function syncNewReceiptInputs(){
 }
 function readNewReceipt(){
   const m = document.getElementById('rct-new-modal'), C = rctLib(), s = rctSettings();
-  const amount = rctR2(document.getElementById('rn-amount').value);
+  const amount = rctR2(rctMoneyVal('rn-amount'));
   const zoho = document.getElementById('rn-zoho').value.trim(), zKey = zoho ? C.zohoNoKey(zoho) : '';
   const dup = zKey ? receiptsCache.find(r => r.zohoPaymentNoKey === zKey) : null;
   const account = (document.getElementById('rn-account')?.value || '').trim();
-  const chargesRaw = document.getElementById('rn-charges').value, charges = rctR2(chargesRaw);
+  const charges = rctR2(rctMoneyVal('rn-charges'));
   const allocations = [...m._alloc.entries()].filter(([, v]) => v > 0.005).map(([invoiceId, amount]) => ({ invoiceId, amount: rctR2(amount) }));
   const applied = rctR2(allocations.reduce((t, a) => t + a.amount, 0));
   const over = allocations.map(a => { const x = (m._open || []).find(o => o.invoice.id === a.invoiceId); return x && a.amount > x.balance + 0.005 ? x.invoice.invNo : null; }).filter(Boolean);
@@ -781,4 +785,4 @@ async function saveReceiptSettings(){
   } catch (e) { showToast(e.code === 'permission-denied' ? 'Only an administrator can change these settings (or the receipt rules are not published yet).' : e.message, 'error', 'Not Saved'); }
   finally { if (btn) btn.disabled = false; }
 }
-console.log('Payment receipts V266.1 ✅ (bank charges · customer picker · A4 table header)');
+console.log('Payment receipts V266.2 ✅ (bank charges · customer picker · A4 table header · picker on click · amount format)');

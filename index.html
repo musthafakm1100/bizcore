@@ -24,7 +24,7 @@
 <link href="css/register-standard.css?v=266.0" rel="stylesheet"/>
 <link href="css/doc-view.css?v=265.2" rel="stylesheet"/>
 <link href="css/delivery-compact.css?v=265.7" rel="stylesheet"/>
-<link href="css/receipts.css?v=266.1" rel="stylesheet"/>
+<link href="css/receipts.css?v=266.2" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=265.2" defer></script>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
@@ -3049,7 +3049,7 @@ onAuthStateChanged(auth, user => {
       document.body.appendChild(s);
     };
     // V266: receipts.js (Payment Receipts) after invoicing.js, before app.js
-    inv.onload = () => { const r = document.createElement('script'); r.id = 'bizcore-receipts-script'; r.src = 'js/receipts.js?v=266.1'; r.onload = start; r.onerror = () => { console.error('[BizCore] receipts.js could not be loaded'); start(); }; document.body.appendChild(r); };
+    inv.onload = () => { const r = document.createElement('script'); r.id = 'bizcore-receipts-script'; r.src = 'js/receipts.js?v=266.2'; r.onload = start; r.onerror = () => { console.error('[BizCore] receipts.js could not be loaded'); start(); }; document.body.appendChild(r); };
     inv.onerror = () => { console.error('[BizCore] invoicing.js could not be loaded'); start(); };
     document.body.appendChild(inv);
   }
