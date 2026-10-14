@@ -85,7 +85,7 @@ function startReceiptListeners(){
   _rctListenersStarted = true;
   window.BizCoreRct.startSettingsListener();
   window.BizCoreRct.onSettingsChange(() => {
-    if (document.getElementById('setup-tab-billing')?.style.display === 'block') renderReceiptSettings();
+    if (document.getElementById('setup-tab-billing')?.style.display === 'block') { renderReceiptSettings(); if (typeof renderBillingSettings === 'function') renderBillingSettings(); }   // V266.4: Editing invoices is shown under Invoicing rules
     syncReceiptPageState();
   });
   window.BizCoreInv.ready.then(mode => {
@@ -789,8 +789,7 @@ function renderReceiptSettings(){
       <div class="form-group"><label for="rs-record">Who may record receipts</label>${sel('rs-record', s.allowRecord, who)}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Also applies to applying unapplied money later.</div></div>
       <div class="form-group"><label for="rs-void">Who may void receipts</label>${sel('rs-void', s.allowVoid, who)}</div>
       <div class="form-group"><label for="rs-edit-rct">Editing receipts</label>${sel('rs-edit-rct', s.editReceipts, [['none', 'Nobody — corrections by Void only'], ['limited', 'Limited edit for all users'], ['limited-admin-full', 'Limited for all users, full for administrators'], ['full', 'Full edit for all users']])}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Limited: reference, notes, account, method, Zoho no. and the invoices applied. Full: also customer, date, amount and bank charges.</div></div>
-      <div class="form-group"><label for="rs-edit-inv">Editing invoices (limited)</label>${sel('rs-edit-inv', s.editInvoices, [['none', 'Nobody'], ['admin', 'Administrators only'], ['all', 'All users']])}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Due date, customer PO no., description, notes and Zoho no. Invoice figures are never edited — use Cancel and re-issue (a credit note and a new invoice).</div></div>
-      <div class="form-group"><label for="rs-edit-limit">Edit time limit</label><div style="display:flex;gap:8px;align-items:center">${sel('rs-edit-limit', s.editLimit, [['month', 'Current month only'], ['days', 'Within a number of days'], ['none', 'No limit']]).replace('<select', '<select onchange="document.getElementById(\'rs-edit-days-wrap\').hidden=this.value!==\'days\'"')}<span id="rs-edit-days-wrap" ${s.editLimit === 'days' ? '' : 'hidden'}><input id="rs-edit-days" type="number" min="1" max="365" step="1" value="${s.editDays}" ${dis} style="width:80px"/> days</span></div>
+      <div class="form-group"><label for="rs-edit-limit">Edit time limit (receipts and invoices)</label><div style="display:flex;gap:8px;align-items:center">${sel('rs-edit-limit', s.editLimit, [['month', 'Current month only'], ['days', 'Within a number of days'], ['none', 'No limit']]).replace('<select', '<select onchange="document.getElementById(\'rs-edit-days-wrap\').hidden=this.value!==\'days\'"')}<span id="rs-edit-days-wrap" ${s.editLimit === 'days' ? '' : 'hidden'}><input id="rs-edit-days" type="number" min="1" max="365" step="1" value="${s.editDays}" ${dis} style="width:80px"/> days</span></div>
         <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-weight:500;text-transform:none;letter-spacing:0"><input type="checkbox" id="rs-admin-after" ${s.adminsAfterLimit ? 'checked' : ''} ${dis}/> Administrators may still edit after the limit</label>
         <div style="font-size:11.5px;color:var(--gray);margin-top:4px">Counted from the receipt / invoice date. After the limit: Void (receipt) or credit note (invoice).</div></div>
       <div class="form-group"><label for="rs-accounts">Deposit accounts (one per line)</label><textarea id="rs-accounts" ${dis} rows="4" placeholder="e.g. SNB Current ••4410&#10;Al Rajhi ••2201&#10;Cash box">${rctEsc((s.accounts || []).join('\n'))}</textarea><div style="font-size:11.5px;color:var(--gray);margin-top:4px">When the list is filled, "Deposited to" is a mandatory choice on every receipt. Leave empty to keep it optional free text.</div></div>
@@ -805,7 +804,7 @@ async function saveReceiptSettings(){
   const btn = document.getElementById('rs-save'); if (btn) btn.disabled = true;
   try {
     await window.BizCoreRct.saveSettings({ zohoPaymentNo: v('rs-zoho'), allowRecord: v('rs-record'), allowVoid: v('rs-void'), accounts: v('rs-accounts').split('\n'),
-      editReceipts: v('rs-edit-rct'), editInvoices: v('rs-edit-inv'), editLimit: v('rs-edit-limit'), editDays: parseInt(v('rs-edit-days'), 10) || 7, adminsAfterLimit: document.getElementById('rs-admin-after').checked });
+      editReceipts: v('rs-edit-rct'), editInvoices: window.BizCoreRct.settings.editInvoices, editLimit: v('rs-edit-limit'), editDays: parseInt(v('rs-edit-days'), 10) || 7, adminsAfterLimit: document.getElementById('rs-admin-after').checked });
     showToast('Receipt settings saved.', 'success', 'Settings Saved');
   } catch (e) { showToast(e.code === 'permission-denied' ? 'Only an administrator can change these settings (or the receipt rules are not published yet).' : e.message, 'error', 'Not Saved'); }
   finally { if (btn) btn.disabled = false; }
@@ -925,4 +924,4 @@ async function saveEditReceipt(m){
     }, ready: v => !v || !isModalOpen('rct-new-modal') });
 }
 
-console.log('Payment receipts V266.3 ✅ (bank charges · customer picker · A4 table header · edit receipts & invoices · cancel and re-issue · receipt lock)');
+console.log('Payment receipts V266.4 ✅ (invoice edit levels under Invoicing rules · invoice edit screen · cancel and re-issue = full · receipt edit · locks)');

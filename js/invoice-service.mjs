@@ -21,7 +21,7 @@ import {
   COLLECTIONS, SCHEMA_VERSION, DeliveryError, isSafeId, eventIdForOperation, emptyLedger, requireDate, requireReason, cleanText, assertSize,
 } from './delivery-core.mjs?v=266.0';
 import { LOCK_COLLECTION, LOCK_TYPES, lockId, lockHeldBy } from './lock-service.mjs?v=266.0';
-import { RECEIPT_SETTINGS_PATH, effectiveReceiptSettings, invoiceEditRights } from './receipt-core.mjs?v=266.3';
+import { RECEIPT_SETTINGS_PATH, effectiveReceiptSettings, invoiceEditRights } from './receipt-core.mjs?v=266.4';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
 const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, details); };

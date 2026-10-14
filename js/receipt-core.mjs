@@ -39,13 +39,17 @@ export const RECEIPT_DEFAULTS = Object.freeze({
   accounts: [],                 // "Deposited to" accounts; when empty the field is optional free text
   // V266.3 editing (receipts and invoices)
   editReceipts: 'limited-admin-full', // 'none' | 'limited' | 'limited-admin-full' | 'full'
-  editInvoices: 'all',                // 'none' | 'admin' | 'all'  (limited edit only — invoice figures are never edited)
+  // V266.4: same scale as receipts. For invoices 'full' = may use Cancel and re-issue (figures are never edited in place)
+  editInvoices: 'limited-admin-full', // 'none' | 'limited' | 'limited-admin-full' | 'full'
   editLimit: 'month',                 // 'none' | 'month' (same calendar month as the document date) | 'days'
   editDays: 7,                        // used when editLimit = 'days'
   adminsAfterLimit: true,             // administrators may still edit after the limit
 });
 export const RECEIPT_EDIT_LEVELS = Object.freeze(['none', 'limited', 'limited-admin-full', 'full']);
-export const INVOICE_EDIT_LEVELS = Object.freeze(['none', 'admin', 'all']);
+export const INVOICE_EDIT_LEVELS = RECEIPT_EDIT_LEVELS;
+/** V266.3 values saved before V266.4 → the V266.4 scale. */
+export const LEGACY_INVOICE_EDIT_LEVELS = Object.freeze({ all: 'limited-admin-full', admin: 'limited-admin-full' });
+const invoiceLevelOf = v => (INVOICE_EDIT_LEVELS.includes(v) ? v : LEGACY_INVOICE_EDIT_LEVELS[v] || null);
 export const EDIT_LIMITS = Object.freeze(['none', 'month', 'days']);
 /** Receipt fields by edit level. */
 export const RECEIPT_FULL_FIELDS = Object.freeze(['customer', 'custId', 'date', 'amount', 'bankCharges']);
@@ -76,7 +80,7 @@ export function effectiveReceiptSettings(stored) {
   for (const k of ['allowRecord', 'allowVoid']) if (stored && ['all', 'admin'].includes(stored[k])) out[k] = stored[k];
   if (stored && Array.isArray(stored.accounts)) out.accounts = [...new Set(stored.accounts.map(cleanAccount).filter(Boolean))].slice(0, 20);
   if (stored && RECEIPT_EDIT_LEVELS.includes(stored.editReceipts)) out.editReceipts = stored.editReceipts;
-  if (stored && INVOICE_EDIT_LEVELS.includes(stored.editInvoices)) out.editInvoices = stored.editInvoices;
+  if (stored && invoiceLevelOf(stored.editInvoices)) out.editInvoices = invoiceLevelOf(stored.editInvoices);
   if (stored && EDIT_LIMITS.includes(stored.editLimit)) out.editLimit = stored.editLimit;
   if (stored && Number.isInteger(stored.editDays) && stored.editDays >= 1 && stored.editDays <= 365) out.editDays = stored.editDays;
   if (stored && typeof stored.adminsAfterLimit === 'boolean') out.adminsAfterLimit = stored.adminsAfterLimit;
@@ -95,8 +99,8 @@ export function validateReceiptSettings(input) {
   value.accounts = [...new Set(acc)].slice(0, 20);
   if (!RECEIPT_EDIT_LEVELS.includes(input?.editReceipts ?? RECEIPT_DEFAULTS.editReceipts)) errors.push({ field: 'editReceipts', message: 'Choose who may edit receipts.' });
   else value.editReceipts = input?.editReceipts ?? RECEIPT_DEFAULTS.editReceipts;
-  if (!INVOICE_EDIT_LEVELS.includes(input?.editInvoices ?? RECEIPT_DEFAULTS.editInvoices)) errors.push({ field: 'editInvoices', message: 'Choose who may edit invoices.' });
-  else value.editInvoices = input?.editInvoices ?? RECEIPT_DEFAULTS.editInvoices;
+  if (!invoiceLevelOf(input?.editInvoices ?? RECEIPT_DEFAULTS.editInvoices)) errors.push({ field: 'editInvoices', message: 'Choose who may edit invoices.' });
+  else value.editInvoices = invoiceLevelOf(input?.editInvoices ?? RECEIPT_DEFAULTS.editInvoices);
   if (!EDIT_LIMITS.includes(input?.editLimit ?? RECEIPT_DEFAULTS.editLimit)) errors.push({ field: 'editLimit', message: 'Choose the edit time limit.' });
   else value.editLimit = input?.editLimit ?? RECEIPT_DEFAULTS.editLimit;
   const days = Number(input?.editDays ?? RECEIPT_DEFAULTS.editDays);
@@ -130,13 +134,18 @@ export function receiptEditRights(receipt, settings, isAdmin, today) {
   }
   return { limited, full, why };
 }
-/** → { ok, why } for the limited edit of an invoice. */
+/** → { ok, limited, full, why, fullWhy } for an invoice.
+ *  limited = the limited edit (Zoho no., due date, PO no., description, notes);
+ *  full    = may use Cancel and re-issue (a full credit note + a new invoice). Figures are never edited in place. */
 export function invoiceEditRights(invoice, settings, isAdmin, today) {
-  const lvl = settings.editInvoices;
-  if (lvl === 'none') return { ok: false, why: 'Editing invoices is switched off (Administration → Billing Settings).' };
-  if (lvl === 'admin' && !isAdmin) return { ok: false, why: 'Only an administrator may edit invoices (Administration → Billing Settings).' };
-  if (!withinEditLimit(invoice?.date, settings, today) && !(isAdmin && settings.adminsAfterLimit)) return { ok: false, why: `Invoices can be edited only ${editLimitText(settings)}. Use a credit note instead.` };
-  return { ok: true, why: '' };
+  const lvl = invoiceLevelOf(settings.editInvoices) || RECEIPT_DEFAULTS.editInvoices;
+  let limited = lvl !== 'none', full = lvl === 'full' || (lvl === 'limited-admin-full' && !!isAdmin);
+  let why = limited ? '' : 'Editing invoices is switched off (Administration → Billing Settings → Invoicing rules).';
+  let fullWhy = full ? '' : lvl === 'none' ? why : 'Only an administrator may cancel and re-issue invoices (Administration → Billing Settings → Invoicing rules).';
+  if ((limited || full) && !withinEditLimit(invoice?.date, settings, today) && !(isAdmin && settings.adminsAfterLimit)) {
+    limited = full = false; why = fullWhy = `Invoices can be edited only ${editLimitText(settings)}. Use a credit note instead.`;
+  }
+  return { ok: limited, limited, full, why, fullWhy };
 }
 /** Sets a receipt's amount on an invoice payment record to an absolute value (0 removes it). */
 export function setPaymentAmount(payment, invoice, { rctId, rctNo, date }, amount, at) {

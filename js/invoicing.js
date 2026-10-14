@@ -1046,7 +1046,8 @@ function renderInvoiceView(doc, kind){
   if (!cn) {
     const er = invoiceEditRightsOf(doc);
     if (er.shown) b.push(`<button class="btn btn-secondary" id="inv-view-edit-btn" ${er.ok ? '' : `disabled title="${invEsc(er.why)}"`} onclick="${invViewGo(`openEditInvoice('${doc.salesOrderId}','${doc.id}')`)}"><i class="ti ti-pencil"></i><span>Edit</span></button>`);
-    if (canCredit && doc.status === 'Issued') b.push(`<button class="btn btn-secondary" id="inv-view-reissue-btn" onclick="${invViewGo(`openCancelReissue('${doc.salesOrderId}','${doc.id}')`)}"><i class="ti ti-refresh"></i><span>Cancel &amp; re-issue</span></button>`);
+    // V266.4: "full" invoice edit = Cancel and re-issue (also needs the credit-note permission)
+    if (er.full && doc.status === 'Issued') b.push(`<button class="btn btn-secondary" id="inv-view-reissue-btn" ${canCredit ? '' : 'disabled title="Cancel and re-issue makes a credit note — only users allowed to issue credit notes can use it (Administration → Billing Settings)."'} onclick="${invViewGo(`openCancelReissue('${doc.salesOrderId}','${doc.id}')`)}"><i class="ti ti-refresh"></i><span>Cancel &amp; re-issue</span></button>`);
   }
   if (canCredit) b.push(`<button class="btn btn-danger" id="inv-view-credit-btn" onclick="${invViewGo(`openIssueCreditNote('${doc.salesOrderId}','${doc.id}')`)}"><i class="ti ti-receipt-refund"></i><span>Credit Note</span></button>`);
   b.push(`<button class="btn btn-primary" id="inv-view-print-btn" onclick="${cn ? `printCreditNote('${doc.id}')` : `printCustomerInvoice('${doc.id}')`}"><i class="ti ti-printer"></i><span>Print / PDF</span></button>`);
@@ -1093,6 +1094,7 @@ function renderBillingSettings(){
   const box = document.getElementById('billing-settings-body'); if (!box) return;
   const B = window.BizCoreInv;
   if (!B) { box.innerHTML = '<div style="color:var(--gray)">Not connected.</div>'; return; }
+  const R = window.BizCoreRct && window.BizCoreRct.settings ? window.BizCoreRct : null;   // V266.4: invoice editing is stored with the receipt settings
   const s = B.settings, stored = B.storedSettings, isAdmin = !!B.isAdministrator, dis = isAdmin ? '' : 'disabled';
   const sel = (id, value, opts) => `<select id="${id}" ${dis}>${opts.map(([v, l]) => `<option value="${v}" ${v === value ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
   const who = [['all', 'All users'], ['admin', 'Administrators only'], ['none', 'Nobody (switched off)']];
@@ -1105,6 +1107,8 @@ function renderBillingSettings(){
       <div class="form-group"><label for="bs-order">Who may issue order invoices (bill ahead of delivery)</label>${sel('bs-order', s.allowOrderInvoices, who)}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Delivery invoices (accepted goods) are always allowed.</div></div>
       <div class="form-group"><label for="bs-adv">Who may issue advance invoices</label>${sel('bs-adv', s.allowAdvanceInvoices, who)}</div>
       <div class="form-group"><label for="bs-cn">Who may issue credit notes</label>${sel('bs-cn', s.allowCreditNotes, who.slice(0, 2))}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Corrections must stay possible, so credit notes cannot be switched off.</div></div>
+      ${R ? `<div class="form-group"><label for="bs-edit-inv">Editing invoices</label>${sel('bs-edit-inv', R.settings.editInvoices, [['none', 'Nobody — corrections by credit note only'], ['limited', 'Limited edit for all users'], ['limited-admin-full', 'Limited for all users, full for administrators'], ['full', 'Full edit for all users']])}
+        <div style="font-size:11.5px;color:var(--gray);margin-top:4px">Limited: Zoho no., payment due date, customer PO no., description and notes. Full: also <strong>Cancel and re-issue</strong> (a full credit note and a corrected new invoice) — the figures of an issued invoice are never changed (ZATCA). Cancel and re-issue also needs the credit-note permission above. The edit time limit is set under Payment receipts.</div></div>` : ''}
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;flex-wrap:wrap">
       <div style="font-size:12px;color:var(--gray)">${stored && stored.updatedByName ? 'Last changed by ' + invEsc(stored.updatedByName) + (stored.updatedAt ? ' · ' + new Date(window.BizCoreLocks.core.toMillis(stored.updatedAt)).toLocaleString() : '') : 'Using the default values (deduction: automatic proposal; order/advance invoices and credit notes: administrators only).'}</div>
@@ -1116,7 +1120,15 @@ function renderBillingSettings(){
 async function saveBillingSettings(){
   const v = id => document.getElementById(id).value;
   const btn = document.getElementById('bs-save'); if (btn) btn.disabled = true;
-  try { await window.BizCoreInv.saveSettings({ deductionMethod: v('bs-ded'), allowOrderInvoices: v('bs-order'), allowAdvanceInvoices: v('bs-adv'), allowCreditNotes: v('bs-cn') }); showToast('Billing settings saved.', 'success', 'Settings Saved'); }
+  // read everything first: saving re-renders this section
+  const R = window.BizCoreRct, ei = document.getElementById('bs-edit-inv'), editInvoices = ei ? ei.value : null;
+  const billing = { deductionMethod: v('bs-ded'), allowOrderInvoices: v('bs-order'), allowAdvanceInvoices: v('bs-adv'), allowCreditNotes: v('bs-cn') };
+  try {
+    await window.BizCoreInv.saveSettings(billing);
+    // V266.4: "Editing invoices" lives in settings/receipts (with the edit time limit); saved only when changed
+    if (R && R.settings && editInvoices && editInvoices !== R.settings.editInvoices) await R.saveSettings({ ...R.settings, editInvoices });
+    showToast('Billing settings saved.', 'success', 'Settings Saved');
+  }
   catch (e) { showToast(e.code === 'permission-denied' ? 'Only an administrator can change these settings.' : e.message, 'error', 'Not Saved'); }
   finally { if (btn) btn.disabled = false; }
 }
@@ -1212,28 +1224,71 @@ function invoiceEditRightsOf(inv){
   const R = window.BizCoreRct; if (!R) return { shown: false, ok: false, why: '' };
   const t = new Date(), today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
   const r = R.core.invoiceEditRights(inv, R.settings, !!R.isAdministrator, today);
-  return { shown: R.settings.editInvoices !== 'none', ok: r.ok, why: r.why };
+  return { shown: R.settings.editInvoices !== 'none', ok: r.limited, full: r.full, why: r.why, fullWhy: r.fullWhy };
 }
 function ensureInvoiceEditModal(){
   let m = document.getElementById('inv-edit-modal'); if (m) return m;
   m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'inv-edit-modal';
-  m.innerHTML = `<div class="modal inv-edit-box">
+  // V266.4: the same entry screen as Create Invoice — locked fields greyed out, only the limited fields open
+  const lock = '<i class="ti ti-lock ie-lock" title="Cannot be changed on an issued tax invoice — use Cancel &amp; re-issue"></i>';
+  m.innerHTML = `<div class="modal modal-normal so-create-workspace inv-workspace inv-edit-workspace">
     <div class="modal-header"><div><h2 id="ie-title">Edit invoice</h2><div class="so-create-subtitle" id="ie-subtitle"></div></div><button class="close-btn" onclick="closeModal('inv-edit-modal')">✕</button></div>
     <div class="modal-body">
-      <div class="inv-edit-facts" id="ie-facts"></div>
-      <div class="inv-edit-fields">
-        <div class="form-group"><label for="ie-zoho">Zoho invoice no. *</label><input id="ie-zoho" maxlength="100" autocomplete="off" oninput="recalcEditInvoice()"/><div class="inv-field-msg" id="ie-zoho-msg" hidden></div></div>
-        <div class="form-group"><label for="ie-due">Payment due date</label><input id="ie-due" type="date" onchange="recalcEditInvoice()"/></div>
-        <div class="form-group"><label for="ie-po">Customer PO no.</label><input id="ie-po" maxlength="200" autocomplete="off" oninput="recalcEditInvoice()"/></div>
-        <div class="form-group inv-span-2"><label for="ie-reason" id="ie-reason-label">Description</label><input id="ie-reason" maxlength="300" oninput="recalcEditInvoice()"/></div>
-        <div class="form-group inv-span-2"><label for="ie-notes">Notes</label><textarea id="ie-notes" class="inv-notes" oninput="recalcEditInvoice()"></textarea></div>
-        <div class="form-group inv-span-2 inv-edit-why"><label for="ie-why">Reason for the change *</label><input id="ie-why" maxlength="300" placeholder="e.g. customer asked for 30 days, Zoho number typed wrong…" oninput="recalcEditInvoice()"/></div>
+      <div class="ie-mode"><i class="ti ti-pencil"></i><div><b>Limited edit</b><span>Zoho no., payment due date, customer PO no., description and notes can be changed. Quantities, prices, VAT, date and customer of a tax invoice stay as issued — use <b>Cancel &amp; re-issue</b> for those.</span></div></div>
+      <div class="so-header-grid">
+        <section class="so-entry-card"><div class="so-entry-card-title"><i class="ti ti-file-invoice"></i>Invoice Details</div><div class="so-entry-fields two">
+          <div class="form-group"><label for="ie-no">Invoice Number ${lock}</label><input id="ie-no" disabled class="so-readonly strong"/></div>
+          <div class="form-group"><label for="ie-date">Invoice Date ${lock}</label><input id="ie-date" type="date" disabled/></div>
+          <div class="form-group"><label for="ie-due">Payment Due Date</label><input id="ie-due" type="date" onchange="recalcEditInvoice()"/></div>
+          <div class="form-group"><label for="ie-zoho">Zoho Invoice No. *</label><input id="ie-zoho" maxlength="100" autocomplete="off" oninput="recalcEditInvoice()"/><div class="inv-field-msg" id="ie-zoho-msg" hidden></div></div>
+          <div class="form-group"><label for="ie-po">Customer PO No.</label><input id="ie-po" maxlength="200" autocomplete="off" oninput="recalcEditInvoice()"/></div>
+          <div class="form-group"><label for="ie-type">Invoice Type ${lock}</label><input id="ie-type" disabled/></div>
+          <div class="form-group inv-span-2"><label for="ie-reason" id="ie-reason-label">Description</label><input id="ie-reason" maxlength="300" oninput="recalcEditInvoice()"/></div>
+        </div></section>
+        <section class="so-entry-card"><div class="so-entry-card-title"><i class="ti ti-shopping-cart"></i>Order &amp; Billing</div><div class="inv-facts" id="ie-facts"></div></section>
       </div>
-      <div class="inv-edit-note"><i class="ti ti-info-circle"></i> Quantities, prices, VAT, date and customer of a tax invoice cannot be changed. Use <b>Cancel &amp; re-issue</b> for those.</div>
+      <section class="so-entry-card so-items-card ie-locked-card">
+        <div class="so-entry-card-title so-items-title"><span><i class="ti ti-list-check"></i><span id="ie-items-title">Invoiced Items</span></span><span class="ie-locked-tag"><i class="ti ti-lock"></i>As issued — cannot be changed</span></div>
+        <div class="inv-grid-scroll" id="ie-grid"><div class="inv-line-head" id="ie-items-head"></div><div id="ie-items"></div></div>
+      </section>
+      <div class="so-bottom-grid">
+        <section class="so-entry-card"><div class="so-entry-card-title"><i class="ti ti-message"></i>Invoice Notes</div><div class="form-group"><label for="ie-notes">Notes <span class="inv-optional">Optional</span></label><textarea id="ie-notes" class="inv-notes" oninput="recalcEditInvoice()"></textarea></div>
+          <div class="form-group inv-edit-why"><label for="ie-why">Reason for the change *</label><input id="ie-why" maxlength="300" placeholder="e.g. customer asked for 30 days, Zoho number typed wrong…" oninput="recalcEditInvoice()"/></div></section>
+        <section class="so-entry-card so-summary-card ie-locked-card"><div class="so-entry-card-title"><i class="ti ti-calculator"></i>Invoice Summary <span class="ie-locked-tag"><i class="ti ti-lock"></i>Fixed</span></div><div id="ie-summary"></div></section>
+      </div>
     </div>
-    <div class="modal-footer"><div class="inv-ready" id="ie-ready"></div><button class="btn btn-secondary" onclick="closeModal('inv-edit-modal')">Cancel</button><button class="btn btn-primary" id="ie-save" onclick="saveEditInvoice()" disabled><i class="ti ti-device-floppy"></i><span id="ie-save-text">Save Changes</span></button></div>
+    <div class="modal-footer"><div class="inv-ready" id="ie-ready" aria-live="polite"></div><button class="btn btn-secondary" onclick="closeModal('inv-edit-modal')">Cancel</button><button class="btn btn-primary" id="ie-save" onclick="saveEditInvoice()" disabled><i class="ti ti-device-floppy"></i><span id="ie-save-text">Save Changes</span></button></div>
   </div>`;
   document.body.appendChild(m); return m;
+}
+/** Read-only lines and totals of the issued invoice, laid out like the Create Invoice screen. */
+function renderEditInvoiceLines(inv){
+  const n2 = v => formatNumber(invNum(v), 2), t = inv.totals || {};
+  const grid = document.getElementById('ie-grid');
+  if (inv.type === 'advance') {
+    const a = inv.advance || {};
+    const basis = a.method === 'full' ? 'full order value' : `${formatNumber(a.percent, 2)}% of ${a.method === 'percentLines' ? 'selected lines' : 'order value'} (${n2(a.base)})`;
+    grid.className = 'inv-grid-scroll ie-grid-advance';
+    document.getElementById('ie-items-title').textContent = 'Advance';
+    document.getElementById('ie-items-head').innerHTML = '<span>#</span><span>Description</span><span class="num">VAT %</span><span class="num">Amount</span>';
+    document.getElementById('ie-items').innerHTML = `<div class="inv-line-row"><span class="muted">1</span><span class="desc">Advance payment against ${invEsc(inv.soNo || 'the order')} — ${invEsc(basis)}</span><span class="num">${Math.round(invNum(a.vatRate) * 100)}%</span><span class="num strong">${n2(t.subtotal)}</span></div>`;
+  } else {
+    grid.className = 'inv-grid-scroll ie-grid-goods';
+    document.getElementById('ie-items-title').textContent = 'Invoiced Items';
+    document.getElementById('ie-items-head').innerHTML = '<span>#</span><span>Item / Description</span><span class="num">Qty</span><span>UOM</span><span class="num">Unit Price</span><span class="num">VAT %</span><span class="num">Amount</span>';
+    document.getElementById('ie-items').innerHTML = (inv.lines || []).map((l, i) => `<div class="inv-line-row"><span class="muted">${i + 1}</span><span class="desc">${invEsc(l.desc || '—')}${l.code ? `<small class="muted"> · ${invEsc(l.code)}</small>` : ''}</span><span class="num">${formatQuantity(l.qty)}</span><span class="muted">${invEsc(l.uom || '—')}</span><span class="num">${documentMoney('customerInvoice', 'unitPrice', l.up)}</span><span class="num">${Math.round(invNum(l.vatRate != null ? l.vatRate : 0.15) * 100)}%</span><span class="num strong">${documentMoney('customerInvoice', 'lineAmount', l.subtotal != null ? invNum(l.subtotal) : invNum(l.qty) * invNum(l.up))}</span></div>`).join('')
+      || '<div class="inv-empty-row"><i class="ti ti-info-circle"></i><span>No lines.</span></div>';
+  }
+  const row = (k, v, cls = 'so-summary-row') => `<div class="${cls}"><span>${k}</span><span>${v}</span></div>`;
+  let h = '';
+  if (inv.type !== 'advance') {
+    h += row('Goods (ex-VAT)', invMoney(t.goodsSubtotal), 'so-summary-row muted');
+    (inv.deductions || []).forEach(d => { h += row(`Less: advance ${invEsc(d.advanceInvNo)}`, '− ' + invMoney(d.subtotal), 'so-summary-row muted'); });
+  }
+  h += '<div class="so-summary-divider"></div>' + row('Subtotal', invMoney(t.subtotal)) + row('VAT', invMoney(t.vat))
+    + `<div class="so-summary-total"><span>TOTAL</span><span>${documentMoney('customerInvoice', 'grandTotal', invNum(t.total))}</span></div>`;
+  if ((inv.creditNotes || []).length) h += `<div class="ie-credited"><i class="ti ti-receipt-refund"></i> Credited by ${(inv.creditNotes || []).map(c => `${invEsc(c.cnNo)} (${n2(c.total)})`).join(', ')}</div>`;
+  document.getElementById('ie-summary').innerHTML = h;
 }
 async function openEditInvoice(soId, invoiceId){
   const inv = invoicesCache.find(i => i.id === invoiceId); if (!inv) { showToast('Invoice not found', 'error'); return false; }
@@ -1242,15 +1297,22 @@ async function openEditInvoice(soId, invoiceId){
   if (!navigator.onLine) { showToast('Invoices are saved directly to the cloud database. Please reconnect and try again.', 'error', 'Offline'); return false; }
   const m = ensureInvoiceEditModal();
   Object.assign(m, { _soId: soId, _invoice: inv, _opId: newDeliveryOperationId('invedit', soId) });
+  ['view-modal', 'inv-view-modal'].forEach(mid => { if (typeof isModalOpen === 'function' && isModalOpen(mid)) closeModal(mid); });
   document.getElementById('ie-title').textContent = 'Edit ' + inv.invNo;
-  document.getElementById('ie-subtitle').textContent = `${invTypeLabel(inv.type)} · ${inv.customer || ''} · ${inv.soNo || ''}`;
+  document.getElementById('ie-subtitle').textContent = [inv.customer, inv.soNo, 'revision ' + (inv.revision || 1) + (inv.editCount ? ' · edited ' + inv.editCount + '×' : '')].filter(Boolean).join(' · ');
   const f = (k, v) => `<div><span>${k}</span><strong>${v}</strong></div>`;
-  document.getElementById('ie-facts').innerHTML = f('Invoice date', fmtDate(inv.date)) + f('Total', invMoney((inv.totals || {}).total)) + f('Status', invEsc(inv.status || 'Issued')) + f('Revision', String(inv.revision || 1));
+  const pay = typeof receiptsActive === 'function' && receiptsActive();
+  document.getElementById('ie-facts').innerHTML = f('Sales Order', invEsc(inv.soNo || '—')) + f('Customer', invEsc(inv.customer || '—')) + f('Status', invEsc(inv.status || 'Issued'))
+    + f('Total incl. VAT', invMoney((inv.totals || {}).total)) + (pay ? f('Paid', invMoney(invoicePaidOf(inv))) + f('Balance due', invMoney(invoiceBalanceOf(inv))) : '');
+  document.getElementById('ie-no').value = inv.invNo || '';
+  document.getElementById('ie-date').value = inv.date || '';
+  document.getElementById('ie-type').value = invTypeLabel(inv.type);
+  renderEditInvoiceLines(inv);
   document.getElementById('ie-zoho').value = inv.zohoNo || '';
   document.getElementById('ie-due').value = inv.dueDate || '';
   document.getElementById('ie-po').value = inv.poNo || '';
   document.getElementById('ie-reason').value = inv.reason || '';
-  document.getElementById('ie-reason-label').textContent = inv.type === 'order' ? 'Reason for billing ahead *' : 'Description';
+  document.getElementById('ie-reason-label').innerHTML = inv.type === 'order' ? 'Reason for billing ahead *' : 'Description <span class="inv-optional">Optional</span>';
   document.getElementById('ie-notes').value = inv.notes || '';
   document.getElementById('ie-why').value = '';
   openModalWithSize('inv-edit-modal');
@@ -1304,6 +1366,8 @@ async function saveEditInvoice(){
 /** Cancel and re-issue: full credit note first (its screen, prefilled), then the new invoice prefilled from the old one. */
 async function openCancelReissue(soId, invoiceId){
   const inv = invoicesCache.find(i => i.id === invoiceId); if (!inv) return false;
+  const er = invoiceEditRightsOf(inv);
+  if (!er.full) { showToast(er.fullWhy || 'You may not cancel and re-issue this invoice.', 'warning', 'Not Allowed'); return false; }
   if (inv.status !== 'Issued') { showToast(`${inv.invNo} already has a credit note. Use Credit Note for further corrections.`, 'warning', 'Not Possible'); return false; }
   const paid = typeof invoicePaidOf === 'function' ? invoicePaidOf(inv) : 0;
   if (paid > 0.005) {
