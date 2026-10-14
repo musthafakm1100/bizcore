@@ -322,7 +322,7 @@
   function fitDocuments(m) {
     m.querySelectorAll('.qdoc-sheet, .dn-a4').forEach(doc => {
       const host = doc.parentElement; if (!host) return;
-      if (window.innerWidth > TAB_MAX || m.id === 'dn-print-modal') { if (m.id !== 'dn-print-modal') { doc.style.zoom = ''; host.style.overflowX = ''; } return; }
+      if (window.innerWidth > 1100 || m.id === 'dn-print-modal') { if (m.id !== 'dn-print-modal') { doc.style.zoom = ''; host.style.overflowX = ''; } return; }
       doc.style.zoom = '';
       const avail = host.clientWidth - 4, w = doc.offsetWidth;
       if (w > avail && avail > 100) { doc.style.zoom = (avail / w).toFixed(3); host.style.overflowX = 'hidden'; }

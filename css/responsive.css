@@ -167,5 +167,10 @@ html body .bcr-sheet aside.bc-in-sheet .module-monitor-collapse{visibility:hidde
   html body .modal-overlay :is(.qv-document-workspace,.inv-view-workspace)[data-bctab="doc"]>aside.qv-erp-panel{display:none!important}
   html body .modal-overlay :is(.qv-document-workspace,.inv-view-workspace)[data-bctab="details"]>aside.qv-erp-panel{display:flex!important;flex-direction:column;position:static!important;width:100%!important;max-width:none!important;top:auto!important}
   html body .modal-overlay :is(.qv-document-workspace,.inv-view-workspace)[data-bctab="doc"]>:is(.qv-document-column,.dn-view-document){display:block!important;width:100%!important;overflow:hidden!important;padding:0!important;margin:0!important}
-  html body .modal-overlay :is(.qv-document-column,.dn-view-document)>:is(.qdoc-sheet,.dn-a4){margin:0!important;flex:0 0 auto!important;width:210mm!important;min-width:210mm!important;max-width:none!important}
+}
+/* Up to 1100 px the A4 page keeps its real size and layout and is scaled down to fit (as in the Delivery Note view) */
+@media (max-width: 1100px){
+  html{-webkit-text-size-adjust:100%;text-size-adjust:100%}   /* phones must not enlarge the document text */
+  html body .modal-overlay:not(#dn-print-modal) :is(.qv-document-column,.dn-view-document)>:is(.qdoc-sheet,.dn-a4){margin:0 auto!important;flex:0 0 auto!important;width:210mm!important;min-width:210mm!important;max-width:none!important}
+  html body .modal-overlay:not(#dn-print-modal) :is(.qv-document-column,.dn-view-document){overflow:hidden!important;min-width:0!important}
 }
