@@ -347,10 +347,34 @@
     paintTabs(tabs, ws);
   }
   function paintTabs(tabs, ws) { tabs.querySelectorAll('[data-bct]').forEach(b => { const on = b.dataset.bct === ws.dataset.bctab; b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); }); }
+  // Pricing document view below 900 px: "Details" and "Summary" tabs; line items as cards on a phone
+  function pricingTabs(m) {
+    const doc = m.querySelector('#pricing-ro-body > .pricing-view-document'); if (!doc) return;
+    const body = doc.parentElement;
+    let tabs = body.querySelector(':scope > .bcv-tabs');
+    if (window.innerWidth > TAB_MAX) { if (tabs) tabs.hidden = true; doc.removeAttribute('data-bctab'); return; }
+    if (!tabs) {
+      tabs = document.createElement('div'); tabs.className = 'bcv-tabs'; tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Pricing view');
+      tabs.innerHTML = '<button type="button" role="tab" data-bct="details">Details</button><button type="button" role="tab" data-bct="summary">Summary</button>';
+      tabs.addEventListener('click', e => { const b = e.target.closest('[data-bct]'); if (!b) return; const d = body.querySelector(':scope > .pricing-view-document'); if (!d) return; d.dataset.bctab = b.dataset.bct; paintTabs(tabs, d); body.scrollTop = 0; });
+    }
+    if (tabs.parentElement !== body || tabs.nextElementSibling !== doc) body.insertBefore(tabs, doc);
+    tabs.hidden = false;
+    if (!doc.dataset.bctab) doc.dataset.bctab = 'details';
+    paintTabs(tabs, doc);
+    // column names on each cell, so a phone can show every line as a small card
+    const t = doc.querySelector('.pricing-view-table');
+    if (t && !t.dataset.bcLabels) {
+      const heads = [...t.querySelectorAll('thead th')].map(th => th.textContent.trim());
+      t.querySelectorAll('tbody tr').forEach(tr => [...tr.cells].forEach((td, i) => { if (heads[i] && tr.cells.length > 1) td.setAttribute('data-label', heads[i]); }));
+      t.dataset.bcLabels = '1';
+    }
+  }
   function enhanceModal(m) {
     if (!m || !m.classList.contains('open')) return;
     m.querySelectorAll(FOOT).forEach(enhanceFooter);
     viewTabs(m);
+    pricingTabs(m);
     enhanceProgress(m);
     fitDocuments(m);
     setTimeout(() => fitDocuments(m), 350);

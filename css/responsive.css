@@ -140,7 +140,7 @@ html body .bcr-sheet aside.bc-in-sheet .module-monitor-collapse{visibility:hidde
 @media (min-width: 901px) and (max-width: 1279px){
   /* customer names stay on one line (rows were three lines tall); the table scrolls sideways if needed */
   html body :is(#page-quotations #quotes-table,#page-salesorders #so-register-table,#page-deliverynotes #dn-register-table,#page-customerinvoices #invreg-table,#page-receipts #rctreg-table) td{white-space:nowrap}
-  html body :is(#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-table-wrap{overflow-x:auto!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-table-wrap{overflow-x:auto!important}
 }
 
 /* ═════════ Tablets and small laptops (≤ 1279 px) ═════════ */
@@ -152,7 +152,7 @@ html body .bcr-sheet aside.bc-in-sheet .module-monitor-collapse{visibility:hidde
 @media (min-width: 901px) and (max-width: 1279px){
   /* Monitor: sticks to the top of the page (was 96 px down — a gap above it) and scrolls on its own when taller than the screen */
   html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) aside.dn-overview-panel.module-monitor.bc-monitor{position:sticky!important;top:0!important;align-self:start!important;max-height:calc(100vh - 72px)!important;overflow-y:auto!important;overscroll-behavior:contain}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) :is(button.module-monitor-rail.module-monitor-rail,.rfq-monitor-expand.rfq-monitor-expand){top:0!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) :is(button.module-monitor-rail.module-monitor-rail,.rfq-monitor-expand.module-monitor-rail.rfq-monitor-expand.module-monitor-rail){top:0!important}
 }
 
 /* ═════════ Quotation / Invoice / Payment Receipt views below 900 px: Document | Details tabs ═════════ */
@@ -173,4 +173,35 @@ html body .bcr-sheet aside.bc-in-sheet .module-monitor-collapse{visibility:hidde
   html{-webkit-text-size-adjust:100%;text-size-adjust:100%}   /* phones must not enlarge the document text */
   html body .modal-overlay:not(#dn-print-modal) :is(.qv-document-column,.dn-view-document)>:is(.qdoc-sheet,.dn-a4){margin:0 auto!important;flex:0 0 auto!important;width:210mm!important;min-width:210mm!important;max-width:none!important}
   html body .modal-overlay:not(#dn-print-modal) :is(.qv-document-column,.dn-view-document){overflow:hidden!important;min-width:0!important}
+}
+
+/* ═════════ Pricing document view below 900 px: Details | Summary tabs ═════════ */
+@media (max-width: 899px){
+  html body #pricing-ro-modal .pricing-view-document[data-bctab="details"] .pricing-view-side{display:none!important}
+  html body #pricing-ro-modal .pricing-view-document[data-bctab="summary"] :is(.pricing-view-topbar,.pricing-view-meta-grid,.pricing-view-main){display:none!important}
+  html body #pricing-ro-modal .pricing-view-document[data-bctab] .pricing-view-workspace{display:block!important}
+  html body #pricing-ro-modal .pricing-view-document[data-bctab="summary"] .pricing-view-side{display:flex!important;flex-direction:column;position:static!important;width:100%!important;max-width:none!important}
+  html body #pricing-ro-modal .pricing-view-meta-grid{grid-template-columns:1fr 1fr!important}
+  html body #pricing-ro-modal .pricing-view-notes-costs-row{display:flex!important;flex-direction:column!important;gap:12px!important}
+  /* Summary tab: one clear list — label on the left, amount on the right */
+  html body #pricing-ro-modal .pricing-view-side .pricing-summary{display:flex!important;flex-direction:column!important;gap:0!important;padding:4px 14px 10px!important}
+  html body #pricing-ro-modal .pricing-view-side .pricing-summary-section{grid-column:auto!important;margin:12px 0 4px!important;padding:0!important;border:0!important}
+  html body #pricing-ro-modal .pricing-view-side .ps-item{display:flex!important;justify-content:space-between!important;align-items:center!important;gap:12px!important;padding:9px 0!important;border:0!important;border-bottom:1px solid #edf1f5!important;background:none!important;border-radius:0!important;min-height:0!important;grid-column:auto!important}
+  html body #pricing-ro-modal .pricing-view-side .ps-item.ps-highlight{background:#f0faf3!important;padding:10px 10px!important;border-radius:8px!important;border:0!important;margin:3px 0!important}
+  html body #pricing-ro-modal .pricing-view-side .ps-label{font-size:13.5px!important;color:#475569!important}
+  html body #pricing-ro-modal .pricing-view-side .ps-val{font-size:15px!important;font-weight:700!important;white-space:nowrap!important}
+}
+/* Phone: each line item is a small card (label · value) instead of a 9-column table */
+@media (max-width: 760px){
+  html body #pricing-ro-modal .pricing-view-table-wrap{overflow:visible!important}
+  html body #pricing-ro-modal .pricing-view-table{min-width:0!important;width:100%!important;table-layout:auto!important}
+  html body #pricing-ro-modal .pricing-view-table thead{display:none!important}
+  html body #pricing-ro-modal .pricing-view-table tbody tr{display:grid!important;grid-template-columns:1fr 1fr;gap:4px 14px;padding:10px 12px;border-bottom:1px solid #edf1f5}
+  html body #pricing-ro-modal .pricing-view-table tbody td{display:flex!important;justify-content:space-between;gap:8px;padding:2px 0!important;border:0!important;height:auto!important;text-align:right!important;white-space:normal!important;font-size:13px}
+  html body #pricing-ro-modal .pricing-view-table tbody td[data-label]::before{content:attr(data-label);color:#64748b;font-size:11.5px;font-weight:600;text-align:left}
+  html body #pricing-ro-modal .pricing-view-table tbody td:nth-child(1){display:none!important}
+  html body #pricing-ro-modal .pricing-view-table tbody td:nth-child(2){grid-column:1 / -1;display:block!important;text-align:left!important;font-weight:600}
+  html body #pricing-ro-modal .pricing-view-table tbody td:nth-child(2)::before,
+  html body #pricing-ro-modal .pricing-view-table tbody td:nth-child(3)::before{display:none}
+  html body #pricing-ro-modal .pricing-view-table tbody td:nth-child(3){grid-column:1 / -1;display:block!important;text-align:left!important;color:#475569}
 }

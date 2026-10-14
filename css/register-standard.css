@@ -618,3 +618,6 @@ html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table)
   :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>:is(.bc-filter-customer,.bc-filter-status){min-width:80px!important}
   :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-search{min-width:96px!important}
 }
+
+/* V266.72 — the RFQ monitor's folded button sits at the top like on every other register (was 96 px down) */
+html body #page-rfq .rfq-main-workspace .rfq-monitor-expand.module-monitor-rail.rfq-monitor-expand{top:0!important;margin-top:0!important}

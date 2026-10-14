@@ -1138,7 +1138,9 @@ function onQuoteUomChange(sel){ const qty=sel.closest('tr')?.querySelector('[dat
 function fmtDate(d) {
   // Convert YYYY-MM-DD to DD-MM-YYYY for display
   if (!d) return '—';
-  const parts = d.split('-');
+  // V266.72: a full timestamp (2026-10-11T10:25:38Z) shows its date only (was "11T10:25:38Z-10-2026")
+  const iso = /^(\d{4})-(\d{2})-(\d{2})T/.exec(String(d)); if (iso) return iso[3]+'-'+iso[2]+'-'+iso[1];
+  const parts = String(d).split('-');
   if (parts.length !== 3) return d;
   return parts[2]+'-'+parts[1]+'-'+parts[0];
 }
