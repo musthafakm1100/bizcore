@@ -14,18 +14,22 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=250" rel="stylesheet"/>
-<link href="css/bizcore-design.css?v=215" rel="stylesheet"/>
+<link href="css/main.css?v=266.5" rel="stylesheet"/>
+<link href="css/bizcore-design.css?v=266.5" rel="stylesheet"/>
 <link href="css/typography.css?v=215" rel="stylesheet"/>
-<link href="css/masters.css?v=245" rel="stylesheet"/>
+<link href="css/masters.css?v=266.5" rel="stylesheet"/>
 <link href="css/administration-typography.css?v=247" rel="stylesheet"/>
-<link href="css/numbering-controls.css?v=248" rel="stylesheet"/>
-<link href="css/invoicing.css?v=264.7" rel="stylesheet"/>
-<link href="css/register-standard.css?v=266.0" rel="stylesheet"/>
-<link href="css/doc-view.css?v=265.2" rel="stylesheet"/>
-<link href="css/delivery-compact.css?v=265.7" rel="stylesheet"/>
-<link href="css/receipts.css?v=266.4" rel="stylesheet"/>
+<link href="css/numbering-controls.css?v=266.5" rel="stylesheet"/>
+<link href="css/invoicing.css?v=266.5" rel="stylesheet"/>
+<link href="css/register-standard.css?v=266.7" rel="stylesheet"/>
+<link href="css/doc-view.css?v=266.5" rel="stylesheet"/>
+<link href="css/delivery-compact.css?v=266.5" rel="stylesheet"/>
+<link href="css/receipts.css?v=266.5" rel="stylesheet"/>
+<link href="css/shell.css?v=266.61" rel="stylesheet"/>
+<link href="css/responsive.css?v=266.7" rel="stylesheet"/>
+<link href="css/theme.css?v=266.5" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=265.2" defer></script>
+<script src="js/responsive.js?v=266.7" defer></script>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
 .quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
@@ -44,7 +48,7 @@ button,.btn{font-size:14px!important;font-weight:600!important;}
 
 
 <style id="document-display-settings-css">
-.doc-display-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.doc-display-panel{border:1px solid var(--border);border-radius:9px;padding:14px;background:#fff}.doc-display-panel h4{margin:0 0 4px;font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px}.doc-display-panel p{margin:0 0 12px;font-size:10px;color:var(--gray)}.doc-display-fields{display:grid;grid-template-columns:1fr 1fr;gap:7px 10px}.doc-display-check{display:flex;align-items:center;gap:7px;padding:7px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:11px;color:#334155;background:#f8fafc;cursor:pointer}.doc-display-check input{margin:0;accent-color:#174b7a}@media(max-width:850px){.doc-display-grid{grid-template-columns:1fr}.doc-display-fields{grid-template-columns:1fr}}
+.doc-display-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.doc-display-panel{border:1px solid var(--border);border-radius:9px;padding:14px;background:#fff}.doc-display-panel h4{margin:0 0 4px;font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px}.doc-display-panel p{margin:0 0 12px;font-size:10px;color:var(--gray)}.doc-display-fields{display:grid;grid-template-columns:1fr 1fr;gap:7px 10px}.doc-display-check{display:flex;align-items:center;gap:7px;padding:7px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:11px;color:#334155;background:#f8fafc;cursor:pointer}.doc-display-check input{margin:0;accent-color:var(--c-174b7a)}@media(max-width:850px){.doc-display-grid{grid-template-columns:1fr}.doc-display-fields{grid-template-columns:1fr}}
 .bp-header-details{margin-top:7px;font-size:8px;line-height:1.45;color:#52687b}.bp-empty-note{color:#94a3b8;font-style:italic}.bp-footer{line-height:1.45}
 </style>
 </head>
@@ -57,7 +61,7 @@ document.addEventListener('error', function(e) {
 </script>
 
 <!-- Auth guard: shown while checking login state -->
-<div id="auth-loading" style="position:fixed;inset:0;background:#0B539D;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;color:#fff">
+<div id="auth-loading" style="position:fixed;inset:0;background:var(--c-0b539d);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;color:#fff">
   <div style="font-size:28px;font-weight:800;letter-spacing:-.3px;margin-bottom:8px">BizCore</div>
   <div style="font-size:13px;color:rgba(255,255,255,.7);margin-bottom:28px">Downtown Trading Est.</div>
   <div class="auth-loading-ring-wrap">
@@ -82,7 +86,7 @@ document.addEventListener('error', function(e) {
     var msg = document.createElement('div');
     msg.style.cssText = 'margin-top:22px;max-width:440px;text-align:center;font-size:13px;line-height:1.5;background:rgba(255,255,255,.12);padding:14px 16px;border-radius:10px';
     msg.innerHTML = '<strong>BizCore could not start.</strong><br>' + (failed ? 'Some application files in this browser are out of date.' : 'The application is taking unusually long to start.') +
-      '<br><button id="bizcore-hard-reload" style="margin-top:10px;height:34px;padding:0 16px;border:none;border-radius:7px;background:#fff;color:#0B539D;font-weight:700;cursor:pointer">Reload with latest files</button>' +
+      '<br><button id="bizcore-hard-reload" style="margin-top:10px;height:34px;padding:0 16px;border:none;border-radius:7px;background:#fff;color:var(--c-0b539d);font-weight:700;cursor:pointer">Reload with latest files</button>' +
       (failed ? '<div style="margin-top:8px;font-size:11px;opacity:.75">' + String(failed).replace(/</g,'&lt;').slice(0,200) + '</div>' : '');
     box.appendChild(msg);
     document.getElementById('bizcore-hard-reload').onclick = function(){
@@ -116,7 +120,7 @@ document.addEventListener('error', function(e) {
     </defs>
   </svg>
 </div>
-<div><div class="co" id="sb-co-name">Downtown Trading Est.</div><div class="sub">BizCore v1.0</div></div></div>
+<div><div class="co" id="sb-co-name">Downtown Trading</div><div class="sub">BizCore v1.0</div></div></div>
 <button aria-expanded="true" aria-label="Collapse sidebar" class="sidebar-collapse-btn" id="sidebar-collapse-btn" onclick="toggleSidebarCollapse()" title="Collapse sidebar" type="button"><i class="ti ti-chevron-left"></i></button>
 <div class="nav-section">
 <div aria-label="Dashboard" class="nav-item nav-root active" data-nav-page="dashboard" onclick="showPage('dashboard',this)" role="button" tabindex="0" title="Dashboard"><i class="ti ti-layout-dashboard"></i><span class="nav-text">Dashboard</span></div>
@@ -244,15 +248,7 @@ document.addEventListener('error', function(e) {
 </div>
 <!-- QUOTATIONS -->
 <div class="page" id="page-quotations">
-  <div class="quotation-page-header document-page-header" aria-label="Quotation page header">
-    <div class="quotation-page-heading">
-      <h2>Quotations</h2>
-      <span>Sales quotation register and conversion status</span>
-    </div>
-    <div class="document-page-actions quotation-page-actions">
-      <button class="btn btn-primary quotation-page-new-btn" onclick="openQuotationWorkflowDialog()" type="button"><i class="ti ti-plus"></i><span>New Quotation</span></button>
-    </div>
-  </div>
+  <!-- V266.6: page header removed — the title is in the top bar, the main button is in the toolbar -->
 
   
 
@@ -285,7 +281,9 @@ document.addEventListener('error', function(e) {
 <div class="bc-date" data-bc-date="quotation" data-bc-date-title="Quotation date"></div><input type="hidden" id="filter-date-from"/><input type="hidden" id="filter-date-to"/>
       <input id="search-input" class="bc-filter bc-filter-search" type="text" oninput="currentPage=1;renderTable()" placeholder="Search quotation, customer, reference or item…" aria-label="Search quotations"/>
 <button class="btn btn-secondary btn-sm register-clear-filters quotation-clear-filters-btn bc-filter-btn" id="quotation-clear-filters-btn" onclick="clearAllQuotationFilters()" title="Clear all quotation filters" type="button" disabled aria-disabled="true"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
-<button class="btn btn-secondary btn-sm quotation-export-excel-btn bc-filter-btn" id="quotation-export-excel-btn" onclick="openQuotationExcelExportDialog()" title="Export the currently filtered quotation register to Excel" type="button"><i class="ti ti-file-spreadsheet"></i><span>Export Excel</span></button>
+<button class="btn btn-secondary btn-sm quotation-export-excel-btn bc-filter-btn" id="quotation-export-excel-btn" onclick="openQuotationExcelExportDialog()" title="Export the currently filtered quotation register to Excel" type="button"><i class="bc-xls-ico" aria-hidden="true"></i><span>Export Excel</span></button>
+
+<button class="btn bc-filter-new btn-primary quotation-page-new-btn" title="New Quotation" onclick="openQuotationWorkflowDialog()" type="button"><i class="ti ti-plus"></i><span>New Quotation</span></button>
 </div>
 </div>
 
@@ -327,13 +325,7 @@ document.addEventListener('error', function(e) {
 <!-- SUPPLIERS PAGE -->
 <!-- RFQ TRACKER PAGE -->
 <div class="page" id="page-rfq">
-<div class="rfq-page-header document-page-header" aria-label="RFQ page header">
-  <div class="rfq-page-heading">
-    <h2>RFQs</h2>
-    <span>Request for quotation register</span>
-  </div>
-  <button class="btn btn-primary rfq-page-new-btn" onclick="openNewRFQ()" type="button"><i class="ti ti-plus"></i><span>New RFQ</span></button>
-</div>
+<!-- V266.6: page header removed — the title is in the top bar, the main button is in the toolbar -->
 
 <div class="rfq-main-workspace module-main-workspace" id="rfq-main-workspace" data-module-monitor="rfq">
 <aside class="dn-overview-panel module-monitor bc-monitor rfq-main-monitor" aria-label="RFQ Monitor" id="rfq-main-monitor">
@@ -362,6 +354,8 @@ document.addEventListener('error', function(e) {
 <div class="bc-date" data-bc-date="rfq" data-bc-date-title="RFQ date"></div>
 <input id="rfq-search" class="bc-filter bc-filter-search" type="text" oninput="rfqPage=1;renderRFQPage()" placeholder="Search RFQ, customer or reference…" aria-label="Search RFQs"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="rfq-clear-filters-btn" onclick="clearAllRFQFilters()" type="button" title="Clear all RFQ filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
+
+<button class="btn bc-filter-new btn-primary rfq-page-new-btn" title="New RFQ" onclick="openNewRFQ()" type="button"><i class="ti ti-plus"></i><span>New RFQ</span></button>
 </div>
 <div class="rfq-filter-group" hidden aria-hidden="true" style="display:none">
 <button class="dash-period-btn active" id="rfq-f-all" onclick="filterRFQ('all',this)">All <span id="rfq-cnt-all"></span></button>
@@ -382,13 +376,7 @@ document.addEventListener('error', function(e) {
 </div>
 <!-- PRICING DOCUMENTS PAGE -->
 <div class="page" id="page-costing">
-  <div class="pricing-page-header document-page-header" aria-label="Pricing page header">
-    <div class="pricing-page-heading">
-      <h2>Pricing</h2>
-      <span>Saved pricing documents and quotation conversion status</span>
-    </div>
-    <button class="btn btn-primary pricing-page-new-btn" onclick="openPricingSourceRFQs()" type="button" title="Select an RFQ to start pricing"><i class="ti ti-plus"></i><span>Start Pricing</span></button>
-  </div>
+  <!-- V266.6: page header removed — the title is in the top bar, the main button is in the toolbar -->
   
   <div class="pricing-main-workspace module-main-workspace" id="pricing-main-workspace" data-module-monitor="pricing">
     <aside class="dn-overview-panel module-monitor bc-monitor pricing-main-monitor" aria-label="Pricing Monitor">
@@ -410,7 +398,9 @@ document.addEventListener('error', function(e) {
 <div class="bc-date" data-bc-date="pricing" data-bc-date-title="Pricing updated date"></div>
       <input id="pricing-doc-search" class="bc-filter bc-filter-search" type="text" oninput="pricingDocPage=1;renderPricingDocuments()" placeholder="Search pricing no., RFQ, customer or quotation…" aria-label="Search pricing documents"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="pricing-clear-filters-btn" onclick="clearAllPricingFilters()" type="button" title="Clear all Pricing filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
-<button class="btn btn-secondary btn-sm register-export-excel-btn bc-filter-btn" id="pricing-export-excel-btn" onclick="openPricingExcelExportDialog()" type="button" title="Export filtered Pricing register to Excel"><i class="ti ti-file-spreadsheet"></i><span>Export Excel</span></button>
+<button class="btn btn-secondary btn-sm register-export-excel-btn bc-filter-btn" id="pricing-export-excel-btn" onclick="openPricingExcelExportDialog()" type="button" title="Export filtered Pricing register to Excel"><i class="bc-xls-ico" aria-hidden="true"></i><span>Export Excel</span></button>
+
+<button class="btn bc-filter-new btn-primary pricing-page-new-btn" onclick="openPricingSourceRFQs()" type="button" title="Select an RFQ to start pricing"><i class="ti ti-plus"></i><span>Start Pricing</span></button>
 </div>
 <div class="pricing-register-filters" hidden aria-hidden="true" style="display:none">
       <button class="dash-period-btn active" id="pricing-doc-f-all" onclick="filterPricingDocuments('all',this)">All <span id="pricing-doc-c-all"></span></button>
@@ -431,17 +421,7 @@ document.addEventListener('error', function(e) {
 </div>
 <!-- SALES ORDERS PAGE -->
 <div class="page" id="page-salesorders">
-  <div class="salesorders-page-header document-page-header" aria-label="Sales Orders page header">
-    <div class="salesorders-page-heading document-page-heading">
-      <h2>Sales Orders</h2>
-      <span>Confirmed customer orders, fulfilment and invoicing status</span>
-    </div>
-    <div class="document-page-actions">
-      <button class="btn btn-primary" onclick="showPage('quotations')" type="button" title="Sales Orders are created from approved quotations">
-        <i class="ti ti-file-arrow-right"></i><span>Create from Quotation</span>
-      </button>
-    </div>
-  </div>
+  <!-- V266.6: page header removed — the title is in the top bar, the main button is in the toolbar -->
 
   
 
@@ -491,6 +471,8 @@ document.addEventListener('error', function(e) {
 <div class="bc-date" data-bc-date="so" data-bc-date-title="Sales Order date"></div>
 <input id="so-search" class="bc-filter bc-filter-search" type="text" oninput="soPage=1;renderSOPage()" placeholder="Search SO No, customer, PO No…" aria-label="Search Sales Orders"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="so-clear-filters-btn" onclick="clearAllSOFilters()" type="button" title="Clear all Sales Order filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
+
+<button class="btn bc-filter-new btn-primary" onclick="showPage('quotations')" type="button" title="Sales Orders are created from approved quotations">         <i class="ti ti-file-arrow-right"></i><span>Create from Quotation</span>       </button>
 </div>
 </div>
 
@@ -532,12 +514,7 @@ document.addEventListener('error', function(e) {
 </div>
 <!-- FUTURE / FOUNDATION MODULES -->
 <div class="page" id="page-deliverynotes">
-  <div class="deliverynotes-page-header document-page-header" aria-label="Delivery Notes page header">
-    <div class="deliverynotes-page-heading document-page-heading">
-      <h2>Delivery Notes</h2>
-      <span>Dispatch, confirm customer acceptance and track delivery exceptions</span>
-    </div>
-  </div>
+  <!-- V266.6: page header removed — the title is in the top bar, the main button is in the toolbar -->
   <div class="dn-register-shell module-main-workspace" id="deliverynotes-main-workspace" data-module-monitor="deliverynotes">
     <aside class="dn-overview-panel module-monitor bc-monitor" aria-label="Delivery Monitor">
       <div class="dn-overview-head module-monitor-head"><div><strong>Delivery Monitor</strong><span>Delivery activity &amp; exceptions</span></div><button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('deliverynotes')" aria-label="Collapse Delivery Monitor" title="Collapse Delivery Monitor"><i class="ti ti-chevron-left"></i></button></div>
@@ -562,19 +539,15 @@ document.addEventListener('error', function(e) {
 <div class="bc-date" data-bc-date="dn" data-bc-date-title="Delivery Note date"></div>
 <input id="dn-search" class="bc-filter bc-filter-search" type="text" oninput="renderDNPage()" placeholder="Search DN, SO, customer or PO…" aria-label="Search Delivery Notes"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="dn-clear-filters-btn" onclick="clearAllDNFilters()" type="button" title="Clear all Delivery Note filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
-        </div>
+        
+</div>
       </div>
       <div class="card dn-register-card"><div class="dn-table-scroll"><table id="dn-register-table"><thead><tr><th class="sortable-register-th" data-sort-screen="dn" data-sort-key="no" onclick="setRegisterSort('dn','no',renderDNPage)">DN No.</th><th class="sortable-register-th" data-sort-screen="dn" data-sort-key="date" onclick="setRegisterSort('dn','date',renderDNPage)">Date</th><th class="sortable-register-th" data-sort-screen="dn" data-sort-key="customer" onclick="setRegisterSort('dn','customer',renderDNPage)">Customer</th><th class="sortable-register-th" data-sort-screen="dn" data-sort-key="so" onclick="setRegisterSort('dn','so',renderDNPage)">Sales Order</th><th class="sortable-register-th" data-sort-screen="dn" data-sort-key="po" onclick="setRegisterSort('dn','po',renderDNPage)">Customer PO</th><th class="sortable-register-th center" data-sort-screen="dn" data-sort-key="items" onclick="setRegisterSort('dn','items',renderDNPage)">Items</th><th>Acceptance</th><th class="sortable-register-th" data-sort-screen="dn" data-sort-key="status" onclick="setRegisterSort('dn','status',renderDNPage)">Status</th></tr></thead><tbody id="dn-register-tbody"></tbody></table></div></div>
     </div>
   </div>
 </div>
 <div class="page" id="page-customerinvoices">
-  <div class="customerinvoices-page-header document-page-header" aria-label="Invoices page header">
-    <div class="customerinvoices-page-heading document-page-heading">
-      <h2>Invoices</h2>
-      <span>Customer invoices, advances and credit notes — created from the Sales Order</span>
-    </div>
-  </div>
+  <!-- V266.6: page header removed — the title is in the top bar, the main button is in the toolbar -->
   <div class="dn-register-shell module-main-workspace" id="customerinvoices-main-workspace" data-module-monitor="customerinvoices">
     <aside class="dn-overview-panel module-monitor bc-monitor" aria-label="Billing Monitor">
       <div class="dn-overview-head module-monitor-head"><div><strong>Billing Monitor</strong><span>Invoices, advances &amp; credits</span></div><button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('customerinvoices')" aria-label="Collapse Billing Monitor" title="Collapse Billing Monitor"><i class="ti ti-chevron-left"></i></button></div>
@@ -611,7 +584,8 @@ document.addEventListener('error', function(e) {
 <div class="bc-date" data-bc-date="invreg" data-bc-date-title="Invoice date"></div>
 <input id="invreg-q" class="bc-filter bc-filter-search" type="text" oninput="renderInvoiceRegister()" placeholder="Search number, customer, SO or Zoho no…" aria-label="Search invoices"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="invreg-clear" onclick="clearInvoiceRegisterFilters()" type="button" title="Clear all invoice filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
-        </div>
+        
+</div>
       </div>
       <div class="card dn-register-card"><div class="dn-table-scroll"><table id="invreg-table"><thead><tr>
         <th class="sortable-register-th" data-sort-screen="inv" data-sort-key="no" onclick="setRegisterSort('inv','no',renderInvoiceRegister)">Number</th>
@@ -629,19 +603,11 @@ document.addEventListener('error', function(e) {
   </div>
 </div>
 <div class="page" id="page-receipts">
-  <div class="receipts-page-header document-page-header" aria-label="Payment Receipts page header">
-    <div class="receipts-page-heading document-page-heading">
-      <h2>Payment Receipts</h2>
-      <span>Money received from customers and the invoices it settles</span>
-    </div>
-    <div class="document-page-actions">
-      <button class="btn btn-success rct-new-btn" id="rct-new-btn" onclick="openNewReceipt()" type="button"><i class="ti ti-plus"></i><span>New Receipt</span></button>
-    </div>
-  </div>
+  <!-- V266.6: page header removed — the title is in the top bar, the main button is in the toolbar -->
   <div class="rct-unavailable" id="rct-unavailable" hidden></div>
   <div class="dn-register-shell module-main-workspace" id="receipts-main-workspace" data-module-monitor="receipts">
     <aside class="dn-overview-panel module-monitor bc-monitor" aria-label="Receipt Monitor">
-      <div class="dn-overview-head module-monitor-head"><div><strong>Receipt Monitor</strong><span>Collections at a glance</span></div><button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('receipts')" aria-label="Collapse Receipt Monitor" title="Collapse Receipt Monitor"><i class="ti ti-layout-sidebar-left-collapse"></i></button></div>
+      <div class="dn-overview-head module-monitor-head"><div><strong>Receipt Monitor</strong><span>Collections at a glance</span></div><button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('receipts')" aria-label="Collapse Receipt Monitor" title="Collapse Receipt Monitor"><i class="ti ti-chevron-left"></i></button></div>
       <div class="dn-overview-body module-monitor-body">
         <button type="button" class="dn-overview-total dn-kpi active" data-rct-kpi="all" onclick="filterReceiptKPI('all')"><span>All receipts</span><strong id="rctreg-k-total">0</strong></button>
         <div class="dn-overview-section-label">Status</div>
@@ -668,7 +634,9 @@ document.addEventListener('error', function(e) {
 <div class="bc-date" data-bc-date="rctreg" data-bc-date-title="Receipt date"></div>
 <input id="rctreg-q" class="bc-filter bc-filter-search" type="text" oninput="renderReceiptRegister()" placeholder="Search receipt, customer, reference, invoice…" aria-label="Search receipts"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="rctreg-clear" onclick="clearReceiptRegisterFilters()" type="button" title="Clear all receipt filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
-        </div>
+        
+<button class="btn bc-filter-new btn-primary rct-new-btn" id="rct-new-btn" title="New Receipt" onclick="openNewReceipt()" type="button"><i class="ti ti-plus"></i><span>New Receipt</span></button>
+</div>
       </div>
       <div class="card dn-register-card"><div class="dn-table-scroll"><table id="rctreg-table" class="rct-reg-table"><thead><tr>
         <th class="sortable-register-th" data-sort-screen="rct" data-sort-key="no" onclick="setRegisterSort('rct','no',renderReceiptRegister)">Receipt No.</th>
@@ -960,7 +928,7 @@ document.addEventListener('error', function(e) {
     <div class="form-group"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="s-signature-overlap" checked onchange="updateSignatureDisplayPreview()"/> Overlap signature &amp; stamp</label><span class="field-help">When enabled, the stamp sits over the signature like a physical document.</span></div>
     <div class="form-group" id="signature-overlap-amount-wrap"><label>Overlap amount <span id="overlap-amount-value">75%</span></label><input type="range" id="s-overlap-amount" min="0" max="100" step="5" value="75" oninput="updateSignatureDisplayPreview()"/></div>
   </div>
-  <div style="margin-top:12px"><label style="font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.5px">Live preview</label><div id="signature-display-preview" style="position:relative;height:150px;margin-top:6px;background:#fff;border:1px solid #dbe4ed;border-radius:8px;overflow:hidden"><div id="signature-preview-stage" style="position:absolute;left:50%;bottom:25px;width:300px;height:120px;transform:translateX(-50%)"></div><div style="position:absolute;left:12%;right:12%;bottom:24px;border-top:1.5px solid #174b7a"></div><div style="position:absolute;left:12%;bottom:9px;font-size:8px;font-weight:800;color:#5d7186;text-transform:uppercase">Authorised Signature — Company</div></div></div>
+  <div style="margin-top:12px"><label style="font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.5px">Live preview</label><div id="signature-display-preview" style="position:relative;height:150px;margin-top:6px;background:#fff;border:1px solid #dbe4ed;border-radius:8px;overflow:hidden"><div id="signature-preview-stage" style="position:absolute;left:50%;bottom:25px;width:300px;height:120px;transform:translateX(-50%)"></div><div style="position:absolute;left:12%;right:12%;bottom:24px;border-top:1.5px solid var(--c-174b7a)"></div><div style="position:absolute;left:12%;bottom:9px;font-size:8px;font-weight:800;color:#5d7186;text-transform:uppercase">Authorised Signature — Company</div></div></div>
 </div>
 <div class="info-box" style="margin-top:10px"><i class="ti ti-shield-check"></i><div><strong>Controlled quotation output</strong><div style="font-size:11px;margin-top:3px">Signature and stamp are never added automatically. An authorized user chooses them only when generating a quotation Print / PDF.</div></div></div>
 </div>
@@ -1181,7 +1149,7 @@ document.addEventListener('error', function(e) {
 <section class="pricing-setting-card"><div class="pricing-setting-card-head"><h3><i class="ti ti-eye" style="margin-right:6px"></i>Live Preview</h3><p>Preview the selected style before saving.</p></div><div class="pricing-setting-card-body"><div id="qprint-note-preview"></div></div></section>
 </div>
 <style>
-#qprint-note-preview{background:#fff;border:1px solid var(--border);border-radius:7px;overflow:hidden}.qnp-table{font-size:11px;color:#17324d}.qnp-head,.qnp-row{display:grid;grid-template-columns:42px 1fr 48px 52px}.qnp-head{background:#174b7a;color:#fff;font-weight:700}.qnp-head span,.qnp-row>span{padding:7px;border-right:1px solid #d6e0e9}.qnp-row>span{min-width:0}.qnp-row strong{display:block}.qnp-row small{display:block;color:#64788c;margin-top:2px}.qnp{margin-top:7px;font-size:10px}.qnp.highlight{padding:5px 7px;background:#fffbea;border:1px solid #eadfae;color:#5a4a0a}.qnp.blue{padding:5px 7px;background:#eef6fd;border-left:3px solid #2684d8;color:#294d6d}.qnp.minimal{padding:2px 1px;color:#5d7186;font-style:italic}.qnp.badge{display:flex;gap:6px;align-items:center;color:#415a70}.qnp.badge span{background:#2684d8;color:#fff;border-radius:3px;padding:2px 5px;font-size:8px;font-weight:800;letter-spacing:.4px}
+#qprint-note-preview{background:#fff;border:1px solid var(--border);border-radius:7px;overflow:hidden}.qnp-table{font-size:11px;color:var(--c-17324d)}.qnp-head,.qnp-row{display:grid;grid-template-columns:42px 1fr 48px 52px}.qnp-head{background:var(--c-174b7a);color:#fff;font-weight:700}.qnp-head span,.qnp-row>span{padding:7px;border-right:1px solid #d6e0e9}.qnp-row>span{min-width:0}.qnp-row strong{display:block}.qnp-row small{display:block;color:#64788c;margin-top:2px}.qnp{margin-top:7px;font-size:10px}.qnp.highlight{padding:5px 7px;background:#fffbea;border:1px solid #eadfae;color:#5a4a0a}.qnp.blue{padding:5px 7px;background:var(--c-eef6fd);border-left:3px solid var(--c-2684d8);color:var(--c-294d6d)}.qnp.minimal{padding:2px 1px;color:#5d7186;font-style:italic}.qnp.badge{display:flex;gap:6px;align-items:center;color:#415a70}.qnp.badge span{background:#2684d8;color:#fff;border-radius:3px;padding:2px 5px;font-size:8px;font-weight:800;letter-spacing:.4px}
 </style>
 <div class="setup-card admin-master-width master-change-bar"><div><div id="quotation-print-change-status" style="font-size:12px;font-weight:700;color:var(--gray)">No pending changes</div><div style="font-size:11px;color:var(--gray);margin-top:2px">Presentation only: quotation data and historical values are not changed.</div></div><div class="master-change-actions"><button class="btn btn-secondary" onclick="restoreQuotationPrintDefaults()"><i class="ti ti-restore"></i>Restore Default</button><button class="btn btn-primary" disabled id="quotation-print-apply-btn" onclick="applyQuotationPrintSettings()"><i class="ti ti-device-floppy"></i>Save Settings</button></div></div>
 </div>
@@ -1264,11 +1232,20 @@ document.addEventListener('error', function(e) {
 <div class="setup-page-head"><div><h2>System Preferences</h2><p>Control application-wide display and working preferences.</p></div><span class="phase-badge"><i class="ti ti-adjustments" style="margin-right:5px"></i>Preferences</span></div>
 <div class="setup-card preferences-card">
 <h4><i class="ti ti-palette" style="margin-right:6px"></i>Appearance</h4>
-<p class="preferences-help">Choose the application color theme. The selected theme is saved in this browser.</p>
-<div class="form-group preferences-theme-field"><label for="theme-select">Application theme</label><div class="preferences-theme-control"><span class="theme-preview" id="theme-preview"></span><select aria-label="Select application theme" id="theme-select" onchange="applyTheme(this.value)"><option value="blue">Corporate Navy</option><option value="darkblue">Executive Blue</option><option value="slate">Professional Slate</option><option value="teal">Modern Teal</option><option value="green">Forest Green</option><option value="purple">Royal Purple</option><option value="red">Burgundy</option><option value="dark">Charcoal</option></select></div></div>
+<p class="preferences-help">Choose the colour theme for the whole application. It is saved with your user, so you see the same theme on every PC and phone. Status colours (paid, overdue, …) and printed documents never change with the theme.</p>
+<div class="preferences-theme-layout">
+<div class="form-group preferences-theme-field"><label for="theme-select">Application theme</label><div class="preferences-theme-control"><span class="theme-preview" id="theme-preview"></span><select aria-label="Select application theme" id="theme-select" onchange="applyTheme(this.value,{save:true})"><option value="blue">Corporate Navy (default)</option><option value="slate">Professional Slate</option><option value="teal">Modern Teal</option><option value="green">Forest Green</option><option value="purple">Royal Purple</option><option value="red">Burgundy</option></select></div><div class="preferences-save-note" id="theme-save-note" aria-live="polite"></div></div>
+<div class="theme-sample" aria-label="Theme preview">
+<div class="theme-sample-side"><b>BizCore</b><span>Sales Orders</span><span class="on">Invoices</span><span>Receipts</span></div>
+<div class="theme-sample-main">
+<div class="theme-sample-title">Invoices</div>
+<div class="theme-sample-mon"><b>Invoice Monitor</b><small>All · Unpaid · Overdue</small></div>
+<div class="theme-sample-row"><a>INV-2610-0012</a><span class="badge inv-badge-issued">Issued</span><span class="rct-pay-pill paid">Paid</span><span class="rct-pay-pill overdue">Overdue</span></div>
+<div class="theme-sample-actions"><button type="button" class="btn btn-secondary btn-sm">Cancel</button><button type="button" class="btn btn-primary btn-sm">Save</button></div>
 </div>
-<div class="setup-page-head"><div><h2>System Preferences</h2><p>Maintain general application behaviour and user-interface preferences.</p></div><span class="phase-badge"><i class="ti ti-clock" style="margin-right:5px"></i>Planned</span></div>
-<div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-adjustments"></i></div><h2>System Preferences</h2><p>This screen is ready for future application-wide preference controls.</p><span class="module-tag"><i class="ti ti-tools"></i>Menu ready</span></div></div>
+</div>
+</div>
+</div>
 </div>
 <div class="setup-tab-content" id="setup-tab-admin" style="display:none">
 <div class="setup-page-head"><div><h2>Backup &amp; Security</h2><p>Protected PIN settings, backup and data management tools.</p></div><span class="phase-badge"><i class="ti ti-lock"></i> PIN protected</span></div>
@@ -1890,7 +1867,7 @@ document.addEventListener('error', function(e) {
 </div>
 </div>
 <!-- Frozen status pipeline bar -->
-<div id="so-pipeline-bar" style="flex-shrink:0;background:#F0F6FF;border-bottom:2px solid var(--blue-light);padding:12px 24px"></div>
+<div id="so-pipeline-bar" style="flex-shrink:0;background:var(--c-f0f6ff);border-bottom:2px solid var(--blue-light);padding:12px 24px"></div>
 <div class="modal-body" id="so-view-body"></div>
 <div class="modal-footer" id="so-view-footer"></div>
 </div>
@@ -2485,6 +2462,16 @@ async function fbSaveSettings(obj) {
   } catch(e) { console.warn('FB settings save failed:', e.message); return false; }
 }
 
+/* V266.5: per-user screen preferences (application theme) — settings/uiPrefs_<uid>, so the theme follows the user
+   to every PC and phone. Only screen preferences; nothing business-related is stored here. */
+async function fbLoadUserPrefs(uid) {
+  try { const snap = await getDoc(doc(db, 'settings', 'uiPrefs_' + uid)); return snap.exists() ? snap.data() : null; }
+  catch(e) { console.warn('FB user preferences load failed:', e.message); return null; }
+}
+async function fbSaveUserPrefs(uid, prefs) {
+  try { await setDoc(doc(db, 'settings', 'uiPrefs_' + uid), { ...prefs, uid, updatedAt: Date.now() }, { merge: true }); return true; }
+  catch(e) { console.warn('FB user preferences save failed:', e.message); return false; }
+}
 async function fbLoadSettings() {
   try {
     const snap = await getDoc(doc(db, 'settings', 'main'));
@@ -2898,7 +2885,7 @@ window.BizCoreRct = {
   },
 };
 /* Expose to app.js */
-window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
+window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
   getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, finalizeProvisionalNumber, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
 
   /* ═══════════════════════════════════════════════════
@@ -2946,6 +2933,7 @@ onAuthStateChanged(auth, user => {
     email: user.email,
     name:  user.displayName || user.email.split('@')[0]
   };
+  if (typeof loadUserTheme === 'function') loadUserTheme();   // V266.5: theme saved with the user
 
 
   // Keep the topbar identity tied to the authenticated BizCore user.
@@ -3045,13 +3033,13 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=266.4';
+      s.src = 'js/app.js?v=266.7';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d); };
       document.body.appendChild(s);
     };
     // V266: receipts.js (Payment Receipts) after invoicing.js, before app.js
-    inv.onload = () => { const r = document.createElement('script'); r.id = 'bizcore-receipts-script'; r.src = 'js/receipts.js?v=266.4'; r.onload = start; r.onerror = () => { console.error('[BizCore] receipts.js could not be loaded'); start(); }; document.body.appendChild(r); };
+    inv.onload = () => { const r = document.createElement('script'); r.id = 'bizcore-receipts-script'; r.src = 'js/receipts.js?v=266.61'; r.onload = start; r.onerror = () => { console.error('[BizCore] receipts.js could not be loaded'); start(); }; document.body.appendChild(r); };
     inv.onerror = () => { console.error('[BizCore] invoicing.js could not be loaded'); start(); };
     document.body.appendChild(inv);
   }

@@ -18,7 +18,7 @@
 #page-salesorders .bc-monitor .dn-overview-head,
 #page-deliverynotes .bc-monitor .dn-overview-head,
 #page-customerinvoices .bc-monitor .dn-overview-head,
-#page-receipts .bc-monitor .dn-overview-head{min-height:52px!important;padding:9px 9px 9px 12px!important;background:#173a5e!important;color:#fff!important;border-radius:10px 10px 0 0!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;margin:0!important;border:0!important}
+#page-receipts .bc-monitor .dn-overview-head{min-height:52px!important;padding:9px 9px 9px 12px!important;background:var(--c-173a5e)!important;color:#fff!important;border-radius:10px 10px 0 0!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;margin:0!important;border:0!important}
 #page-rfq .bc-monitor .dn-overview-head>div,
 #page-costing .bc-monitor .dn-overview-head>div,
 #page-quotations .bc-monitor .dn-overview-head>div,
@@ -67,7 +67,7 @@
 #page-salesorders .bc-monitor .dn-overview-total strong,
 #page-deliverynotes .bc-monitor .dn-overview-total strong,
 #page-customerinvoices .bc-monitor .dn-overview-total strong,
-#page-receipts .bc-monitor .dn-overview-total strong{min-width:34px!important;font-size:21px!important;font-weight:720!important;color:#173a5e!important;text-align:right!important;font-variant-numeric:tabular-nums!important;line-height:1.1!important}
+#page-receipts .bc-monitor .dn-overview-total strong{min-width:34px!important;font-size:21px!important;font-weight:720!important;color:var(--c-173a5e)!important;text-align:right!important;font-variant-numeric:tabular-nums!important;line-height:1.1!important}
 #page-rfq .bc-monitor .dn-overview-section-label,
 #page-costing .bc-monitor .dn-overview-section-label,
 #page-quotations .bc-monitor .dn-overview-section-label,
@@ -130,7 +130,7 @@
 #page-salesorders .bc-monitor .dn-overview-row.active,
 #page-deliverynotes .bc-monitor .dn-overview-row.active,
 #page-customerinvoices .bc-monitor .dn-overview-row.active,
-#page-receipts .bc-monitor .dn-overview-row.active{box-shadow:inset 3px 0 0 #2e75b6!important}
+#page-receipts .bc-monitor .dn-overview-row.active{box-shadow:inset 3px 0 0 var(--c-2e75b6)!important}
 #page-rfq .bc-monitor .dn-overview-total.active span,
 #page-rfq .bc-monitor .dn-overview-row.active>span,
 #page-costing .bc-monitor .dn-overview-total.active span,
@@ -144,7 +144,7 @@
 #page-customerinvoices .bc-monitor .dn-overview-total.active span,
 #page-receipts .bc-monitor .dn-overview-total.active span,
 #page-customerinvoices .bc-monitor .dn-overview-row.active>span,
-#page-receipts .bc-monitor .dn-overview-row.active>span{color:#173a5e!important}
+#page-receipts .bc-monitor .dn-overview-row.active>span{color:var(--c-173a5e)!important}
 #page-rfq .bc-monitor .dn-overview-row.bc-monitor-metric,
 #page-costing .bc-monitor .dn-overview-row.bc-monitor-metric,
 #page-quotations .bc-monitor .dn-overview-row.bc-monitor-metric,
@@ -312,7 +312,7 @@
 #page-customerinvoices .bc-filter:focus,
 #page-receipts .bc-filter:focus,
 #page-customerinvoices .bc-filter:focus-visible,
-#page-receipts .bc-filter:focus-visible{outline:none!important;border-color:#3b82f6!important;box-shadow:0 0 0 3px rgba(59,130,246,.15)!important}
+#page-receipts .bc-filter:focus-visible{outline:none!important;border-color:var(--c-3b82f6)!important;box-shadow:0 0 0 3px color-mix(in srgb, var(--c-3b82f6) 15%, transparent)!important}
 #page-rfq .bc-filter-sort,
 #page-costing .bc-filter-sort,
 #page-quotations .bc-filter-sort,
@@ -460,8 +460,8 @@
 .bc-date{position:relative!important;display:inline-flex!important;flex:0 0 140px!important;width:140px!important;margin:0!important;padding:0!important;border:0!important;background:none!important}
 .bc-date>.bc-date-btn{width:100%!important}
 .bc-date .bc-date-chev{margin-left:auto!important}
-.bc-date.open>.bc-date-btn{border-color:#3b82f6!important;box-shadow:0 0 0 3px rgba(59,130,246,.15)!important}
-.bc-date>.bc-date-btn.active{color:#1d4ed8!important;border-color:#bfdbfe!important;background-color:#f5f9ff!important}
+.bc-date.open>.bc-date-btn{border-color:var(--c-3b82f6)!important;box-shadow:0 0 0 3px color-mix(in srgb, var(--c-3b82f6) 15%, transparent)!important}
+.bc-date>.bc-date-btn.active{color:var(--c-1d4ed8)!important;border-color:var(--c-bfdbfe)!important;background-color:#f5f9ff!important}
 .bc-date .bc-date-pop{position:absolute!important;top:calc(100% + 6px)!important;left:0!important;z-index:400!important;width:320px!important;max-width:calc(100vw - 24px)!important;background:#fff!important;border:1px solid #dbe3ec!important;border-radius:12px!important;box-shadow:0 14px 34px rgba(15,23,42,.16)!important;overflow:hidden!important;text-align:left!important;font-family:inherit!important;cursor:default}
 .bc-date .bc-date-pop[hidden]{display:none!important}
 .bc-date .bc-date-title{padding:10px 14px 6px!important;margin:0!important;font-size:10px!important;font-weight:800!important;letter-spacing:.07em!important;text-transform:uppercase!important;color:#8a98a8!important;line-height:1.2!important}
@@ -469,18 +469,18 @@
 .bc-date .bc-date-sep{height:1px!important;background:#eef2f5!important;margin:4px 4px!important}
 .bc-date .bc-date-item{all:unset;box-sizing:border-box!important;width:100%!important;height:33px!important;display:flex!important;align-items:center!important;gap:8px!important;padding:0 10px!important;border-radius:7px!important;font-size:13px!important;font-weight:500!important;color:#1f2937!important;cursor:pointer!important;line-height:1!important}
 .bc-date .bc-date-item:hover{background:#f6f9fc!important}
-.bc-date .bc-date-item:focus-visible{outline:2px solid #93c5fd!important;outline-offset:-2px!important}
+.bc-date .bc-date-item:focus-visible{outline:2px solid var(--c-93c5fd)!important;outline-offset:-2px!important}
 .bc-date .bc-date-item .bc-date-tick{width:14px!important;flex:0 0 14px!important;font-size:12px!important;font-weight:900!important;color:transparent!important}
 .bc-date .bc-date-item small{margin-left:auto!important;font-size:11px!important;font-weight:500!important;color:#94a3b8!important;white-space:nowrap!important}
-.bc-date .bc-date-item.on{background:#eff6ff!important;color:#1d4ed8!important;font-weight:650!important}
-.bc-date .bc-date-item.on .bc-date-tick{color:#2563eb!important}
-.bc-date .bc-date-item.on small{color:#60a5fa!important}
+.bc-date .bc-date-item.on{background:var(--c-eff6ff)!important;color:var(--c-1d4ed8)!important;font-weight:650!important}
+.bc-date .bc-date-item.on .bc-date-tick{color:var(--c-2563eb)!important}
+.bc-date .bc-date-item.on small{color:var(--c-60a5fa)!important}
 .bc-date .bc-date-custom{border-top:1px solid #eef2f5!important;background:#f8fafc!important;padding:0 14px 12px!important}
 .bc-date .bc-date-custom .bc-date-title{padding:10px 0 8px!important}
-.bc-date .bc-date-custom.on .bc-date-title{color:#1d4ed8!important}
+.bc-date .bc-date-custom.on .bc-date-title{color:var(--c-1d4ed8)!important}
 .bc-date .bc-date-row{display:flex!important;align-items:center!important;gap:6px!important}
 .bc-date .bc-date-row input{flex:1 1 0!important;min-width:0!important;width:auto!important;height:32px!important;min-height:32px!important;box-sizing:border-box!important;margin:0!important;padding:0 8px!important;border:1px solid #d5dde7!important;border-radius:7px!important;background:#fff!important;font:inherit!important;font-size:12px!important;color:#334155!important;box-shadow:none!important}
-.bc-date .bc-date-row input:focus{outline:none!important;border-color:#3b82f6!important;box-shadow:0 0 0 3px rgba(59,130,246,.15)!important}
+.bc-date .bc-date-row input:focus{outline:none!important;border-color:var(--c-3b82f6)!important;box-shadow:0 0 0 3px color-mix(in srgb, var(--c-3b82f6) 15%, transparent)!important}
 .bc-date .bc-date-arrow{color:#94a3b8!important;font-size:13px!important;flex:0 0 auto!important}
 .bc-date .bc-date-err{margin-top:7px!important;font-size:11.5px!important;font-weight:600!important;color:#b91c1c!important}
 .bc-date .bc-date-err[hidden]{display:none!important}
@@ -488,6 +488,124 @@
 .bc-date .bc-date-actions button{all:unset;box-sizing:border-box!important;height:30px!important;padding:0 14px!important;border-radius:7px!important;font-size:12px!important;font-weight:700!important;cursor:pointer!important;display:inline-flex!important;align-items:center!important}
 .bc-date .bc-date-clear{color:#64748b!important}
 .bc-date .bc-date-clear:hover{background:#eef2f6!important}
-.bc-date .bc-date-apply{background:#173a5e!important;color:#fff!important}
-.bc-date .bc-date-apply:hover{background:#1f4e79!important}
+.bc-date .bc-date-apply{background:var(--c-173a5e)!important;color:#fff!important}
+.bc-date .bc-date-apply:hover{background:var(--c-1f4e79)!important}
 @media(max-width:760px){.bc-date{flex:1 1 140px!important;width:auto!important}.bc-date .bc-date-pop{position:fixed!important;left:12px!important;right:12px!important;top:auto!important;bottom:12px!important;width:auto!important}}
+
+/* ══ V266.6 — one-line register toolbar ══════════════════════════════════════════════
+   No page header (title in the top bar). The toolbar is ONE line at every desktop / laptop / tablet width:
+   count · customer · status · date · search · Clear · Export · main button. No sort list (click a column).
+   When the line gets tight the fields shrink, then the secondary buttons show only their icon (tooltip
+   keeps the name), then the main button too. Phones (≤ 760 px) scroll the line sideways. */
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar{
+  flex-wrap:nowrap!important;container-type:inline-size;container-name:bcbar;gap:8px!important;min-height:48px!important;height:48px!important;padding:0 10px!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-left{flex:0 0 auto!important;gap:0!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar .bc-filter-sort{display:none!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar .bc-filter-count{white-space:nowrap;font-size:12px}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right{
+  flex:1 1 auto!important;flex-wrap:nowrap!important;justify-content:safe flex-end!important;margin-left:auto!important;gap:7px!important;min-width:0!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-customer{flex:0 1 170px!important;width:auto!important;min-width:104px!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-status{flex:0 1 140px!important;width:auto!important;min-width:100px!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-date{flex:0 0 132px!important;width:132px!important;min-width:132px!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-search{flex:1 1 240px!important;width:auto!important;min-width:150px!important;max-width:360px!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.btn{flex:0 0 auto!important;height:34px!important;min-height:34px!important;white-space:nowrap!important;margin:0!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-new{padding:0 14px!important;font-weight:650!important;box-shadow:none!important}
+@container bcbar (max-width: 1080px){
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-btn{width:34px!important;padding:0!important;justify-content:center!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-btn span{display:none!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-btn i{margin:0!important}
+}
+@container bcbar (max-width: 920px){
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-left .bc-filter-count{display:none!important}
+}
+@container bcbar (max-width: 660px){
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-customer,:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-status{min-width:86px!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-date{flex:0 0 108px!important;width:108px!important;min-width:108px!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-search{min-width:104px!important}
+}
+@container bcbar (max-width: 800px){
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-new{width:34px!important;padding:0!important;justify-content:center!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-new span{display:none!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-new i{margin:0!important}
+}
+/* Very narrow (phones, portrait tablets) — until the V266.7 phone / tablet design: wrap so every button stays visible */
+@media (max-width: 860px){
+@container bcbar (max-width: 560px){
+  /* only on phones / portrait tablets (viewport ≤ 860 px); desktops keep one line */
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right{flex-wrap:wrap!important;justify-content:flex-start!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-new{width:auto!important;padding:0 12px!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-filter-new span{display:inline!important}
+}
+}
+@media (max-width: 860px){
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar{flex-wrap:wrap!important;height:auto!important;padding:8px 10px!important;overflow:visible!important}
+}
+
+/* V266.6 — sticky offsets: the page header (48 px) is gone, so everything sticks 48 px higher */
+html body #page-rfq .bc-filterbar,
+html body #page-costing .bc-filterbar,
+html body #page-quotations .bc-filterbar,
+html body #page-salesorders .bc-filterbar,
+html body #page-deliverynotes .bc-filterbar,
+html body #page-customerinvoices .bc-filterbar,
+html body #page-receipts .bc-filterbar{top:0!important}
+html body #page-costing .pricing-register-table thead th,
+html body #page-quotations #quotes-table thead th,
+html body #page-salesorders #so-register-table thead th,
+html body #page-deliverynotes #dn-register-table thead th,
+html body #page-customerinvoices #dn-register-table thead th,
+html body #page-receipts #dn-register-table thead th,
+html body #page-rfq .rfq-register thead th{top:48px!important}
+html body #page-rfq .module-monitor,
+html body #page-rfq .module-monitor-rail,
+html body #page-rfq .dn-overview-panel,
+html body #page-costing .module-monitor,
+html body #page-costing .module-monitor-rail,
+html body #page-costing .dn-overview-panel,
+html body #page-quotations .module-monitor,
+html body #page-quotations .module-monitor-rail,
+html body #page-quotations .dn-overview-panel,
+html body #page-salesorders .module-monitor,
+html body #page-salesorders .module-monitor-rail,
+html body #page-salesorders .dn-overview-panel,
+html body #page-deliverynotes .module-monitor,
+html body #page-deliverynotes .module-monitor-rail,
+html body #page-deliverynotes .dn-overview-panel,
+html body #page-customerinvoices .module-monitor,
+html body #page-customerinvoices .module-monitor-rail,
+html body #page-customerinvoices .dn-overview-panel,
+html body #page-receipts .module-monitor,
+html body #page-receipts .module-monitor-rail,
+html body #page-receipts .dn-overview-panel{top:0!important}
+/* monitors keep their own (more specific) rules → same value with ids */
+html body #page-quotations .quotation-main-monitor,html body #page-salesorders .salesorders-main-monitor,html body #page-costing .pricing-main-monitor,html body #page-quotations .module-monitor-rail,html body #page-costing .module-monitor-rail,html body #page-deliverynotes .dn-overview-panel,html body #page-customerinvoices .dn-overview-panel,html body #page-receipts .dn-overview-panel{top:0!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar .bc-date>.bc-date-btn{min-width:0!important;max-width:100%!important;overflow:hidden!important;white-space:nowrap!important;padding-left:9px!important;padding-right:8px!important}
+
+/* V266.6 — Excel export icon (original drawing; fixed green in every theme) */
+.bc-xls-ico{display:inline-block;width:18px;height:18px;flex:0 0 18px;background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Crect%20x%3D%222%22%20y%3D%223%22%20width%3D%2220%22%20height%3D%2218%22%20rx%3D%223%22%20fill%3D%22%23107C41%22/%3E%3Cpath%20d%3D%22M14%206h5v12h-5%22%20fill%3D%22%2321A366%22/%3E%3Cpath%20d%3D%22M15%209h3M15%2012h3M15%2015h3%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22/%3E%3Cpath%20d%3D%22M5.5%208l5%208M10.5%208l-5%208%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.1%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E") center/contain no-repeat;vertical-align:middle}
+.confirm-icon .bc-xls-ico{width:40px;height:40px;flex-basis:40px}
+
+/* V266.6 — document numbers, dates, amounts and status never wrap onto two lines in registers */
+html body #page-quotations #quotes-table td:is(:nth-child(1),:nth-child(2),:nth-child(6),:nth-child(7),:nth-child(9)),
+html body #page-salesorders #so-register-table td:is(:nth-child(1),:nth-child(2),:nth-child(5),:nth-child(7),:nth-child(8)),
+html body #page-deliverynotes #dn-register-table td:is(:nth-child(1),:nth-child(2),:nth-child(4),:nth-child(8)),
+html body #page-customerinvoices #invreg-table td:is(:nth-child(1),:nth-child(2),:nth-child(3),:nth-child(5),:nth-child(7),:nth-child(8),:nth-child(9),:nth-child(10)),
+html body #page-receipts #rctreg-table td:is(:nth-child(1),:nth-child(2),:nth-child(6),:nth-child(8),:nth-child(9)),
+html body #page-costing .pricing-register-table td:is(:nth-child(1),:nth-child(3),:nth-child(4),:nth-child(5),:nth-child(6),:nth-child(7),:nth-child(8),:nth-child(9),:nth-child(10)),
+html body #page-rfq .rfq-register td:is(:nth-child(1),:nth-child(4),:nth-child(5),:nth-child(6)){white-space:nowrap!important}
+
+
+/* V266.6 — Invoices & Payment Receipts registers use the same type scale as Quotations / Sales Orders:
+   header 12 px / 600, rows 46 px, status badge 13 px / 600, secondary pills 12 px / 600, amounts regular. */
+html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table) thead th{
+  height:38px!important;padding-top:0!important;padding-bottom:0!important;padding-left:12px!important;font-family:inherit!important;font-size:12px!important;font-weight:600!important;
+  color:#536273!important;letter-spacing:.01em!important;line-height:1.2!important;vertical-align:middle!important}
+html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table) tbody td{
+  height:46px!important;padding:7px 12px!important;font-size:14px!important;line-height:1.3!important;vertical-align:middle!important;border-bottom:1px solid #edf1f5!important}
+html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table) tbody tr:last-child td{border-bottom:0!important}
+html body #page-customerinvoices #invreg-table .badge,
+html body #page-receipts #rctreg-table .rct-status{font-size:13px!important;font-weight:600!important;padding:3px 10px!important;line-height:1.25!important;border-radius:999px!important}
+html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table) :is(.inv-type-pill,.rct-pay-pill){font-size:12px!important;font-weight:600!important;padding:3px 9px!important;line-height:1.25!important}
+html body #page-receipts #rctreg-table .rct-chip{font-size:12px!important;padding:2px 7px!important}
+html body #page-receipts #rctreg-table td.num .rct-bc{font-size:11.5px!important}
+html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table) thead th:not(.sortable-register-th){padding-right:12px!important}

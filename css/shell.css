@@ -1,0 +1,57 @@
+/* BizCore V266.6 — application shell: top bar, breadcrumb, sidebar logo area and collapse button.
+   Approved 14 Oct: top bar "B" (very light theme tint, search stays white), breadcrumb style "1"
+   (title + full breadcrumb underneath, one size, nothing clipped), top bar and logo area both 64 px,
+   collapse button inside the logo area (open) / under the logo (collapsed). */
+
+/* Top bar: light theme tint (follows the theme), soft line + shadow */
+html body header#app-topbar.topbar{background:var(--blue-pale)!important;border-bottom:1px solid color-mix(in srgb,var(--blue-mid) 18%,transparent)!important;box-shadow:0 1px 3px rgba(15,23,42,.06)!important;backdrop-filter:none!important}
+html body #app-topbar .global-search-wrap,html body #app-topbar .global-search-wrap input{background:#fff!important}
+
+/* Title + breadcrumb (desktop / tablet; the phone layout hides the breadcrumb as before) */
+html body #app-topbar .topbar-title{font-size:17px!important;font-weight:700!important;line-height:1.2!important}
+html body #app-topbar .topbar-breadcrumb{overflow:visible!important;min-height:0!important;margin-top:3px!important;align-items:center!important}
+html body #app-topbar .topbar-breadcrumb .breadcrumb-item,
+html body #app-topbar .topbar-breadcrumb .crumb-current,
+html body #app-topbar .topbar-breadcrumb .crumb-separator{height:auto!important;line-height:1.35!important}
+html body #app-topbar .topbar-breadcrumb button,
+html body #app-topbar .topbar-breadcrumb span,
+html body #app-topbar .topbar-breadcrumb .breadcrumb-item,
+html body #app-topbar .topbar-breadcrumb .crumb-current{font-size:12px!important;font-weight:500!important;color:#5b6b7c!important}
+html body #app-topbar .topbar-breadcrumb .breadcrumb-home i{font-size:12px!important}
+html body #app-topbar .topbar-breadcrumb .crumb-current,
+html body #app-topbar .topbar-breadcrumb [aria-current="page"]{color:var(--blue)!important;font-weight:650!important}
+html body #app-topbar .topbar-breadcrumb .crumb-separator{color:#9aa8b6!important;width:14px!important}
+html body #app-topbar .topbar-breadcrumb .breadcrumb-item:not([aria-current="page"]):hover{color:var(--blue-mid)!important;background:#fff!important}
+
+@media (min-width: 761px){
+  /* top bar and sidebar logo area share one 56 px band, so their bottom lines meet (64 → 56 px, 14 Oct) */
+  html body header#app-topbar.topbar{height:56px!important;min-height:56px!important}
+  html body .sidebar .sidebar-logo{min-height:56px!important;height:56px!important;padding-top:6px!important;padding-bottom:6px!important;box-sizing:border-box!important}
+}
+
+@media (min-width: 901px){
+  /* Collapse button — sidebar open: inside the logo area, right side */
+  html body .sidebar .sidebar-collapse-btn{right:10px!important;top:15px!important;transform:none!important;width:26px!important;height:26px!important;background:rgba(255,255,255,.10)!important;border:1px solid rgba(255,255,255,.18)!important;color:#fff!important;border-radius:7px!important;box-shadow:none!important}
+  html body .sidebar .sidebar-collapse-btn:hover{background:rgba(255,255,255,.2)!important}
+  /* sidebar collapsed: its own row under the logo, centred — never on top of the logo */
+  html body .sidebar.collapsed .sidebar-collapse-btn{position:relative!important;right:auto!important;top:auto!important;display:flex!important;margin:8px auto 4px!important;width:34px!important;height:28px!important}
+}
+
+/* V266.6 — small labels: 10–10.5 px → 11.5 px and slightly darker (same layout, easier to read on a laptop) */
+html body .dn-overview-panel .dn-overview-section-label,
+html body .bc-monitor .dn-overview-section-label,
+html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-dashboard,#page-deliveries) .dn-overview-panel .dn-overview-section-label,
+html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-dashboard,#page-deliveries) .bc-monitor .dn-overview-section-label{font-size:11.5px!important;color:#5b6b7c!important;letter-spacing:.05em!important}
+html body .dn-overview-head span,
+html body .module-monitor-head span,
+html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-dashboard,#page-deliveries) .dn-overview-head span,
+html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-dashboard,#page-deliveries) .module-monitor-head span{font-size:11.5px!important}
+html body .pt-step .pt-label{font-size:11.5px!important}
+html body .pt-step .pt-label:not(.done):not(.active){color:#5b6b7c!important}
+html body .so-po-view-details span{font-size:11.5px!important;color:#5b6b7c!important}
+
+/* V266.6 — notification bell: plain icon, no white box; the red count badge sits on its top-right corner */
+html body #app-topbar .topbar-icon-btn{background:transparent!important;border:0!important;box-shadow:none!important;color:#475569!important;border-radius:8px!important}
+html body #app-topbar .topbar-icon-btn i{font-size:21px!important}
+html body #app-topbar .topbar-icon-btn:hover{background:color-mix(in srgb,var(--blue-mid) 10%,transparent)!important;color:var(--blue)!important}
+html body #app-topbar .topbar-alert-dot.has-count{background:#ef4444!important;border:2px solid var(--blue-pale)!important;top:0!important;right:-3px!important;min-width:18px!important;height:18px!important;font-size:10px!important;box-sizing:border-box!important}

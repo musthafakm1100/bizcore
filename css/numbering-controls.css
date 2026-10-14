@@ -34,8 +34,8 @@
 #setup-tab-defaults .numbering-table .docnum-prefix:focus,
 #setup-tab-defaults .numbering-table .docnum-reset:focus {
   outline:none;
-  border-color:#2563eb;
-  box-shadow:0 0 0 3px rgba(37,99,235,.13);
+  border-color:var(--c-2563eb);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--c-2563eb) 13%, transparent);
 }
 #setup-tab-defaults .numbering-table .docnum-prefix:focus-visible,
 #setup-tab-defaults .numbering-table .docnum-reset:focus-visible {outline:2px solid transparent;}

@@ -183,7 +183,7 @@ function renderReceiptRegister(){
   const open = r => `openReceiptView('${rctEsc(r.id)}')`;
   body.innerHTML = rows.length ? rows.map(r => `<tr class="quotation-clickable-row${r.status === 'Voided' ? ' rct-row-voided' : ''}" tabindex="0" role="button" data-rct="${rctEsc(r.id)}" onclick="${open(r)}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${open(r)}}">
       <td class="rct-no">${rctEsc(r.rctNo)}</td><td>${fmtDate(r.date)}</td><td>${rctEsc(r.customer || '—')}</td><td>${rctEsc(r.method || '—')}</td><td>${rctEsc(r.reference || '—')}</td><td>${rctEsc(r.zohoPaymentNo || '—')}</td>
-      <td class="rct-applied">${chips(r)}</td><td class="num"><b>${r.status === 'Voided' ? '<s>' + rctF(r.amount) + '</s>' : rctF(r.amount)}</b>${rctNum(r.bankCharges) > 0.005 ? `<small class="rct-bc">${rctF(r.bankCharges)} bank charges</small>` : ''}</td><td>${status(r)}</td></tr>`).join('')
+      <td class="rct-applied">${chips(r)}</td><td class="num">${r.status === 'Voided' ? '<s>' + rctF(r.amount) + '</s>' : rctF(r.amount)}${rctNum(r.bankCharges) > 0.005 ? `<small class="rct-bc">${rctF(r.bankCharges)} bank charges</small>` : ''}</td><td>${status(r)}</td></tr>`).join('')
     : `<tr><td colspan="9"><div class="empty-state"><i class="ti ti-cash"></i><strong>No receipts found</strong><p>${receiptsCache.length ? 'Adjust the filters to see other receipts.' : 'Record money received with New Receipt.'}</p></div></td></tr>`;
   const cards = document.getElementById('rctreg-cards');
   if (cards) cards.innerHTML = rows.length ? rows.map(r => {

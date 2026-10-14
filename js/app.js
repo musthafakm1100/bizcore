@@ -226,35 +226,49 @@ let UOM_LIST = uomMaster.filter(u=>u.active).map(u=>u.code);
 /* ══════════════════════════════════════════════════
    THEME & FONT SIZE
 ══════════════════════════════════════════════════ */
+/* V266.5: the whole application follows the theme. Every on-screen brand colour is a token in css/theme.css
+   (--c-<hex>) derived from the original Corporate Navy colour by three numbers:
+   h = hue shift in degrees, c = colour strength (1 = as designed), l = lightness lift (0 = as designed).
+   Printed documents, status colours and neutral greys are not themed. The choice is saved with the user
+   (settings/uiPrefs_<uid>) and in this browser (so the right colours show before sign-in completes). */
 const THEMES = {
-  blue:     {sidebar:'#173A5E', mid:'#2E75B6', light:'#DCE6F0', pale:'#EBF3FB', active:'#FFFFFF'},
-  darkblue: {sidebar:'#1a5276', mid:'#2471a3', light:'#aed6f1', pale:'#d6eaf8', active:'#FFFFFF'},
-  green:    {sidebar:'#145a32', mid:'#1e8449', light:'#a9dfbf', pale:'#d5f5e3', active:'#FFFFFF'},
-  purple:   {sidebar:'#6e2fa0', mid:'#8e44ad', light:'#d2b4de', pale:'#f4ecf7', active:'#FFFFFF'},
-  red:      {sidebar:'#922b21', mid:'#c0392b', light:'#f1948a', pale:'#fdedec', active:'#FFFFFF'},
-  dark:     {sidebar:'#1a252f', mid:'#2e4057', light:'#85929e', pale:'#eaecee', active:'#FFFFFF'},
-  slate:    {sidebar:'#2c3e50', mid:'#34495e', light:'#95a5a6', pale:'#eaf0fb', active:'#FFFFFF'},
-  teal:     {sidebar:'#117a8b', mid:'#138d75', light:'#76d7c4', pale:'#e8f8f5', active:'#FFFFFF'},
+  blue:   { label: 'Corporate Navy',     h: 0,    c: 1,    l: 0 },
+  slate:  { label: 'Professional Slate', h: 0,    c: 0.35, l: 0.02 },
+  teal:   { label: 'Modern Teal',        h: -50,  c: 0.9,  l: 0.07 },
+  green:  { label: 'Forest Green',       h: -100, c: 0.9,  l: 0.03 },
+  purple: { label: 'Royal Purple',       h: 55,   c: 1,    l: 0.03 },
+  red:    { label: 'Burgundy',           h: 125,  c: 0.85, l: 0.06 },
 };
+// Themes removed in V266.5 → closest remaining theme
+const THEME_ALIASES = { darkblue: 'blue', dark: 'slate' };
+const themeKey = name => (THEMES[name] ? name : THEME_ALIASES[name] || 'blue');
 
-function applyTheme(name) {
-  const t = THEMES[name]; if (!t) return;
+function applyTheme(name, opts = {}) {
+  const key = themeKey(name), t = THEMES[key];
   const r = document.documentElement.style;
-  r.setProperty('--blue',         t.sidebar);
-  r.setProperty('--blue-mid',     t.mid);
-  r.setProperty('--blue-light',   t.light);
-  r.setProperty('--blue-pale',    t.pale);
-  r.setProperty('--sidebar-bg',   t.sidebar);
-  r.setProperty('--sidebar-active', t.active);
-  r.setProperty('--sidebar-active-text', t.sidebar);
-  r.setProperty('--accent',       t.mid);
-  // Keep the professional selector and colour preview in sync
+  r.setProperty('--th-h', String(t.h));
+  r.setProperty('--th-c', String(t.c));
+  r.setProperty('--th-l', String(t.l));
+  document.documentElement.dataset.theme = key;
+  // Keep the selector and colour preview in sync
   const selector = document.getElementById('theme-select');
-  if (selector) selector.value = name;
+  if (selector) selector.value = key;
   const preview = document.getElementById('theme-preview');
-  if (preview) preview.style.background = t.mid;
-  // Persist
-  try { localStorage.setItem('dtq_theme', name); } catch(e) {}
+  if (preview) preview.style.background = 'var(--c-2e75b6)';
+  try { localStorage.setItem('dtq_theme', key); } catch(e) {}
+  // Chosen by the user on the Preferences page → save with the user (all devices)
+  if (opts.save && window.currentUser && window.FB && typeof window.FB.fbSaveUserPrefs === 'function') {
+    window.FB.fbSaveUserPrefs(window.currentUser.uid, { theme: key }).then(ok => {
+      const note = document.getElementById('theme-save-note');
+      if (note) note.textContent = ok ? 'Saved with your user — the same theme on every device.' : 'Saved in this browser only (could not reach the server).';
+    });
+  }
+}
+/** After sign-in: use the theme saved with the user (if any). */
+async function loadUserTheme(){
+  if (!window.currentUser || !window.FB || typeof window.FB.fbLoadUserPrefs !== 'function') return;
+  const prefs = await window.FB.fbLoadUserPrefs(window.currentUser.uid);
+  if (prefs && prefs.theme) applyTheme(prefs.theme);
 }
 
 const FONT_SIZES = [11, 12, 13, 14, 15];
@@ -284,7 +298,7 @@ function changeFontSize(dir) {
 function loadThemeAndFont() {
   try {
     const t = localStorage.getItem('dtq_theme');
-    applyTheme(t && THEMES[t] ? t : 'blue');
+    applyTheme(t || 'blue');
     localStorage.removeItem('dtq_fontidx');
     document.documentElement.style.fontSize = '';
   } catch(e) { applyTheme('blue'); }
@@ -909,7 +923,8 @@ function setBrandAssetPreview(type, value) {
 }
 
 function applySettings() {
-  document.getElementById('sb-co-name').textContent = settings.coname || 'Downtown Trading Est.';
+  // V266.6: the sidebar shows the short name (no legal suffix "Est."); documents keep the full legal name
+  document.getElementById('sb-co-name').textContent = String(settings.coname || 'Downtown Trading Est.').replace(/\s+est\.?\s*$/i, '');
   // Sidebar keeps the BizCore mark (set once in the HTML) rather than the
   // company logo — a small square slot isn't the right shape for a wide
   // wordmark logo. The company logo is still used correctly elsewhere
@@ -2181,7 +2196,7 @@ function filterProdSearch() {
   const dd = document.getElementById('prod-search-dd'); if (!dd) return;
   const matches = products.filter(p => !q || `${p.name} ${p.brand} ${p.model} ${p.code}`.toLowerCase().includes(q)).slice(0,12);
   dd.innerHTML = matches.map(p => {
-    const specPill = (p.specs||[]).slice(0,3).map(s=>`<span style="background:#EBF3FB;color:#1F4E79;border-radius:3px;padding:1px 5px;font-size:10px;margin-right:3px">${s.k}: ${s.v}</span>`).join('');
+    const specPill = (p.specs||[]).slice(0,3).map(s=>`<span style="background:var(--c-ebf3fb);color:var(--c-1f4e79);border-radius:3px;padding:1px 5px;font-size:10px;margin-right:3px">${s.k}: ${s.v}</span>`).join('');
     const ddImg = p.image
       ? `<img src="${p.image}" style="width:36px;height:36px;object-fit:contain;border-radius:4px;border:1px solid var(--border);flex-shrink:0">`
       : `<div style="width:36px;height:36px;background:var(--blue-pale);border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-package" style="font-size:16px;color:var(--blue-light)"></i></div>`;
@@ -2306,7 +2321,7 @@ function setQuoteType(type, options={}) {
   currentQuoteType = type;
   const tabs=document.querySelector('.quote-tabs');
   if(tabs){tabs.classList.toggle('template-locked',!!options.locked);tabs.setAttribute('aria-label',quotationTypeLabel(type)+' template');}
-  const heading=document.querySelector('.quote-section-heading > span');
+  const heading=tabs?tabs.closest('.quote-section-heading')?.querySelector(':scope > span'):null;   // V266.6: the items heading (was renaming "Header information")
   if(heading) heading.innerHTML='<i class="ti '+quotationTypeIcon(type)+'"></i>'+(type==='contracting'?'Service scope & pricing':'Quotation items');
   ['product','contracting'].forEach(t=>{
     const btn = document.getElementById('type-btn-'+t);
@@ -3498,7 +3513,7 @@ function openQuotationExcelExportDialog(){
   overlay.className='confirm-overlay quotation-export-overlay';
   overlay.innerHTML=`
     <div class="confirm-box quotation-export-box" role="dialog" aria-modal="true" aria-labelledby="quotation-export-title">
-      <div class="confirm-icon"><i class="ti ti-file-spreadsheet"></i></div>
+      <div class="confirm-icon"><i class="bc-xls-ico" aria-hidden="true"></i></div>
       <div class="confirm-title" id="quotation-export-title">Export Quotation Register</div>
       <div class="confirm-msg">Choose the level of detail to include in the Excel workbook.</div>
       <div class="quotation-export-options">
@@ -3903,7 +3918,8 @@ function toggleSidebarCollapse(force){
     btn.title=collapsed?'Expand sidebar':'Collapse sidebar';
     btn.innerHTML=collapsed?'<i class="ti ti-chevron-right"></i>':'<i class="ti ti-chevron-left"></i>';
   }
-  try{localStorage.setItem('bc_sidebar_collapsed',collapsed?'1':'0');}catch(e){}
+  // V266.7: only a click on the button is the user's choice; automatic states (tablet default) are not saved
+  if(typeof force!=='boolean'){try{localStorage.setItem('bc_sidebar_collapsed',collapsed?'1':'0');}catch(e){}}
 }
 function getVisibleNavControls(){
   return Array.from(document.querySelectorAll('.nav-item.nav-root,.nav-group-toggle,.nav-group.open .nav-submenu .nav-item'))
@@ -4034,7 +4050,7 @@ function initPremiumSidebar(){
   sidebar.addEventListener('keydown',handleSidebarKeydown);
   initCollapsedNavFlyout();
   let savedGroup=''; let collapsed=false;
-  try{savedGroup=localStorage.getItem('bc_nav_open_group')||'';collapsed=localStorage.getItem('bc_sidebar_collapsed')==='1';}catch(e){}
+  try{savedGroup=localStorage.getItem('bc_nav_open_group')||'';const sv=localStorage.getItem('bc_sidebar_collapsed');collapsed=sv===null?(window.innerWidth>900&&window.innerWidth<1280):sv==='1';}catch(e){}
   const activeGroup=document.querySelector('.nav-item.active')?.closest('.nav-group');
   const desired=activeGroup?.dataset.group||savedGroup||'sales';
   getNavGroups().forEach(g=>setNavGroupState(g,g.dataset.group===desired,false));
@@ -4327,7 +4343,7 @@ function openPricingExcelExportDialog(){
   overlay.id='pricing-export-overlay';
   overlay.className='confirm-overlay quotation-export-overlay';
   overlay.innerHTML=`<div class="confirm-box quotation-export-box" role="dialog" aria-modal="true" aria-labelledby="pricing-export-title">
-    <div class="confirm-icon"><i class="ti ti-file-spreadsheet"></i></div>
+    <div class="confirm-icon"><i class="bc-xls-ico" aria-hidden="true"></i></div>
     <div class="confirm-title" id="pricing-export-title">Export Pricing Register</div>
     <div class="confirm-msg">Choose the level of detail to include in the Excel workbook.</div>
     <div class="quotation-export-options">
@@ -4650,7 +4666,7 @@ function updateValidUntil(){
   const inline=document.getElementById('quote-validity-inline');
   if(!d){if(el)el.textContent='Valid until: —';if(inline)inline.textContent='Expiry calculated automatically';return;}
   const dt=new Date(d+'T00:00:00');dt.setDate(dt.getDate()+days);
-  const formatted=dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+  const formatted=fmtDate(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`);   // V266.6: DD-MM-YYYY everywhere
   if(el)el.textContent='Valid until: '+formatted;
   if(inline)inline.textContent='Expires: '+formatted;
 }
@@ -6002,8 +6018,8 @@ function showReasonPrompt(opts) {
     modal.innerHTML =
       '<div role="dialog" aria-modal="true" style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;max-width:460px;width:100%;box-shadow:0 18px 55px rgba(15,23,42,.22);overflow:hidden">'
       + '<div style="padding:20px 22px 14px;border-bottom:1px solid #EEF2F7;display:flex;gap:12px;align-items:flex-start">'
-      + '<div style="width:34px;height:34px;border-radius:9px;background:#EFF6FF;color:#1D4ED8;display:flex;align-items:center;justify-content:center;font-size:18px;flex:0 0 auto">' + (opts.icon||'⚠️') + '</div>'
-      + '<div><div style="font-size:16px;font-weight:700;color:#0F2744;line-height:1.25">' + (opts.title||'Confirm') + '</div>'
+      + '<div style="width:34px;height:34px;border-radius:9px;background:var(--c-eff6ff);color:var(--c-1d4ed8);display:flex;align-items:center;justify-content:center;font-size:18px;flex:0 0 auto">' + (opts.icon||'⚠️') + '</div>'
+      + '<div><div style="font-size:16px;font-weight:700;color:var(--c-0f2744);line-height:1.25">' + (opts.title||'Confirm') + '</div>'
       + '<div style="font-size:13px;color:#64748B;line-height:1.5;margin-top:5px">' + (opts.message||'') + '</div></div></div>'
       + '<div style="padding:16px 22px 18px">'
       + (opts.label ? '<label for="reason-prompt-input" style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:7px">' + opts.label + ' <span style="color:#DC2626">*</span></label>' : '')
@@ -6813,7 +6829,7 @@ async function revisePricingFromRO(btn) {
     placeholder: 'Enter revision reason…',
     cancelText: 'Cancel',
     confirmText: 'Revise Pricing',
-    confirmColor: '#1D4ED8',
+    confirmColor: 'var(--c-1d4ed8)',
     requiredText: 'Revision reason is required.'
   });
   if(!reason)return;
@@ -7230,13 +7246,13 @@ function toggleModuleMonitor(moduleKey){
   setModuleMonitorState(moduleKey,!workspace.classList.contains('monitor-collapsed'),true);
 }
 function restoreModuleMonitors(){
-  ['rfq','quotations','pricing','salesorders','deliverynotes','customerinvoices'].forEach(moduleKey=>{
+  ['rfq','quotations','pricing','salesorders','deliverynotes','customerinvoices','receipts'].forEach(moduleKey=>{
     const workspace=getModuleMonitorWorkspace(moduleKey);
     if(!workspace) return;
     const saved=localStorage.getItem(moduleMonitorStorageKey(moduleKey));
     // On smaller screens reclaim register width by default; once the user
     // chooses a state, that preference wins on later visits.
-    const collapsed=saved===null ? window.innerWidth<=1100 : saved==='1';
+    const collapsed=saved===null ? window.innerWidth<1280 : saved==='1';   // V266.7: tablets / small laptops start folded
     setModuleMonitorState(moduleKey,collapsed,false);
   });
 }
@@ -7476,7 +7492,7 @@ function employeeExpiryMeta(dateValue,label) {
   if(days<0) return {cls:'expired',text:`Expired ${Math.abs(days)}d ago`,days};
   if(days<=30) return {cls:'urgent',text:`Expires in ${days}d`,days};
   if(days<=90) return {cls:'warning',text:`Expires in ${days}d`,days};
-  return {cls:'valid',text:new Date(dateValue+'T00:00:00').toLocaleDateString('en-GB'),days};
+  return {cls:'valid',text:fmtDate(String(dateValue).slice(0,10)),days};
 }
 function populateRFQAssignees(selectedValue='') {
   const select=document.getElementById('rfq-assigned'); if(!select)return;
@@ -7536,7 +7552,7 @@ function removeEmployeePhoto(){
 function formatEmployeeDate(dateValue) {
   if(!dateValue) return 'Not recorded';
   const d=new Date(dateValue+'T00:00:00');
-  return Number.isNaN(d.getTime()) ? 'Not recorded' : d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+  return Number.isNaN(d.getTime()) ? 'Not recorded' : fmtDate(String(dateValue).slice(0,10));   // V266.6: DD-MM-YYYY
 }
 function openEmployeeView(id) {
   const e=employees.find(x=>x.id===id); if(!e)return;
@@ -12647,6 +12663,9 @@ function initPremiumTopbar(){
 }
 
 loadThemeAndFont();
+if (window.currentUser) loadUserTheme();   // V266.5: theme saved with the user (app.js loads after sign-in)
+console.log('Theme V266.5 ✅ (whole screen follows the theme · saved with the user · 6 themes · fixed status colours)');
+console.log('Screens V266.6 ✅ (no page header · one-line toolbar · top bar · breadcrumb · collapse button · labels · dates)');
 initPremiumSidebar();
 initPremiumTopbar();
 loadRecycleBin();
@@ -13635,7 +13654,7 @@ function renderImportPreview() {
 
   // Summary bar
   html += '<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
-  html += `<div style="flex:1;min-width:120px;background:#EAF2FA;border-radius:8px;padding:12px 16px;text-align:center">
+  html += `<div style="flex:1;min-width:120px;background:var(--c-eaf2fa);border-radius:8px;padding:12px 16px;text-align:center">
     <div style="font-size:24px;font-weight:800;color:var(--blue)">${total}</div>
     <div style="font-size:11px;color:var(--gray);margin-top:2px">Rows found</div></div>`;
   html += `<div style="flex:1;min-width:120px;background:${readyCount>0?'#e8f8f0':'#f8f9fa'};border-radius:8px;padding:12px 16px;text-align:center">
@@ -13864,7 +13883,7 @@ function showIdleWarning(){
   modal.innerHTML = `<div style="background:#fff;border-radius:14px;padding:28px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="font-size:15px;font-weight:700;margin-bottom:8px"><i class="ti ti-clock-pause" style="color:#B45309;margin-right:6px"></i>Are you still working?</div>
     <div style="font-size:13px;color:#5A6677;margin-bottom:18px">${escapeHtml(lockTypeLabel(lock.docType) + ' ' + (lock.label || lock.docId))} will be released for other users in <strong id="lock-idle-count">${s.idleWarningMinutes}:00</strong> because there has been no activity. Unsaved entries in the open window will be lost.</div>
-    <div style="display:flex;justify-content:flex-end"><button id="lock-idle-keep" style="height:36px;padding:0 18px;border:none;border-radius:7px;background:#0B539D;color:#fff;cursor:pointer;font-size:13px;font-weight:600">Keep working</button></div></div>`;
+    <div style="display:flex;justify-content:flex-end"><button id="lock-idle-keep" style="height:36px;padding:0 18px;border:none;border-radius:7px;background:var(--c-0b539d);color:#fff;cursor:pointer;font-size:13px;font-weight:600">Keep working</button></div></div>`;
   document.body.appendChild(modal);
   const end = Date.now() + s.idleWarningMinutes * 60000;
   const tick = setInterval(() => {
@@ -13992,13 +14011,13 @@ function showLockConflict(docType, docId, docLabel, holder) {
         <div><div style="font-size:15px;font-weight:700;color:#1a1a1a">Document in use</div><div style="font-size:12px;color:#8B98A8;margin-top:2px">${escapeHtml(label)}</div></div>
       </div>
       <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:14px 16px;margin-bottom:14px;font-size:13px;color:#1a1a1a;line-height:1.55">
-        <div><i class="ti ti-user" style="color:#0B539D;margin-right:6px"></i><strong>${escapeHtml(holder.name)}</strong> is working on this ${escapeHtml(lockTypeLabel(docType).toLowerCase())}${holder.activity ? ' — <em>' + escapeHtml(holder.activity) + '</em>' : ''}.</div>
+        <div><i class="ti ti-user" style="color:var(--c-0b539d);margin-right:6px"></i><strong>${escapeHtml(holder.name)}</strong> is working on this ${escapeHtml(lockTypeLabel(docType).toLowerCase())}${holder.activity ? ' — <em>' + escapeHtml(holder.activity) + '</em>' : ''}.</div>
         <div style="color:#5A6677;margin-top:6px">Since ${fmtLockTime(holder.sinceMs)}${idleMin >= 1 ? ' · last active ' + idleMin + ' min ago' : ''}</div>
       </div>
       <div style="font-size:12px;color:#5A6677;margin-bottom:18px">You can view and print it. Changes are blocked until ${escapeHtml(holder.name)} finishes; the lock is released automatically when they close the window or stop responding.</div>
       <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
         <button onclick="closeLockConflict()" style="height:36px;padding:0 16px;border:1.5px solid #E2E8F0;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600;color:#5A6677">Close</button>
-        <button onclick="viewDocReadOnly('${docType}','${String(docId).replace(/'/g, "\\'")}')" style="height:36px;padding:0 16px;border:1.5px solid #0B539D;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600;color:#0B539D"><i class="ti ti-eye" style="margin-right:4px"></i>View only</button>
+        <button onclick="viewDocReadOnly('${docType}','${String(docId).replace(/'/g, "\\'")}')" style="height:36px;padding:0 16px;border:1.5px solid var(--c-0b539d);border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600;color:var(--c-0b539d)"><i class="ti ti-eye" style="margin-right:4px"></i>View only</button>
         ${isAdmin ? `<button onclick="forceReleaseLockFromDialog('${docType}','${String(docId).replace(/'/g, "\\'")}')" style="height:36px;padding:0 16px;border:none;border-radius:8px;background:#DC2626;cursor:pointer;font-size:12px;font-weight:600;color:#fff"><i class="ti ti-lock-open" style="margin-right:4px"></i>Release lock</button>` : ''}
       </div>
     </div>`;
