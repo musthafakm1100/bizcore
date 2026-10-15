@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#173a5e">
+<title>My Cash — BizCore</title>
+<link rel="icon" href="favicon.ico">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="css/cash.css?v=267.2">
+</head>
+<!-- BizCore V267.2 — My Cash: the only screen of a cash custodian login (approved mockups 15 Oct 2026).
+     The database rules let this login read only its own cash account(s) and their ledger lines. -->
+<body class="mc-body">
+<div class="mc-shell">
+  <aside class="mc-sb" id="mc-sb" aria-label="Menu">
+    <div class="mc-logo"><div class="m"><i style="height:12px;background:#3b82f6"></i><i style="height:22px;background:#f59e0b"></i><i style="height:16px;background:#3b82f6"></i></div><div><b>Downtown Trading</b><small>BizCore v1.0</small></div></div>
+    <nav class="mc-nav"><div class="mc-ni"><i class="ti ti-wallet"></i>My Cash</div></nav>
+    <div class="mc-sbfoot">Cash custodian login<br>sees only My Cash</div>
+  </aside>
+  <div class="mc-main">
+    <header class="mc-top">
+      <button class="mc-burger" type="button" aria-label="Menu" onclick="document.getElementById('mc-sb').classList.toggle('open')"><i class="ti ti-menu-2"></i></button>
+      <div class="t">My Cash<small id="mc-sub">&nbsp;</small></div>
+      <div class="r">
+        <span class="mc-online" id="mc-online">● Online</span>
+        <span class="mc-bell" id="mc-bell" title="Lines waiting for you"><i class="ti ti-bell"></i><b id="mc-bell-n" hidden></b></span>
+        <button class="mc-user" type="button" id="mc-user" aria-haspopup="true" aria-expanded="false"><span class="mc-av" id="mc-av">··</span><span class="nm" id="mc-name"></span></button>
+        <div class="mc-menu" id="mc-menu" hidden>
+          <div class="who" id="mc-who"></div>
+          <button type="button" data-act="password"><i class="ti ti-key"></i>Change password</button>
+          <button type="button" data-act="signout"><i class="ti ti-logout"></i>Sign out</button>
+        </div>
+      </div>
+    </header>
+    <main class="mc-body-pad" id="mc-root"><div class="mc-center"><i class="ti ti-loader-2"></i><p>Loading…</p></div></main>
+  </div>
+</div>
+<div id="mc-modal-host"></div>
+
+<script src="js/cash-ui.js?v=267.2"></script>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, onAuthStateChanged, signOut, updatePassword, connectAuthEmulator } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, initializeFirestore, persistentLocalCache, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, where, runTransaction, serverTimestamp, connectFirestoreEmulator }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import * as LC from './js/ledger-core.mjs?v=267.2';
+import { createLedgerService } from './js/ledger-service.mjs?v=267.2';
+
+const cfg = {
+  apiKey:            'AIzaSyCsgVVIU_AZpWgTrZo_jrlCQVgZusCI_zY',
+  authDomain:        'bizcore-downtown.firebaseapp.com',
+  projectId:         'bizcore-downtown',
+  storageBucket:     'bizcore-downtown.firebasestorage.app',
+  messagingSenderId: '864406054158',
+  appId:             '1:864406054158:web:190929f0cc60e12e77e35f'
+};
+// Same local-testing switch as the other pages (localhost + ?emulator=1 only; project becomes demo-bizcore)
+const BIZCORE_EMULATOR = (() => {
+  const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const q = new URLSearchParams(location.search).get('emulator');
+  try { if (q === '1') localStorage.setItem('bizcore_emulator', '1'); if (q === '0') localStorage.removeItem('bizcore_emulator'); } catch (e) {}
+  let on = false; try { on = local && localStorage.getItem('bizcore_emulator') === '1'; } catch (e) {}
+  return on;
+})();
+if (BIZCORE_EMULATOR) cfg.projectId = 'demo-bizcore';
+const app = initializeApp(cfg);
+const auth = getAuth(app);
+let db;
+try { db = initializeFirestore(app, { localCache: persistentLocalCache() }); } catch (e) { db = getFirestore(app); }
+if (BIZCORE_EMULATOR) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
+
+const UI = window.BizCashUI, esc = UI.esc, money = UI.money;
+const S = { user: null, me: null, accounts: [], cashAccounts: [], lines: [], accountId: null, filter: 'all', unsub: [] };
+const service = createLedgerService({ db, doc, runTransaction, serverTimestamp, setDoc, updateDoc }, {
+  actor: () => S.user ? { uid: S.user.uid, name: (S.me && S.me.name) || S.user.displayName || S.user.email, email: S.user.email } : {},
+});
+const $ = id => document.getElementById(id);
+const root = $('mc-root');
+const phone = () => window.matchMedia('(max-width:760px)').matches;
+function toast(msg, err) { document.querySelectorAll('.mc-toast').forEach(x => x.remove()); const t = document.createElement('div'); t.className = 'mc-toast' + (err ? ' err' : ''); t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), err ? 5000 : 2600); }
+const center = (icon, html) => { root.innerHTML = `<div class="mc-center"><i class="ti ${icon}"></i>${html}</div>`; };
+const today = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+const canConfirm = r => !!LC.confirmRight(r, { uid: S.user && S.user.uid, isAdmin: false });
+
+/* ── sign-in and the custodian record ── */
+onAuthStateChanged(auth, async user => {
+  S.unsub.forEach(u => { try { u(); } catch (e) {} }); S.unsub = [];
+  if (!user) { location.href = 'login.html?return=' + encodeURIComponent('mycash.html'); return; }
+  S.user = user;
+  const ini = String(user.displayName || user.email || '?').split(/[\s@._-]+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  $('mc-av').textContent = ini; $('mc-name').textContent = user.displayName || user.email.split('@')[0]; $('mc-who').textContent = user.email;
+  let rec;
+  try { rec = await getDoc(doc(db, LC.LEDGER_COLLECTIONS.custodians, user.uid)); }
+  catch (e) { center('ti-wifi-off', `<p>Could not load your cash account. Check the internet connection and try again.</p><p><button class="cl-btn" onclick="location.reload()">Try again</button></p>`); return; }
+  if (!rec.exists()) { location.replace('index.html'); return; } // office staff use BizCore itself
+  S.unsub.push(onSnapshot(doc(db, LC.LEDGER_COLLECTIONS.custodians, user.uid), s => {
+    S.me = s.data() || null;
+    if (S.me && S.me.active === false) { center('ti-lock', '<h3>This login is not active</h3><p>Please contact the office.</p>'); return; }
+    if (S.me && S.me.mustChangePassword) openPassword(true);
+    render();
+  }, () => {}));
+  service.registerSelf().catch(() => {});
+  S.unsub.push(onSnapshot(query(collection(db, 'paymentAccounts'), where('type', '==', 'cash'), where('custodianUid', '==', user.uid)), s => {
+    S.accounts = s.docs.map(d => d.data()).sort((a, b) => String(a.code).localeCompare(String(b.code), undefined, { numeric: true }));
+    if (!S.accounts.find(a => a.id === S.accountId)) S.accountId = S.accounts[0] ? S.accounts[0].id : null;
+    render();
+  }, e => center('ti-alert-triangle', `<p>Your cash accounts could not be loaded (${esc(e.code || e.message)}).</p>`)));
+  S.unsub.push(onSnapshot(query(collection(db, 'paymentAccounts'), where('type', '==', 'cash')), s => {
+    S.cashAccounts = s.docs.map(d => d.data()).filter(a => a.active !== false);
+  }, () => {}));
+  S.unsub.push(onSnapshot(query(collection(db, LC.LEDGER_COLLECTIONS.lines), where('custodianUid', '==', user.uid)), s => {
+    S.lines = s.docs.map(d => d.data()); render();
+  }, e => toast('Ledger unavailable: ' + (e.code || e.message), true)));
+});
+
+/* ── screen ── */
+function render() {
+  if (!S.user || !S.me || S.me.active === false) return;
+  const acc = S.accounts.find(a => a.id === S.accountId);
+  const allWaiting = S.lines.filter(l => l.status === 'pending' && !l.void).length;
+  $('mc-bell-n').hidden = !allWaiting; $('mc-bell-n').textContent = allWaiting;
+  if (!acc) { $('mc-sub').textContent = ''; center('ti-wallet-off', '<h3>No cash account yet</h3><p>The office hasn\'t linked a cash account to this login.</p>'); return; }
+  $('mc-sub').textContent = acc.name;
+  const g = LC.buildLedger(acc, S.lines.filter(l => l.accountId === acc.id));
+  const confirmable = LC.confirmableLines(g.rows, { uid: S.user.uid }).length;
+  const opts = { mode: 'custodian', filter: S.filter, canConfirm, confirmable };
+  const switcher = S.accounts.length > 1 ? `<div class="mc-accs" role="toolbar" aria-label="Cash account">${S.accounts.map(a => `<button type="button" class="cl-chip${a.id === acc.id ? ' on' : ''}" data-act="account" data-id="${esc(a.id)}">${esc(a.name)}</button>`).join('')}</div>` : '';
+  const handBtn = acc.active !== false ? `<button type="button" class="cl-btn" data-act="handover"><i class="ti ti-arrows-exchange"></i>Hand over cash</button>` : '';
+  if (phone()) {
+    root.innerHTML = `${switcher}
+      <div class="cl-kc big mc-balance"><div><span>Balance</span><b>${money(g.balance)}</b><small>confirmed ${money(g.confirmedBalance)}</small></div>${g.waiting ? `<span class="cb-badge" style="font-size:12px">⏳ ${g.waiting} waiting</span>` : ''}</div>
+      ${confirmable ? `<button type="button" class="cl-btn cl-ok cl-all" data-act="confirm-all"><i class="ti ti-checks"></i>Confirm all waiting (${confirmable})</button>` : ''}
+      <div class="cl-chips" style="margin-top:10px">${UI.toolbarHtml(g, { ...opts, confirmable: 0 })}${handBtn}</div>
+      ${UI.cardsHtml(g, opts)}`;
+    return;
+  }
+  root.innerHTML = `${switcher}
+    <div class="cl-kpis">
+      <div class="cl-kc big"><span>Balance</span><b>${money(g.balance)}</b><small>all entries</small></div>
+      <div class="cl-kc"><span>Confirmed balance</span><b>${money(g.confirmedBalance)}</b><small>lines you confirmed</small></div>
+      <div class="cl-kc warn"><span>Waiting for you</span><b>${g.waiting} line${g.waiting === 1 ? '' : 's'}</b><small>${[g.waitingIn ? '+' + money(g.waitingIn) + ' in' : '', g.waitingOut ? '−' + money(g.waitingOut) + ' out' : ''].filter(Boolean).join(' · ') || 'nothing to confirm'}</small></div>
+      <div class="cl-kc bad"><span>Queried</span><b>${g.queried} line${g.queried === 1 ? '' : 's'}</b><small>${g.queried ? 'the office has been told' : 'nothing queried'}</small></div>
+    </div>
+    <div class="cl-card"><div class="cl-ch"><h3><i class="ti ti-list-details"></i>${esc(acc.name)} · ledger</h3><div class="cl-r">${UI.toolbarHtml(g, opts)}${handBtn}</div></div>
+      ${UI.tableHtml(g, opts)}
+      <div class="cl-note"><i class="ti ti-info-circle"></i><span>Confirm a line when the money really came in or went out. Use <b>Query</b> if it didn't — the office is notified. Entries never wait for you; the line just stays ⏳ until you confirm.</span></div></div>`;
+}
+let _rw; window.addEventListener('resize', () => { clearTimeout(_rw); _rw = setTimeout(render, 120); });
+window.addEventListener('online', () => { $('mc-online').textContent = '● Online'; $('mc-online').classList.remove('off'); });
+window.addEventListener('offline', () => { $('mc-online').textContent = '● Offline'; $('mc-online').classList.add('off'); });
+if (!navigator.onLine) window.dispatchEvent(new Event('offline'));
+
+/* ── actions ── */
+root.addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const act = b.dataset.act;
+  if (act === 'filter') { S.filter = b.dataset.filter; render(); }
+  else if (act === 'account') { S.accountId = b.dataset.id; S.filter = 'all'; render(); }
+  else if (act === 'confirm') { b.disabled = true; try { await service.confirmLine(b.dataset.id); toast('Confirmed'); } catch (err) { toast(err.message, true); b.disabled = false; } }
+  else if (act === 'query') openQuery(b.dataset.id);
+  else if (act === 'confirm-all') {
+    const acc = S.accounts.find(a => a.id === S.accountId);
+    const ids = LC.confirmableLines(S.lines.filter(l => l.accountId === acc.id && !l.void), { uid: S.user.uid }).map(l => l.id);
+    if (!ids.length || !confirm(`Confirm ${ids.length} waiting line${ids.length === 1 ? '' : 's'}?`)) return;
+    b.disabled = true;
+    const r = await service.confirmLines(ids);
+    toast(r.failed.length ? `${r.done.length} confirmed, ${r.failed.length} not: ${r.failed[0].message}` : `${r.done.length} confirmed`, !!r.failed.length);
+  }
+  else if (act === 'handover') openHandover();
+});
+$('mc-user').addEventListener('click', () => { const m = $('mc-menu'); m.hidden = !m.hidden; $('mc-user').setAttribute('aria-expanded', String(!m.hidden)); });
+document.addEventListener('click', e => { if (!e.target.closest('.mc-top .r')) $('mc-menu').hidden = true; if (!e.target.closest('.mc-sb,.mc-burger')) $('mc-sb').classList.remove('open'); });
+$('mc-menu').addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  $('mc-menu').hidden = true;
+  if (b.dataset.act === 'signout') { try { await signOut(auth); } catch (err) {} location.href = 'login.html'; }
+  if (b.dataset.act === 'password') openPassword(false);
+});
+
+/* ── small windows ── */
+function modal(title, bodyHtml, okLabel, onOk, { closable = true, okClass = 'cl-p' } = {}) {
+  const host = $('mc-modal-host');
+  host.innerHTML = `<div class="mc-modal-wrap" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="mc-modal"><div class="mc-mh">${esc(title)}${closable ? '<button type="button" data-x aria-label="Close">✕</button>' : ''}</div>
+    <div class="mc-mb"><div class="cl-form">${bodyHtml}<div class="cl-err" hidden></div></div></div>
+    <div class="mc-mf">${closable ? '<button type="button" class="cl-btn" data-x>Cancel</button>' : ''}<button type="button" class="cl-btn ${okClass}" data-ok>${okLabel}</button></div></div></div>`;
+  const close = () => { host.innerHTML = ''; };
+  host.querySelectorAll('[data-x]').forEach(x => x.onclick = close);
+  const errBox = host.querySelector('.cl-err');
+  const showErr = m => { errBox.hidden = !m; errBox.textContent = m || ''; };
+  host.querySelector('[data-ok]').onclick = async ev => {
+    ev.currentTarget.disabled = true;
+    try { const r = await onOk(host, showErr); if (r !== false) close(); }
+    catch (err) { showErr(err.message || String(err)); }
+    finally { const ok = host.querySelector('[data-ok]'); if (ok) ok.disabled = false; }
+  };
+  setTimeout(() => { const f = host.querySelector('input,select,textarea'); if (f) f.focus(); }, 50);
+}
+function openQuery(lineId) {
+  const l = S.lines.find(x => x.id === lineId); if (!l) return;
+  const d = UI.describe(l);
+  modal('Query this line', `<div class="full cl-info"><b>${esc(l.voucherNo)}</b> · ${esc(d.title)} · ${l.amountIn ? '+' + money(l.amountIn) : '−' + money(l.amountOut)}</div>
+    <div class="full"><label for="mc-q">What is wrong? *</label><textarea id="mc-q" maxlength="200" placeholder="e.g. Not received — customer will pay tomorrow"></textarea></div>`,
+    '<i class="ti ti-message-question"></i>Send query', async (h, err) => {
+      const note = h.querySelector('#mc-q').value;
+      if (!LC.validateQueryNote(note).ok) { err('Say what is wrong (for example: not received).'); return false; }
+      await service.queryLine(lineId, note); toast('Query sent — the office can see it');
+    });
+}
+function openHandover() {
+  const mine = S.accounts.filter(a => a.active !== false);
+  const others = S.cashAccounts.filter(a => !mine.find(m => m.id === a.id));
+  if (!others.length) { toast('There is no other cash account to hand over to.', true); return; }
+  const opt = list => list.map(a => `<option value="${esc(a.id)}">${esc(a.name)}${a.custodianName ? ' (' + esc(a.custodianName) + ')' : ''}</option>`).join('');
+  modal('Hand over cash', `
+    <div class="full"><label for="mc-h-from">From (your account)</label><select id="mc-h-from">${opt(mine)}</select></div>
+    <div class="full"><label for="mc-h-to">To *</label><select id="mc-h-to"><option value="">Choose who receives the cash…</option>${opt(others)}</select></div>
+    <div><label for="mc-h-amt">Amount (SAR) *</label><input id="mc-h-amt" inputmode="decimal" autocomplete="off" placeholder="0.00"></div>
+    <div><label for="mc-h-date">Date *</label><input id="mc-h-date" type="date" value="${today()}" max="${today()}"></div>
+    <div class="full"><label for="mc-h-note">Note</label><input id="mc-h-note" maxlength="200" placeholder="optional"></div>
+    <div class="full cl-info">The receiver confirms when the cash reaches them. It leaves your balance now.</div>`,
+    '<i class="ti ti-arrows-exchange"></i>Record handover', async (h, err) => {
+      const input = { operationId: 'mc-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10), fromAccountId: h.querySelector('#mc-h-from').value, toAccountId: h.querySelector('#mc-h-to').value, amount: h.querySelector('#mc-h-amt').value, date: h.querySelector('#mc-h-date').value, description: h.querySelector('#mc-h-note').value };
+      const from = S.accounts.find(a => a.id === input.fromAccountId), to = S.cashAccounts.find(a => a.id === input.toAccountId);
+      const v = LC.validateHandover(input, { from, to, today: today() });
+      if (!v.ok) { err(v.errors.map(x => x.message).join(' ')); return false; }
+      const r = await service.recordHandover(input); toast(`${r.entry.voucherNo} recorded`);
+    }, { okClass: 'cl-p' });
+}
+function openPassword(forced) {
+  if ($('mc-pw1')) return;
+  modal(forced ? 'Choose your own password' : 'Change password', `
+    ${forced ? '<div class="full cl-info">You signed in with a temporary password. Please choose your own before you continue.</div>' : ''}
+    <div class="full"><label for="mc-pw1">New password *</label><input id="mc-pw1" type="password" autocomplete="new-password" minlength="8"></div>
+    <div class="full"><label for="mc-pw2">Repeat new password *</label><input id="mc-pw2" type="password" autocomplete="new-password" minlength="8"></div>`,
+    '<i class="ti ti-key"></i>Save password', async (h, err) => {
+      const a = h.querySelector('#mc-pw1').value, b = h.querySelector('#mc-pw2').value;
+      if (a.length < 8) { err('Use at least 8 characters.'); return false; }
+      if (a !== b) { err('The two passwords are different.'); return false; }
+      try { await updatePassword(auth.currentUser, a); }
+      catch (e) {
+        if (e.code === 'auth/requires-recent-login') { err('For safety, sign out and sign in again, then change the password.'); return false; }
+        throw e;
+      }
+      if (S.me && S.me.mustChangePassword) await service.markPasswordChanged();
+      toast('Password changed');
+    }, { closable: !forced });
+}
+console.log('My Cash V267.2 ✅');
+</script>
+</body>
+</html>

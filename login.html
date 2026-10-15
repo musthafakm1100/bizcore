@@ -145,8 +145,13 @@ const db   = getFirestore(app);
 if (BIZCORE_EMULATOR) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 
 // If already logged in go straight to app
-onAuthStateChanged(auth, function(user) {
-  if (user) { const r=new URLSearchParams(location.search).get('return'); /* only a page of this site (no other website) */ const safe=r && /^[A-Za-z0-9_.-]+\.html([?#].*)?$/.test(r) ? r : 'index.html'; window.location.href = safe; }
+onAuthStateChanged(auth, async function(user) {
+  if (!user) return;
+  const r=new URLSearchParams(location.search).get('return'); /* only a page of this site (no other website) */ const safe=r && /^[A-Za-z0-9_.-]+\.html([?#].*)?$/.test(r) ? r : 'index.html';
+  // V267.2: a cash custodian login has only My Cash
+  let cashOnly = false;
+  try { cashOnly = (await getDoc(doc(db, 'cashCustodians', user.uid))).exists(); } catch (e) {}
+  window.location.href = cashOnly ? 'mycash.html' : safe;
 });
 
 // Try to load company logo from Firestore

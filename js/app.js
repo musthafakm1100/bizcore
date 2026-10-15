@@ -2952,6 +2952,7 @@ function switchSetupTab(tab) {
   if (tab === 'locks' && typeof startLocksScreen === 'function') startLocksScreen();
   if (tab === 'defaults') { renderSetupTermsList('delivery'); renderSetupTermsList('payment'); }
   if (tab === 'payment-accounts' && typeof renderPaymentAccounts === 'function') renderPaymentAccounts();
+  if (tab === 'users' && typeof renderCustodianLogins === 'function') renderCustodianLogins();   // V267.2
   if (tab === 'cost-components') renderCostComponents();
   if (tab === 'margin-status') renderMarginStatuses();
   if (tab === 'pricing-settings') renderPricingSettings();
@@ -4442,6 +4443,7 @@ function showPage(page, el) {
   if(page==='deliverynotes')renderDNPage();
   if(page==='customerinvoices'&&typeof renderInvoiceRegister==='function')renderInvoiceRegister();
   if(page==='receipts'&&typeof renderReceiptRegister==='function'){document.getElementById('page-title').textContent='Payment Receipts';renderReceiptRegister();}
+  if(page==='cashbank'&&typeof renderCashBank==='function'){document.getElementById('page-title').textContent='Cash & Bank';renderCashBank();}   // V267.2
   closeMobileSidebar();
 }
 
@@ -12578,6 +12580,7 @@ function toggleBizCoreNotificationRead(id){
 function openBizCoreNotification(id){
  const list=loadBizCoreNotifications(),n=list.find(x=>x.id===id);if(!n)return;
  n.read=true;saveBizCoreNotifications(list);refreshTopbarNotifications();renderAllBizCoreNotifications();closeTopbarMenus();closeAllBizCoreNotifications();
+ if(n.type==='cash'&&typeof openCashBankAccount==='function'){openCashBankAccount(n.accountId);return;}   // V267.2: a custodian queried a cash line
  if(n.type==='delivery'&&n.soId){showPage('deliverynotes');setTimeout(()=>{const so=salesOrders.find(x=>x.id===n.soId);const idx=n.dnId?(so?.deliveries||[]).findIndex(d=>d.id===n.dnId):n.deliveryIdx;if(idx>=0)viewDeliveryNote(n.soId,idx);else showToast('This Delivery Note is no longer available.','info')},80)}
 }
 function bizCoreNotificationTime(value){
@@ -12669,7 +12672,7 @@ loadThemeAndFont();
 if (window.currentUser) loadUserTheme();   // V266.5: theme saved with the user (app.js loads after sign-in)
 console.log('Theme V266.5 ✅ (whole screen follows the theme · saved with the user · 6 themes · fixed status colours)');
 console.log('Screens V266.6 ✅ (no page header · one-line toolbar · top bar · breadcrumb · collapse button · labels · dates)');
-console.log('Phone & tablet V266.7 ✅ (chips · filter panel · cards · Document/Details tabs · tablet rail · monitor scroll)' + (window.BizCoreResponsive ? '' : ' — responsive.js NOT loaded'));
+console.log('Cash ledger V267.2 ✅ · Phone & tablet V266.7 ✅ (chips · filter panel · cards · Document/Details tabs · tablet rail · monitor scroll)' + (window.BizCoreResponsive ? '' : ' — responsive.js NOT loaded'));
 initPremiumSidebar();
 initPremiumTopbar();
 loadRecycleBin();

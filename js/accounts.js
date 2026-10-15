@@ -65,6 +65,7 @@ function paEnsureModal(){
       <div class="form-group pa-f-type"><label>Type *</label><div class="pa-seg" role="radiogroup" aria-label="Account type" id="pa-type">
         <button type="button" role="radio" data-type="cash" onclick="paSetType('cash')"><i class="ti ti-cash"></i>Cash</button><button type="button" role="radio" data-type="card" onclick="paSetType('card')"><i class="ti ti-credit-card"></i>Card</button><button type="button" role="radio" data-type="bank" onclick="paSetType('bank')"><i class="ti ti-building-bank"></i>Bank</button></div></div>
       <div class="form-group pa-f-cust" id="pa-cust-wrap"><label for="pa-cust">Custodian *</label><input id="pa-cust" maxlength="80" autocomplete="off" placeholder="Person who holds this cash"><small>A name — the person doesn't need a BizCore login.</small></div>
+      <div class="form-group pa-f-login" id="pa-login-wrap"><label for="pa-login">Custodian login <em>optional</em></label><select id="pa-login"></select><small>Link a BizCore login so the custodian confirms this cash ledger. Without a login an administrator confirms for them.</small></div>
       <div class="form-group pa-f-zoho"><label for="pa-zoho">Zoho account name <em>optional</em></label><input id="pa-zoho" maxlength="120" autocomplete="off" placeholder="Exactly as in Zoho Books"></div>
       <div class="form-group pa-f-bal"><label for="pa-bal">Opening balance (SAR)</label><input id="pa-bal" inputmode="decimal" autocomplete="off" placeholder="0.00"></div>
       <div class="form-group pa-f-date"><label for="pa-date">Balance as of *</label><input id="pa-date" type="date"></div>
@@ -82,6 +83,7 @@ function paSetType(t){
   m._type = t;
   m.querySelectorAll('#pa-type [data-type]').forEach(b => { const on = b.dataset.type === t; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
   document.getElementById('pa-cust-wrap').hidden = t !== 'cash';
+  const lw = document.getElementById('pa-login-wrap'); if (lw) lw.hidden = t !== 'cash';
 }
 function openPaymentAccountForm(id){
   const m = paEnsureModal();
@@ -97,12 +99,13 @@ function openPaymentAccountForm(id){
   document.getElementById('pa-bal').value = a ? paMoney(a.openingBalance) : '';
   document.getElementById('pa-date').value = a ? a.openingDate : `${t.getFullYear()}-${p(t.getMonth() + 1)}-01`;
   document.getElementById('pa-active').checked = a ? a.active !== false : true;
+  paFillLogins(a ? (a.custodianUid || '') : '');
   paSetType(a ? a.type : 'cash');
   const used = !!(a && a.hasEntries);
   m._locked = used;
   ['pa-bal', 'pa-date'].forEach(i => { document.getElementById(i).disabled = used || !admin; });
   m.querySelectorAll('#pa-type button').forEach(b => { b.disabled = used || !admin; });
-  ['pa-code', 'pa-name', 'pa-cust', 'pa-zoho', 'pa-active'].forEach(i => { document.getElementById(i).disabled = !admin; });
+  ['pa-code', 'pa-name', 'pa-cust', 'pa-login', 'pa-zoho', 'pa-active'].forEach(i => { document.getElementById(i).disabled = !admin; });
   document.getElementById('pa-save').style.display = admin ? '' : 'none';
   document.getElementById('pa-info').innerHTML = used
     ? '<i class="ti ti-lock"></i> This account already has entries: its type and opening balance can no longer change.'
@@ -113,6 +116,17 @@ function openPaymentAccountForm(id){
   if (typeof openModalWithSize === 'function') openModalWithSize('pa-modal'); else m.classList.add('open');
   setTimeout(() => { const f = document.getElementById(a ? 'pa-name' : 'pa-code'); if (f && !f.disabled) f.focus(); }, 60);
 }
+/* V267.2: the logins a cash custodian can be linked to (office staff + cash custodian logins) */
+function paFillLogins(current){
+  const sel = document.getElementById('pa-login'); if (!sel) return;
+  const cash = window.BizCoreCash; if (cash) cash.startDirectory();
+  const seen = new Set(), opts = ['<option value="">— no login (an administrator confirms) —</option>'];
+  const add = (uid, label) => { if (!uid || seen.has(uid)) return; seen.add(uid); opts.push(`<option value="${paEsc(uid)}">${paEsc(label)}</option>`); };
+  (cash ? cash.custodians : []).filter(c => c.active !== false || c.uid === current).forEach(c => add(c.uid, `${c.name} · ${c.email} (cash login)`));
+  (cash ? cash.directory : []).forEach(d => add(d.uid, `${d.name || d.email} · ${d.email} (office)`));
+  if (current && !seen.has(current)) add(current, `Linked login (${current.slice(0, 8)}…)`);
+  sel.innerHTML = opts.join(''); sel.value = current || '';
+}
 function paShowError(msg, fields){
   const e = document.getElementById('pa-error'); if (!e) return;
   e.hidden = !msg; e.textContent = msg || '';
@@ -120,12 +134,13 @@ function paShowError(msg, fields){
   document.querySelectorAll('#pa-modal .pa-bad').forEach(x => x.classList.remove('pa-bad'));
   (fields || []).forEach(f => { const el = document.getElementById(map[f]); if (el) el.classList.add('pa-bad'); });
 }
+function existingUid(m){ const a = m && m._id ? paAccounts().find(x => x.id === m._id) : null; return a ? a.custodianUid : ''; }
 async function savePaymentAccount(){
   const m = document.getElementById('pa-modal'), lib = paLib(); if (!m || !lib) return;
   if (!paIsAdmin()) { paShowError('Only administrators can change payment accounts.'); return; }
   const input = {
     code: document.getElementById('pa-code').value, name: document.getElementById('pa-name').value, type: m._type,
-    custodianName: document.getElementById('pa-cust').value, zohoName: document.getElementById('pa-zoho').value,
+    custodianName: document.getElementById('pa-cust').value, custodianUid: document.getElementById('pa-login') ? document.getElementById('pa-login').value : (existingUid(m) || ''), zohoName: document.getElementById('pa-zoho').value,
     openingBalance: document.getElementById('pa-bal').value, openingDate: document.getElementById('pa-date').value,
     active: document.getElementById('pa-active').checked,
   };
@@ -138,7 +153,10 @@ async function savePaymentAccount(){
   if (dupName || dupCode) { paShowError(dupCode ? `Account code ${v.value.code} is already used by "${dupCode.name}".` : `Another account is already called "${dupName.name}".`, [dupCode ? 'code' : 'name']); return; }
   const btn = document.getElementById('pa-save'); btn.disabled = true;
   try {
-    await lib.service.saveAccount(input, m._id ? { id: m._id, expectedRevision: m._rev } : {});
+    const before = existing ? (existing.custodianUid || '') : '';
+    const saved = await lib.service.saveAccount(input, m._id ? { id: m._id, expectedRevision: m._rev } : {});
+    // V267.2: lines already in the ledger follow the newly linked login
+    if (existing && (saved.custodianUid || '') !== before && window.BizCoreCash) { try { await window.BizCoreCash.service.relinkLines(saved.id); } catch (e) { console.warn('[BizCore] relink lines:', e.message); } }
     closeModal('pa-modal');
     if (typeof showToast === 'function') showToast(m._id ? 'Payment account saved' : 'Payment account added', 'success');
   } catch (e) {
@@ -155,4 +173,4 @@ async function savePaymentAccount(){
   };
   go();
 })();
-console.log('Payment Accounts V267.1 ✅ (Administration → Finance)');
+console.log('Payment Accounts V267.2 ✅ (Administration → Finance)');
