@@ -2535,7 +2535,7 @@ function viewPricingReadOnly(rfqId) {
 
   const roFBtns=[];
   if(navFromQuoteId) roFBtns.push('<button class="btn btn-secondary" onclick="backToQuoteFromRO()"><i class="ti ti-arrow-left"></i>Back to quotation</button>');
-  else roFBtns.push('<button class="btn btn-secondary" onclick="closeModal(\'pricing-ro-modal\')">Close</button>');
+  // V266.73: one Close only (the one at the end of the bar)
   roFBtns.push('<button class="btn btn-secondary" data-rid="'+rfqId+'" onclick="backToRFQFromRO(this)"><i class="ti ti-clipboard-list"></i>View RFQ</button>');
   if(linkedQuotation) roFBtns.push('<button class="btn btn-secondary" onclick="openPricingViewQuotation(\''+linkedQuotation.id+'\')"><i class="ti ti-file-invoice"></i>View quotation</button>');
   if(isPricingVersionLocked(r)) roFBtns.push('<button class="btn btn-primary" data-rid="'+rfqId+'" onclick="revisePricingFromRO(this)"><i class="ti ti-git-branch"></i>Revise pricing</button>');
@@ -2951,6 +2951,7 @@ function switchSetupTab(tab) {
   if (tab === 'billing' && typeof renderReceiptSettings === 'function') renderReceiptSettings();
   if (tab === 'locks' && typeof startLocksScreen === 'function') startLocksScreen();
   if (tab === 'defaults') { renderSetupTermsList('delivery'); renderSetupTermsList('payment'); }
+  if (tab === 'payment-accounts' && typeof renderPaymentAccounts === 'function') renderPaymentAccounts();
   if (tab === 'cost-components') renderCostComponents();
   if (tab === 'margin-status') renderMarginStatuses();
   if (tab === 'pricing-settings') renderPricingSettings();

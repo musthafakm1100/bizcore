@@ -26,6 +26,7 @@
 <link href="css/delivery-compact.css?v=266.5" rel="stylesheet"/>
 <link href="css/receipts.css?v=266.5" rel="stylesheet"/>
 <link href="css/shell.css?v=266.61" rel="stylesheet"/>
+<link href="css/accounts.css?v=267.1" rel="stylesheet"/>
 <link href="css/responsive.css?v=266.73" rel="stylesheet"/>
 <link href="css/theme.css?v=266.5" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=265.2" defer></script>
@@ -854,6 +855,10 @@ document.addEventListener('error', function(e) {
 <button class="setup-tab active" id="stab-branding" onclick="switchSetupTab('branding')"><i class="ti ti-building-cog"></i><span class="tab-copy"><span class="tab-title">Company Settings</span></span></button>
 <button class="setup-tab" id="stab-preferences" onclick="switchSetupTab('preferences')"><i class="ti ti-adjustments"></i><span class="tab-copy"><span class="tab-title">System Preferences</span></span></button>
 </div>
+<div class="setup-nav-group" id="setup-nav-finance">
+<div class="setup-nav-group-title">Finance</div>
+<button class="setup-tab" id="stab-payment-accounts" onclick="switchSetupTab('payment-accounts')"><i class="ti ti-wallet"></i><span class="tab-copy"><span class="tab-title">Payment Accounts</span></span></button>
+</div>
 <div class="setup-nav-group">
 <div class="setup-nav-group-title">Security</div>
 <button class="setup-tab" id="stab-users" onclick="switchSetupTab('users')"><i class="ti ti-user-cog"></i><span class="tab-copy"><span class="tab-title">Users</span></span></button>
@@ -1041,6 +1046,12 @@ document.addEventListener('error', function(e) {
 <!-- TAB: Roles & Permissions -->
 <div class="setup-tab-content" id="setup-tab-roles" style="display:none"><div class="setup-page-head"><div><h2>Roles &amp; Permissions</h2><p>Define simple access levels now. Detailed controls can be expanded later.</p></div><span class="phase-badge">Basic permissions</span></div><div class="role-grid"><div class="role-list"><div class="role-list-head">Roles</div><div id="role-list"></div><div style="padding:10px"><button class="btn btn-secondary btn-sm" onclick="addRole()" style="width:100%;justify-content:center"><i class="ti ti-plus"></i>Add role</button></div></div><div class="setup-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px"><div><h4 style="margin:0;border:0;padding:0"><i class="ti ti-lock-access" style="margin-right:6px"></i><span id="role-editor-name">Administrator</span></h4><p style="font-size:11px;color:var(--gray);margin-top:5px">Select the basic actions allowed for this role.</p></div><button class="btn btn-primary btn-sm" onclick="saveRolePermissions()"><i class="ti ti-device-floppy"></i>Save permissions</button></div><div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius)"><table class="permission-table"><thead><tr><th>Module</th><th>View</th><th>Create</th><th>Edit</th><th>Delete</th><th>Print</th><th>Approve</th></tr></thead><tbody id="permission-tbody"></tbody></table></div></div></div></div>
 <!-- TAB: Pricing and business configuration placeholders -->
+<div class="setup-tab-content" id="setup-tab-payment-accounts" style="display:none">
+<div class="setup-page-head"><div><h2><i class="ti ti-wallet" style="margin-right:7px"></i>Payment Accounts</h2><p>Cash, card and bank accounts used for receipts and payments. Each has a unique code and name, ready for the chart of accounts.</p></div><button class="btn btn-primary btn-sm" id="pa-add-btn" type="button" onclick="openPaymentAccountForm()"><i class="ti ti-plus"></i>Add Account</button></div>
+<div class="card pa-card"><div class="pa-card-head"><div><h3><i class="ti ti-list-details"></i>Accounts</h3><p>Inactive accounts can't be chosen for new entries but stay on old ones. Accounts are never deleted.</p></div><div class="pa-chips" id="pa-chips" role="toolbar" aria-label="Account type"></div></div>
+<div class="pa-table-wrap"><table class="pa-table" id="pa-table"><thead><tr><th>Code</th><th>Account</th><th>Type</th><th>Custodian</th><th>Zoho account</th><th class="num">Opening balance</th><th>Status</th><th></th></tr></thead><tbody id="pa-tbody"></tbody></table></div></div>
+<p class="pa-note" id="pa-note"><i class="ti ti-info-circle"></i> Only administrators manage this list. The custodian (cash accounts) is the person who holds the cash — a name; they don't need a BizCore login.</p>
+</div>
 <div class="setup-tab-content" id="setup-tab-cost-components" style="display:none">
 <div class="setup-page-head"><div><h2><i class="ti ti-calculator" style="margin-right:7px"></i>Cost Components Master</h2><p>Define the default cost components used during pricing calculations.</p></div><button class="btn btn-primary btn-sm" onclick="openCostComponentForm()"><i class="ti ti-plus"></i>Add Component</button></div>
 <div class="setup-card cost-components-width" id="cost-component-form" style="display:none;margin-bottom:14px">
@@ -2079,6 +2090,8 @@ import { createInvoiceService } from './js/invoice-service.mjs?v=266.4';
 import { createNumbering } from './js/numbering.mjs?v=266.0';
 import * as RctCore from './js/receipt-core.mjs?v=266.4';
 import { createReceiptService } from './js/receipt-service.mjs?v=266.4';
+import * as AccCore from './js/account-core.mjs?v=267.1';
+import { createAccountService } from './js/account-service.mjs?v=267.1';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator }
@@ -2832,6 +2845,34 @@ window.BizCoreInv = {
   },
 };
 /* ═══════════════════════════════════════════════════
+   V267.1 PAYMENT ACCOUNTS — paymentAccounts (js/account-service.mjs)
+   Cash, card and bank accounts; administrators only (also enforced by the security rules).
+═══════════════════════════════════════════════════ */
+const accountService = createAccountService({ db, doc, runTransaction, serverTimestamp }, {
+  actor: () => { const u = auth.currentUser, cu = window.currentUser || {}; return u ? { uid: u.uid, name: cu.name || u.displayName || u.email || u.uid } : {}; },
+});
+let _accUnsub = null, _accList = [];
+const _accListeners = new Set();
+window.BizCoreAcc = {
+  core: AccCore,
+  service: accountService,
+  get accounts() { return _accList; },
+  get isAdministrator() { return _isAdministrator; },
+  onChange(fn) { _accListeners.add(fn); return () => _accListeners.delete(fn); },
+  start() {
+    if (_accUnsub) return;
+    _accUnsub = onSnapshot(collection(db, AccCore.ACCOUNT_COLLECTIONS.accounts), snap => {
+      const out = []; snap.forEach(d => out.push(d.data()));
+      _accList = AccCore.sortAccounts(out);
+      _accListeners.forEach(fn => { try { fn(_accList); } catch (e) { console.error(e); } });
+    }, err => console.warn('[BizCore] Payment accounts unavailable:', err.message));
+  },
+  async loadChanges(accountId) {
+    const snap = await getDocs(collection(db, AccCore.ACCOUNT_COLLECTIONS.accounts, String(accountId), AccCore.ACCOUNT_COLLECTIONS.changes));
+    return snap.docs.map(d => d.data()).sort((a, b) => LockCore.toMillis(b.recordedAt) - LockCore.toMillis(a.recordedAt));
+  },
+};
+/* ═══════════════════════════════════════════════════
    V266 PAYMENT RECEIPTS — customerReceipts + invoicePayments (js/receipt-service.mjs)
    Active only when invoices are independent documents (system/invoiceStorage = independent).
 ═══════════════════════════════════════════════════ */
@@ -3033,13 +3074,13 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=266.73';
+      s.src = 'js/app.js?v=267.1';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d); };
       document.body.appendChild(s);
     };
     // V266: receipts.js (Payment Receipts) after invoicing.js, before app.js
-    inv.onload = () => { const r = document.createElement('script'); r.id = 'bizcore-receipts-script'; r.src = 'js/receipts.js?v=266.61'; r.onload = start; r.onerror = () => { console.error('[BizCore] receipts.js could not be loaded'); start(); }; document.body.appendChild(r); };
+    inv.onload = () => { const r = document.createElement('script'); r.id = 'bizcore-receipts-script'; r.src = 'js/receipts.js?v=266.61'; r.onload = () => { const pa = document.createElement('script'); pa.id = 'bizcore-accounts-script'; pa.src = 'js/accounts.js?v=267.1'; pa.onload = start; pa.onerror = () => { console.error('[BizCore] accounts.js could not be loaded'); start(); }; document.body.appendChild(pa); }; r.onerror = () => { console.error('[BizCore] receipts.js could not be loaded'); start(); }; document.body.appendChild(r); };
     inv.onerror = () => { console.error('[BizCore] invoicing.js could not be loaded'); start(); };
     document.body.appendChild(inv);
   }

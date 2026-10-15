@@ -1,0 +1,62 @@
+/* BizCore V267.1 — Administration → Finance → Payment Accounts */
+#setup-tab-payment-accounts .pa-card{padding:0;overflow:hidden;border-radius:12px}
+.pa-card-head{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid #edf1f5;flex-wrap:wrap}
+.pa-card-head h3{margin:0;font-size:14px;font-weight:700;color:var(--blue);display:flex;gap:7px;align-items:center}
+.pa-card-head p{margin:2px 0 0;font-size:12px;color:#64748b}
+.pa-chips{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.pa-chip{height:30px;border:1px solid #d8e0ea;border-radius:999px;background:#fff;padding:0 12px;font:600 12.5px Inter,system-ui,sans-serif;color:#334155;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.pa-chip b{color:var(--blue)}
+.pa-chip.on{background:var(--blue);border-color:var(--blue);color:#fff}.pa-chip.on b{color:#fff}
+.pa-table-wrap{overflow-x:auto}
+.pa-table{width:100%;border-collapse:collapse;font-size:13.5px}
+.pa-table th{height:38px;padding:0 10px;background:#f8fafc;color:#536273;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.01em;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.pa-table td{padding:10px 10px;border-bottom:1px solid #edf1f5;vertical-align:middle}
+.pa-table tr:last-child td{border-bottom:0}
+.pa-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pa-table td.num small{display:block;font-size:11.5px;color:#94a3b8}
+.pa-code{font-variant-numeric:tabular-nums;color:#475569;white-space:nowrap}
+.pa-name{font-weight:600;color:#0f172a;min-width:170px}
+.pa-zoho{color:#475569}
+.pa-muted{color:#94a3b8}
+.pa-type{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px;white-space:nowrap;background:var(--st-amber-bg);color:var(--st-amber-fg)}
+.pa-type-card{background:var(--st-blue-bg);color:var(--st-blue-fg)}
+.pa-type-bank{background:var(--st-purple-bg);color:var(--st-purple-fg)}
+.pa-cust{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.pa-avatar{width:22px;height:22px;border-radius:6px;background:#dfe7f0;color:var(--blue);font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.pa-status{font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px;white-space:nowrap}
+.pa-status.on{background:var(--st-green-bg);color:var(--st-green-fg)}.pa-status.off{background:var(--st-neutral-bg);color:var(--st-neutral-fg)}
+tr.pa-off td{color:#94a3b8}tr.pa-off .pa-name{color:#94a3b8}
+.pa-act{text-align:right;white-space:nowrap}
+.pa-empty{text-align:center;padding:34px 10px!important;color:#64748b}
+.pa-empty i{display:block;font-size:30px;color:#9fb0c3;margin-bottom:6px}.pa-empty b{display:block;color:#334155;margin-bottom:3px}
+.pa-note{font-size:12.5px;color:#64748b;margin:10px 2px;display:flex;gap:6px}
+/* Add / Edit window */
+html body #pa-modal .modal.pa-modal{width:min(640px,96vw)!important;max-width:640px!important;height:auto!important;max-height:92vh!important}
+html body #pa-modal .pa-form{align-content:start;overflow:auto}
+.pa-form{display:grid;grid-template-columns:1fr 2fr;gap:12px 14px}
+.pa-form .form-group{margin:0}
+.pa-form .pa-f-type{grid-column:1/2}.pa-form .pa-f-cust{grid-column:2/3}
+.pa-form .pa-f-zoho{grid-column:1/-1}
+.pa-form .pa-f-bal{grid-column:1/2}.pa-form .pa-f-date{grid-column:2/3}
+.pa-form [hidden]{display:none!important}
+.pa-form label em{font-style:normal;text-transform:none;letter-spacing:0;color:#94a3b8;font-weight:500;margin-left:4px}
+.pa-form small{display:block;font-size:11.5px;color:#64748b;margin-top:4px}
+.pa-seg{display:flex;border:1px solid #cfd8e3;border-radius:8px;overflow:hidden;height:38px}
+.pa-seg button{flex:1;border:0;border-left:1px solid #e2e8f0;background:#fff;font:600 13px Inter,system-ui,sans-serif;color:#475569;display:inline-flex;gap:5px;align-items:center;justify-content:center;cursor:pointer;padding:0 6px}
+.pa-seg button:first-child{border-left:0}
+.pa-seg button.on{background:var(--blue);color:#fff}
+.pa-seg button:disabled{cursor:not-allowed;opacity:.75}
+.pa-f-active{grid-column:1/-1;display:flex;align-items:center;gap:9px;font-size:13.5px;cursor:pointer}
+.pa-f-active input{width:18px;height:18px}
+.pa-info{grid-column:1/-1;font-size:12px;color:#64748b;background:#f8fafc;border:1px solid #edf1f5;border-radius:8px;padding:9px 11px}
+.pa-error{grid-column:1/-1;font-size:13px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:9px 11px}
+.pa-bad,.pa-seg.pa-bad{border-color:#ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,.12)}
+#pa-modal .modal-footer{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.pa-meta{margin-right:auto;font-size:12px;color:#94a3b8}
+@media (max-width:760px){
+  .pa-form{grid-template-columns:1fr}
+  .pa-form>*{grid-column:1/-1!important}
+  .pa-table th:nth-child(5),.pa-table td:nth-child(5){display:none}
+}
+.pa-edit{width:34px;height:32px;padding:0!important;justify-content:center}.pa-edit i{margin:0!important}
+.pa-cust{white-space:normal}
