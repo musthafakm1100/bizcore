@@ -2953,6 +2953,7 @@ function switchSetupTab(tab) {
   if (tab === 'defaults') { renderSetupTermsList('delivery'); renderSetupTermsList('payment'); }
   if (tab === 'payment-accounts' && typeof renderPaymentAccounts === 'function') renderPaymentAccounts();
   if (tab === 'users' && typeof renderCustodianLogins === 'function') renderCustodianLogins();   // V267.2
+  if (tab === 'purchase-settings' && typeof renderPurchaseSettings === 'function') renderPurchaseSettings();   // V268.1
   if (tab === 'cost-components') renderCostComponents();
   if (tab === 'margin-status') renderMarginStatuses();
   if (tab === 'pricing-settings') renderPricingSettings();
@@ -4444,6 +4445,7 @@ function showPage(page, el) {
   if(page==='customerinvoices'&&typeof renderInvoiceRegister==='function')renderInvoiceRegister();
   if(page==='receipts'&&typeof renderReceiptRegister==='function'){document.getElementById('page-title').textContent='Payment Receipts';renderReceiptRegister();}
   if(page==='cashbank'&&typeof renderCashBank==='function'){document.getElementById('page-title').textContent='Cash & Bank';renderCashBank();}   // V267.2
+  if(page==='purchaseinvoices'&&typeof renderPurchaseRegister==='function'){renderPurchaseRegister();}   // V268.1
   closeMobileSidebar();
 }
 
@@ -7235,7 +7237,7 @@ function applyRFQMonitorFilter(status, btn) {
 }
 function moduleMonitorStorageKey(moduleKey){ return `bizcore-${moduleKey}-monitor-collapsed`; }
 function getModuleMonitorWorkspace(moduleKey){
-  const ids={rfq:'rfq-main-workspace',quotations:'quotation-main-workspace',pricing:'pricing-main-workspace',salesorders:'salesorders-main-workspace',deliverynotes:'deliverynotes-main-workspace',customerinvoices:'customerinvoices-main-workspace',receipts:'receipts-main-workspace'};
+  const ids={rfq:'rfq-main-workspace',quotations:'quotation-main-workspace',pricing:'pricing-main-workspace',salesorders:'salesorders-main-workspace',deliverynotes:'deliverynotes-main-workspace',customerinvoices:'customerinvoices-main-workspace',receipts:'receipts-main-workspace',purchaseinvoices:'pi-main-workspace'};
   return document.getElementById(ids[moduleKey]||'');
 }
 function setModuleMonitorState(moduleKey, collapsed, persist=true){
@@ -7251,7 +7253,7 @@ function toggleModuleMonitor(moduleKey){
   setModuleMonitorState(moduleKey,!workspace.classList.contains('monitor-collapsed'),true);
 }
 function restoreModuleMonitors(){
-  ['rfq','quotations','pricing','salesorders','deliverynotes','customerinvoices','receipts'].forEach(moduleKey=>{
+  ['rfq','quotations','pricing','salesorders','deliverynotes','customerinvoices','receipts','purchaseinvoices'].forEach(moduleKey=>{
     const workspace=getModuleMonitorWorkspace(moduleKey);
     if(!workspace) return;
     const saved=localStorage.getItem(moduleMonitorStorageKey(moduleKey));
@@ -12672,7 +12674,7 @@ loadThemeAndFont();
 if (window.currentUser) loadUserTheme();   // V266.5: theme saved with the user (app.js loads after sign-in)
 console.log('Theme V266.5 ✅ (whole screen follows the theme · saved with the user · 6 themes · fixed status colours)');
 console.log('Screens V266.6 ✅ (no page header · one-line toolbar · top bar · breadcrumb · collapse button · labels · dates)');
-console.log('Cash ledger V267.2 ✅ · Phone & tablet V266.7 ✅ (chips · filter panel · cards · Document/Details tabs · tablet rail · monitor scroll)' + (window.BizCoreResponsive ? '' : ' — responsive.js NOT loaded'));
+console.log('Purchase Invoices V268.1 ✅ · Cash ledger V267.2 ✅ · Phone & tablet V266.7 ✅ (chips · filter panel · cards · Document/Details tabs · tablet rail · monitor scroll)' + (window.BizCoreResponsive ? '' : ' — responsive.js NOT loaded'));
 initPremiumSidebar();
 initPremiumTopbar();
 loadRecycleBin();
