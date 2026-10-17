@@ -8,13 +8,20 @@
  *   + stockItems/{itemKey} and a stockMovement for every quantity that goes to stock.
  * Two people buying the last units of the same order line at the same moment can't both succeed (the purchasing
  * record is read inside the transaction). A retried save (same operation) is detected and changes nothing.
- * voidPurchaseInvoice reverses all of it (refused when the stock has already been used).
+ * voidPurchaseInvoice reverses all of it (refused when the stock has already been used, or while payments exist).
+ *
+ * V268.2 — supplier payments (js/purchase-core.mjs → validateSupplierPayment / buildSupplierPaymentRecords):
+ *   createPurchaseInvoice also takes payments made at entry (one payment per date), in the same transaction;
+ *   recordSupplierPayment / recordSupplierCashBack / voidSupplierPayment are ONE transaction each:
+ *   payment + balanced cash-ledger entry + postings (+ accounts hasEntries) + invoice figures + invoice event.
  */
 import {
   PURCHASE_COLLECTIONS as C, PURCHASE_SCHEMA_VERSION, PURCHASE_SETTINGS_PATH, PURCHASE_STATUS,
   effectivePurchaseSettings, validatePurchaseSettings, validatePurchaseInvoice, purchaseIdForOperation,
   supplierRefIdOf, r2, rq,
-} from './purchase-core.mjs?v=268.1';
+  PAYMENT_COLLECTION, PAYMENT_KINDS, paymentIdForOperation, validateSupplierPayment, buildSupplierPaymentRecords,
+  applyPaymentToInvoice,
+} from './purchase-core.mjs?v=268.2';
 import { DeliveryError, isSafeId, eventIdForOperation, requireReason, cleanText, assertSize } from './delivery-core.mjs?v=266.0';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
@@ -22,6 +29,7 @@ const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, de
 export const PURCHASE_ERR = Object.freeze({
   INVALID_INPUT: 'invalid-input', NOT_FOUND: 'not-found', INVALID_STATE: 'invalid-state', STALE: 'stale-revision',
   DUPLICATE_SUPPLIER_INVOICE: 'duplicate-supplier-invoice', NOT_ADMIN: 'not-admin', STOCK_USED: 'stock-used', ID_COLLISION: 'id-collision',
+  HAS_PAYMENTS: 'has-payments',
 });
 const PI_BYTES = 700 * 1024;
 
@@ -48,7 +56,36 @@ export function createPurchaseService(fs, options = {}) {
     counter: key => doc(db, 'counters', key),
     settings: () => doc(db, ...PURCHASE_SETTINGS_PATH),
     access: () => doc(db, 'system', 'accessControl'),
+    payment: id => doc(db, PAYMENT_COLLECTION, id),
+    account: id => doc(db, 'paymentAccounts', id),
+    cashEntry: id => doc(db, 'cashEntries', id),
+    cashLine: id => doc(db, 'cashLines', id),
   };
+  /** Reads the payment accounts used by payment lines, and the bank accounts linked to the cards among them. */
+  async function readAccounts(tx, groups) {
+    const map = new Map();
+    const ids = [...new Set(groups.flatMap(g => (g.lines || []).map(l => l && l.accountId)).filter(isSafeId))];
+    for (const id of ids) { const s = await tx.get(refs.account(id)); if (s.exists()) map.set(id, { id, ...s.data() }); }
+    const linked = [...new Set([...map.values()].filter(a => a.type === 'card' && isSafeId(a.linkedBankAccountId)).map(a => a.linkedBankAccountId))].filter(id => !map.has(id));
+    for (const id of linked) { const s = await tx.get(refs.account(id)); if (s.exists()) map.set(id, { id, ...s.data() }); }
+    return map;
+  }
+  /** Reads the number counters of the payments (several payments may share a counter). */
+  async function readCounters(tx, keys) {
+    const out = new Map();
+    for (const k of [...new Set(keys)]) { ensure(isSafeId(k), PURCHASE_ERR.INVALID_INPUT, 'Document numbering is required'); const s = await tx.get(refs.counter(k)); out.set(k, Number(s.exists() ? s.data().value : 0) || 0); }
+    return out;
+  }
+  const checkNumbering = n => ensure(n && isSafeId(n.counterKey) && typeof n.displayPrefix === 'string', PURCHASE_ERR.INVALID_INPUT, 'Payment numbering is required');
+  /** Writes one payment's records (payment + ledger entry + postings + accounts marked as having entries). */
+  function writePaymentRecords(tx, recs, accounts) {
+    tx.set(refs.payment(recs.payment.id), recs.payment);
+    if (recs.entry) {
+      tx.set(refs.cashEntry(recs.entry.id), recs.entry);
+      for (const l of recs.lines) tx.set(refs.cashLine(l.id), l);
+      for (const a of recs.entry.accountIds) { const acc = accounts.get(a); if (acc && !acc.hasEntries) { tx.update(refs.account(a), { hasEntries: true }); acc.hasEntries = true; } }
+    }
+  }
   const CONTENTION = new Set(['aborted', 'failed-precondition']);
   const pause = n => new Promise(r => setTimeout(r, 60 * n + Math.floor(Math.random() * 120)));
   async function transact(fn) {
@@ -94,6 +131,12 @@ export function createPurchaseService(fs, options = {}) {
       }
       const stockKeys = [...v.stock.keys()];
       const stockSnaps = await Promise.all(stockKeys.map(k => tx.get(refs.stock(k))));
+      // V268.2: payments made at entry (one payment per date) — read their accounts and number counters now
+      const groups = (Array.isArray(input.payments) ? input.payments : []).filter(g => g && Array.isArray(g.lines) && g.lines.some(l => l && (l.accountId || String(l.amount || '').trim())));
+      ensure(groups.length <= 5, PURCHASE_ERR.INVALID_INPUT, 'At most 5 payment dates on one invoice.');
+      groups.forEach(g => checkNumbering(g.numbering));
+      const payAccounts = groups.length ? await readAccounts(tx, groups) : new Map();
+      const payCounters = groups.length ? await readCounters(tx, groups.map(g => g.numbering.counterKey)) : new Map();
 
       // ── writes ──
       const seq = (Number(counterSnap.exists() ? counterSnap.data().value : 0) || 0) + 1;
@@ -102,12 +145,26 @@ export function createPurchaseService(fs, options = {}) {
         id, schemaVersion: PURCHASE_SCHEMA_VERSION, piNo, ...val, supplierRefKey: refKey,
         status: PURCHASE_STATUS.posted, revision: 1, lastEventId: eventId, creationOperationId: operationId,
         created: at, createdBy: actor.name, createdByUid: actor.uid, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid, recordedAt: stamp(),
+        paymentDiscount: 0, cashBack: 0, paymentCount: 0,
       };
+      // payments at entry: checked one after the other against the balance left
+      const payRecs = [];
+      groups.forEach((g, i) => {
+        const pv = validateSupplierPayment({ kind: PAYMENT_KINDS.payment, date: g.date, lines: g.lines, discount: 0 }, { invoice, accounts: payAccounts, today: (options.today ? options.today() : at.slice(0, 10)) });
+        if (!pv.ok) fail(PURCHASE_ERR.INVALID_INPUT, pv.errors.map(e => e.message).join(' '), { errors: pv.errors, field: 'payments' });
+        const n = payCounters.get(g.numbering.counterKey) + 1; payCounters.set(g.numbering.counterKey, n);
+        const recs = buildSupplierPaymentRecords({ id: paymentIdForOperation(operationId, i + 1), spNo: formatNumber(g.numbering.displayPrefix, n), value: pv.value, invoice, accounts: payAccounts, actor, at, stamp: stamp(), operationId });
+        Object.assign(invoice, applyPaymentToInvoice(invoice, recs.payment, +1));
+        invoice.paymentCount += 1;
+        payRecs.push(recs);
+      });
       assertSize(invoice, PI_BYTES, 'Purchase invoice');
       tx.set(refs.counter(numbering.counterKey), { value: seq, updatedAt: Date.now() });
       tx.set(refs.pi(id), invoice);
       tx.set(refs.event(id, eventId), { id: eventId, kind: 'posted', invoiceId: id, piNo, operationId, toRevision: 1, total: val.totals.total,
-        soIds: val.soIds, actor: actor.name, actorUid: actor.uid, at, recordedAt: stamp() });
+        soIds: val.soIds, paymentIds: payRecs.map(r => r.payment.id), paid: invoice.paid, actor: actor.name, actorUid: actor.uid, at, recordedAt: stamp() });
+      for (const [k, n] of payCounters) tx.set(refs.counter(k), { value: n, updatedAt: Date.now() });
+      payRecs.forEach(r => writePaymentRecords(tx, r, payAccounts));
       tx.set(refs.ref(refKey), { id: refKey, supplierKey: val.supplierKey, supplierInvoiceNo: val.supplierInvoiceNo, invoiceId: id, piNo, createdByUid: actor.uid, created: at });
       writeLedgers(tx, soIds, orders, ledgers, v.deltas, +1, { id, eventId, actor, at });
       stockKeys.forEach((k, i) => {
@@ -151,7 +208,7 @@ export function createPurchaseService(fs, options = {}) {
       const pi = piSnap.data();
       if (pi.status === PURCHASE_STATUS.voided) { ensure(pi.lastEventId === eventId, PURCHASE_ERR.INVALID_STATE, `${pi.piNo} is already cancelled`); return { alreadyApplied: true, invoice: pi }; }
       if (input.expectedRevision != null) ensure(pi.revision === input.expectedRevision, PURCHASE_ERR.STALE, `${pi.piNo} was changed meanwhile. Please open it again.`);
-      ensure(!(Number(pi.paid) > 0.005), PURCHASE_ERR.INVALID_STATE, `${pi.piNo} has payments — remove them first.`);
+      ensure(!(Number(pi.paid) > 0.005 || Number(pi.paymentDiscount) > 0.005 || Number(pi.cashBack) > 0.005), PURCHASE_ERR.HAS_PAYMENTS, `${pi.piNo} has payments — cancel them first.`);
       const soIds = pi.soIds || [];
       const stockLines = (pi.lines || []).filter(l => Number(l.stockQty) > 0);
       const stockKeys = [...new Set(stockLines.map(l => l.itemKey))];
@@ -186,6 +243,84 @@ export function createPurchaseService(fs, options = {}) {
     });
   }
 
+  /* ───────── V268.2: payment / cash back on a saved invoice ───────── */
+  async function recordOnInvoice(input, kind) {
+    const { operationId, invoiceId, numbering } = input;
+    ensure(isSafeId(invoiceId), PURCHASE_ERR.INVALID_INPUT, 'Invoice reference required');
+    checkNumbering(numbering);
+    const id = paymentIdForOperation(operationId);
+    const eventId = eventIdForOperation(kind === PAYMENT_KINDS.cashback ? 'cashback' : 'pay', operationId);
+    const actor = actorOf(), at = now();
+    return transact(async tx => {
+      const [piSnap, paySnap] = await Promise.all([tx.get(refs.pi(invoiceId)), tx.get(refs.payment(id))]);
+      if (paySnap.exists()) { const ex = paySnap.data(); ensure(ex.operationId === operationId, PURCHASE_ERR.ID_COLLISION, 'Payment ID already used'); return { alreadyApplied: true, payment: ex }; }
+      ensure(piSnap.exists(), PURCHASE_ERR.NOT_FOUND, 'Purchase invoice not found');
+      const pi = piSnap.data();
+      ensure(pi.status === PURCHASE_STATUS.posted, PURCHASE_ERR.INVALID_STATE, `${pi.piNo} is cancelled.`);
+      if (input.expectedRevision != null) ensure(pi.revision === input.expectedRevision, PURCHASE_ERR.STALE, `${pi.piNo} was changed meanwhile. Please open it again.`);
+      const accounts = await readAccounts(tx, [{ lines: input.lines || [] }]);
+      const counters = await readCounters(tx, [numbering.counterKey]);
+      const pv = validateSupplierPayment({ ...input, kind }, { invoice: pi, accounts, today: options.today ? options.today() : at.slice(0, 10) });
+      if (!pv.ok) fail(PURCHASE_ERR.INVALID_INPUT, pv.errors.map(e => e.message).join(' '), { errors: pv.errors });
+      const seq = counters.get(numbering.counterKey) + 1;
+      const recs = buildSupplierPaymentRecords({ id, spNo: formatNumber(numbering.displayPrefix, seq), value: pv.value, invoice: pi, accounts, actor, at, stamp: stamp(), operationId });
+      const revision = pi.revision + 1;
+      const figures = applyPaymentToInvoice(pi, recs.payment, +1);
+      const next = { ...pi, ...figures, paymentCount: (Number(pi.paymentCount) || 0) + 1, revision, lastEventId: eventId, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid };
+      tx.set(refs.counter(numbering.counterKey), { value: seq, updatedAt: Date.now() });
+      writePaymentRecords(tx, recs, accounts);
+      tx.set(refs.pi(invoiceId), next);
+      tx.set(refs.event(invoiceId, eventId), { id: eventId, kind: kind === PAYMENT_KINDS.cashback ? 'cashback' : 'payment', invoiceId, piNo: pi.piNo, operationId,
+        paymentId: id, spNo: recs.payment.spNo, amount: recs.payment.amount, discount: recs.payment.discount,
+        fromRevision: pi.revision, toRevision: revision, actor: actor.name, actorUid: actor.uid, at, recordedAt: stamp() });
+      return { alreadyApplied: false, payment: recs.payment, invoice: next };
+    });
+  }
+  const recordSupplierPayment = input => recordOnInvoice(input || {}, PAYMENT_KINDS.payment);
+  const recordSupplierCashBack = input => recordOnInvoice({ ...(input || {}), discount: 0 }, PAYMENT_KINDS.cashback);
+
+  /** Cancel a payment / cash back: it stays (void, with the reason); the ledger entry and the invoice go back. */
+  async function voidSupplierPayment(input = {}) {
+    const { operationId, paymentId } = input;
+    ensure(isSafeId(paymentId), PURCHASE_ERR.INVALID_INPUT, 'Payment reference required');
+    const reason = requireReason(input.reason);
+    const eventId = eventIdForOperation('payvoid', operationId);
+    const actor = actorOf(), at = now();
+    return transact(async tx => {
+      const paySnap = await tx.get(refs.payment(paymentId));
+      ensure(paySnap.exists(), PURCHASE_ERR.NOT_FOUND, 'Payment not found');
+      const pay = paySnap.data();
+      if (pay.status === PURCHASE_STATUS.voided) { ensure(pay.voidEventId === eventId, PURCHASE_ERR.INVALID_STATE, `${pay.spNo} is already cancelled`); return { alreadyApplied: true, payment: pay }; }
+      if (input.expectedRevision != null) ensure(pay.revision === input.expectedRevision, PURCHASE_ERR.STALE, `${pay.spNo} was changed meanwhile. Please open it again.`);
+      const piSnap = await tx.get(refs.pi(pay.invoiceId));
+      ensure(piSnap.exists(), PURCHASE_ERR.NOT_FOUND, 'Purchase invoice not found');
+      const pi = piSnap.data();
+      let entry = null; const lineSnaps = [];
+      if (pay.entryId) {
+        const es = await tx.get(refs.cashEntry(pay.entryId));
+        ensure(es.exists(), PURCHASE_ERR.INVALID_STATE, 'The ledger entry of this payment is missing.');
+        entry = es.data();
+        for (const a of entry.accountIds || []) { const ls = await tx.get(refs.cashLine(`${entry.id}__${a}`)); if (ls.exists()) lineSnaps.push(ls.data()); }
+      }
+      const figures = applyPaymentToInvoice(pi, pay, -1);
+      ensure(figures.paid >= -0.005 && figures.paymentDiscount >= -0.005, PURCHASE_ERR.INVALID_STATE, 'The invoice figures would become negative.');
+      if (pay.kind !== PAYMENT_KINDS.cashback) ensure(figures.cashBack <= figures.paid + 0.005, PURCHASE_ERR.INVALID_STATE, `Cancel the cash back of ${pi.piNo} first — it would be more than what is paid.`);
+      const revision = pi.revision + 1;
+      tx.set(refs.payment(paymentId), { ...pay, status: PURCHASE_STATUS.voided, voidReason: reason, voidedAt: at, voidedBy: actor.name, voidedByUid: actor.uid, voidEventId: eventId,
+        revision: pay.revision + 1, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid });
+      if (entry) {
+        const er = Number(entry.revision) + 1;
+        tx.set(refs.cashEntry(entry.id), { ...entry, void: true, voidReason: reason.slice(0, 200), revision: er, updatedByUid: actor.uid, updatedByName: actor.name, updatedAt: stamp() });
+        for (const l of lineSnaps) tx.update(refs.cashLine(l.id), { void: true, voidReason: reason.slice(0, 200), entryRevision: er });
+      }
+      const next = { ...pi, ...figures, revision, lastEventId: eventId, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid };
+      tx.set(refs.pi(pi.id), next);
+      tx.set(refs.event(pi.id, eventId), { id: eventId, kind: pay.kind === PAYMENT_KINDS.cashback ? 'cashback-voided' : 'payment-voided', invoiceId: pi.id, piNo: pi.piNo, operationId,
+        paymentId, spNo: pay.spNo, amount: pay.amount, discount: pay.discount, reason, fromRevision: pi.revision, toRevision: revision, actor: actor.name, actorUid: actor.uid, at, recordedAt: stamp() });
+      return { alreadyApplied: false, invoice: next };
+    });
+  }
+
   /* ───────── Administration → Purchase settings ───────── */
   async function savePurchaseSettings(input = {}) {
     const actor = actorOf();
@@ -202,5 +337,5 @@ export function createPurchaseService(fs, options = {}) {
     });
   }
 
-  return { createPurchaseInvoice, voidPurchaseInvoice, savePurchaseSettings };
+  return { createPurchaseInvoice, voidPurchaseInvoice, savePurchaseSettings, recordSupplierPayment, recordSupplierCashBack, voidSupplierPayment };
 }

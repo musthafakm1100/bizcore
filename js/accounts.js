@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════
    BizCore V267.1 — Administration → Finance → Payment Accounts (approved mockups, 15 Oct 2026)
+   V268.2: card accounts name their linked bank account (approved mockup PI_10)
    • List of cash, card and bank accounts: code, name, type, custodian (cash), Zoho account, opening balance
    • Add / Edit window; accounts are never deleted (made inactive); code and name unique
    • Administrators only (server-trusted list system/accessControl — also enforced by the security rules)
@@ -35,8 +36,10 @@ function renderPaymentAccounts(){
   }
   body.innerHTML = rows.map(a => {
     const off = a.active === false;
+    const bank = a.type === 'card' ? all.find(x => x.id === a.linkedBankAccountId) : null;
     const cust = a.type === 'cash' && a.custodianName
       ? `<span class="pa-cust"><span class="pa-avatar">${paEsc(a.custodianName.split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase())}</span>${paEsc(a.custodianName)}</span>`
+      : a.type === 'card' ? (bank ? `<span class="pa-muted"><i class="ti ti-building-bank"></i> ${paEsc(bank.code)} · ${paEsc(bank.name)}</span>` : '<span class="pa-warn"><i class="ti ti-alert-triangle"></i> No linked bank account</span>')
       : '<span class="pa-muted">—</span>';
     return `<tr class="${off ? 'pa-off' : ''}" data-id="${paEsc(a.id)}">
       <td class="pa-code">${paEsc(a.code)}</td>
@@ -65,6 +68,7 @@ function paEnsureModal(){
       <div class="form-group pa-f-type"><label>Type *</label><div class="pa-seg" role="radiogroup" aria-label="Account type" id="pa-type">
         <button type="button" role="radio" data-type="cash" onclick="paSetType('cash')"><i class="ti ti-cash"></i>Cash</button><button type="button" role="radio" data-type="card" onclick="paSetType('card')"><i class="ti ti-credit-card"></i>Card</button><button type="button" role="radio" data-type="bank" onclick="paSetType('bank')"><i class="ti ti-building-bank"></i>Bank</button></div></div>
       <div class="form-group pa-f-cust" id="pa-cust-wrap"><label for="pa-cust">Custodian *</label><input id="pa-cust" maxlength="80" autocomplete="off" placeholder="Person who holds this cash"><small>A name — the person doesn't need a BizCore login.</small></div>
+      <div class="form-group pa-f-cust" id="pa-bank-wrap" hidden><label for="pa-bank">Linked bank account *</label><select id="pa-bank"></select><small>Card payments come out of this bank account at once. Only bank accounts can be chosen.</small></div>
       <div class="form-group pa-f-login" id="pa-login-wrap"><label for="pa-login">Custodian login <em>optional</em></label><select id="pa-login"></select><small>Link a BizCore login so the custodian confirms this cash ledger. Without a login an administrator confirms for them.</small></div>
       <div class="form-group pa-f-zoho"><label for="pa-zoho">Zoho account name <em>optional</em></label><input id="pa-zoho" maxlength="120" autocomplete="off" placeholder="Exactly as in Zoho Books"></div>
       <div class="form-group pa-f-bal"><label for="pa-bal">Opening balance (SAR)</label><input id="pa-bal" inputmode="decimal" autocomplete="off" placeholder="0.00"></div>
@@ -83,6 +87,7 @@ function paSetType(t){
   m._type = t;
   m.querySelectorAll('#pa-type [data-type]').forEach(b => { const on = b.dataset.type === t; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
   document.getElementById('pa-cust-wrap').hidden = t !== 'cash';
+  const bw = document.getElementById('pa-bank-wrap'); if (bw) bw.hidden = t !== 'card';
   const lw = document.getElementById('pa-login-wrap'); if (lw) lw.hidden = t !== 'cash';
 }
 function openPaymentAccountForm(id){
@@ -100,16 +105,17 @@ function openPaymentAccountForm(id){
   document.getElementById('pa-date').value = a ? a.openingDate : `${t.getFullYear()}-${p(t.getMonth() + 1)}-01`;
   document.getElementById('pa-active').checked = a ? a.active !== false : true;
   paFillLogins(a ? (a.custodianUid || '') : '');
+  paFillBanks(a ? (a.linkedBankAccountId || '') : '', a ? a.id : '');
   paSetType(a ? a.type : 'cash');
   const used = !!(a && a.hasEntries);
   m._locked = used;
   ['pa-bal', 'pa-date'].forEach(i => { document.getElementById(i).disabled = used || !admin; });
   m.querySelectorAll('#pa-type button').forEach(b => { b.disabled = used || !admin; });
-  ['pa-code', 'pa-name', 'pa-cust', 'pa-login', 'pa-zoho', 'pa-active'].forEach(i => { document.getElementById(i).disabled = !admin; });
+  ['pa-code', 'pa-name', 'pa-cust', 'pa-login', 'pa-bank', 'pa-zoho', 'pa-active'].forEach(i => { document.getElementById(i).disabled = !admin; });
   document.getElementById('pa-save').style.display = admin ? '' : 'none';
   document.getElementById('pa-info').innerHTML = used
     ? '<i class="ti ti-lock"></i> This account already has entries: its type and opening balance can no longer change.'
-    : '<i class="ti ti-info-circle"></i> Only cash accounts have a custodian. The type and opening balance are fixed once the account has entries.';
+    : '<i class="ti ti-info-circle"></i> Cash accounts have a custodian; card accounts have a linked bank account — a card payment is shown in the card\'s history and lowers that bank account\'s balance. The type and opening balance are fixed once the account has entries.';
   document.getElementById('pa-meta').textContent = a ? `Last changed by ${a.updatedByName || '—'}` : '';
   paShowError('');
   m.querySelectorAll('.pa-bad').forEach(e => e.classList.remove('pa-bad'));
@@ -127,10 +133,17 @@ function paFillLogins(current){
   if (current && !seen.has(current)) add(current, `Linked login (${current.slice(0, 8)}…)`);
   sel.innerHTML = opts.join(''); sel.value = current || '';
 }
+/* V268.2: the bank account a card is linked to */
+function paFillBanks(current, selfId){
+  const sel = document.getElementById('pa-bank'); if (!sel) return;
+  const banks = paAccounts().filter(x => x.type === 'bank' && x.id !== selfId && (x.active !== false || x.id === current));
+  sel.innerHTML = '<option value="">Choose the bank account…</option>' + banks.map(b => `<option value="${paEsc(b.id)}">${paEsc(b.code)} · ${paEsc(b.name)}</option>`).join('');
+  sel.value = banks.some(b => b.id === current) ? current : '';
+}
 function paShowError(msg, fields){
   const e = document.getElementById('pa-error'); if (!e) return;
   e.hidden = !msg; e.textContent = msg || '';
-  const map = { code: 'pa-code', name: 'pa-name', custodianName: 'pa-cust', openingBalance: 'pa-bal', openingDate: 'pa-date', type: 'pa-type' };
+  const map = { code: 'pa-code', name: 'pa-name', custodianName: 'pa-cust', linkedBankAccountId: 'pa-bank', openingBalance: 'pa-bal', openingDate: 'pa-date', type: 'pa-type' };
   document.querySelectorAll('#pa-modal .pa-bad').forEach(x => x.classList.remove('pa-bad'));
   (fields || []).forEach(f => { const el = document.getElementById(map[f]); if (el) el.classList.add('pa-bad'); });
 }
@@ -140,6 +153,7 @@ async function savePaymentAccount(){
   if (!paIsAdmin()) { paShowError('Only administrators can change payment accounts.'); return; }
   const input = {
     code: document.getElementById('pa-code').value, name: document.getElementById('pa-name').value, type: m._type,
+    linkedBankAccountId: document.getElementById('pa-bank') ? document.getElementById('pa-bank').value : '',
     custodianName: document.getElementById('pa-cust').value, custodianUid: document.getElementById('pa-login') ? document.getElementById('pa-login').value : (existingUid(m) || ''), zohoName: document.getElementById('pa-zoho').value,
     openingBalance: document.getElementById('pa-bal').value, openingDate: document.getElementById('pa-date').value,
     active: document.getElementById('pa-active').checked,
@@ -173,4 +187,4 @@ async function savePaymentAccount(){
   };
   go();
 })();
-console.log('Payment Accounts V267.2 ✅ (Administration → Finance)');
+console.log('Payment Accounts V268.2 ✅ (Administration → Finance)');

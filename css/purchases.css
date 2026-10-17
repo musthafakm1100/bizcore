@@ -236,3 +236,70 @@
 /* V268.14: "Goes to" right-aligned (desktop/tablet table), like the other figures on the line */
 .pi-lines th.pi-goesh,.pi-lines td.pi-c-goes{text-align:right}
 @media (max-width:760px){ table.pi-lines .pi-c-goes{text-align:left;justify-content:flex-start} }
+
+/* ═══ V268.2 — supplier payments (approved mockups PI_4 / PI_8 / PI_9 / PI_10) ═══ */
+.pi-ty{width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;flex:0 0 22px}
+.pi-ty.c{background:#fef3c7;color:#92400e}.pi-ty.k{background:#e0ecfb;color:#1e4f86}.pi-ty.b{background:#ede9fe;color:#5b21b6}
+.pi-pay-hint{font-weight:500;margin-left:4px}
+.pi-pay-table td{vertical-align:middle}
+.pi-pay-sel{display:flex;align-items:center;gap:7px}
+.pi-pay-acc{flex:1;min-width:0;height:32px;border:1px solid #cfd8e3;border-radius:7px;padding:0 8px;background:#fff;font:inherit;font-size:13px}
+.pi-cell.pi-pay-date{width:140px;text-align:left}.pi-cell.pi-pay-amt{width:118px}.pi-cell.pi-pay-ref{width:150px;text-align:left}
+.pi-wait{display:inline-flex;align-items:center;white-space:nowrap;font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 8px;background:#fef3c7;color:#92400e}
+.pi-ok{white-space:nowrap;font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 8px;background:#e8f7ee;color:#166534}
+.pi-qry{font-size:11.5px;font-weight:600;color:#b91c1c}
+.pi-via{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#475569}
+.pi-chg{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#475569}.pi-chg label{margin:0;text-transform:none;letter-spacing:0;font-weight:500;font-size:12px;color:#475569}
+.pi-chg .pi-cell{width:84px}
+.pi-pay-info .pi-sub{display:block;margin-top:2px}
+.pi-nopay{text-align:left!important;padding:12px 8px!important}
+#pe-due-row{margin-top:8px}#pe-due-row[hidden]{display:none}
+.pi-paid-full{display:flex;align-items:center;gap:7px;margin-top:8px;padding:8px 10px;border-radius:8px;background:#e8f7ee;border:1px solid #bfe5cc;color:#166534;font-size:12.5px;font-weight:600}
+.pi-paid-full[hidden]{display:none}
+/* view: payments */
+.pi-pv-pays{margin-top:14px}
+.pi-pv-pays h4{display:flex;align-items:center;gap:8px;font-size:13.5px;color:#1e3a5f;margin:0 0 8px}
+.pi-pv-sum{margin-left:auto;font-weight:500;font-size:12px;color:#64748b}
+.pi-pv-table td{vertical-align:top}
+.pi-pv-acc .acc{display:inline-flex;align-items:center;gap:6px}
+.pi-pv-via{margin-left:28px}
+.pi-spno{color:#1d5fa3;white-space:nowrap}
+.pi-cbtag{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:700;border-radius:999px;padding:1px 7px;background:#e0f2fe;color:#075985;white-space:nowrap}
+.pi-pv-void td{color:#94a3b8!important}.pi-pv-void .pi-spno{text-decoration:line-through;color:#94a3b8}
+.pi-cancel-pay{border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:7px;padding:3px 9px;font:600 12px Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
+.pi-cancel-pay:hover{background:#fef2f2}
+.pi-pv-none{margin:4px 0 0}
+/* record payment / cash back */
+.pi-bal3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+.pi-bal3 div{background:#f8fafc;border:1px solid #e2e8f0;border-radius:9px;padding:8px 11px}
+.pi-bal3 span{display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em}.pi-bal3 b{font-size:16px;font-variant-numeric:tabular-nums}
+.pi-pm-date{max-width:190px}
+.pi-pm-add{display:flex;align-items:center;gap:8px;margin:8px 0}
+.pi-pm-disc{display:flex;align-items:center;gap:10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px;padding:8px 11px;margin-top:6px;font-size:12.5px;color:#075985}
+.pi-pm-disc .pi-cell{margin-left:auto;width:120px;border-color:#7dd3fc}
+.pi-pm-after-box{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;border-radius:9px;font-size:13px}
+.pi-pm-after-box.ok{background:#e8f7ee;border:1px solid #bfe5cc;color:#166534}
+.pi-pm-after-box.part{background:#fff7e6;border:1px solid #fde4b0;color:#7c4a03}
+.pi-pm-after-box.bad{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+.pi-cb-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.pi-cb-grid .form-group{margin:0}.pi-cb-acc,.pi-cb-note{grid-column:1/-1}
+.pi-cb-grid small{display:block;margin-top:4px;font-size:11.5px;color:#64748b}
+.pi-cb-grid select,.pi-cb-grid input{width:100%}
+@media (max-width:760px){
+  .pi-pay-hint{display:none}
+  table.pi-lines tr.pi-pay-line{display:grid!important;grid-template-columns:1fr 1fr;gap:8px;position:relative;background:#fff;border:1px solid #dfe6ee;border-radius:12px;padding:10px 12px;margin:0 0 10px}
+  table.pi-lines tr.pi-pay-line > td{display:block;padding:0!important;border:0!important;height:auto}
+  table.pi-lines tr.pi-pay-line > td:first-child{grid-column:1/-1;padding-right:28px!important}
+  table.pi-lines tr.pi-pay-line > td.pi-pay-info{grid-column:1/-1}
+  table.pi-lines tr.pi-pay-line > td:last-child{position:absolute;top:8px;right:6px}
+  table.pi-lines tr.pi-pay-line .pi-cell{width:100%;height:36px}
+  .pi-bal3{grid-template-columns:1fr 1fr 1fr;gap:6px}.pi-bal3 b{font-size:14px}
+  .pi-cb-grid{grid-template-columns:1fr}
+  .pi-pv-table tr{display:block;border:1px solid #dfe6ee;border-radius:12px;padding:8px 10px;margin:0 0 8px;background:#fff}
+  .pi-pv-table td{display:block;border:0!important;padding:2px 0!important;height:auto!important;text-align:left!important}
+  .pi-pv-table thead{display:none}
+}
+/* V268.2: payment windows size to their content (the app's normal size would make them full height) */
+#pi-pay-modal .modal.pi-paym{width:min(var(--pi-w,860px),96vw)!important;max-width:var(--pi-w,860px)!important;height:auto!important;max-height:92vh!important}
+.pi-pv-table td:nth-child(2),.pi-pv-table td:nth-child(7){white-space:nowrap}
+@media (max-width:760px){ #pi-pay-modal .modal.pi-paym{width:100vw!important;max-width:none!important;height:100dvh!important;max-height:100dvh!important;border-radius:0!important} }

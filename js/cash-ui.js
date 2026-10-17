@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════
    BizCore V267.2 — cash ledger rendering shared by My Cash (mycash.html) and
+   (V268.2: supplier payments / cash back rows; card memo amounts in brackets)
    Finance → Cash & Bank (index.html). Plain HTML builders, no Firebase here.
    Approved mockups 15 Oct 2026 (CASH_custodian / CASH_staff / CASH_phone).
 ═══════════════════════════════════════════════════════════════════ */
@@ -20,8 +21,14 @@
       const sub = [r.description, 'by ' + (r.recordedByName || '—')].filter(Boolean).join(' · ');
       return { title, sub };
     }
+    // V268.2: supplier payment / cash back (details: reference, bank charge, card)
+    if (r.kind === 'supplier-payment' || r.kind === 'supplier-cashback')
+      return { title: r.description || r.kind, sub: [r.details, 'by ' + (r.recordedByName || '—')].filter(Boolean).join(' · ') };
     return { title: r.description || r.kind, sub: 'by ' + (r.recordedByName || '—') };
   }
+  const isSupplier = r => r.kind === 'supplier-payment' || r.kind === 'supplier-cashback';
+  /** A card's memo line: paid by card, the money left the linked bank account (no balance change here). */
+  const memoHtml = r => r.memoOut ? `<span class="cl-memo" title="Paid by card — taken from the linked bank account">(${money(r.memoOut)})</span>` : '';
 
   /** The giver's line of a handover: what the receiver answered. */
   function counterpartTail(r) {
@@ -35,6 +42,7 @@
    */
   function statusHtml(r, opts = {}) {
     if (r.void) return `<span class="cl-st cl-void"><i class="ti ti-ban"></i>Cancelled</span>${r.voidReason ? `<span class="cl-sub">${esc(r.voidReason)}</span>` : ''}`;
+    if (r.status === 'none' && isSupplier(r)) return `<span class="cl-st cl-none"><i class="ti ti-minus"></i>${r.memoOut ? 'From the linked bank' : 'No confirmation'}</span>`;
     if (r.status === 'none') return `<span class="cl-st cl-none"><i class="ti ti-arrow-right"></i>Receiver confirms</span><span class="cl-sub">${counterpartTail(r)}</span>`;
     const mine = opts.canConfirm && opts.canConfirm(r);
     if (r.status === 'pending') {
@@ -61,12 +69,13 @@
       const d = describe(r);
       const wait = r.status === 'pending' && !r.void;
       const staffEdit = opts.mode === 'staff' && r.kind === 'handover' && !r.void && opts.canEdit;
+      const openPi = opts.mode === 'staff' && isSupplier(r) && r.invoiceId;
       return `<tr class="${wait ? 'cl-wait' : ''}${r.void ? ' cl-voided' : ''}" data-line="${esc(r.id)}">
         <td class="cl-date">${dShort(r.date)}</td>
-        <td class="cl-v">${staffEdit ? `<button type="button" class="cl-link" data-act="edit" data-entry="${esc(r.entryId)}">${esc(r.voucherNo)}</button>` : esc(r.voucherNo)}</td>
+        <td class="cl-v">${staffEdit ? `<button type="button" class="cl-link" data-act="edit" data-entry="${esc(r.entryId)}">${esc(r.voucherNo)}</button>` : openPi ? `<button type="button" class="cl-link" data-act="open-pi" data-pi="${esc(r.invoiceId)}" title="Open ${esc(r.piNo || 'the purchase invoice')}">${esc(r.voucherNo)}</button>` : esc(r.voucherNo)}</td>
         <td class="cl-det">${esc(d.title)}<span class="cl-sub">${esc(d.sub)}</span></td>
         <td class="n cl-in">${r.amountIn ? money(r.amountIn) : ''}</td>
-        <td class="n cl-out">${r.amountOut ? money(r.amountOut) : ''}</td>
+        <td class="n cl-out">${r.amountOut ? money(r.amountOut) : memoHtml(r)}</td>
         <td class="n cl-bal">${r.balance == null ? '—' : money(r.balance)}</td>
         <td class="cl-stc${stRight ? ' r' : ''}">${statusHtml(r, opts)}</td></tr>`;
     }).join('');
@@ -82,11 +91,11 @@
   function cardsHtml(ledger, opts = {}) {
     const f = opts.filter || 'all';
     const rows = ledger.rows.slice().reverse().filter(r => f === 'all' || (f === 'waiting' ? r.status === 'pending' && !r.void : f === 'queried' ? r.status === 'queried' && !r.void : true));
-    const pill = r => r.void ? '<span class="cl-st cl-void">Cancelled</span>' : r.status === 'pending' ? '<span class="cl-st cl-w">⏳ Waiting</span>' : r.status === 'none' ? '<span class="cl-st cl-none">Receiver confirms</span>' : r.status === 'confirmed' ? '<span class="cl-st cl-c">Confirmed</span>' : '<span class="cl-st cl-qq">⚠ Queried</span>';
+    const pill = r => r.void ? '<span class="cl-st cl-void">Cancelled</span>' : r.status === 'pending' ? '<span class="cl-st cl-w">⏳ Waiting</span>' : r.status === 'none' ? `<span class="cl-st cl-none">${isSupplier(r) ? (r.memoOut ? 'From the bank' : 'No confirmation') : 'Receiver confirms'}</span>` : r.status === 'confirmed' ? '<span class="cl-st cl-c">Confirmed</span>' : '<span class="cl-st cl-qq">⚠ Queried</span>';
     const out = rows.map(r => {
       const d = describe(r), mine = !r.void && opts.canConfirm && opts.canConfirm(r);
-      const amt = r.amountIn ? `<span class="cl-amt cl-in">+${money(r.amountIn)}</span>` : `<span class="cl-amt cl-out">−${money(r.amountOut)}</span>`;
-      const extra = r.status === 'queried' && !r.void ? `<div class="cl-sub cl-quote">“${esc(r.statusNote)}”</div>` : r.status === 'none' && !r.void ? `<div class="cl-sub">${counterpartTail(r)}</div>` : '';
+      const amt = r.amountIn ? `<span class="cl-amt cl-in">+${money(r.amountIn)}</span>` : r.amountOut ? `<span class="cl-amt cl-out">−${money(r.amountOut)}</span>` : `<span class="cl-amt">${memoHtml(r)}</span>`;
+      const extra = r.status === 'queried' && !r.void ? `<div class="cl-sub cl-quote">“${esc(r.statusNote)}”</div>` : r.status === 'none' && !r.void && !isSupplier(r) ? `<div class="cl-sub">${counterpartTail(r)}</div>` : '';
       const acts = mine && (r.status === 'pending' || r.status === 'queried') ? `<div class="cl-pc-acts"><button type="button" class="cl-btn cl-ok" data-act="confirm" data-id="${esc(r.id)}"><i class="ti ti-check"></i>Confirm</button>${r.status === 'pending' ? `<button type="button" class="cl-btn cl-q" data-act="query" data-id="${esc(r.id)}"><i class="ti ti-message-question"></i>Query</button>` : ''}</div>` : '';
       return `<div class="cl-pc${r.void ? ' cl-voided' : ''}" data-line="${esc(r.id)}"><div class="cl-r1"><span class="cl-v">${esc(r.voucherNo)}</span>${pill(r)}</div>
         <div class="cl-pc-t">${esc(d.title)}</div><div class="cl-r1"><span class="cl-sub">${dShort(r.date)} · ${esc(d.sub)}</span>${amt}</div>${extra}${acts}</div>`;
@@ -115,8 +124,8 @@
     const body = inRange.map(r => {
       bal += (Number(r.amountIn) || 0) - (Number(r.amountOut) || 0); tin += Number(r.amountIn) || 0; tout += Number(r.amountOut) || 0;
       const d = describe(r);
-      const st = r.status === 'pending' ? 'Waiting' : r.status === 'confirmed' ? 'Confirmed' : r.status === 'queried' ? 'Queried' : r.counterpartStatus === 'confirmed' ? 'Receiver confirmed' : 'Receiver to confirm';
-      return `<tr><td>${dFull(r.date)}</td><td>${esc(r.voucherNo)}</td><td>${esc(d.title)}<br><small>${esc(d.sub)}</small></td><td class="n">${r.amountIn ? money(r.amountIn) : ''}</td><td class="n">${r.amountOut ? money(r.amountOut) : ''}</td><td class="n">${money(bal)}</td><td>${st}</td></tr>`;
+      const st = r.status === 'pending' ? 'Waiting' : r.status === 'confirmed' ? 'Confirmed' : r.status === 'queried' ? 'Queried' : isSupplier(r) ? (r.memoOut ? 'Card — from bank' : '—') : r.counterpartStatus === 'confirmed' ? 'Receiver confirmed' : 'Receiver to confirm';
+      return `<tr><td>${dFull(r.date)}</td><td>${esc(r.voucherNo)}</td><td>${esc(d.title)}<br><small>${esc(d.sub)}</small></td><td class="n">${r.amountIn ? money(r.amountIn) : ''}</td><td class="n">${r.amountOut ? money(r.amountOut) : r.memoOut ? '(' + money(r.memoOut) + ')' : ''}</td><td class="n">${money(bal)}</td><td>${st}</td></tr>`;
     }).join('');
     const openBal = ledger.opening.amount + before.reduce((s, r) => s + (Number(r.amountIn) || 0) - (Number(r.amountOut) || 0), 0);
     return `<!doctype html><html><head><meta charset="utf-8"><title>Statement – ${esc(account.name)}</title><style>

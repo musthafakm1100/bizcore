@@ -9,7 +9,7 @@
  */
 import {
   ACCOUNT_COLLECTIONS, ACCOUNT_SCHEMA_VERSION, validateAccount, keyDocId,
-} from './account-core.mjs?v=267.1';
+} from './account-core.mjs?v=268.2';
 import { DeliveryError, ERR, isSafeId } from './delivery-core.mjs?v=266.0';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
@@ -54,6 +54,12 @@ export function createAccountService(fs, options = {}) {
       const v = validateAccount(input, existing);
       if (!v.ok) fail(ERR.INVALID_INPUT, v.errors.map(e => e.message).join(' '), { errors: v.errors });
       const val = v.value;
+      // V268.2: a card's linked account must be an existing bank account
+      if (val.type === 'card') {
+        ensure(isSafeId(val.linkedBankAccountId) && val.linkedBankAccountId !== accountId, ERR.INVALID_INPUT, 'Choose the linked bank account.', { field: 'linkedBankAccountId' });
+        const bank = await tx.get(refs.account(val.linkedBankAccountId));
+        ensure(bank.exists() && bank.data().type === 'bank', ERR.INVALID_INPUT, 'The linked account must be a bank account.', { field: 'linkedBankAccountId' });
+      }
       const nameKeyId = keyDocId('name', val.nameKey), codeKeyId = keyDocId('code', val.codeKey);
       const nameKeySnap = await tx.get(refs.key(nameKeyId));
       const codeKeySnap = await tx.get(refs.key(codeKeyId));
@@ -83,7 +89,7 @@ export function createAccountService(fs, options = {}) {
       if (!codeKeySnap.exists()) tx.set(refs.key(codeKeyId), { id: codeKeyId, kind: 'code', accountId, createdByUid: actor.uid });
       if (existing && existing.nameKey && existing.nameKey !== val.nameKey) tx.delete(refs.key(keyDocId('name', existing.nameKey)));
       if (existing && existing.codeKey && existing.codeKey !== val.codeKey) tx.delete(refs.key(keyDocId('code', existing.codeKey)));
-      const pick = a => a ? { code: a.code, name: a.name, type: a.type, custodianName: a.custodianName, custodianUid: a.custodianUid, zohoName: a.zohoName, openingBalance: a.openingBalance, openingDate: a.openingDate, active: a.active } : null;
+      const pick = a => a ? { code: a.code, name: a.name, type: a.type, custodianName: a.custodianName, custodianUid: a.custodianUid, linkedBankAccountId: a.linkedBankAccountId || '', zohoName: a.zohoName, openingBalance: a.openingBalance, openingDate: a.openingDate, active: a.active } : null;
       const chgId = 'chg-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
       tx.set(refs.change(accountId, chgId), { id: chgId, accountId, toRevision: revision, before: pick(existing), after: pick(account), actorUid: actor.uid, actorName: actor.name, recordedAt: stamp() });
       return account;

@@ -36,7 +36,9 @@ function renderCashBank() {
   const total = accounts.reduce((s, a) => s + (a.active !== false ? ledgers.get(a.id).balance : 0), 0);
   const list = accounts.map(a => {
     const g = ledgers.get(a.id);
-    const cust = a.type === 'cash' ? (a.custodianName ? 'Custodian: ' + cbEsc(a.custodianName) + (a.custodianUid ? '' : ' · no login') : 'no custodian') : 'no custodian';
+    const bank = a.type === 'card' ? accounts.find(x => x.id === a.linkedBankAccountId) : null;   // V268.2
+    const cust = a.type === 'cash' ? (a.custodianName ? 'Custodian: ' + cbEsc(a.custodianName) + (a.custodianUid ? '' : ' · no login') : 'no custodian')
+      : a.type === 'card' ? (bank ? 'from ' + cbEsc(bank.code) + ' · ' + cbEsc(bank.name) : 'no linked bank account') : 'bank account';
     return `<button type="button" class="cb-acc${a.id === cbAccountId ? ' on' : ''}${a.active === false ? ' off' : ''}" data-act="pick" data-id="${cbEsc(a.id)}" aria-pressed="${a.id === cbAccountId}">
       <span class="cb-ty ${cbEsc(a.type)}"><i class="ti ${CB_ICON[a.type] || 'ti-cash'}"></i></span>
       <span><span class="nm">${cbEsc(a.name)}</span><span class="cl-sub">${cust}${a.active === false ? ' · inactive' : ''}</span></span>
@@ -49,7 +51,8 @@ function renderCashBank() {
     <div class="cl-r">${cbUI().toolbarHtml(g, opts)}<button type="button" class="cl-btn" data-act="statement"><i class="ti ti-printer"></i>Statement</button>${isCash ? '<button type="button" class="cl-btn cl-p" data-act="handover"><i class="ti ti-arrows-exchange"></i>New handover</button>' : ''}</div></div>`;
   const note = isCash
     ? 'Staff see every account and each line\'s confirmation. Only the custodian (or an administrator for a custodian without a login) can confirm. Click a TRF voucher to correct or cancel a handover.'
-    : 'Card and bank accounts get their entries with receipts and payments (next steps). Their balance is the opening balance for now.';
+    : a.type === 'card' ? 'Card payments come out of the linked bank account at once — they are listed here for reference (amounts in brackets) and counted in the bank account.'
+    : 'Supplier payments by bank transfer or card (with bank charges) are listed here. Customer receipts will follow in a later step.';
   root.innerHTML = `<div class="cb-split">
     <div class="cl-card"><div class="cl-ch"><h3><i class="ti ti-wallet"></i>Accounts</h3></div>${list}
       <div class="cl-note"><i class="ti ti-sum"></i><span>Total cash &amp; bank: <b>${cbUI().money(total)}</b></span></div></div>
@@ -74,6 +77,7 @@ document.addEventListener('click', async e => {
   }
   else if (act === 'handover') cbOpenHandover(null);
   else if (act === 'edit') cbOpenHandover(b.dataset.entry);
+  else if (act === 'open-pi') { if (typeof openPurchaseInvoiceView === 'function') { if (window.BizCorePI) window.BizCorePI.start(); openPurchaseInvoiceView(b.dataset.pi); } }   // V268.2
   else if (act === 'statement') cbOpenStatement();
 });
 

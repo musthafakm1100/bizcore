@@ -8,6 +8,8 @@
  *  - the custodian (cash accounts only) is a NAME — the person may have no BizCore login — optionally
  *    linked to a BizCore user (custodianUid) so that, later, they can confirm their own cash ledger;
  *  - the opening balance (and the type) can't change once the account has entries (hasEntries).
+ *  - V268.2: a card account names its LINKED bank account (linkedBankAccountId): card payments come out of that
+ *    bank account at once; the card's own ledger shows them as memo lines.
  *
  * Firestore:
  *   paymentAccounts/{id}            the account
@@ -51,6 +53,7 @@ export function validateAccount(input = {}, existing = null) {
   const type = String(input.type || '').toLowerCase();
   const custodianName = clean(input.custodianName, ACCOUNT_LIMITS.custodian);
   const custodianUid = clean(input.custodianUid, 128);
+  const linkedBankAccountId = clean(input.linkedBankAccountId, 128);
   const zohoName = clean(input.zohoName, ACCOUNT_LIMITS.zoho);
   const rawBal = String(input.openingBalance == null ? '' : input.openingBalance).replace(/[,\s]/g, '');
   const openingBalance = rawBal === '' ? 0 : Number(rawBal);
@@ -62,6 +65,7 @@ export function validateAccount(input = {}, existing = null) {
   if (!name) err('name', 'Enter the account name.');
   if (!ACCOUNT_TYPES.includes(type)) err('type', 'Choose Cash, Card or Bank.');
   if (type === 'cash' && !custodianName) err('custodianName', 'A cash account needs a custodian.');
+  if (type === 'card' && !linkedBankAccountId) err('linkedBankAccountId', 'A card account needs its linked bank account.');
   if (!Number.isFinite(openingBalance)) err('openingBalance', 'Opening balance must be a number.');
   if (!isDate(openingDate)) err('openingDate', 'Enter the date of the opening balance.');
 
@@ -75,6 +79,7 @@ export function validateAccount(input = {}, existing = null) {
     accountingClass: accountingClassOf(type),
     custodianName: type === 'cash' ? custodianName : '',
     custodianUid: type === 'cash' ? custodianUid : '',
+    linkedBankAccountId: type === 'card' ? linkedBankAccountId : '',
     zohoName, openingBalance: r2(openingBalance), openingDate, active,
   };
   if (!value.nameKey && name) err('name', 'Enter a proper account name.');

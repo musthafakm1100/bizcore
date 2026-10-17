@@ -12,6 +12,7 @@
  *            both shared over the lines by value → landed unit cost (profit per order stays right)
  *   totals   VAT on the net; rounding = supplier's total − BizCore's total, within ±limit (Administration)
  *   V268.1   no payments yet: every invoice is saved Unpaid (credit) — the whole total is payable.
+ *   V268.2   supplier payments (at entry and later), discount at payment, cash back — see the end of this file.
  *
  * Firestore (written by js/purchase-service.mjs in ONE transaction):
  *   purchaseInvoices/{id} (+ /events/*), purchaseSupplierRefs/{supplierKey__invNoKey},
@@ -292,11 +293,15 @@ export function validatePurchaseInvoice(input = {}, ctx = {}) {
   return { ok: errors.length === 0, value, errors, deltas, stock, totals: t };
 }
 
-/** The register's payment status (V268.1: always Unpaid unless voided). */
+/** The register's payment status: Paid when nothing is left (payments + discount at payment cover the total). */
 export function payStatusOf(pi) {
   if (!pi || pi.status === PURCHASE_STATUS.voided) return '';
-  const bal = r2((Number(pi.totals && pi.totals.total) || 0) - (Number(pi.paid) || 0));
-  return bal <= EPS ? PAY_STATUS.paid : (Number(pi.paid) || 0) > EPS ? PAY_STATUS.part : PAY_STATUS.unpaid;
+  const m = invoiceMoneyOf(pi);
+  return payStatusFrom(m.total, m.paid, m.paymentDiscount);
+}
+export function payStatusFrom(total, paid, discount = 0) {
+  const settled = r2((Number(paid) || 0) + (Number(discount) || 0));
+  return r2((Number(total) || 0) - settled) <= EPS ? PAY_STATUS.paid : settled > EPS ? PAY_STATUS.part : PAY_STATUS.unpaid;
 }
 export function daysUntil(dateIso, today) {
   if (!isDate(dateIso) || !isDate(today)) return null;
@@ -317,3 +322,196 @@ export function lastPaidOf(invoices, itemKey, { excludeId = null } = {}) {
   return best ? { unit: best.unit, source: 'lastPaid', refNo: best.refNo, refDate: best.refDate, supplier: best.supplier } : null;
 }
 export { isId as isSafePurchaseId };
+
+/* ═══════════════ V268.2 — supplier payments, discount at payment, cash back ═══════════════
+ * supplierPayments/{SPAY-<op>}  one payment (or cash back) on ONE purchase invoice, number SP-YYMM-####.
+ *   payment   lines [{ account, amount, reference, bankCharge }] + optional discount at payment
+ *             → the invoice: paid += amount, paymentDiscount += discount, balance = total − paid − paymentDiscount
+ *   cashback  money the supplier gives back after payment (no credit note): ONE line into a cash / bank account
+ *             → the invoice: cashBack += amount (total, paid and balance unchanged)
+ * Each posts ONE balanced cash-ledger entry (cashEntries/spe-…) and one posting per payment account
+ * (cashLines/<entry>__<account>): cash lines wait for the custodian (⏳); bank lines need no confirmation and
+ * carry the bank charge (→ bank expense); a card line takes the money from the card's LINKED bank account and is
+ * shown on the card as a memo (no balance change).
+ * Discount at payment and cash back lower the cost of the invoice's items (shared by value) → profit follows.
+ * Nothing is deleted: a wrong payment is cancelled (void) with a reason and everything goes back.
+ */
+export const PAYMENT_COLLECTION = 'supplierPayments';
+export const PAYMENT_KINDS = Object.freeze({ payment: 'payment', cashback: 'cashback' });
+export const PAYMENT_LIMITS = Object.freeze({ lines: 10, reference: 60, note: 200, amount: 1e9 });
+export const LEDGER_KIND_OF = Object.freeze({ payment: 'supplier-payment', cashback: 'supplier-cashback' });
+
+export const paymentIdForOperation = (op, n = 0) => {
+  const k = String(op || '').replace(/[^A-Za-z0-9_-]/g, '-');
+  if (k.length < 8 || k.length > 200) throw Object.assign(new Error('Operation ID must be 8–200 characters'), { code: 'invalid-input' });
+  return 'SPAY-' + k + (n ? '-' + n : '');
+};
+export const paymentEntryIdOf = paymentId => 'spe-' + String(paymentId).slice(5);
+const ledgerLineIdOf = (entryId, accountId) => `${entryId}__${accountId}`;
+const money = v => { const raw = String(v == null ? '' : v).replace(/[,\s]/g, ''); if (raw === '') return 0; return /^\d+(\.\d{1,2})?$/.test(raw) ? r2(Number(raw)) : NaN; };
+
+/** The invoice's money after its payments (older invoices have no payment fields yet). */
+export function invoiceMoneyOf(pi) {
+  const total = r2(Number(pi && pi.totals && pi.totals.total) || 0);
+  const paid = r2(Number(pi && pi.paid) || 0), paymentDiscount = r2(Number(pi && pi.paymentDiscount) || 0), cashBack = r2(Number(pi && pi.cashBack) || 0);
+  return { total, paid, paymentDiscount, cashBack, balance: r2(total - paid - paymentDiscount) };
+}
+/** Discount at payment + cash back, as a share of the items' landed cost (0 … 1). */
+export function costFactorOf(pi) {
+  const m = invoiceMoneyOf(pi), d = r2(m.paymentDiscount + m.cashBack);
+  const landed = (pi && pi.lines || []).reduce((s, l) => s + (Number(l.landedAmount) || 0), 0);
+  return d > 0 && landed > 0 ? Math.min(1, d / landed) : 0;
+}
+/** Profit on the orders after discount at payment / cash back (they lower the cost of every item by value). */
+export function profitAfterDiscounts(pi) {
+  const p = (pi && pi.profit) || { sales: 0, cost: 0, profit: 0 }, f = costFactorOf(pi);
+  if (!f) return { sales: r2(p.sales), cost: r2(p.cost), profit: r2(p.profit), reduced: 0 };
+  const cost = r2(Number(p.cost) * (1 - f));
+  return { sales: r2(p.sales), cost, profit: r2(Number(p.sales) - cost), reduced: r2(Number(p.cost) - cost) };
+}
+/** The invoice's figures after adding (sign +1) or removing (sign −1) a payment. */
+export function applyPaymentToInvoice(pi, payment, sign = 1) {
+  const m = invoiceMoneyOf(pi);
+  const isCb = payment.kind === PAYMENT_KINDS.cashback;
+  const paid = r2(m.paid + (isCb ? 0 : sign * (Number(payment.amount) || 0)));
+  const paymentDiscount = r2(m.paymentDiscount + (isCb ? 0 : sign * (Number(payment.discount) || 0)));
+  const cashBack = r2(m.cashBack + (isCb ? sign * (Number(payment.amount) || 0) : 0));
+  const balance = r2(m.total - paid - paymentDiscount);
+  return { paid, paymentDiscount, cashBack, balance, payStatus: payStatusFrom(m.total, paid, paymentDiscount) };
+}
+
+/**
+ * Check a payment / cash back for ONE invoice.
+ *   input   { kind, date, lines:[{accountId, amount, reference, bankCharge}], discount, note }
+ *   ctx     { invoice (its current money), accounts: Map id → account (incl. the banks linked to cards), today }
+ * → { ok, value, errors:[{field, message, line}] }
+ */
+export function validateSupplierPayment(input = {}, { invoice = null, accounts = new Map(), today = new Date().toISOString().slice(0, 10) } = {}) {
+  const errors = [], err = (field, message, line) => errors.push({ field, message, ...(line != null ? { line } : {}) });
+  const kind = input.kind === PAYMENT_KINDS.cashback ? PAYMENT_KINDS.cashback : PAYMENT_KINDS.payment;
+  const date = String(input.date || '').slice(0, 10);
+  const m = invoiceMoneyOf(invoice);
+  if (!invoice || invoice.status !== PURCHASE_STATUS.posted) err('invoice', 'This purchase invoice is cancelled or missing.');
+  if (!isDate(date)) err('date', 'Enter the payment date.');
+  else if (date > today) err('date', 'The payment date can\'t be in the future.');
+  const raw = Array.isArray(input.lines) ? input.lines.filter(l => l && (l.accountId || String(l.amount || '').trim() !== '')) : [];
+  if (raw.length > PAYMENT_LIMITS.lines) err('lines', `At most ${PAYMENT_LIMITS.lines} accounts in one payment.`);
+  const seen = new Set(), lines = [];
+  raw.slice(0, PAYMENT_LIMITS.lines).forEach((l, i) => {
+    const n = i + 1, a = isId(l.accountId) ? accounts.get(l.accountId) : null;
+    const amount = money(l.amount), bankCharge = money(l.bankCharge);
+    if (!a) { err('account', `Payment line ${n}: choose the account.`, i); return; }
+    if (a.active === false) err('account', `Payment line ${n}: ${a.name} is inactive.`, i);
+    if (!(Number.isFinite(amount) && amount > 0)) err('amount', `Payment line ${n}: enter an amount greater than zero (up to 2 decimals).`, i);
+    else if (amount > PAYMENT_LIMITS.amount) err('amount', `Payment line ${n}: the amount is too large.`, i);
+    let via = null;
+    if (a.type === 'card') {
+      via = isId(a.linkedBankAccountId) ? accounts.get(a.linkedBankAccountId) : null;
+      if (kind === PAYMENT_KINDS.cashback) err('account', 'Cash back is received into a cash or bank account, not a card.', i);
+      else if (!via || via.type !== 'bank') err('account', `${a.name} has no linked bank account — set it in Administration → Payment Accounts.`, i);
+      else if (via.active === false) err('account', `${a.name}: its bank account ${via.name} is inactive.`, i);
+    }
+    if (!(Number.isFinite(bankCharge) && bankCharge >= 0)) err('bankCharge', `Payment line ${n}: bank charge must be a number (up to 2 decimals).`, i);
+    else if (bankCharge > 0 && (a.type !== 'bank' || kind !== PAYMENT_KINDS.payment)) err('bankCharge', `Payment line ${n}: a bank charge is only for a bank transfer.`, i);
+    const posting = via || a;
+    if (seen.has(posting.id)) err('account', `${posting.name} is used twice — one line per account.`, i);
+    seen.add(posting.id);
+    if (isDate(date)) for (const x of [a, via]) if (x && x.openingDate && date < x.openingDate) err('date', `The date is before the opening balance of ${x.name} (${x.openingDate}).`, i);
+    lines.push({
+      accountId: a.id, accountCode: clean(a.code, 20), accountName: clean(a.name, 80), accountType: a.type,
+      amount: Number.isFinite(amount) ? amount : 0, reference: clean(l.reference, PAYMENT_LIMITS.reference),
+      bankCharge: Number.isFinite(bankCharge) ? bankCharge : 0,
+      viaAccountId: via ? via.id : '', viaAccountCode: via ? clean(via.code, 20) : '', viaAccountName: via ? clean(via.name, 80) : '',
+      postingAccountId: posting.id,
+    });
+  });
+  const amount = r2(lines.reduce((s, l) => s + l.amount, 0));
+  const bankCharges = r2(lines.reduce((s, l) => s + l.bankCharge, 0));
+  const discount = kind === PAYMENT_KINDS.payment ? money(input.discount) : 0;
+  const note = clean(input.note, PAYMENT_LIMITS.note);
+  if (kind === PAYMENT_KINDS.payment) {
+    if (!(Number.isFinite(discount) && discount >= 0)) err('discount', 'Discount at payment must be a number (up to 2 decimals).');
+    const applied = r2(amount + (Number.isFinite(discount) ? discount : 0));
+    if (!(applied > 0)) err('amount', 'Enter the amount paid (or a discount).');
+    else if (invoice && applied > m.balance + EPS) err('amount', `This is ${r2(applied - m.balance).toFixed(2)} more than the balance ${m.balance.toFixed(2)}. Paying more than the balance is not allowed yet (advances come later).`);
+  } else {
+    if (lines.length !== 1) err('lines', 'Choose the one account the cash back was received into.');
+    if (lines[0] && !['cash', 'bank'].includes(lines[0].accountType)) err('account', 'Cash back is received into a cash or bank account.');
+    if (!(amount > 0)) err('amount', 'Enter the amount received.');
+    else if (invoice && amount > r2(m.paid - m.cashBack) + EPS) err('amount', `The cash back can't be more than what was paid on this invoice (${r2(m.paid - m.cashBack).toFixed(2)}).`);
+  }
+  const d = Number.isFinite(discount) ? discount : 0;
+  const value = {
+    kind, date, lines, amount, bankCharges, discount: kind === PAYMENT_KINDS.payment ? d : 0, note,
+    applied: kind === PAYMENT_KINDS.payment ? r2(amount + d) : 0, cashBack: kind === PAYMENT_KINDS.cashback ? amount : 0,
+  };
+  return { ok: errors.length === 0, value, errors };
+}
+
+/**
+ * The records of one payment: the payment document, its balanced ledger entry and one posting per account.
+ * accounts: Map id → account (custodian, name). No entry when only a discount is given (no money moves).
+ */
+export function buildSupplierPaymentRecords({ id, spNo, value, invoice, accounts, actor, at, stamp, operationId }) {
+  const isCb = value.kind === PAYMENT_KINDS.cashback;
+  const entryKind = LEDGER_KIND_OF[value.kind];
+  const sup = clean(invoice.supplierName, 200);
+  const description = clean(`${isCb ? 'Cash back from' : 'Payment to'} ${sup} · ${invoice.piNo}`, 200);
+  const postings = {};   // accountId → { amountIn, amountOut, memoOut, charge, viaCard, reference }
+  for (const l of value.lines) {
+    const p = postings[l.postingAccountId] || (postings[l.postingAccountId] = { amountIn: 0, amountOut: 0, memoOut: 0, charge: 0, viaCard: '', reference: '' });
+    if (isCb) p.amountIn = r2(p.amountIn + l.amount);
+    else { p.amountOut = r2(p.amountOut + l.amount + l.bankCharge); p.charge = r2(p.charge + l.bankCharge); }
+    if (l.reference) p.reference = l.reference;
+    if (l.viaAccountId) {
+      p.viaCard = l.accountName;
+      const c = postings[l.accountId] || (postings[l.accountId] = { amountIn: 0, amountOut: 0, memoOut: 0, charge: 0, viaCard: '', reference: '' });
+      c.memoOut = r2(c.memoOut + l.amount); c.viaBank = l.viaAccountName; if (l.reference) c.reference = l.reference;
+    }
+  }
+  const accountIds = Object.keys(postings);
+  const entryId = accountIds.length ? paymentEntryIdOf(id) : '';
+  const moved = isCb ? value.amount : r2(value.amount + value.bankCharges);
+  const journal = isCb
+    ? [{ accountId: value.lines[0].postingAccountId, ledger: '', debit: value.amount, credit: 0 }, { accountId: '', ledger: 'purchase-discount', debit: 0, credit: value.amount }]
+    : [{ accountId: '', ledger: 'supplier-payable', debit: value.applied, credit: 0 },
+       ...(value.bankCharges > 0 ? [{ accountId: '', ledger: 'bank-charges', debit: value.bankCharges, credit: 0 }] : []),
+       ...accountIds.filter(a => postings[a].amountOut > 0).map(a => ({ accountId: a, ledger: '', debit: 0, credit: postings[a].amountOut })),
+       ...(value.discount > 0 ? [{ accountId: '', ledger: 'purchase-discount', debit: 0, credit: value.discount }] : [])];
+  const payment = {
+    id, schemaVersion: PURCHASE_SCHEMA_VERSION, kind: value.kind, spNo, operationId,
+    invoiceId: invoice.id, piNo: invoice.piNo, supplierId: invoice.supplierId || '', supplierName: sup, supplierKey: invoice.supplierKey || '',
+    date: value.date, lines: value.lines, amount: value.amount, bankCharges: value.bankCharges, discount: value.discount,
+    applied: value.applied, cashBack: value.cashBack, note: value.note, entryId,
+    status: PURCHASE_STATUS.posted, revision: 1,
+    accounting: { lines: journal },
+    created: at, createdBy: actor.name, createdByUid: actor.uid, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid, recordedAt: stamp,
+  };
+  if (!entryId) return { payment, entry: null, lines: [] };
+  const entry = {
+    id: entryId, schemaVersion: 1, kind: entryKind, paymentId: id, invoiceId: invoice.id, piNo: invoice.piNo,
+    voucherNo: spNo, date: value.date, amount: moved, description,
+    lines: journal, accountIds,
+    postings: Object.fromEntries(accountIds.map(a => [a, { amountIn: postings[a].amountIn, amountOut: postings[a].amountOut, memoOut: postings[a].memoOut }])),
+    void: false, revision: 1,
+    recordedByUid: actor.uid, recordedByName: actor.name, recordedAt: at,
+    updatedByUid: actor.uid, updatedByName: actor.name, updatedAt: stamp,
+  };
+  const lines = accountIds.map(a => {
+    const acc = accounts.get(a) || { id: a, name: a, type: 'bank' }, p = postings[a];
+    const needsConfirm = acc.type === 'cash' && (p.amountIn > 0 || p.amountOut > 0);
+    const extra = [p.reference, p.charge > 0 ? `incl. bank charge ${p.charge.toFixed(2)}` : '', p.viaCard ? `by ${p.viaCard}` : '', p.memoOut > 0 ? `paid by card — from ${p.viaBank || 'the linked bank'}` : ''].filter(Boolean).join(' · ');
+    return {
+      id: ledgerLineIdOf(entryId, a), entryId, voucherNo: spNo, kind: entryKind, date: value.date, description,
+      details: clean(extra, 200), void: false, entryRevision: 1, schemaVersion: 1,
+      recordedByUid: actor.uid, recordedByName: actor.name, recordedAt: at,
+      accountId: a, accountName: clean(acc.name, 80), custodianUid: acc.custodianUid || '',
+      counterpartAccountId: '', counterpartName: sup, counterpartLineId: '',
+      amountIn: p.amountIn, amountOut: p.amountOut, memoOut: p.memoOut, charge: p.charge,
+      needsConfirm, status: needsConfirm ? 'pending' : 'none',
+      statusByUid: '', statusByName: '', statusAt: null, statusNote: '', onBehalf: false,
+      paymentId: id, invoiceId: invoice.id, piNo: invoice.piNo,
+    };
+  });
+  return { payment, entry, lines };
+}

@@ -60,3 +60,6 @@ html body #pa-modal .pa-form{align-content:start;overflow:auto}
 }
 .pa-edit{width:34px;height:32px;padding:0!important;justify-content:center}.pa-edit i{margin:0!important}
 .pa-cust{white-space:normal}
+
+/* V268.2: a card without its linked bank account */
+.pa-warn{color:#b45309;font-size:12.5px;font-weight:600}

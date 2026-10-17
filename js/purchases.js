@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════
    BizCore V268.12 — Purchasing → Purchase Invoices (approved mockups 4 + 7, 17 Oct 2026)
+   V268.2: supplier payments at entry and later (Record payment), discount at payment, cash back, cancel payment
    V268.12: item · sales order in one wide column, qty "of N to buy" + status, Selling → P/L per line (allowed roles), phone cards
    • Register (standard register: monitor, one-line toolbar, table / phone cards)
    • New Purchase Invoice: supplier & bill (supplier's total required), lines from Sales Orders
@@ -79,6 +80,10 @@ function piPayPill(pi){
   const due = d === null ? '' : d < 0 ? ` · ${-d}d overdue` : d === 0 ? ' · due today' : ` · due ${piDate(pi.dueDate)}`;
   return `<span class="pi-pay ${d !== null && d < 0 ? 'over' : 'open'}">${piEsc(st)}${due}</span>`;
 }
+/** Paid / Part paid / Unpaid pill (credit = nothing paid at entry). */
+function piStatusPill(st, credit){
+  return st === 'Paid' ? '<span class="pi-pay paid">Paid</span>' : st === 'Part paid' ? '<span class="pi-pay open">Part paid</span>' : `<span class="pi-pay open">${credit ? 'Unpaid (credit)' : 'Unpaid'}</span>`;
+}
 function renderPurchaseRegister(){
   const lib = piLib(), body = document.getElementById('pireg-body'); if (!lib || !body) return;
   lib.start();
@@ -155,8 +160,10 @@ function piEnsureModal(){
         <section class="so-entry-card"><div class="so-entry-card-title so-items-title"><span class="pi-title-ic"><i class="ti ti-receipt-2"></i><span id="pe-costs-title">Additional costs &amp; discount</span></span><span class="pi-actions"><button type="button" class="btn btn-secondary btn-sm" id="pe-add-disc" onclick="piAddDiscount()"><i class="ti ti-discount"></i>Add discount</button><button type="button" class="btn btn-secondary btn-sm" onclick="piAddCost()"><i class="ti ti-plus"></i>Add cost</button></span></div>
           <div id="pe-costs"></div>
         </section>
-        <section class="so-entry-card"><div class="so-entry-card-title"><i class="ti ti-cash"></i>Payment <span class="pi-pay open" style="margin-left:6px">Unpaid (credit)</span></div>
-          <div class="pi-due"><i class="ti ti-clock"></i><span>Payments are added in the next version. This invoice is saved <b>Unpaid (credit)</b> — the whole total goes to the supplier's payable.</span><label for="pe-due">Payment due *</label><input id="pe-due" type="date" onchange="piRecalc()"></div>
+        <section class="so-entry-card"><div class="so-entry-card-title so-items-title"><span class="pi-title-ic"><i class="ti ti-cash"></i>Payments <span id="pe-pay-pill"></span><span class="pi-sub pi-pay-hint">· one line per account; paying more than the total is not allowed yet</span></span><span class="pi-actions"><button type="button" class="btn btn-secondary btn-sm" id="pe-add-pay" onclick="piAddPayLine()"><i class="ti ti-plus"></i>Add payment</button></span></div>
+          <div class="pi-lines-wrap"><table class="pi-lines pi-pay-table"><thead id="pe-pay-head"></thead><tbody id="pe-pay"></tbody></table></div>
+          <div class="pi-due" id="pe-due-row"><i class="ti ti-clock"></i><span id="pe-due-text"></span><label for="pe-due">Payment due *</label><input id="pe-due" type="date" onchange="piState().dueTouched=true;piRecalc()"></div>
+          <div class="pi-paid-full" id="pe-paid-full" hidden><i class="ti ti-circle-check"></i>Paid in full — nothing goes to the supplier's payable.</div>
         </section>
       </div>
       <aside class="pi-entry-side">
@@ -177,7 +184,8 @@ function openNewPurchaseInvoice(){
   lib.start();
   const m = piEnsureModal();
   const today = piToday();
-  m._s = { lines: [], costs: [], discount: null, vatTouched: false, op: 'pi-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10) };
+  m._s = { lines: [], costs: [], discount: null, vatTouched: false, pays: [], op: 'pi-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10) };
+  piStartAccounts();
   const sups = (typeof suppliers !== 'undefined' ? suppliers : []).slice().sort((a, b) => String(a.company || '').localeCompare(String(b.company || '')));
   document.getElementById('pe-supplier').innerHTML = '<option value="">Choose the supplier…</option>' + sups.map(s => `<option value="${piEsc(s.id)}">${piEsc(s.company || s.name || s.id)}</option>`).join('');
   ['pe-invno', 'pe-zoho', 'pe-suptotal'].forEach(id => { document.getElementById(id).value = ''; });
@@ -186,13 +194,16 @@ function openNewPurchaseInvoice(){
   const x = typeof docNumberParts === 'function' ? docNumberParts('purchaseInvoice') : { displayPrefix: 'PI-' };
   document.getElementById('pe-subtitle').textContent = `Number assigned on save · ${x.displayPrefix}…`;
   document.getElementById('pe-error').hidden = true;
-  piRenderLines(); piRenderCosts(); piRecalc();
+  piRenderLines(); piRenderCosts(); piRenderPays(); piRecalc();
   if (typeof openModalWithSize === 'function') openModalWithSize('pi-new-modal'); else m.classList.add('open');
   setTimeout(() => document.getElementById('pe-supplier').focus(), 60);
 }
 function piHeadChanged(dateChanged){
   const s = piState(); if (!s) return;
-  if (dateChanged) { const d = document.getElementById('pe-date').value; if (d && !s.dueTouched) document.getElementById('pe-due').value = piAddDays(d, 30); }
+  if (dateChanged) {
+    const d = document.getElementById('pe-date').value; if (d && !s.dueTouched) document.getElementById('pe-due').value = piAddDays(d, 30);
+    if (d) { s.pays.forEach(p => { if (!p.dateTouched) p.date = d; }); piRenderPays(); }
+  }
   piRecalc();
 }
 function piMoneyBlur(el){ const raw = String(el.value || '').replace(/[,\s]/g, ''); if (raw === '' || !Number.isFinite(Number(raw))) return; el.value = piF(Number(raw)); }
@@ -245,17 +256,18 @@ function piQtyInfo(l, i){
   return `<div class="pi-ref-sub">Of ${piQ(left)} to buy</div>${st}`;
 }
 /** Selling → P/L of one line: selling price on the Sales Order × qty for the order(s) − landed cost of that qty. */
-function piLinePL(vl){
+function piLinePL(vl, factor){
   if (!vl) return null;
   const allocs = vl.allocations || [], q = allocs.reduce((s, a) => s + piN(a.qty), 0);
   if (!(q > 0) || !Number.isFinite(Number(vl.landedUnitCost))) return null;
   const sales = allocs.reduce((s, a) => s + piN(a.sellUnit != null ? a.sellUnit : vl.sellUnit) * piN(a.qty), 0);
-  const profit = sales - piN(vl.landedUnitCost) * q;
+  // V268.2: discount at payment / cash back lower every item's cost by the same share
+  const profit = sales - piN(vl.landedUnitCost) * (1 - (Number(factor) || 0)) * q;
   return { sell: piN(vl.sellUnit), q, sales, profit, pct: sales > 0 ? profit / sales * 100 : null, partial: piN(vl.stockQty) > 0 };
 }
-function piPLHtml(vl){
+function piPLHtml(vl, factor){
   if (vl && vl.kind === 'stock') return '<span class="pi-sub">For stock</span>';
-  const p = piLinePL(vl); if (!p) return '<span class="pi-sub">—</span>';
+  const p = piLinePL(vl, factor); if (!p) return '<span class="pi-sub">—</span>';
   const loss = p.profit < -0.005, c = loss ? 'pi-red' : 'pi-green';
   return `<span class="pi-sub">Sell ${piF(p.sell)}</span><b class="pi-plv ${c}">${p.profit > 0.005 ? '+' : ''}${piF(p.profit)}</b><span class="pi-plp ${c}">${p.pct == null ? '' : p.pct.toFixed(1) + '%'}${p.partial ? ` · ${piQ(p.q)} for the order` : ''}</span>`;
 }
@@ -395,7 +407,7 @@ function piRenderCosts(){
 function piProfitBox(p, note){
   const loss = Number(p.profit) < -0.005;
   return `<div class="pi-hl${loss ? ' loss' : ''}"><div class="pi-ps"><span>${loss ? 'Loss' : 'Profit'} on these orders</span><b class="${loss ? 'pi-red' : 'pi-green'}">${piF(p.profit)}</b></div>
-    <small>Sales value ${piF(p.sales)} − cost ${piF(p.cost)}${note ? ' · shown only to roles allowed in Administration' : ''}</small></div>`;
+    <small>Sales value ${piF(p.sales)} − cost ${piF(p.cost)}${p.reduced ? ` · cost lowered ${piF(p.reduced)} by discount at payment / cash back` : ''}${note ? ' · shown only to roles allowed in Administration' : ''}</small></div>`;
 }
 /* totals, checks, "To continue" */
 function piReadInput(){
@@ -403,13 +415,100 @@ function piReadInput(){
   const sup = (typeof suppliers !== 'undefined' ? suppliers : []).find(x => x.id === sel.value);
   return {
     operationId: s.op, supplierId: sup ? sup.id : '', supplierName: sup ? (sup.company || sup.name || '') : '', supplierVat: sup ? (sup.vat || '') : '',
-    supplierInvoiceNo: document.getElementById('pe-invno').value, date: document.getElementById('pe-date').value, dueDate: document.getElementById('pe-due').value,
+    supplierInvoiceNo: document.getElementById('pe-invno').value, date: document.getElementById('pe-date').value,
+    // V268.2: paid in full at entry → nothing is payable later; the due date is the invoice date
+    dueDate: s._pay && s._total > 0 && s._total - s._pay.paid <= 0.005 && !s._pay.errors.length ? document.getElementById('pe-date').value : document.getElementById('pe-due').value,
     zohoBillNo: document.getElementById('pe-zoho').value, supplierTotal: document.getElementById('pe-suptotal').value,
     vat: s.vatTouched ? s.vat : null,
     costs: s.costs.map(c => ({ label: c.label, amount: piN(c.amount) })), discount: s.discount && piN(s.discount.value) > 0 ? { mode: s.discount.mode, value: piN(s.discount.value) } : null,
     lines: s.lines.map(l => ({ kind: l.kind, soId: l.soId, soLineId: l.soLineId, productId: l.productId, code: l.code, desc: l.desc, uom: l.uom, qty: l.qty, unitCost: l.unitCost === '' ? NaN : l.unitCost,
       discountPct: l.discountPct, reference: l.reference, costReason: l.costReason, extra: l.extra ? { to: l.extra.to, soId: l.extra.soId, soLineId: l.extra.soLineId } : null })),
+    payments: piPayGroups(s.pays, document.getElementById('pe-date').value),
   };
+}
+/* ═══════════════════════════════ V268.2 PAYMENTS (approved mockups PI_4 / PI_8 / PI_9 / PI_10) ═══════════════════════════════ */
+const piAccLib = () => window.BizCoreAcc;
+const piAccounts = () => (piAccLib() ? piAccLib().accounts : []);
+const piAccOf = id => piAccounts().find(a => a.id === id) || null;
+const piAccMap = () => new Map(piAccounts().map(a => [a.id, a]));
+function piStartAccounts(){ if (piAccLib()) piAccLib().start(); if (window.BizCoreCash) window.BizCoreCash.start(); }
+const PI_TY = { cash: ['c', 'ti-cash'], card: ['k', 'ti-credit-card'], bank: ['b', 'ti-building-bank'] };
+function piAccIcon(t){ const m = PI_TY[t] || PI_TY.cash; return `<span class="pi-ty ${m[0]}"><i class="ti ${m[1]}"></i></span>`; }
+function piAccLabel(a){ return a ? `${a.code} · ${a.name}` : ''; }
+/** Account choices, grouped by type (only active accounts; the current one is kept). */
+function piAccOptions(current, types){
+  const list = piAccounts().filter(a => (a.active !== false || a.id === current) && (!types || types.includes(a.type)));
+  const grp = { cash: 'Cash', card: 'Card', bank: 'Bank' };
+  return '<option value="">Choose the account…</option>' + Object.keys(grp).filter(t => list.some(a => a.type === t)).map(t =>
+    `<optgroup label="${grp[t]}">${list.filter(a => a.type === t).map(a => `<option value="${piEsc(a.id)}"${a.id === current ? ' selected' : ''}>${piEsc(piAccLabel(a))}</option>`).join('')}</optgroup>`).join('');
+}
+/** What happens on this account: cash → the custodian confirms; card → from its linked bank; bank → bank charge. */
+function piPayInfo(p, onCharge){
+  const a = piAccOf(p.accountId); if (!a) return '';
+  if (a.type === 'cash') return `<span class="pi-wait">⏳ ${piEsc(String(a.custodianName || 'Custodian').split(/\s+/)[0])} confirms</span>`;
+  if (a.type === 'card') { const b = piAccOf(a.linkedBankAccountId); return b ? `<span class="pi-via"><i class="ti ti-building-bank"></i>via ${piEsc(b.name)} — bank balance, at once</span>` : '<span class="pi-red pi-via"><i class="ti ti-alert-triangle"></i>No linked bank account — set it in Administration → Payment Accounts</span>'; }
+  return onCharge ? `<span class="pi-chg"><label>Bank charge</label><input class="pi-cell pi-money" inputmode="decimal" placeholder="0.00" value="${piEsc(p.bankCharge || '')}" aria-label="Bank charge" oninput="${onCharge}"></span><span class="pi-sub">→ bank expense, not the supplier</span>` : '<span class="pi-sub">Bank — no confirmation</span>';
+}
+/** Payment lines of the new invoice → one payment per date. */
+function piPayGroups(pays, invDate){
+  const groups = new Map();
+  (pays || []).forEach(p => {
+    if (!p.accountId && !String(p.amount || '').trim()) return;
+    const d = p.date || invDate;
+    if (!groups.has(d)) groups.set(d, []);
+    groups.get(d).push({ accountId: p.accountId, amount: p.amount, reference: p.reference, bankCharge: p.bankCharge });
+  });
+  return [...groups].map(([date, lines]) => ({ date, lines, numbering: piPayNumbering(date) }));
+}
+function piPayNumbering(date){
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? new Date(date + 'T00:00:00') : new Date();
+  const x = typeof docNumberParts === 'function' ? docNumberParts('supplierPayment', d) : { counterKey: 'doc_supplierPayment_all', displayPrefix: 'SP-' };
+  return { counterKey: x.counterKey, displayPrefix: x.displayPrefix };
+}
+/** Checks the entry's payments one after the other against what is left of the total. */
+function piCheckPays(groups, total){
+  const C = piCore(), accounts = piAccMap();
+  const inv = { status: 'Posted', totals: { total }, paid: 0, paymentDiscount: 0, cashBack: 0 };
+  const errors = [];
+  groups.forEach(g => {
+    const v = C.validateSupplierPayment({ kind: 'payment', date: g.date, lines: g.lines, discount: 0 }, { invoice: inv, accounts, today: piToday() });
+    errors.push(...v.errors);
+    if (v.ok) inv.paid = Math.round((inv.paid + v.value.amount) * 100) / 100;
+  });
+  const accts = new Set(groups.flatMap(g => g.lines.map(l => l.accountId)).filter(Boolean));
+  return { paid: inv.paid, errors, accounts: accts.size };
+}
+function piAddPayLine(){
+  const s = piState(); if (!s) return;
+  const date = document.getElementById('pe-date').value || piToday();
+  const t = s._v ? s._v.totals : null, total = t ? (t.supplierTotal != null ? t.supplierTotal : t.calcTotal) : 0;
+  const paid = piCheckPays(piPayGroups(s.pays, date), total).paid;
+  const left = Math.max(0, Math.round((total - paid) * 100) / 100);
+  s.pays.push({ accountId: '', date, amount: left > 0 ? piF(left) : '', reference: '', bankCharge: '' });
+  piRenderPays(); piRecalc();
+  setTimeout(() => { const el = document.querySelectorAll('#pe-pay .pi-pay-acc'); if (el.length) el[el.length - 1].focus(); }, 30);
+}
+function piSetPay(i, field, value, rerender){
+  const s = piState(), p = s && s.pays[i]; if (!p) return;
+  p[field] = value;
+  if (field === 'date') p.dateTouched = true;
+  if (field === 'accountId') { const a = piAccOf(value); if (!a || a.type !== 'bank') p.bankCharge = ''; }
+  if (rerender) piRenderPays();
+  piRecalc();
+}
+function piRenderPays(){
+  const s = piState(); if (!s) return;
+  document.getElementById('pe-pay-head').innerHTML = s.pays.length ? '<tr><th>Paid from (payment account)</th><th style="width:150px">Date</th><th class="num" style="width:130px">Amount</th><th style="width:160px">Reference</th><th style="width:250px">Confirmation</th><th style="width:34px"></th></tr>' : '';
+  const body = document.getElementById('pe-pay');
+  body.innerHTML = s.pays.length ? s.pays.map((p, i) => {
+    const a = piAccOf(p.accountId);
+    return `<tr class="pi-pay-line" data-p="${i}"><td><span class="pi-pay-sel">${a ? piAccIcon(a.type) : ''}<select class="pi-pay-acc" aria-label="Paid from" onchange="piSetPay(${i},'accountId',this.value,true)">${piAccOptions(p.accountId)}</select></span></td>
+      <td><input class="pi-cell pi-pay-date" type="date" value="${piEsc(p.date)}" aria-label="Payment date" onchange="piSetPay(${i},'date',this.value)"></td>
+      <td class="num"><input class="pi-cell pi-money pi-pay-amt" inputmode="decimal" placeholder="0.00" value="${piEsc(p.amount)}" aria-label="Amount" oninput="piSetPay(${i},'amount',this.value)" onblur="piMoneyBlur(this)"></td>
+      <td><input class="pi-cell pi-pay-ref" maxlength="60" placeholder="optional" value="${piEsc(p.reference)}" aria-label="Reference" oninput="piSetPay(${i},'reference',this.value)"></td>
+      <td class="pi-pay-info">${piPayInfo(p, `piSetPay(${i},'bankCharge',this.value)`)}</td>
+      <td><button type="button" class="pi-x" title="Remove payment" aria-label="Remove payment" onclick="piState().pays.splice(${i},1);piRenderPays();piRecalc()"><i class="ti ti-x"></i></button></td></tr>`;
+  }).join('') : `<tr><td class="pi-empty-lines pi-nopay"><i class="ti ti-cash-off"></i>No payment now — the whole total goes to the supplier's payable. Use <b>Add payment</b> if you paid all or part of it.</td></tr>`;
 }
 function piValidateLocal(input){
   const orders = new Map(), ledgers = new Map();
@@ -419,7 +518,16 @@ function piValidateLocal(input){
 function piSetVat(v){ const s = piState(); s.vatTouched = true; s.vat = v; piRecalc(true); }
 function piRecalc(keepVatFocus){
   const s = piState(); if (!s || !piCore()) return;
-  const input = piReadInput(), v = piValidateLocal(input), t = v.totals, set = piSettings();
+  let input = piReadInput(), v = piValidateLocal(input), t = v.totals;
+  const set = piSettings();
+  // V268.2: payments made now, checked against the total (paid in full → no due date needed)
+  const total = t.supplierTotal != null ? t.supplierTotal : t.calcTotal;
+  const pc = piCheckPays(input.payments, total);
+  const left = Math.round((total - pc.paid) * 100) / 100, stNow = piCore().payStatusFrom(total, pc.paid, 0);
+  const prevFull = s._pay && s._total > 0 && s._total - s._pay.paid <= 0.005 && !s._pay.errors.length;
+  s._pay = pc; s._total = total;
+  const full = total > 0 && left <= 0.005 && !pc.errors.length;
+  if (full !== !!prevFull) { input = piReadInput(); v = piValidateLocal(input); t = v.totals; }
   // supplier total check
   const match = document.getElementById('pe-match');
   if (t.supplierTotal == null) match.innerHTML = `<div class="pi-match idle"><i class="ti ti-info-circle"></i><span>Type the total printed on the supplier's invoice. BizCore's total: <b>${piF(t.calcTotal)}</b></span></div>`;
@@ -436,9 +544,9 @@ function piRecalc(keepVatFocus){
     <div class="pi-ps"><span>BizCore total</span><b>${piF(t.calcTotal)}</b></div>
     <div class="pi-ps"><span>Rounding <small>(to supplier's total)</small></span><b>${t.rounding == null ? '—' : (t.rounding > 0 ? '+' : '') + piF(t.rounding)}</b></div>
     <div class="pi-tot"><span>Total (SAR)</span><span>${piF(t.supplierTotal != null ? t.supplierTotal : t.calcTotal)}</span></div>
-    <div class="pi-ps"><span>Paid now</span><b>0.00</b></div>
-    <div class="pi-ps"><span>Balance to pay later</span><b class="pi-amber">${piF(t.supplierTotal != null ? t.supplierTotal : t.calcTotal)}</b></div>
-    <div class="pi-ps"><span>Payment status</span><span class="pi-pay open">Unpaid (credit)</span></div>
+    <div class="pi-ps"><span>Paid now${pc.accounts ? ` <small>(${pc.accounts} account${pc.accounts > 1 ? 's' : ''})</small>` : ''}</span><b>${piF(pc.paid)}</b></div>
+    <div class="pi-ps"><span>Balance to pay later</span><b class="${left > 0.005 ? 'pi-amber' : 'pi-green'}">${piF(Math.max(0, left))}</b></div>
+    <div class="pi-ps"><span>Payment status</span>${piStatusPill(stNow, true)}</div>
     <p class="pi-note">Discount type (${set.discountMode === 'both' ? 'whole invoice and per line' : set.discountMode === 'line' ? 'per line' : 'whole invoice'}) and the rounding limit are set in Administration → Purchase Settings.</p>`;
   // cost vs estimate
   let est = 0, last = 0, none = 0, actual = 0, refd = 0;
@@ -458,23 +566,35 @@ function piRecalc(keepVatFocus){
   const nLine = errs.filter(e => ['qty', 'unitCost', 'desc', 'soLine', 'discountPct'].includes(e.field)).length; if (nLine) chips.push(`<span class="pi-todo-c">${nLine} Line${nLine > 1 ? 's' : ''} to complete</span>`);
   if (has(['costs', 'discount', 'vat'])) chips.push('<span class="pi-todo-c">Costs / discount / VAT</span>');
   chips.push(has(['supplierTotal']) ? '<span class="pi-todo-c">Supplier total</span>' : '<span class="pi-todo-c ok"><i class="ti ti-check"></i>Supplier total matches</span>');
+  if (pc.errors.length) chips.push('<span class="pi-todo-c">Payments to complete</span>');
+  else if (pc.paid > 0) chips.push(`<span class="pi-todo-c ok"><i class="ti ti-check"></i>${full ? 'Paid in full' : `Part paid · ${piF(left)} due`}</span>`);
   document.getElementById('pe-todo').innerHTML = chips.join('');
-  document.getElementById('pe-save').disabled = !v.ok;
+  document.getElementById('pe-save').disabled = !v.ok || pc.errors.length > 0;
+  // payment section: status, balance left / paid in full
+  const pill = document.getElementById('pe-pay-pill'); if (pill) pill.innerHTML = pc.paid > 0 ? piStatusPill(stNow) : '';
+  const dueRow = document.getElementById('pe-due-row'), fullRow = document.getElementById('pe-paid-full');
+  if (dueRow) { dueRow.hidden = full; document.getElementById('pe-due-text').innerHTML = pc.paid > 0 ? `<b>Balance to pay later: ${piF(Math.max(0, left))}</b> — goes to the supplier's payable` : `Not paid now — the whole total <b>${piF(total)}</b> goes to the supplier's payable`; }
+  if (fullRow) fullRow.hidden = !full;
+  const errBox = document.getElementById('pe-error');
+  if (errBox && !errBox.hidden && errBox.dataset.pay === '1' && !pc.errors.length) errBox.hidden = true;
   piFillLinePL(v);
   s._v = v;
 }
 async function savePurchaseInvoice(){
   const m = document.getElementById('pi-new-modal'), s = piState(), lib = piLib(); if (!s || !lib) return;
+  piRecalc();
   const input = piReadInput(), v = piValidateLocal(input);
   const err = document.getElementById('pe-error');
-  if (!v.ok) { err.hidden = false; err.textContent = v.errors.map(e => e.message).join(' '); return; }
+  if (!v.ok) { err.hidden = false; err.dataset.pay = ''; err.textContent = v.errors.map(e => e.message).join(' '); return; }
+  if (s._pay && s._pay.errors.length) { err.hidden = false; err.dataset.pay = '1'; err.textContent = s._pay.errors.map(e => e.message).join(' '); return; }
   const date = input.date ? new Date(input.date + 'T00:00:00') : new Date();
   const x = typeof docNumberParts === 'function' ? docNumberParts('purchaseInvoice', date) : { counterKey: 'doc_purchaseInvoice_all', displayPrefix: 'PI-' };
   const btn = document.getElementById('pe-save'); btn.disabled = true; err.hidden = true;
   try {
     const r = await lib.service.createPurchaseInvoice({ ...input, numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix } });
     closeModal('pi-new-modal');
-    if (typeof showToast === 'function') showToast(`${r.invoice.piNo} saved — Unpaid, due ${piDate(r.invoice.dueDate)}`, 'success');
+    const st = r.invoice.payStatus;
+    if (typeof showToast === 'function') showToast(`${r.invoice.piNo} saved — ${st === 'Paid' ? 'Paid' : st === 'Part paid' ? `Part paid, ${piF(r.invoice.balance)} due ${piDate(r.invoice.dueDate)}` : `Unpaid, due ${piDate(r.invoice.dueDate)}`}`, 'success');
   } catch (e) {
     err.hidden = false;
     err.textContent = e.code === 'permission-denied' ? 'The server refused the invoice. Please reload and try again.' : (e.message || 'Could not save the invoice.');
@@ -483,12 +603,17 @@ async function savePurchaseInvoice(){
 }
 
 /* ═══════════════════════════════ VIEW + CANCEL ═══════════════════════════════ */
-function openPurchaseInvoiceView(id){
-  const pi = piInvoices().find(p => p.id === id); if (!pi) return;
+function openPurchaseInvoiceView(id, retried){
+  const pi = piInvoices().find(p => p.id === id);
+  if (!pi) { if (!retried && piLib()) { piLib().start(); setTimeout(() => openPurchaseInvoiceView(id, true), 800); } return; }
+  piStartAccounts();
   let m = document.getElementById('pi-view-modal');
   if (!m) { m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'pi-view-modal'; document.body.appendChild(m); }
+  m._id = id;
   const t = pi.totals || {}, v = pi.status === 'Voided';
   const pl = piCanSeeProfit();
+  const C = piCore(), f = C.costFactorOf(pi), money = C.invoiceMoneyOf(pi);
+  const pays = piPaymentsOf(pi), livePays = pays.filter(p => p.status !== 'Voided');
   const lines = (pi.lines || []).map(l => {
     const goes = (l.allocations || []).map(a => `<span class="pi-dest"><i class="ti ti-shopping-cart"></i>${piEsc(a.soNo)} · ${piQ(a.qty)}</span>`).join('') + (piN(l.stockQty) > 0 ? `<span class="pi-dest stock"><i class="ti ti-box"></i>Unassigned stock · ${piQ(l.stockQty)}</span>` : '');
     const ref = l.reference && l.reference.unit ? `${l.reference.source === 'lastPaid' ? 'Last paid ' : 'Est. '}${piF(l.reference.unit)}` : 'No reference';
@@ -497,7 +622,7 @@ function openPurchaseInvoiceView(id){
     return `<tr class="pi-line"><td class="pi-c-item"><div class="pi-idesc">${piEsc(l.desc)}</div><div class="pi-sub">${sub}</div>${l.costReason ? `<div class="pi-sub">Reason: ${piEsc(l.costReason)}</div>` : ''}</td>
       <td class="num pi-c-qty" data-label="Qty">${piQ(l.qty)}</td><td class="num pi-c-cost" data-label="Unit cost">${piF(l.unitCost)}<div class="pi-sub ${l.costCheck === 'above' ? 'pi-red' : l.costCheck === 'below' ? 'pi-blue' : ''}">${ref}${pct}</div></td>
       <td class="num pi-c-disc" data-label="Disc.">${piN(l.discountPct) ? piN(l.discountPct) + '%' : '—'}</td><td class="num pi-c-amt" data-label="Amount"><span class="pi-amt">${piF(l.amount)}</span></td><td class="num pi-c-land" data-label="Landed unit cost">${piF(l.landedUnitCost)}</td>
-      ${pl ? `<td class="num pi-c-pl pi-pl">${piPLHtml(l)}</td>` : ''}<td class="pi-c-goes">${goes}</td></tr>`;
+      ${pl ? `<td class="num pi-c-pl pi-pl">${piPLHtml(l, f)}</td>` : ''}<td class="pi-c-goes">${goes}</td></tr>`;
   }).join('');
   m.innerHTML = `<div class="modal pi-view" role="dialog" aria-modal="true" aria-labelledby="pi-view-title" style="width:min(1100px,96vw);max-width:1100px;height:auto;max-height:92vh">
     <div class="modal-header"><div><h2 id="pi-view-title">${piEsc(pi.piNo)} ${piPayPill(pi)}</h2><div class="so-create-subtitle">${piEsc(pi.supplierName)} · invoice ${piEsc(pi.supplierInvoiceNo)} · ${piDate(pi.date)}</div></div><button class="close-btn" type="button" onclick="closeModal('pi-view-modal')" aria-label="Close">✕</button></div>
@@ -512,16 +637,24 @@ function openPurchaseInvoiceView(id){
         <div><label>Recorded by</label><b>${piEsc(pi.createdBy)}</b><small>${piDate(String(pi.created || '').slice(0, 10))}</small></div>
       </div>
       <div class="pi-lines-wrap"><table class="pi-lines pi-view-lines${pl ? ' pi-has-pl' : ''}"><thead><tr><th>Item · sales order</th><th class="num">Qty</th><th class="num">Unit cost</th><th class="num">Disc.</th><th class="num">Amount</th><th class="num">Landed unit cost</th>${pl ? '<th class="num pi-plh">Selling → P/L</th>' : ''}<th class="pi-goesh">Goes to</th></tr></thead><tbody>${lines}</tbody></table></div>
+      ${piPaymentsSection(pi, pays, money)}
       <div class="pi-view-foot">
         <div>${(pi.costs || []).map(c => `<div class="pi-ps"><span>${piEsc(c.label)}</span><b>${piF(c.amount)}</b></div>`).join('')}${pi.discount ? `<div class="pi-ps"><span>Discount on the whole invoice${pi.discount.mode === 'percent' ? ' (' + pi.discount.value + '%)' : ''}</span><b class="pi-green">−${piF(pi.discount.amount)}</b></div>` : ''}</div>
         <div class="pi-view-sum"><div class="pi-ps"><span>Lines (ex-VAT)</span><b>${piF(t.linesTotal)}</b></div>${t.costsTotal ? `<div class="pi-ps"><span>Additional costs</span><b>${piF(t.costsTotal)}</b></div>` : ''}${t.discount ? `<div class="pi-ps"><span>Discount</span><b class="pi-green">−${piF(t.discount)}</b></div>` : ''}
           <div class="pi-ps"><span>VAT (${t.vatRate}%)</span><b>${piF(t.vat)}</b></div>${t.rounding ? `<div class="pi-ps"><span>Rounding</span><b>${t.rounding > 0 ? '+' : ''}${piF(t.rounding)}</b></div>` : ''}
-          <div class="pi-tot"><span>Total (SAR)</span><span>${piF(t.total)}</span></div><div class="pi-ps"><span>Balance to pay</span><b class="pi-amber">${v ? '—' : piF(pi.balance)}</b></div>
-          ${piCanSeeProfit() && pi.profit && pi.profit.sales > 0 ? piProfitBox(pi.profit, false) : ''}</div>
+          <div class="pi-tot"><span>Total (SAR)</span><span>${piF(t.total)}</span></div>
+          ${money.paid ? `<div class="pi-ps"><span>Paid</span><b>${piF(money.paid)}</b></div>` : ''}
+          ${money.paymentDiscount ? `<div class="pi-ps"><span>Discount at payment</span><b class="pi-green">−${piF(money.paymentDiscount)}</b></div>` : ''}
+          <div class="pi-ps"><span>Balance to pay</span><b class="${money.balance > 0.005 ? 'pi-amber' : 'pi-green'}">${v ? '—' : piF(money.balance)}</b></div>
+          ${money.cashBack ? `<div class="pi-ps"><span>Cash back received</span><b class="pi-green">${piF(money.cashBack)}</b></div>` : ''}
+          ${piCanSeeProfit() && pi.profit && pi.profit.sales > 0 ? piProfitBox(C.profitAfterDiscounts(pi), false) : ''}</div>
       </div>
       <div class="inv-error" id="pv-error" hidden></div>
     </div>
-    <div class="modal-footer">${v ? '' : `<button class="btn btn-danger" type="button" style="margin-right:auto" onclick="piAskCancel('${piEsc(pi.id)}')"><i class="ti ti-ban"></i>Cancel invoice</button>`}<button class="btn btn-secondary" type="button" onclick="closeModal('pi-view-modal')">Close</button></div></div>`;
+    <div class="modal-footer">${v ? '' : `<button class="btn btn-danger" type="button" style="margin-right:auto" ${livePays.length ? `title="Cancel its payments first" onclick="piViewError('${piEsc(pi.piNo)} has payments — cancel them first, then the invoice.')"` : `onclick="piAskCancel('${piEsc(pi.id)}')"`}><i class="ti ti-ban"></i>Cancel invoice</button>`}<button class="btn btn-secondary" type="button" onclick="closeModal('pi-view-modal')">Close</button>
+      ${!v && money.paid - money.cashBack > 0.005 ? `<button class="btn btn-secondary" type="button" id="pv-cashback" onclick="piOpenCashBack('${piEsc(pi.id)}')"><i class="ti ti-arrow-back-up"></i>Cash back</button>` : ''}
+      ${!v && money.balance > 0.005 ? `<button class="btn btn-primary" type="button" id="pv-pay" onclick="piOpenPayModal('${piEsc(pi.id)}')"><i class="ti ti-cash"></i>Record payment</button>` : ''}</div></div>`;
+  if (m.classList.contains('open')) return;   // live refresh of an open view
   if (typeof openModalWithSize === 'function') openModalWithSize('pi-view-modal'); else m.classList.add('open');
 }
 function piAskCancel(id){
@@ -544,6 +677,196 @@ async function piDoCancel(id){
     await piLib().service.voidPurchaseInvoice({ operationId: 'piv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10), invoiceId: id, reason: why, expectedRevision: pi.revision });
     closeModal('pi-void-modal'); closeModal('pi-view-modal');
     if (typeof showToast === 'function') showToast(`${pi.piNo} cancelled`, 'success');
+  } catch (e) { err.hidden = false; err.textContent = e.message || 'Could not cancel.'; btn.disabled = false; }
+}
+
+/* ───────── V268.2: payments on the invoice view (approved mockup PI_8) ───────── */
+function piPaymentsOf(pi){
+  return (piLib() && piLib().payments || []).filter(p => p.invoiceId === pi.id)
+    .sort((a, b) => String(a.created || '').localeCompare(String(b.created || '')) || String(a.spNo || '').localeCompare(String(b.spNo || ''), undefined, { numeric: true }));
+}
+function piViewError(msg){ const e = document.getElementById('pv-error'); if (e) { e.hidden = !msg; e.textContent = msg || ''; } }
+/** The custodian's answer for a cash line / what happens on a bank or card line. */
+function piConfirmHtml(p, l){
+  if (p.status === 'Voided') return '';
+  const cash = window.BizCoreCash, posting = l.viaAccountId || l.accountId;
+  if (l.accountType === 'cash') {
+    const line = cash && (cash.lines || []).find(x => x.id === `${p.entryId}__${posting}`);
+    const who = String((piAccOf(l.accountId) || {}).custodianName || 'custodian').split(/\s+/)[0];
+    if (line && line.status === 'confirmed') return `<span class="pi-ok"><i class="ti ti-check"></i> Confirmed by ${piEsc(String(line.statusByName || who).split(/\s+/)[0])}</span>`;
+    if (line && line.status === 'queried') return `<span class="pi-qry"><i class="ti ti-alert-triangle"></i> Queried: “${piEsc(line.statusNote)}”</span>`;
+    return `<span class="pi-wait">⏳ ${piEsc(who)} confirms</span>`;
+  }
+  if (l.accountType === 'card') return `<span class="pi-sub">Card — from the bank</span>`;
+  return `<span class="pi-sub">Bank — no confirmation</span>`;
+}
+function piPaymentsSection(pi, pays, money){
+  const v = pi.status === 'Voided';
+  const st = piCore().payStatusOf(pi);
+  const rows = pays.map(p => {
+    const off = p.status === 'Voided', cb = p.kind === 'cashback';
+    const ls = p.lines || [];
+    const acc = ls.map(l => `<div class="pi-pv-acc"><span class="acc">${piAccIcon(l.accountType)}${piEsc(l.accountCode)} · ${piEsc(l.accountName)}</span>${l.viaAccountId ? `<div class="pi-sub pi-pv-via">from ${piEsc(l.viaAccountCode)} · ${piEsc(l.viaAccountName)}</div>` : ''}</div>`).join('')
+      + (!ls.length && p.discount ? '<div class="pi-sub">Discount only — no money moved</div>' : '');
+    const refs = ls.map(l => `<div>${l.reference ? piEsc(l.reference) : '<span class="pi-muted">—</span>'}</div>`).join('') + (p.note ? `<div class="pi-sub">${piEsc(p.note)}</div>` : '');
+    const amt = ls.map(l => `<div>${piF(l.amount)}${l.bankCharge ? `<div class="pi-sub">+ bank charge ${piF(l.bankCharge)}</div>` : ''}</div>`).join('') + (p.discount ? `<div class="pi-sub pi-green">discount ${piF(p.discount)}</div>` : '');
+    const conf = off ? `<span class="pi-status voided">Cancelled — ${piEsc(p.voidReason || '')}</span>` : ls.map(l => `<div>${piConfirmHtml(p, l)}</div>`).join('');
+    return `<tr class="${off ? 'pi-pv-void' : ''}" data-pay="${piEsc(p.id)}"><td><b class="pi-spno">${piEsc(p.spNo)}</b>${cb ? '<span class="pi-cbtag">Cash back</span>' : ''}</td><td>${piDate(p.date)}</td>
+      <td>${acc}</td><td class="pi-sub">${refs}</td><td class="num">${amt}</td><td>${conf}</td>
+      <td class="pi-sub">${piEsc(p.createdBy || '')} · ${piEsc(String(p.created || '').slice(8, 10) + '-' + String(p.created || '').slice(5, 7))}</td>
+      <td>${!off && !v ? `<button type="button" class="pi-cancel-pay" onclick="piAskCancelPay('${piEsc(p.id)}')">Cancel</button>` : ''}</td></tr>`;
+  }).join('');
+  return `<section class="pi-pv-pays"><h4><i class="ti ti-cash"></i>Payments ${!v && (money.paid || money.paymentDiscount) ? piStatusPill(st) : ''}<span class="pi-pv-sum">${money.paid || money.paymentDiscount ? `Paid ${piF(money.paid)}${money.paymentDiscount ? ` + discount ${piF(money.paymentDiscount)}` : ''} of ${piF(money.total)}` : ''}${money.cashBack ? ` · cash back ${piF(money.cashBack)}` : ''}</span></h4>
+    ${pays.length ? `<div class="pi-lines-wrap"><table class="pi-lines pi-pv-table"><thead><tr><th>Payment</th><th>Date</th><th>Paid from / received into</th><th>Reference</th><th class="num">Amount</th><th>Confirmation</th><th>Recorded by</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : `<p class="pi-muted pi-pv-none">No payments yet${v ? '' : ' — use <b>Record payment</b> when you pay this invoice'}.</p>`}</section>`;
+}
+
+/* Record payment (approved mockup PI_9) */
+function piPayModalEl(){
+  let m = document.getElementById('pi-pay-modal');
+  if (!m) { m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'pi-pay-modal'; document.body.appendChild(m); }
+  return m;
+}
+function piOpenPayModal(id){
+  const pi = piInvoices().find(p => p.id === id); if (!pi) return;
+  piStartAccounts();
+  const m = piPayModalEl(), money = piCore().invoiceMoneyOf(pi);
+  m._pi = id; m._rev = pi.revision; m._op = 'spay-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  m._st = { date: piToday(), lines: [{ accountId: '', amount: piF(money.balance), reference: '', bankCharge: '' }], discount: '' };
+  m.innerHTML = `<div class="modal pi-paym" role="dialog" aria-modal="true" aria-labelledby="pm-title" style="--pi-w:860px">
+    <div class="modal-header"><div><h2 id="pm-title">Record payment</h2><div class="so-create-subtitle">${piEsc(pi.piNo)} · ${piEsc(pi.supplierName)} · invoice ${piEsc(pi.supplierInvoiceNo)}</div></div><button class="close-btn" type="button" onclick="closeModal('pi-pay-modal')" aria-label="Close">✕</button></div>
+    <div class="modal-body">
+      <div class="pi-bal3"><div><span>Invoice total</span><b>${piF(money.total)}</b></div><div><span>Paid so far</span><b>${piF(money.paid + money.paymentDiscount)}</b></div><div><span>Balance</span><b class="pi-amber">${piF(money.balance)}</b></div></div>
+      <div class="form-group pi-pm-date"><label for="pm-date">Payment date *</label><input id="pm-date" type="date" value="${piToday()}" max="${piToday()}" onchange="piPayModalEl()._st.date=this.value;piPmRecalc()"></div>
+      <div class="pi-lines-wrap"><table class="pi-lines pi-pay-table"><thead><tr><th>Paid from (payment account)</th><th class="num" style="width:140px">Amount</th><th style="width:160px">Reference</th><th style="width:230px"></th><th style="width:34px"></th></tr></thead><tbody id="pm-lines"></tbody></table></div>
+      <div class="pi-pm-add"><button type="button" class="btn btn-secondary btn-sm" onclick="piPmAdd()"><i class="ti ti-plus"></i>Add account</button><span class="pi-sub">split the payment over cash, card and bank</span></div>
+      <div class="pi-pm-disc"><i class="ti ti-discount"></i><b>Discount at payment</b><span class="pi-sub">optional</span><input id="pm-disc" class="pi-cell pi-money" inputmode="decimal" placeholder="0.00" aria-label="Discount at payment" oninput="piPayModalEl()._st.discount=this.value;piPmRecalc()" onblur="piMoneyBlur(this)"></div>
+      <p class="pi-note">The supplier accepted less than the balance. Recorded as a supplier discount on this invoice — it lowers the cost of its items (and the P/L follows).</p>
+      <div class="pi-pm-after" id="pm-after"></div>
+      <p class="pi-note">Cash lines wait for the custodian to confirm; card lines take the money from the card's linked bank account. Paying more than the balance is not allowed (advances come later).</p>
+      <div class="inv-error" id="pm-error" hidden></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" type="button" onclick="closeModal('pi-pay-modal')">Cancel</button><button class="btn btn-primary" type="button" id="pm-save" onclick="piSavePayment()"><i class="ti ti-device-floppy"></i>Save payment</button></div></div>`;
+  piPmRender();
+  if (typeof openModalWithSize === 'function') openModalWithSize('pi-pay-modal'); else m.classList.add('open');
+  setTimeout(() => { const el = m.querySelector('.pi-pay-acc'); if (el) el.focus(); }, 60);
+}
+function piPmAdd(){ const m = piPayModalEl(); m._st.lines.push({ accountId: '', amount: '', reference: '', bankCharge: '' }); piPmRender(); }
+function piPmSet(i, field, value, rerender){
+  const m = piPayModalEl(), l = m._st.lines[i]; if (!l) return;
+  l[field] = value;
+  if (field === 'accountId') { const a = piAccOf(value); if (!a || a.type !== 'bank') l.bankCharge = ''; }
+  if (rerender) piPmRender(); else piPmRecalc();
+}
+function piPmRender(){
+  const m = piPayModalEl();
+  document.getElementById('pm-lines').innerHTML = m._st.lines.map((l, i) => {
+    const a = piAccOf(l.accountId);
+    return `<tr class="pi-pay-line"><td><span class="pi-pay-sel">${a ? piAccIcon(a.type) : ''}<select class="pi-pay-acc" aria-label="Paid from" onchange="piPmSet(${i},'accountId',this.value,true)">${piAccOptions(l.accountId)}</select></span></td>
+      <td class="num"><input class="pi-cell pi-money pi-pay-amt" inputmode="decimal" placeholder="0.00" value="${piEsc(l.amount)}" aria-label="Amount" oninput="piPmSet(${i},'amount',this.value)" onblur="piMoneyBlur(this)"></td>
+      <td><input class="pi-cell pi-pay-ref" maxlength="60" placeholder="optional" value="${piEsc(l.reference)}" aria-label="Reference" oninput="piPmSet(${i},'reference',this.value)"></td>
+      <td class="pi-pay-info">${piPayInfo(l, `piPmSet(${i},'bankCharge',this.value)`)}</td>
+      <td>${m._st.lines.length > 1 ? `<button type="button" class="pi-x" aria-label="Remove account" onclick="piPayModalEl()._st.lines.splice(${i},1);piPmRender()"><i class="ti ti-x"></i></button>` : ''}</td></tr>`;
+  }).join('');
+  piPmRecalc();
+}
+function piPmInput(){
+  const m = piPayModalEl();
+  return { kind: 'payment', date: m._st.date, lines: m._st.lines, discount: m._st.discount };
+}
+function piPmRecalc(){
+  const m = piPayModalEl(), pi = piInvoices().find(p => p.id === m._pi); if (!pi) return;
+  const C = piCore(), money = C.invoiceMoneyOf(pi);
+  const v = C.validateSupplierPayment(piPmInput(), { invoice: pi, accounts: piAccMap(), today: piToday() });
+  const left = Math.round((money.balance - v.value.amount - v.value.discount) * 100) / 100;
+  const st = C.payStatusFrom(money.total, money.paid + v.value.amount, money.paymentDiscount + v.value.discount);
+  document.getElementById('pm-after').innerHTML = `<div class="pi-pm-after-box ${left > 0.005 ? 'part' : left < -0.005 ? 'bad' : 'ok'}"><span>${piF(money.balance)} − paid ${piF(v.value.amount)}${v.value.discount ? ` − discount ${piF(v.value.discount)}` : ''} = <b>${piF(left)}</b> left</span>
+    <b>${left < -0.005 ? 'More than the balance' : st === 'Paid' ? 'Invoice becomes Paid' : 'Invoice stays Part paid'}</b></div>`;
+  document.getElementById('pm-save').disabled = !v.ok;
+  m._v = v;
+}
+async function piSavePayment(){
+  const m = piPayModalEl(), lib = piLib(); piPmRecalc();
+  const err = document.getElementById('pm-error'), v = m._v;
+  if (!v || !v.ok) { err.hidden = false; err.textContent = (v ? v.errors : []).map(e => e.message).join(' ') || 'Check the payment.'; return; }
+  const btn = document.getElementById('pm-save'); btn.disabled = true; err.hidden = true;
+  try {
+    const r = await lib.service.recordSupplierPayment({ ...piPmInput(), operationId: m._op, invoiceId: m._pi, expectedRevision: m._rev, numbering: piPayNumbering(m._st.date) });
+    closeModal('pi-pay-modal');
+    if (typeof showToast === 'function') showToast(`${r.payment.spNo} saved — ${r.invoice ? (r.invoice.payStatus === 'Paid' ? 'invoice Paid' : `${piF(r.invoice.balance)} left`) : 'payment recorded'}`, 'success');
+  } catch (e) { err.hidden = false; err.textContent = e.code === 'permission-denied' ? 'The server refused the payment. Please reload and try again.' : (e.message || 'Could not save the payment.'); btn.disabled = false; }
+}
+
+/* Cash back from the supplier (after payment, no credit note) */
+function piOpenCashBack(id){
+  const pi = piInvoices().find(p => p.id === id); if (!pi) return;
+  piStartAccounts();
+  const m = piPayModalEl(), money = piCore().invoiceMoneyOf(pi), max = Math.round((money.paid - money.cashBack) * 100) / 100;
+  m._pi = id; m._rev = pi.revision; m._op = 'scb-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  m.innerHTML = `<div class="modal pi-paym" role="dialog" aria-modal="true" aria-labelledby="cb-title" style="--pi-w:640px">
+    <div class="modal-header"><div><h2 id="cb-title">Cash back from supplier</h2><div class="so-create-subtitle">${piEsc(pi.piNo)} · ${piEsc(pi.supplierName)} · invoice ${piEsc(pi.supplierInvoiceNo)}</div></div><button class="close-btn" type="button" onclick="closeModal('pi-pay-modal')" aria-label="Close">✕</button></div>
+    <div class="modal-body">
+      <div class="pi-bal3"><div><span>Paid on this invoice</span><b>${piF(money.paid)}</b></div><div><span>Cash back so far</span><b>${piF(money.cashBack)}</b></div><div><span>At most now</span><b>${piF(max)}</b></div></div>
+      <div class="pi-cb-grid">
+        <div class="form-group"><label for="cb-date">Date *</label><input id="cb-date" type="date" value="${piToday()}" max="${piToday()}" oninput="piCbRecalc()"></div>
+        <div class="form-group"><label for="cb-amt">Amount received *</label><input id="cb-amt" class="pi-money" inputmode="decimal" placeholder="0.00" oninput="piCbRecalc()" onblur="piMoneyBlur(this)"></div>
+        <div class="form-group pi-cb-acc"><label for="cb-acc">Received into *</label><select id="cb-acc" onchange="piCbRecalc()">${piAccOptions('', ['cash', 'bank'])}</select><small id="cb-info"></small></div>
+        <div class="form-group pi-cb-note"><label for="cb-note">Note <em>optional</em></label><input id="cb-note" maxlength="200" placeholder="e.g. discount returned in cash by the salesman"></div>
+      </div>
+      <p class="pi-note">The supplier's invoice stays as it is (same total, still ${piEsc(piCore().payStatusOf(pi))}). The cash back is recorded as a discount after payment: it lowers the cost of this invoice's items, and the P/L follows. VAT stays as on the supplier's invoice.</p>
+      <div class="inv-error" id="cb-error" hidden></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" type="button" onclick="closeModal('pi-pay-modal')">Cancel</button><button class="btn btn-primary" type="button" id="cb-save" onclick="piSaveCashBack()" disabled><i class="ti ti-device-floppy"></i>Save cash back</button></div></div>`;
+  if (typeof openModalWithSize === 'function') openModalWithSize('pi-pay-modal'); else m.classList.add('open');
+  setTimeout(() => document.getElementById('cb-amt').focus(), 60);
+}
+function piCbInput(){
+  return { date: document.getElementById('cb-date').value, lines: [{ accountId: document.getElementById('cb-acc').value, amount: document.getElementById('cb-amt').value }], note: document.getElementById('cb-note').value };
+}
+function piCbRecalc(){
+  const m = piPayModalEl(), pi = piInvoices().find(p => p.id === m._pi); if (!pi) return;
+  const v = piCore().validateSupplierPayment({ ...piCbInput(), kind: 'cashback' }, { invoice: pi, accounts: piAccMap(), today: piToday() });
+  const a = piAccOf(document.getElementById('cb-acc').value);
+  document.getElementById('cb-info').innerHTML = a ? (a.type === 'cash' ? `⏳ ${piEsc(String(a.custodianName || 'The custodian').split(/\s+/)[0])} confirms receiving it` : 'Bank — no confirmation') : '';
+  document.getElementById('cb-save').disabled = !v.ok;
+  m._v = v;
+}
+async function piSaveCashBack(){
+  const m = piPayModalEl(), lib = piLib(); piCbRecalc();
+  const err = document.getElementById('cb-error'), v = m._v;
+  if (!v || !v.ok) { err.hidden = false; err.textContent = (v ? v.errors : []).map(e => e.message).join(' '); return; }
+  const btn = document.getElementById('cb-save'); btn.disabled = true; err.hidden = true;
+  const input = piCbInput();
+  try {
+    const r = await lib.service.recordSupplierCashBack({ ...input, operationId: m._op, invoiceId: m._pi, expectedRevision: m._rev, numbering: piPayNumbering(input.date) });
+    closeModal('pi-pay-modal');
+    if (typeof showToast === 'function') showToast(`${r.payment.spNo} — cash back ${piF(r.payment.amount)} recorded`, 'success');
+  } catch (e) { err.hidden = false; err.textContent = e.message || 'Could not save the cash back.'; btn.disabled = false; }
+}
+
+/* Cancel a payment / cash back (with a reason) */
+function piAskCancelPay(payId){
+  const p = (piLib().payments || []).find(x => x.id === payId); if (!p) return;
+  const m = piPayModalEl(); m._pay = payId; m._op = 'spv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  const what = p.kind === 'cashback' ? 'cash back' : 'payment';
+  m.innerHTML = `<div class="modal pi-paym" role="dialog" aria-modal="true" aria-labelledby="cp-title" style="--pi-w:480px">
+    <div class="modal-header"><div class="modal-header-title-wrap"><h2 id="cp-title">Cancel ${piEsc(p.spNo)}</h2></div><button class="close-btn" type="button" onclick="closeModal('pi-pay-modal')" aria-label="Close">✕</button></div>
+    <div class="modal-body"><p class="pi-note" style="margin-top:0">The ${what} of ${piF(p.amount)}${p.discount ? ` (+ discount ${piF(p.discount)})` : ''} stays in the list, marked Cancelled. Its cash / bank lines are cancelled in Cash &amp; Bank and ${p.kind === 'cashback' ? 'the item costs go back up' : `the balance of ${piEsc(p.piNo)} goes back up`}. Enter it again correctly if needed.</p>
+      <div class="form-group"><label for="cp-why">Reason *</label><input id="cp-why" maxlength="300" placeholder="e.g. wrong amount, wrong account"></div><div class="inv-error" id="cp-err" hidden></div></div>
+    <div class="modal-footer"><button class="btn btn-secondary" type="button" onclick="closeModal('pi-pay-modal')">Go back</button><button class="btn btn-danger" type="button" id="cp-save" onclick="piDoCancelPay()"><i class="ti ti-ban"></i>Cancel ${what}</button></div></div>`;
+  if (typeof openModalWithSize === 'function') openModalWithSize('pi-pay-modal'); else m.classList.add('open');
+  setTimeout(() => document.getElementById('cp-why').focus(), 60);
+}
+async function piDoCancelPay(){
+  const m = piPayModalEl(), p = (piLib().payments || []).find(x => x.id === m._pay);
+  const why = document.getElementById('cp-why').value.trim(), err = document.getElementById('cp-err');
+  if (!p) return;
+  if (why.length < 5) { err.hidden = false; err.textContent = 'Enter the reason for cancelling (at least 5 characters).'; return; }
+  const btn = document.getElementById('cp-save'); btn.disabled = true;
+  try {
+    await piLib().service.voidSupplierPayment({ operationId: m._op, paymentId: p.id, reason: why, expectedRevision: p.revision });
+    closeModal('pi-pay-modal');
+    if (typeof showToast === 'function') showToast(`${p.spNo} cancelled`, 'success');
   } catch (e) { err.hidden = false; err.textContent = e.message || 'Could not cancel.'; btn.disabled = false; }
 }
 
@@ -578,10 +901,14 @@ async function savePurchaseSettingsForm(){
     lib.onChange(() => {
       const p = document.getElementById('page-purchaseinvoices'); if (p && p.classList.contains('active')) renderPurchaseRegister(); else { try { renderPurchaseRegister(); } catch (e) {} }
       const t = document.getElementById('setup-tab-purchase-settings'); if (t && t.style.display !== 'none') renderPurchaseSettings();
+      // V268.2: an open invoice view follows its payments; an open new invoice follows the accounts
+      const vm = document.getElementById('pi-view-modal'); if (vm && vm.classList.contains('open') && vm._id) openPurchaseInvoiceView(vm._id);
+      const nm = document.getElementById('pi-new-modal'), ae = document.activeElement;
+      if (nm && nm.classList.contains('open') && nm._s && !(ae && ae.closest && ae.closest('#pe-pay'))) piRenderPays();
     });
     lib.start();
     if (window.BCDateFilter) BCDateFilter.register('pireg', () => renderPurchaseRegister());
   };
   go();
 })();
-console.log('Purchase Invoices V268.1 ✅');
+console.log('Purchase Invoices V268.2 ✅ (payments · discount at payment · cash back)');

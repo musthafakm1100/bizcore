@@ -1285,7 +1285,7 @@ function validUntil(q) {
 
 /* ── v103 Central document numbering ── */
 const DOC_NUMBERING_DEFAULTS={
-  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},paymentReceipt:{label:'Payment Receipt',prefix:'RCT',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'}
+  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},paymentReceipt:{label:'Payment Receipt',prefix:'RCT',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'},supplierPayment:{label:'Supplier Payment',prefix:'SP',reset:'monthly'}
 };
 function ensureDocumentNumbering(){settings.documentNumbering=settings.documentNumbering||{};Object.entries(DOC_NUMBERING_DEFAULTS).forEach(([k,d])=>{settings.documentNumbering[k]={...d,...(settings.documentNumbering[k]||{})};});return settings.documentNumbering;}
 function docPeriod(reset='monthly',date=new Date()){const yy=String(date.getFullYear()).slice(2),mm=String(date.getMonth()+1).padStart(2,'0');return reset==='yearly'?yy:(reset==='never'?'':yy+mm);}
@@ -1299,7 +1299,7 @@ async function allocateDocumentNumber(type,date=new Date()){
 }
 function existingDocumentNumbers(type){
   if(type==='rfq')return rfqs.map(x=>x.rfqNo||''); if(type==='quotation')return quotations.map(x=>x.qno||''); if(type==='salesOrder')return salesOrders.map(x=>x.soNo||'');
-  if(type==='deliveryNote')return salesOrders.flatMap(s=>(s.deliveries||[]).map(x=>x.dnNo||'')); if(type==='customerInvoice')return salesOrders.flatMap(s=>(s.invoices||[]).map(x=>x.invNo||'')); if(type==='creditNote')return salesOrders.flatMap(s=>(s.creditNotes||[]).map(x=>x.cnNo||'')); if(type==='paymentReceipt')return (typeof receiptsCache!=='undefined'?receiptsCache:[]).map(x=>x.rctNo||''); return [];
+  if(type==='deliveryNote')return salesOrders.flatMap(s=>(s.deliveries||[]).map(x=>x.dnNo||'')); if(type==='customerInvoice')return salesOrders.flatMap(s=>(s.invoices||[]).map(x=>x.invNo||'')); if(type==='creditNote')return salesOrders.flatMap(s=>(s.creditNotes||[]).map(x=>x.cnNo||'')); if(type==='paymentReceipt')return (typeof receiptsCache!=='undefined'?receiptsCache:[]).map(x=>x.rctNo||''); if(type==='purchaseInvoice')return (window.BizCorePI?window.BizCorePI.invoices:[]).map(x=>x.piNo||''); if(type==='supplierPayment')return (window.BizCorePI?window.BizCorePI.payments:[]).map(x=>x.spNo||''); return [];
 }
 function estimatedNextDocumentNumber(type){const x=docNumberParts(type);const vals=existingDocumentNumbers(type).filter(n=>String(n).startsWith(x.displayPrefix)&&!String(n).includes('-OFF-')).map(n=>parseInt(String(n).slice(x.displayPrefix.length),10)||0);return formatDocSequence(x.displayPrefix,(vals.length?Math.max(...vals):0)+1);}
 function renderDocumentNumbering(){
@@ -12674,7 +12674,7 @@ loadThemeAndFont();
 if (window.currentUser) loadUserTheme();   // V266.5: theme saved with the user (app.js loads after sign-in)
 console.log('Theme V266.5 ✅ (whole screen follows the theme · saved with the user · 6 themes · fixed status colours)');
 console.log('Screens V266.6 ✅ (no page header · one-line toolbar · top bar · breadcrumb · collapse button · labels · dates)');
-console.log('Purchase Invoices V268.1 ✅ · Cash ledger V267.2 ✅ · Phone & tablet V266.7 ✅ (chips · filter panel · cards · Document/Details tabs · tablet rail · monitor scroll)' + (window.BizCoreResponsive ? '' : ' — responsive.js NOT loaded'));
+console.log('Purchase Invoices V268.2 ✅ (supplier payments) · Cash ledger V267.2 ✅ · Phone & tablet V266.7 ✅ (chips · filter panel · cards · Document/Details tabs · tablet rail · monitor scroll)' + (window.BizCoreResponsive ? '' : ' — responsive.js NOT loaded'));
 initPremiumSidebar();
 initPremiumTopbar();
 loadRecycleBin();

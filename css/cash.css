@@ -162,3 +162,5 @@ body.mc-body{margin:0;font-family:Inter,system-ui,sans-serif;background:#f1f5f9;
 #page-cashbank .cb-acc{border:0;border-bottom:1px solid #edf1f5;border-left:3px solid transparent;border-radius:0;box-shadow:none;margin:0}
 #page-cashbank .cb-acc.on{border-left-color:var(--blue,#173a5e)}
 #cashbank-root .cl-acts{flex-wrap:nowrap}
+/* V268.2: a card's memo amount (paid by card — taken from the linked bank account) */
+.cl-memo{color:#94a3b8;font-style:italic;font-variant-numeric:tabular-nums}
