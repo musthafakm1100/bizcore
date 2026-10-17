@@ -1,4 +1,4 @@
-/* BizCore V266.7 — phone & tablet screens (approved 14 Oct 2026).
+/* BizCore V266.7 — phone & tablet screens (approved 14 Oct 2026). V268.13: Purchase Invoices register added.
  *
  * Works on top of the existing pages without changing how they filter, sort or save:
  *  - Status chips (phone + tablet portrait): a copy of the monitor rows; a tap clicks the real monitor row.
@@ -29,6 +29,7 @@
     deliverynotes:    { noun: 'delivery notes', amount: null, sub: ['sales order'], chip: 'acceptance', tabletHide: ['customer po', 'items'] },
     customerinvoices: { noun: 'documents', amount: 'total (sar)', sub: ['sales order'], pill: 'type', extra: 'balance', tabletHide: ['reference', 'paid', 'sales order', 'type'] },
     receipts:         { noun: 'receipts', ownCards: true, tabletHide: ['method', 'reference'] },
+    purchaseinvoices: { noun: 'purchase invoices', ownCards: true, who: 'Supplier', tabletHide: ['supplier inv.', 'zoho bill', 'orders'] },   // V268.13
   };
   const pageOf = id => document.getElementById('page-' + id);
 
@@ -158,7 +159,7 @@
       const resultText = (x.count && x.count.textContent.trim()) || '';
       body.innerHTML = `
         <div class="bcr-sheet-head"><h3>Filters</h3><button type="button" class="bcr-sheet-link" data-act="clear">Clear all</button></div>
-        ${x.customer ? `<div class="bcr-sheet-label">Customer</div><select class="bcr-sheet-select" data-ctl="customer">${opts(x.customer).map(o => `<option value="${esc(o.v)}"${o.on ? ' selected' : ''}>${esc(o.t)}</option>`).join('')}</select>` : ''}
+        ${x.customer ? `<div class="bcr-sheet-label">${esc((REG[key] && REG[key].who) || 'Customer')}</div><select class="bcr-sheet-select" data-ctl="customer">${opts(x.customer).map(o => `<option value="${esc(o.v)}"${o.on ? ' selected' : ''}>${esc(o.t)}</option>`).join('')}</select>` : ''}
         ${x.status ? `<div class="bcr-sheet-label">Status</div><div class="bcr-sheet-chips">${opts(x.status).map(o => `<button type="button" class="bc-chip${o.on ? ' on' : ''}" data-status="${esc(o.v)}">${esc(o.v ? o.t : 'All')}</button>`).join('')}</div>` : ''}
         ${dateItems.length ? `<div class="bcr-sheet-label">Date</div><div class="bcr-sheet-chips">${dateItems.map((d, i) => `<button type="button" class="bc-chip${d.classList.contains('on') ? ' on' : ''}" data-date="${i}">${esc(d.querySelector('span:not(.bc-date-tick)')?.textContent.trim() || '')}</button>`).join('')}<button type="button" class="bc-chip${custom ? ' on' : ''}" data-date="custom"><i class="ti ti-calendar" aria-hidden="true"></i>Custom…</button></div>
           <div class="bcr-sheet-custom"${custom ? '' : ' hidden'}><input type="date" data-from value="${esc(x.date.querySelector('.bc-date-from').value)}" aria-label="From date"><span>→</span><input type="date" data-to value="${esc(x.date.querySelector('.bc-date-to').value)}" aria-label="To date"><button type="button" class="btn btn-primary btn-sm" data-act="apply-date">Apply</button></div>` : ''}

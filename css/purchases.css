@@ -1,4 +1,4 @@
-/* BizCore V268.1 / V268.12 — Purchasing → Purchase Invoices (approved mockups 4 + 7, 17 Oct 2026). Prefix pi-. */
+/* BizCore V268.1 / V268.12–14 — Purchasing → Purchase Invoices (approved mockups 4 + 7, 17 Oct 2026). Prefix pi-. */
 /* register */
 .pi-reg-table{width:100%}
 .pi-no{font-weight:650;color:#1d5fa3;white-space:nowrap}
@@ -16,6 +16,80 @@
 .pi-card.voided{opacity:.6}
 .pi-empty{padding:24px;text-align:center;color:#64748b}
 @media (max-width:760px){ #page-purchaseinvoices .dn-table-scroll{display:none} .pi-cards{display:block;padding:10px} }
+/* V268.14: register look = Receipts / Invoices registers (generated from the register rules in css/receipts.css:
+   #page-receipts → #page-purchaseinvoices). Shared rules: register-standard.css, shell.css. */
+#page-purchaseinvoices th.num,#page-purchaseinvoices td.num{text-align:right;font-variant-numeric:tabular-nums}
+#page-purchaseinvoices td.num.neg{color:#b42318}
+#page-purchaseinvoices .bc-monitor-metric{cursor:default}
+#page-purchaseinvoices .bc-monitor-metric strong{font-variant-numeric:tabular-nums;font-size:13px!important;white-space:nowrap}
+#page-purchaseinvoices .bc-monitor-metric:hover{background:transparent}
+#page-purchaseinvoices .dn-register-shell{display:grid;grid-template-columns:220px minmax(0,1fr);gap:12px;align-items:start}
+#page-purchaseinvoices .dn-overview-panel{background:#fff;border:1px solid #dbe3ec;border-radius:8px;overflow:hidden;position:sticky;top:76px}
+#page-purchaseinvoices .dn-overview-head{background:var(--c-173a5e);color:#fff;padding:12px 13px}
+#page-purchaseinvoices .dn-overview-body{padding:7px;background:#fff}
+#page-purchaseinvoices .dn-register-area{min-width:0}
+@media(max-width:980px){#page-purchaseinvoices .dn-register-shell{grid-template-columns:1fr}}
+#page-purchaseinvoices .dn-register-shell{--module-monitor-width:245px;display:grid;grid-template-columns:var(--module-monitor-width) minmax(0,1fr);gap:8px;align-items:start;position:relative;isolation:isolate}
+#page-purchaseinvoices .dn-overview-panel{background:transparent;border:0;border-radius:0;overflow:visible;position:sticky;top:96px;align-self:start;z-index:39}
+#page-purchaseinvoices .dn-overview-head{min-height:52px!important;padding:9px 9px 9px 12px!important;background:var(--c-173a5e);color:#fff;border-radius:10px 10px 0 0;display:flex;align-items:center;justify-content:space-between;gap:8px}
+#page-purchaseinvoices .dn-overview-head>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+#page-purchaseinvoices .dn-overview-head strong{font-size:15px!important;font-weight:700!important}
+#page-purchaseinvoices .dn-overview-head span{font-size:10.5px!important;color:rgba(255,255,255,.72)!important;margin:0}
+#page-purchaseinvoices .dn-overview-body{padding:0!important;background:#fff!important;border:1px solid #dfe6ee!important;border-top:0!important;border-radius:0 0 10px 10px!important}
+#page-purchaseinvoices .dn-overview-total{width:100%!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px!important;padding:9px 10px 10px!important;border:0!important;border-bottom:1px solid #eef2f5!important;border-radius:0!important;margin:0!important;background:#fff!important;box-shadow:none!important;color:#334155!important}
+#page-purchaseinvoices .dn-overview-total span{font-size:12.5px!important;font-weight:600!important;text-align:left!important}
+#page-purchaseinvoices .dn-overview-total strong{min-width:34px!important;font-size:21px!important;font-weight:720!important;color:var(--c-173a5e)!important;text-align:right!important;font-variant-numeric:tabular-nums!important}
+#page-purchaseinvoices .dn-overview-section-label{padding:9px 10px 5px!important;font-size:10px!important;font-weight:700!important;letter-spacing:.07em!important;text-transform:uppercase!important;color:#8a98a8!important}
+#page-purchaseinvoices .dn-overview-row{width:100%!important;min-height:37px!important;display:grid!important;grid-template-columns:minmax(0,1fr) 44px!important;align-items:center!important;gap:8px!important;padding:5px 10px!important;border:0!important;border-bottom:1px solid #f0f3f6!important;border-radius:0!important;background:#fff!important;box-shadow:none!important;color:#334155!important;text-align:left!important}
+#page-purchaseinvoices .dn-overview-row>span{display:flex!important;align-items:center!important;gap:9px!important;min-width:0!important;font-size:13px!important;font-weight:500!important}
+#page-purchaseinvoices .dn-overview-row>strong{min-width:34px!important;margin:0!important;font-size:16px!important;font-weight:700!important;line-height:1!important;color:#243447!important;text-align:right!important;font-variant-numeric:tabular-nums!important}
+#page-purchaseinvoices .dn-overview-total:hover,#page-purchaseinvoices .dn-overview-row:hover,#page-purchaseinvoices .dn-overview-total.active,#page-purchaseinvoices .dn-overview-row.active{background:#f6f9fc!important}
+#page-purchaseinvoices .dn-overview-row.active{box-shadow:inset 3px 0 0 var(--c-2e75b6)!important}
+#page-purchaseinvoices .dn-overview-total.active span,#page-purchaseinvoices .dn-overview-row.active>span{color:var(--c-173a5e)!important}
+#page-purchaseinvoices .dn-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:0 0 9px;box-shadow:0 0 0 2px rgba(15,23,42,.04)}
+#page-purchaseinvoices .dn-register-toolbar{position:sticky;top:48px;z-index:52;min-height:48px;margin:0;padding:6px 8px;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;background:#fff;border:1px solid #dfe6ed;border-radius:7px 7px 0 0}
+#page-purchaseinvoices .dn-register-card{margin:0;border-radius:0 0 8px 8px;overflow:visible}
+#page-purchaseinvoices .dn-table-scroll{overflow:visible;max-height:none}
+@media(min-width:1101px){#page-purchaseinvoices .dn-register-shell::before{content:"";position:absolute;z-index:0;left:0;top:0;bottom:0;width:250px;background:#f4f7fa;border-right:1px solid #dfe6ee;pointer-events:none}
+#page-purchaseinvoices .dn-register-shell.monitor-collapsed::before{display:none}
+#page-purchaseinvoices .dn-overview-panel,#page-purchaseinvoices .dn-register-area,#page-purchaseinvoices .module-monitor-rail{position:relative;z-index:1}
+#page-purchaseinvoices .dn-overview-panel{position:sticky!important;top:96px!important}
+#page-purchaseinvoices .module-monitor-rail{position:sticky!important;top:96px!important;align-self:start!important}}
+@media(max-width:1100px){#page-purchaseinvoices .dn-register-shell::before{display:none!important}}
+@media(max-width:980px){#page-purchaseinvoices .dn-register-shell,#page-purchaseinvoices .dn-register-shell.monitor-collapsed{grid-template-columns:34px minmax(0,1fr)!important}
+#page-purchaseinvoices .dn-overview-panel{position:fixed!important;top:64px!important;left:8px;right:8px;width:auto!important;z-index:1600}}
+#page-purchaseinvoices .dn-register-toolbar{
+  position:sticky;top:48px;z-index:52;
+  min-height:48px;margin:0;padding:6px 8px;
+  display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;
+  background:#fff;border:1px solid #dfe6ed;border-radius:7px 7px 0 0;
+}
+#page-purchaseinvoices .dn-toolbar-left,#page-purchaseinvoices .dn-toolbar-right{display:flex;align-items:center;gap:8px;min-width:0}
+#page-purchaseinvoices .dn-toolbar-left{flex:0 0 auto}
+#page-purchaseinvoices .dn-toolbar-right{flex:1 1 auto;justify-content:flex-end;margin-left:0}
+#page-purchaseinvoices .dn-register-toolbar select,#page-purchaseinvoices .dn-register-toolbar input{
+  height:34px;border:1px solid #d7e0e9;border-radius:6px;background:#fff;
+  color:#334155;font-size:12px;padding:0 9px;outline:none;box-sizing:border-box;
+}
+#page-purchaseinvoices .dn-register-toolbar .register-clear-filters{height:34px;min-height:34px;white-space:nowrap}
+@media(max-width:980px){#page-purchaseinvoices .dn-register-toolbar{
+    position:static!important;top:auto!important;display:flex!important;align-items:center!important;
+    justify-content:flex-start!important;gap:7px!important;width:100%!important;min-height:44px!important;
+    height:auto!important;padding:7px!important;margin:0 0 8px!important;overflow-x:auto!important;
+    overflow-y:hidden!important;flex-wrap:nowrap!important;border-radius:8px!important;scrollbar-width:thin;
+  }
+#page-purchaseinvoices .dn-register-toolbar>*{flex:0 0 auto!important}
+#page-purchaseinvoices .dn-toolbar-left,#page-purchaseinvoices .dn-toolbar-right{flex:0 0 auto!important;flex-wrap:nowrap!important;width:auto!important}
+#page-purchaseinvoices .dn-toolbar-right{margin-left:auto!important}}
+@media(min-width:1101px){#page-purchaseinvoices .dn-register-shell{
+    position:relative!important;
+    min-height:calc(100vh - 112px)!important;
+    align-items:start!important;
+  }
+#page-purchaseinvoices .dn-register-area{min-height:calc(100vh - 112px)!important}
+#page-purchaseinvoices .dn-overview-panel{align-self:start!important}
+#page-purchaseinvoices .dn-register-shell::before{min-height:100%!important}}
+/* end of generated register rules */
 
 /* entry workspace */
 #pi-new-modal .pi-workspace{width:min(1366px,97vw)!important;max-width:1366px!important}
@@ -159,3 +233,6 @@
   table.pi-lines tr.pi-line > td{background:transparent!important}
   table.pi-lines .pi-c-goes{display:flex!important;flex-wrap:wrap;gap:4px}
 }
+/* V268.14: "Goes to" right-aligned (desktop/tablet table), like the other figures on the line */
+.pi-lines th.pi-goesh,.pi-lines td.pi-c-goes{text-align:right}
+@media (max-width:760px){ table.pi-lines .pi-c-goes{text-align:left;justify-content:flex-start} }
