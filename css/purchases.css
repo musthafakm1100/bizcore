@@ -303,3 +303,5 @@
 #pi-pay-modal .modal.pi-paym{width:min(var(--pi-w,860px),96vw)!important;max-width:var(--pi-w,860px)!important;height:auto!important;max-height:92vh!important}
 .pi-pv-table td:nth-child(2),.pi-pv-table td:nth-child(7){white-space:nowrap}
 @media (max-width:760px){ #pi-pay-modal .modal.pi-paym{width:100vw!important;max-width:none!important;height:100dvh!important;max-height:100dvh!important;border-radius:0!important} }
+/* V268.21: discount at payment on the new invoice */
+.pi-pe-disc{margin-top:8px}.pi-pe-disc[hidden]{display:none}

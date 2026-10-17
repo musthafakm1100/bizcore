@@ -162,6 +162,7 @@ function piEnsureModal(){
         </section>
         <section class="so-entry-card"><div class="so-entry-card-title so-items-title"><span class="pi-title-ic"><i class="ti ti-cash"></i>Payments <span id="pe-pay-pill"></span><span class="pi-sub pi-pay-hint">· one line per account; paying more than the total is not allowed yet</span></span><span class="pi-actions"><button type="button" class="btn btn-secondary btn-sm" id="pe-add-pay" onclick="piAddPayLine()"><i class="ti ti-plus"></i>Add payment</button></span></div>
           <div class="pi-lines-wrap"><table class="pi-lines pi-pay-table"><thead id="pe-pay-head"></thead><tbody id="pe-pay"></tbody></table></div>
+          <div class="pi-pm-disc pi-pe-disc" id="pe-disc-row" hidden><i class="ti ti-discount"></i><b>Discount at payment</b><span class="pi-sub">optional — the supplier accepts less than the balance</span><input id="pe-pay-disc" class="pi-cell pi-money" inputmode="decimal" placeholder="0.00" aria-label="Discount at payment" oninput="piRecalc()" onblur="piMoneyBlur(this)"></div>
           <div class="pi-due" id="pe-due-row"><i class="ti ti-clock"></i><span id="pe-due-text"></span><label for="pe-due">Payment due *</label><input id="pe-due" type="date" onchange="piState().dueTouched=true;piRecalc()"></div>
           <div class="pi-paid-full" id="pe-paid-full" hidden><i class="ti ti-circle-check"></i>Paid in full — nothing goes to the supplier's payable.</div>
         </section>
@@ -188,7 +189,7 @@ function openNewPurchaseInvoice(){
   piStartAccounts();
   const sups = (typeof suppliers !== 'undefined' ? suppliers : []).slice().sort((a, b) => String(a.company || '').localeCompare(String(b.company || '')));
   document.getElementById('pe-supplier').innerHTML = '<option value="">Choose the supplier…</option>' + sups.map(s => `<option value="${piEsc(s.id)}">${piEsc(s.company || s.name || s.id)}</option>`).join('');
-  ['pe-invno', 'pe-zoho', 'pe-suptotal'].forEach(id => { document.getElementById(id).value = ''; });
+  ['pe-invno', 'pe-zoho', 'pe-suptotal', 'pe-pay-disc'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('pe-date').value = today;
   document.getElementById('pe-due').value = piAddDays(today, 30);
   const x = typeof docNumberParts === 'function' ? docNumberParts('purchaseInvoice') : { displayPrefix: 'PI-' };
@@ -417,7 +418,7 @@ function piReadInput(){
     operationId: s.op, supplierId: sup ? sup.id : '', supplierName: sup ? (sup.company || sup.name || '') : '', supplierVat: sup ? (sup.vat || '') : '',
     supplierInvoiceNo: document.getElementById('pe-invno').value, date: document.getElementById('pe-date').value,
     // V268.2: paid in full at entry → nothing is payable later; the due date is the invoice date
-    dueDate: s._pay && s._total > 0 && s._total - s._pay.paid <= 0.005 && !s._pay.errors.length ? document.getElementById('pe-date').value : document.getElementById('pe-due').value,
+    dueDate: piIsFull(s) ? document.getElementById('pe-date').value : document.getElementById('pe-due').value,
     zohoBillNo: document.getElementById('pe-zoho').value, supplierTotal: document.getElementById('pe-suptotal').value,
     vat: s.vatTouched ? s.vat : null,
     costs: s.costs.map(c => ({ label: c.label, amount: piN(c.amount) })), discount: s.discount && piN(s.discount.value) > 0 ? { mode: s.discount.mode, value: piN(s.discount.value) } : null,
@@ -466,7 +467,7 @@ function piPayNumbering(date){
   return { counterKey: x.counterKey, displayPrefix: x.displayPrefix };
 }
 /** Checks the entry's payments one after the other against what is left of the total. */
-function piCheckPays(groups, total){
+function piCheckPays(groups, total, discountRaw){
   const C = piCore(), accounts = piAccMap();
   const inv = { status: 'Posted', totals: { total }, paid: 0, paymentDiscount: 0, cashBack: 0 };
   const errors = [];
@@ -475,9 +476,22 @@ function piCheckPays(groups, total){
     errors.push(...v.errors);
     if (v.ok) inv.paid = Math.round((inv.paid + v.value.amount) * 100) / 100;
   });
+  // V268.21: discount at payment on the new invoice (saved right after the invoice, as a discount-only payment)
+  const raw = String(discountRaw == null ? '' : discountRaw).replace(/[,\s]/g, '');
+  let discount = 0;
+  if (raw !== '') {
+    if (!/^\d+(\.\d{1,2})?$/.test(raw)) errors.push({ field: 'discount', message: 'Discount at payment must be a number (up to 2 decimals).' });
+    else {
+      discount = Math.round(Number(raw) * 100) / 100;
+      const room = Math.round((total - inv.paid) * 100) / 100;
+      if (discount > room + 0.005) errors.push({ field: 'discount', message: `Discount at payment ${piF(discount)} is more than the balance ${piF(Math.max(0, room))}.` });
+    }
+  }
   const accts = new Set(groups.flatMap(g => g.lines.map(l => l.accountId)).filter(Boolean));
-  return { paid: inv.paid, errors, accounts: accts.size };
+  return { paid: inv.paid, discount, errors, accounts: accts.size };
 }
+/** Paid in full at entry (payments + discount at payment cover the total) — no due date needed. */
+function piIsFull(s){ return !!(s && s._pay && s._total > 0 && s._total - s._pay.paid - s._pay.discount <= 0.005 && !s._pay.errors.length); }
 function piAddPayLine(){
   const s = piState(); if (!s) return;
   const date = document.getElementById('pe-date').value || piToday();
@@ -522,11 +536,11 @@ function piRecalc(keepVatFocus){
   const set = piSettings();
   // V268.2: payments made now, checked against the total (paid in full → no due date needed)
   const total = t.supplierTotal != null ? t.supplierTotal : t.calcTotal;
-  const pc = piCheckPays(input.payments, total);
-  const left = Math.round((total - pc.paid) * 100) / 100, stNow = piCore().payStatusFrom(total, pc.paid, 0);
-  const prevFull = s._pay && s._total > 0 && s._total - s._pay.paid <= 0.005 && !s._pay.errors.length;
+  const pc = piCheckPays(input.payments, total, (document.getElementById('pe-pay-disc') || {}).value);
+  const left = Math.round((total - pc.paid - pc.discount) * 100) / 100, stNow = piCore().payStatusFrom(total, pc.paid, pc.discount);
+  const prevFull = piIsFull(s);
   s._pay = pc; s._total = total;
-  const full = total > 0 && left <= 0.005 && !pc.errors.length;
+  const full = piIsFull(s);
   if (full !== !!prevFull) { input = piReadInput(); v = piValidateLocal(input); t = v.totals; }
   // supplier total check
   const match = document.getElementById('pe-match');
@@ -545,6 +559,7 @@ function piRecalc(keepVatFocus){
     <div class="pi-ps"><span>Rounding <small>(to supplier's total)</small></span><b>${t.rounding == null ? '—' : (t.rounding > 0 ? '+' : '') + piF(t.rounding)}</b></div>
     <div class="pi-tot"><span>Total (SAR)</span><span>${piF(t.supplierTotal != null ? t.supplierTotal : t.calcTotal)}</span></div>
     <div class="pi-ps"><span>Paid now${pc.accounts ? ` <small>(${pc.accounts} account${pc.accounts > 1 ? 's' : ''})</small>` : ''}</span><b>${piF(pc.paid)}</b></div>
+    ${pc.discount ? `<div class="pi-ps"><span>Discount at payment</span><b class="pi-green">−${piF(pc.discount)}</b></div>` : ''}
     <div class="pi-ps"><span>Balance to pay later</span><b class="${left > 0.005 ? 'pi-amber' : 'pi-green'}">${piF(Math.max(0, left))}</b></div>
     <div class="pi-ps"><span>Payment status</span>${piStatusPill(stNow, true)}</div>
     <p class="pi-note">Discount type (${set.discountMode === 'both' ? 'whole invoice and per line' : set.discountMode === 'line' ? 'per line' : 'whole invoice'}) and the rounding limit are set in Administration → Purchase Settings.</p>`;
@@ -567,13 +582,14 @@ function piRecalc(keepVatFocus){
   if (has(['costs', 'discount', 'vat'])) chips.push('<span class="pi-todo-c">Costs / discount / VAT</span>');
   chips.push(has(['supplierTotal']) ? '<span class="pi-todo-c">Supplier total</span>' : '<span class="pi-todo-c ok"><i class="ti ti-check"></i>Supplier total matches</span>');
   if (pc.errors.length) chips.push('<span class="pi-todo-c">Payments to complete</span>');
-  else if (pc.paid > 0) chips.push(`<span class="pi-todo-c ok"><i class="ti ti-check"></i>${full ? 'Paid in full' : `Part paid · ${piF(left)} due`}</span>`);
+  else if (pc.paid > 0 || pc.discount > 0) chips.push(`<span class="pi-todo-c ok"><i class="ti ti-check"></i>${full ? 'Paid in full' : `Part paid · ${piF(left)} due`}</span>`);
   document.getElementById('pe-todo').innerHTML = chips.join('');
   document.getElementById('pe-save').disabled = !v.ok || pc.errors.length > 0;
   // payment section: status, balance left / paid in full
-  const pill = document.getElementById('pe-pay-pill'); if (pill) pill.innerHTML = pc.paid > 0 ? piStatusPill(stNow) : '';
+  const pill = document.getElementById('pe-pay-pill'); if (pill) pill.innerHTML = pc.paid > 0 || pc.discount > 0 ? piStatusPill(stNow) : '';
+  const discRow = document.getElementById('pe-disc-row'); if (discRow) discRow.hidden = !s.pays.length && !pc.discount;
   const dueRow = document.getElementById('pe-due-row'), fullRow = document.getElementById('pe-paid-full');
-  if (dueRow) { dueRow.hidden = full; document.getElementById('pe-due-text').innerHTML = pc.paid > 0 ? `<b>Balance to pay later: ${piF(Math.max(0, left))}</b> — goes to the supplier's payable` : `Not paid now — the whole total <b>${piF(total)}</b> goes to the supplier's payable`; }
+  if (dueRow) { dueRow.hidden = full; document.getElementById('pe-due-text').innerHTML = pc.paid > 0 || pc.discount > 0 ? `<b>Balance to pay later: ${piF(Math.max(0, left))}</b> — goes to the supplier's payable` : `Not paid now — the whole total <b>${piF(total)}</b> goes to the supplier's payable`; }
   if (fullRow) fullRow.hidden = !full;
   const errBox = document.getElementById('pe-error');
   if (errBox && !errBox.hidden && errBox.dataset.pay === '1' && !pc.errors.length) errBox.hidden = true;
@@ -591,7 +607,20 @@ async function savePurchaseInvoice(){
   const x = typeof docNumberParts === 'function' ? docNumberParts('purchaseInvoice', date) : { counterKey: 'doc_purchaseInvoice_all', displayPrefix: 'PI-' };
   const btn = document.getElementById('pe-save'); btn.disabled = true; err.hidden = true;
   try {
-    const r = await lib.service.createPurchaseInvoice({ ...input, numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix } });
+    let r = await lib.service.createPurchaseInvoice({ ...input, numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix } });
+    // V268.21: the discount at payment typed on the new invoice — saved at once as a discount-only payment
+    const disc = s._pay ? s._pay.discount : 0;
+    if (disc > 0 && !r.alreadyApplied) {
+      const dd = input.date && input.date <= piToday() ? input.date : piToday();
+      try {
+        const d = await lib.service.recordSupplierPayment({ operationId: s.op + '-disc', invoiceId: r.invoice.id, expectedRevision: r.invoice.revision, numbering: piPayNumbering(dd), date: dd, lines: [], discount: String(disc) });
+        if (d.invoice) r = { ...r, invoice: d.invoice };
+      } catch (e2) {
+        closeModal('pi-new-modal');
+        if (typeof showToast === 'function') showToast(`${r.invoice.piNo} saved, but the discount at payment was not: ${e2.message} — use Record payment on the invoice.`, 'error');
+        return;
+      }
+    }
     closeModal('pi-new-modal');
     const st = r.invoice.payStatus;
     if (typeof showToast === 'function') showToast(`${r.invoice.piNo} saved — ${st === 'Paid' ? 'Paid' : st === 'Part paid' ? `Part paid, ${piF(r.invoice.balance)} due ${piDate(r.invoice.dueDate)}` : `Unpaid, due ${piDate(r.invoice.dueDate)}`}`, 'success');
@@ -766,8 +795,8 @@ function piPmRender(){
       <td class="num"><input class="pi-cell pi-money pi-pay-amt" inputmode="decimal" placeholder="0.00" value="${piEsc(l.amount)}" aria-label="Amount" oninput="piPmSet(${i},'amount',this.value)" onblur="piMoneyBlur(this)"></td>
       <td><input class="pi-cell pi-pay-ref" maxlength="60" placeholder="optional" value="${piEsc(l.reference)}" aria-label="Reference" oninput="piPmSet(${i},'reference',this.value)"></td>
       <td class="pi-pay-info">${piPayInfo(l, `piPmSet(${i},'bankCharge',this.value)`)}</td>
-      <td>${m._st.lines.length > 1 ? `<button type="button" class="pi-x" aria-label="Remove account" onclick="piPayModalEl()._st.lines.splice(${i},1);piPmRender()"><i class="ti ti-x"></i></button>` : ''}</td></tr>`;
-  }).join('');
+      <td><button type="button" class="pi-x" title="Remove this account" aria-label="Remove account" onclick="piPayModalEl()._st.lines.splice(${i},1);piPmRender()"><i class="ti ti-x"></i></button></td></tr>`;
+  }).join('') || '<tr><td colspan="5" class="pi-empty-lines pi-nopay"><i class="ti ti-cash-off"></i>No money paid now — enter the <b>discount at payment</b> below, or use <b>Add account</b>.</td></tr>';
   piPmRecalc();
 }
 function piPmInput(){
@@ -911,4 +940,4 @@ async function savePurchaseSettingsForm(){
   };
   go();
 })();
-console.log('Purchase Invoices V268.2 ✅ (payments · discount at payment · cash back)');
+console.log('Purchase Invoices V268.21 ✅ (payments · discount at payment · cash back)');
