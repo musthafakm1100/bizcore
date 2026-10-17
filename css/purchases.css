@@ -1,4 +1,4 @@
-/* BizCore V268.1 — Purchasing → Purchase Invoices (approved mockup 4, 17 Oct 2026). Prefix pi-. */
+/* BizCore V268.1 / V268.12 — Purchasing → Purchase Invoices (approved mockups 4 + 7, 17 Oct 2026). Prefix pi-. */
 /* register */
 .pi-reg-table{width:100%}
 .pi-no{font-weight:650;color:#1d5fa3;white-space:nowrap}
@@ -114,3 +114,48 @@
 .pi-title-ic{display:inline-flex;align-items:center;gap:6px}
 .pi-so{white-space:nowrap}
 .pi-hl.loss{background:#fef2f2}
+
+/* V268.12 — lines layout (approved mockup 7): item · sales order wide, boxes level, qty status, Selling → P/L */
+.pi-lines tr.pi-line > td{vertical-align:top}
+.pi-idesc{font-weight:500;color:#0f172a;line-height:1.35}
+.pi-c-qty .pi-cell,.pi-c-cost .pi-cell{display:inline-block}
+.pi-c-cost .pi-var{display:inline-flex}
+.pi-qst{font-size:11px;font-weight:700;margin-top:1px;white-space:nowrap}
+.pi-qst.ok{color:#15803d}.pi-qst.ex{color:#b45309}.pi-qst.sh{color:#64748b}
+.pi-lines th.pi-plh{color:#946b19}
+.pi-lines td.pi-pl{background:#fbfaf3;white-space:nowrap}
+.pi-pl .pi-sub{display:block}
+.pi-plv{display:block;font-size:13.5px;font-variant-numeric:tabular-nums}
+.pi-plp{display:block;font-size:11px;font-weight:600}
+.pi-c-item .pi-sub .pi-uom{display:inline-block;vertical-align:middle}
+.pi-c-goes .pi-dest{margin-right:4px}
+@media (max-width:760px){
+  .pi-lines-wrap{overflow:visible}
+  table.pi-lines,table.pi-lines tbody{display:block;width:100%}
+  table.pi-lines thead{display:none}
+  table.pi-lines tr.pi-line{display:grid;grid-template-columns:1fr 1fr;grid-template-areas:"item item" "qty cost" "disc disc" "amt pl" "land land" "goes goes";gap:8px 10px;position:relative;background:#fff;border:1px solid #dfe6ee;border-radius:12px;padding:10px 12px;margin:0 0 10px}
+  table.pi-lines tr.pi-line > td{display:block;padding:0;border:0;min-width:0;height:auto}
+  table.pi-lines .pi-c-item{grid-area:item;padding-right:28px!important}
+  table.pi-lines .pi-c-qty{grid-area:qty}table.pi-lines .pi-c-cost{grid-area:cost}table.pi-lines .pi-c-disc{grid-area:disc}
+  table.pi-lines .pi-c-amt{grid-area:amt;text-align:left;align-self:center}table.pi-lines .pi-c-pl{grid-area:pl;background:none}
+  table.pi-lines .pi-c-land{grid-area:land;text-align:left}table.pi-lines .pi-c-goes{grid-area:goes}
+  table.pi-lines .pi-c-x{position:absolute;top:6px;right:4px}
+  table.pi-lines .pi-c-qty::before,table.pi-lines .pi-c-cost::before,table.pi-lines .pi-c-disc::before{content:attr(data-label);display:block;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#64748b;margin-bottom:3px}
+  table.pi-lines .pi-c-amt::before,table.pi-lines .pi-c-land::before{content:attr(data-label) " ";font-size:12.5px;color:#475569}
+  table.pi-lines .pi-c-amt .pi-amt{font-weight:700}
+  table.pi-lines .pi-c-amt,table.pi-lines .pi-c-pl{border-top:1px dashed #e2e8f0!important;padding-top:8px!important}
+  table.pi-lines .pi-c-qty .pi-cell,table.pi-lines .pi-c-cost .pi-cell{width:100%;height:36px}
+  table.pi-lines .pi-c-disc .pi-cell{width:90px}
+  table.pi-lines .pi-pl .pi-sub{display:none}
+  table.pi-lines tr.pi-ask-row{display:block;background:#fff;border:1px solid #dfe6ee;border-top:0;border-radius:0 0 12px 12px;padding:0 12px 10px;margin:0 0 10px}
+  table.pi-lines tr.pi-ask-row > td{display:block;padding:0!important;border:0}
+  table.pi-lines tr.pi-line:has(+ tr.pi-ask-row),table.pi-lines tr.pi-ask-row:has(+ tr.pi-ask-row){border-bottom:0;border-bottom-left-radius:0;border-bottom-right-radius:0;margin-bottom:0}
+  table.pi-lines tr.pi-ask-row:has(+ tr.pi-ask-row){padding-bottom:6px}
+  table.pi-lines tr:not(.pi-line):not(.pi-ask-row){display:block}
+  table.pi-lines tr:not(.pi-line):not(.pi-ask-row) > td{display:block}
+  #pi-new-modal .pi-lines-wrap{background:transparent}
+}
+@media (max-width:760px){
+  table.pi-lines tr.pi-line > td{background:transparent!important}
+  table.pi-lines .pi-c-goes{display:flex!important;flex-wrap:wrap;gap:4px}
+}

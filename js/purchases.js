@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════
-   BizCore V268.1 — Purchasing → Purchase Invoices (approved mockup 4, 17 Oct 2026)
+   BizCore V268.12 — Purchasing → Purchase Invoices (approved mockups 4 + 7, 17 Oct 2026)
+   V268.12: item · sales order in one wide column, qty "of N to buy" + status, Selling → P/L per line (allowed roles), phone cards
    • Register (standard register: monitor, one-line toolbar, table / phone cards)
    • New Purchase Invoice: supplier & bill (supplier's total required), lines from Sales Orders
      (qty filled in with what is still to buy) or for stock, cost vs estimate / last paid, extra quantity
@@ -234,29 +235,57 @@ function piCostTag(line){
   if (chk.kind === 'within') return { chk, html: `<span class="pi-var up">${pct} ${what || '— within limit'}</span>` };
   return { chk, html: `<span class="pi-var upr">${pct} ${what ? what + ' — ' : '— '}above ${set.costLimitPct}% limit</span>` };
 }
+/* V268.12 (mockup 7): qty box → "of N to buy" → ✓ complete / +N extra / N still to buy */
+function piQtyInfo(l, i){
+  if (l.kind !== 'order') return '';
+  const left = piLeftFor(l, i), q = piN(l.qty);
+  let st = '';
+  if (q > 0) st = Math.abs(q - left) < 1e-9 ? '<div class="pi-qst ok"><i class="ti ti-check"></i> complete</div>'
+    : q > left ? `<div class="pi-qst ex">+${piQ(q - left)} extra</div>` : `<div class="pi-qst sh">${piQ(left - q)} still to buy</div>`;
+  return `<div class="pi-ref-sub">of ${piQ(left)} to buy</div>${st}`;
+}
+/** Selling → P/L of one line: selling price on the Sales Order × qty for the order(s) − landed cost of that qty. */
+function piLinePL(vl){
+  if (!vl) return null;
+  const allocs = vl.allocations || [], q = allocs.reduce((s, a) => s + piN(a.qty), 0);
+  if (!(q > 0) || !Number.isFinite(Number(vl.landedUnitCost))) return null;
+  const sales = allocs.reduce((s, a) => s + piN(a.sellUnit != null ? a.sellUnit : vl.sellUnit) * piN(a.qty), 0);
+  const profit = sales - piN(vl.landedUnitCost) * q;
+  return { sell: piN(vl.sellUnit), q, sales, profit, pct: sales > 0 ? profit / sales * 100 : null, partial: piN(vl.stockQty) > 0 };
+}
+function piPLHtml(vl){
+  if (vl && vl.kind === 'stock') return '<span class="pi-sub">— stock</span>';
+  const p = piLinePL(vl); if (!p) return '<span class="pi-sub">—</span>';
+  const loss = p.profit < -0.005, c = loss ? 'pi-red' : 'pi-green';
+  return `<span class="pi-sub">sell ${piF(p.sell)}</span><b class="pi-plv ${c}">${p.profit > 0.005 ? '+' : ''}${piF(p.profit)}</b><span class="pi-plp ${c}">${p.pct == null ? '' : p.pct.toFixed(1) + '%'}${p.partial ? ` · ${piQ(p.q)} for the order` : ''}</span>`;
+}
+function piRefLine(ref){
+  if (!ref || !(Number(ref.unit) > 0)) return '';
+  return ref.source === 'lastPaid' ? `<div class="pi-ref-sub">last paid ${piF(ref.unit)}${ref.refDate ? ' · ' + piDate(ref.refDate) : ''}</div>` : `<div class="pi-ref-sub">est. ${piF(ref.unit)}</div>`;
+}
 function piRenderLines(){
   const s = piState(); if (!s) return;
-  const lineDisc = ['line', 'both'].includes(piSettings().discountMode);
-  document.getElementById('pe-lines-head').innerHTML = `<tr><th style="width:150px">Sales order</th><th>Item</th><th class="num" style="width:96px">Still to buy</th><th class="num" style="width:96px">Qty bought</th><th class="num" style="width:180px">Unit cost<br><span class="pi-th-sub">estimate → actual</span></th>${lineDisc ? '<th class="num" style="width:76px">Disc. %</th>' : ''}<th class="num" style="width:100px">Amount</th><th style="width:170px">Goes to</th><th style="width:34px"></th></tr>`;
-  const cols = lineDisc ? 9 : 8;
+  const lineDisc = ['line', 'both'].includes(piSettings().discountMode), pl = piCanSeeProfit();
+  const tbl = document.querySelector('#pi-new-modal table.pi-lines'); if (tbl) { tbl.classList.toggle('pi-has-disc', lineDisc); tbl.classList.toggle('pi-has-pl', pl); }
+  document.getElementById('pe-lines-head').innerHTML = `<tr><th>Item · sales order</th><th class="num" style="width:96px">Qty bought</th><th class="num" style="width:136px">Unit cost</th>${lineDisc ? '<th class="num" style="width:76px">Disc. %</th>' : ''}<th class="num" style="width:96px">Amount</th>${pl ? '<th class="num pi-plh" style="width:118px">Selling → P/L</th>' : ''}<th style="width:160px">Goes to</th><th style="width:34px"></th></tr>`;
+  const cols = 5 + (lineDisc ? 1 : 0) + (pl ? 1 : 0) + 1;
   const body = document.getElementById('pe-lines');
   if (!s.lines.length) { body.innerHTML = `<tr><td colspan="${cols}" class="pi-empty-lines"><i class="ti ti-shopping-cart"></i>Add the items from the supplier's invoice: <b>Add from sales orders</b>, or <b>Add item for stock</b>.</td></tr>`; return; }
   body.innerHTML = s.lines.map((l, i) => {
     const tag = piCostTag(l);
-    const ref = l.reference;
-    const refTxt = ref ? `<span class="pi-ref">${ref.source === 'lastPaid' ? 'last paid ' : ''}${piF(ref.unit)} →</span>` : '';
-    const refSub = ref && ref.source === 'lastPaid' ? `<div class="pi-ref-sub">no estimate · last bought ${piDate(ref.refDate)}</div>` : '';
     const amount = piN(l.qty) * piN(l.unitCost) * (1 - (lineDisc ? piN(l.discountPct) : 0) / 100);
+    const qtyTd = `<td class="num pi-c-qty" data-label="Qty bought"><input class="pi-cell" inputmode="decimal" value="${piEsc(l.qty)}" aria-label="Qty bought" onchange="piSetLine(${i},'qty',this.value,true)" oninput="piSetLine(${i},'qty',this.value)"><div class="pi-qinfo">${piQtyInfo(l, i)}</div></td>`;
+    const costTd = `<td class="num pi-c-cost" data-label="Unit cost"><input class="pi-cell pi-cost" inputmode="decimal" value="${l.unitCost === '' ? '' : piEsc(l.unitCost)}" aria-label="Unit cost" onchange="piSetLine(${i},'unitCost',this.value,true)" oninput="piSetLine(${i},'unitCost',this.value)">${piRefLine(l.reference)}${tag.html}</td>`;
+    const discTd = lineDisc ? `<td class="num pi-c-disc" data-label="Disc. %"><input class="pi-cell pi-disc" inputmode="decimal" value="${piEsc(l.discountPct || '')}" aria-label="Discount %" onchange="piSetLine(${i},'discountPct',this.value,true)"></td>` : '';
+    const amtTd = `<td class="num pi-c-amt" data-label="Amount"><span class="pi-amt">${piF(amount)}</span></td>`;
+    const plTd = pl ? `<td class="num pi-c-pl pi-pl">${l.kind === 'stock' ? '<span class="pi-sub">— stock</span>' : ''}</td>` : '';
+    const xTd = `<td class="pi-c-x"><button type="button" class="pi-x" title="Remove line" aria-label="Remove line" onclick="piRemoveLine(${i})"><i class="ti ti-x"></i></button></td>`;
     let rows = '';
     if (l.kind === 'order') {
       const left = piLeftFor(l, i), extra = Math.max(0, piN(l.qty) - left);
       const goes = `<span class="pi-dest"><i class="ti ti-shopping-cart"></i>${piEsc(l.soNo)}${extra > 0 ? ' · ' + piQ(Math.min(piN(l.qty), left)) : ''}</span>` + (extra > 0 ? (l.extra ? (l.extra.to === 'stock' ? `<span class="pi-dest stock"><i class="ti ti-box"></i>Unassigned stock · ${piQ(extra)}</span>` : `<span class="pi-dest"><i class="ti ti-shopping-cart"></i>${piEsc(l.extra.soNo)} · ${piQ(extra)}</span>`) : `<div class="pi-ref-sub warn">+ ${piQ(extra)} to place ↓</div>`) : '');
-      rows = `<tr data-i="${i}"><td><span class="pi-so">${piEsc(l.soNo)}</span><div class="pi-sub">${piEsc(l.customer || '')}</div></td><td>${piEsc(l.desc)}<div class="pi-sub">${piEsc(l.uom)}</div></td>
-        <td class="num">${piQ(left)} of ${piQ(l.orderedQty)}</td>
-        <td class="num"><input class="pi-cell" inputmode="decimal" value="${piEsc(l.qty)}" aria-label="Qty bought" onchange="piSetLine(${i},'qty',this.value,true)" oninput="piSetLine(${i},'qty',this.value)"></td>
-        <td class="num">${refTxt} <input class="pi-cell pi-cost" inputmode="decimal" value="${l.unitCost === '' ? '' : piEsc(l.unitCost)}" aria-label="Unit cost" onchange="piSetLine(${i},'unitCost',this.value,true)" oninput="piSetLine(${i},'unitCost',this.value)"><br>${tag.html}${refSub}</td>
-        ${lineDisc ? `<td class="num"><input class="pi-cell pi-disc" inputmode="decimal" value="${piEsc(l.discountPct || '')}" aria-label="Discount %" onchange="piSetLine(${i},'discountPct',this.value,true)"></td>` : ''}
-        <td class="num pi-amt">${piF(amount)}</td><td>${goes}</td><td><button type="button" class="pi-x" title="Remove line" aria-label="Remove line" onclick="piRemoveLine(${i})"><i class="ti ti-x"></i></button></td></tr>`;
+      rows = `<tr class="pi-line" data-i="${i}"><td class="pi-c-item"><div class="pi-idesc">${piEsc(l.desc)}</div><div class="pi-sub">${piEsc(l.uom)} · <span class="pi-so">${piEsc(l.soNo)}</span> · ${piEsc(l.customer || '')}</div></td>
+        ${qtyTd}${costTd}${discTd}${amtTd}${plTd}<td class="pi-c-goes">${goes}</td>${xTd}</tr>`;
       if (extra > 0 && !l.extra) {
         const others = piOtherOrdersFor(l).filter(x => x.left >= extra);
         rows += `<tr class="pi-ask-row"><td colspan="${cols}"><div class="pi-ask"><i class="ti ti-help-circle"></i><b>${piQ(extra)} more than ${piEsc(l.soNo)} needs.</b> Where should they go? *
@@ -265,13 +294,8 @@ function piRenderLines(){
           <button type="button" class="pi-opt" onclick="piSetLine(${i},'qty','${piQ(left)}',true)"><i class="ti ti-pencil"></i>Correct quantity to ${piQ(left)}</button></div></td></tr>`;
       } else if (extra > 0 && l.extra) rows += `<tr class="pi-ask-row"><td colspan="${cols}"><div class="pi-placed"><i class="ti ti-circle-check"></i>${piQ(extra)} extra → ${l.extra.to === 'stock' ? 'Unassigned stock' : piEsc(l.extra.soNo)} <button type="button" class="pi-link" onclick="piPlaceExtra(${i},null)">change</button></div></td></tr>`;
     } else {
-      rows = `<tr data-i="${i}"><td><span class="pi-stock-tag"><i class="ti ti-box"></i> for stock</span></td>
-        <td><input class="pi-cell pi-stock-desc" list="pe-products" value="${piEsc(l.desc)}" placeholder="Item (product or description)" aria-label="Item" onchange="piSetStockItem(${i},this.value)"><div class="pi-sub"><input class="pi-cell pi-uom" value="${piEsc(l.uom)}" aria-label="Unit" onchange="piSetLine(${i},'uom',this.value,true)"></div></td>
-        <td class="num">—</td>
-        <td class="num"><input class="pi-cell" inputmode="decimal" value="${piEsc(l.qty)}" aria-label="Qty bought" onchange="piSetLine(${i},'qty',this.value,true)" oninput="piSetLine(${i},'qty',this.value)"></td>
-        <td class="num">${refTxt} <input class="pi-cell pi-cost" inputmode="decimal" value="${l.unitCost === '' ? '' : piEsc(l.unitCost)}" aria-label="Unit cost" onchange="piSetLine(${i},'unitCost',this.value,true)" oninput="piSetLine(${i},'unitCost',this.value)"><br>${tag.html}${refSub}</td>
-        ${lineDisc ? `<td class="num"><input class="pi-cell pi-disc" inputmode="decimal" value="${piEsc(l.discountPct || '')}" aria-label="Discount %" onchange="piSetLine(${i},'discountPct',this.value,true)"></td>` : ''}
-        <td class="num pi-amt">${piF(amount)}</td><td><span class="pi-dest stock"><i class="ti ti-box"></i>Unassigned stock · ${piQ(l.qty)}</span></td><td><button type="button" class="pi-x" title="Remove line" aria-label="Remove line" onclick="piRemoveLine(${i})"><i class="ti ti-x"></i></button></td></tr>`;
+      rows = `<tr class="pi-line" data-i="${i}"><td class="pi-c-item"><input class="pi-cell pi-stock-desc" list="pe-products" value="${piEsc(l.desc)}" placeholder="Item (product or description)" aria-label="Item" onchange="piSetStockItem(${i},this.value)"><div class="pi-sub"><input class="pi-cell pi-uom" value="${piEsc(l.uom)}" aria-label="Unit" onchange="piSetLine(${i},'uom',this.value,true)"> · <span class="pi-stock-tag"><i class="ti ti-box"></i> for stock</span></div></td>
+        ${qtyTd}${costTd}${discTd}${amtTd}${plTd}<td class="pi-c-goes"><span class="pi-dest stock"><i class="ti ti-box"></i>Unassigned stock · ${piQ(l.qty)}</span></td>${xTd}</tr>`;
     }
     if (tag.chk.kind === 'above' && piSettings().costLimitAction === 'reason')
       rows += `<tr class="pi-ask-row"><td colspan="${cols}"><div class="pi-reason"><i class="ti ti-alert-triangle"></i>Reason for the higher cost * <input class="pi-cell" maxlength="300" value="${piEsc(l.costReason)}" placeholder="e.g. supplier price increase, urgent purchase" oninput="piSetLine(${i},'costReason',this.value)"></div></td></tr>`;
@@ -281,12 +305,25 @@ function piRenderLines(){
   if (!dl) { dl = document.createElement('datalist'); dl.id = 'pe-products'; document.body.appendChild(dl); }
   dl.innerHTML = (typeof products !== 'undefined' ? products : []).map(p => `<option value="${piEsc(p.name)}">${piEsc([p.code, p.uom].filter(Boolean).join(' · '))}</option>`).join('');
 }
+/** Fill each line's Selling → P/L from the checked invoice (landed cost includes the shared costs and discount). */
+function piFillLinePL(v){
+  if (!piCanSeeProfit() || !v || !v.value) return;
+  const s = piState();
+  document.querySelectorAll('#pe-lines tr.pi-line').forEach(tr => {
+    const i = Number(tr.dataset.i), l = s.lines[i], td = tr.querySelector('.pi-pl'); if (!td || !l) return;
+    td.innerHTML = l.kind === 'stock' ? '<span class="pi-sub">— stock</span>' : (l.unitCost === '' || l.unitCost == null) ? '<span class="pi-sub">—</span>' : piPLHtml(v.value.lines[i]);
+  });
+}
 function piSetLine(i, field, value, rerender){
   const s = piState(); const l = s && s.lines[i]; if (!l) return;
   l[field] = value;
   if (field === 'qty' && l.extra && piN(value) <= piLeftFor(l, i)) l.extra = null;
   if (rerender) { piRenderLines(); }
-  else if (field === 'qty' || field === 'unitCost') { const tr = document.querySelector(`#pe-lines tr[data-i="${i}"] .pi-amt`); if (tr) tr.textContent = piF(piN(l.qty) * piN(l.unitCost) * (1 - (['line', 'both'].includes(piSettings().discountMode) ? piN(l.discountPct) : 0) / 100)); }
+  else if (field === 'qty' || field === 'unitCost') {
+    const tr = document.querySelector(`#pe-lines tr[data-i="${i}"]`);
+    if (tr) { const a = tr.querySelector('.pi-amt'); if (a) a.textContent = piF(piN(l.qty) * piN(l.unitCost) * (1 - (['line', 'both'].includes(piSettings().discountMode) ? piN(l.discountPct) : 0) / 100));
+      if (field === 'qty') { const q = tr.querySelector('.pi-qinfo'); if (q) q.innerHTML = piQtyInfo(l, i); } }
+  }
   piRecalc();
 }
 function piSetStockItem(i, value){
@@ -423,6 +460,7 @@ function piRecalc(keepVatFocus){
   chips.push(has(['supplierTotal']) ? '<span class="pi-todo-c">Supplier total</span>' : '<span class="pi-todo-c ok"><i class="ti ti-check"></i>Supplier total matches</span>');
   document.getElementById('pe-todo').innerHTML = chips.join('');
   document.getElementById('pe-save').disabled = !v.ok;
+  piFillLinePL(v);
   s._v = v;
 }
 async function savePurchaseInvoice(){
@@ -450,12 +488,16 @@ function openPurchaseInvoiceView(id){
   let m = document.getElementById('pi-view-modal');
   if (!m) { m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'pi-view-modal'; document.body.appendChild(m); }
   const t = pi.totals || {}, v = pi.status === 'Voided';
+  const pl = piCanSeeProfit();
   const lines = (pi.lines || []).map(l => {
     const goes = (l.allocations || []).map(a => `<span class="pi-dest"><i class="ti ti-shopping-cart"></i>${piEsc(a.soNo)} · ${piQ(a.qty)}</span>`).join('') + (piN(l.stockQty) > 0 ? `<span class="pi-dest stock"><i class="ti ti-box"></i>Unassigned stock · ${piQ(l.stockQty)}</span>` : '');
     const ref = l.reference && l.reference.unit ? `${l.reference.source === 'lastPaid' ? 'last paid ' : 'est. '}${piF(l.reference.unit)}` : 'no reference';
     const pct = l.costPct != null ? ` (${l.costPct > 0 ? '+' : ''}${Number(l.costPct).toFixed(1)}%)` : '';
-    return `<tr><td>${piEsc(l.desc)}<div class="pi-sub">${piEsc(l.uom)}${l.costReason ? ' · reason: ' + piEsc(l.costReason) : ''}</div></td><td class="num">${piQ(l.qty)}</td><td class="num">${piF(l.unitCost)}<div class="pi-sub ${l.costCheck === 'above' ? 'pi-red' : l.costCheck === 'below' ? 'pi-blue' : ''}">${ref}${pct}</div></td>
-      ${piN(l.discountPct) ? `<td class="num">${piN(l.discountPct)}%</td>` : '<td class="num">—</td>'}<td class="num">${piF(l.amount)}</td><td class="num">${piF(l.landedUnitCost)}</td><td>${goes}</td></tr>`;
+    const sub = l.kind === 'stock' ? `${piEsc(l.uom)} · <span class="pi-stock-tag"><i class="ti ti-box"></i> for stock</span>` : `${piEsc(l.uom)} · <span class="pi-so">${piEsc(l.soNo)}</span> · ${piEsc(l.customer || '')}`;
+    return `<tr class="pi-line"><td class="pi-c-item"><div class="pi-idesc">${piEsc(l.desc)}</div><div class="pi-sub">${sub}</div>${l.costReason ? `<div class="pi-sub">reason: ${piEsc(l.costReason)}</div>` : ''}</td>
+      <td class="num pi-c-qty" data-label="Qty">${piQ(l.qty)}</td><td class="num pi-c-cost" data-label="Unit cost">${piF(l.unitCost)}<div class="pi-sub ${l.costCheck === 'above' ? 'pi-red' : l.costCheck === 'below' ? 'pi-blue' : ''}">${ref}${pct}</div></td>
+      <td class="num pi-c-disc" data-label="Disc.">${piN(l.discountPct) ? piN(l.discountPct) + '%' : '—'}</td><td class="num pi-c-amt" data-label="Amount"><span class="pi-amt">${piF(l.amount)}</span></td><td class="num pi-c-land" data-label="Landed unit cost">${piF(l.landedUnitCost)}</td>
+      ${pl ? `<td class="num pi-c-pl pi-pl">${piPLHtml(l)}</td>` : ''}<td class="pi-c-goes">${goes}</td></tr>`;
   }).join('');
   m.innerHTML = `<div class="modal pi-view" role="dialog" aria-modal="true" aria-labelledby="pi-view-title" style="width:min(1100px,96vw);max-width:1100px;height:auto;max-height:92vh">
     <div class="modal-header"><div><h2 id="pi-view-title">${piEsc(pi.piNo)} ${piPayPill(pi)}</h2><div class="so-create-subtitle">${piEsc(pi.supplierName)} · invoice ${piEsc(pi.supplierInvoiceNo)} · ${piDate(pi.date)}</div></div><button class="close-btn" type="button" onclick="closeModal('pi-view-modal')" aria-label="Close">✕</button></div>
@@ -469,7 +511,7 @@ function openPurchaseInvoiceView(id){
         <div><label>Zoho bill no.</label><b>${piEsc(pi.zohoBillNo || '—')}</b></div>
         <div><label>Recorded by</label><b>${piEsc(pi.createdBy)}</b><small>${piDate(String(pi.created || '').slice(0, 10))}</small></div>
       </div>
-      <div class="pi-lines-wrap"><table class="pi-lines"><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit cost</th><th class="num">Disc.</th><th class="num">Amount</th><th class="num">Landed unit cost</th><th>Goes to</th></tr></thead><tbody>${lines}</tbody></table></div>
+      <div class="pi-lines-wrap"><table class="pi-lines pi-view-lines${pl ? ' pi-has-pl' : ''}"><thead><tr><th>Item · sales order</th><th class="num">Qty</th><th class="num">Unit cost</th><th class="num">Disc.</th><th class="num">Amount</th><th class="num">Landed unit cost</th>${pl ? '<th class="num pi-plh">Selling → P/L</th>' : ''}<th>Goes to</th></tr></thead><tbody>${lines}</tbody></table></div>
       <div class="pi-view-foot">
         <div>${(pi.costs || []).map(c => `<div class="pi-ps"><span>${piEsc(c.label)}</span><b>${piF(c.amount)}</b></div>`).join('')}${pi.discount ? `<div class="pi-ps"><span>Discount on the whole invoice${pi.discount.mode === 'percent' ? ' (' + pi.discount.value + '%)' : ''}</span><b class="pi-green">−${piF(pi.discount.amount)}</b></div>` : ''}</div>
         <div class="pi-view-sum"><div class="pi-ps"><span>Lines (ex-VAT)</span><b>${piF(t.linesTotal)}</b></div>${t.costsTotal ? `<div class="pi-ps"><span>Additional costs</span><b>${piF(t.costsTotal)}</b></div>` : ''}${t.discount ? `<div class="pi-ps"><span>Discount</span><b class="pi-green">−${piF(t.discount)}</b></div>` : ''}
