@@ -30,6 +30,7 @@
     customerinvoices: { noun: 'documents', amount: 'total (sar)', sub: ['sales order'], pill: 'type', extra: 'balance', tabletHide: ['reference', 'paid', 'sales order', 'type'] },
     receipts:         { noun: 'receipts', ownCards: true, tabletHide: ['method', 'reference'] },
     purchaseinvoices: { noun: 'purchase invoices', ownCards: true, who: 'Supplier', tabletHide: ['supplier inv.', 'zoho bill', 'orders'] },   // V268.13
+    supplierpayments: { noun: 'supplier payments', ownCards: true, who: 'Supplier', tabletHide: ['for', 'paid from'] },   // V268.3
   };
   const pageOf = id => document.getElementById('page-' + id);
 

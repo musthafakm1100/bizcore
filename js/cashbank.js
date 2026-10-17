@@ -78,6 +78,7 @@ document.addEventListener('click', async e => {
   else if (act === 'handover') cbOpenHandover(null);
   else if (act === 'edit') cbOpenHandover(b.dataset.entry);
   else if (act === 'open-pi') { if (typeof openPurchaseInvoiceView === 'function') { if (window.BizCorePI) window.BizCorePI.start(); openPurchaseInvoiceView(b.dataset.pi); } }   // V268.2
+  else if (act === 'open-sp') { if (typeof openSupplierPaymentView === 'function') { if (window.BizCorePI) window.BizCorePI.start(); openSupplierPaymentView(b.dataset.sp); } }   // V268.3 advance
   else if (act === 'statement') cbOpenStatement();
 });
 

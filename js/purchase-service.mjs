@@ -19,9 +19,9 @@ import {
   PURCHASE_COLLECTIONS as C, PURCHASE_SCHEMA_VERSION, PURCHASE_SETTINGS_PATH, PURCHASE_STATUS,
   effectivePurchaseSettings, validatePurchaseSettings, validatePurchaseInvoice, purchaseIdForOperation,
   supplierRefIdOf, r2, rq,
-  PAYMENT_COLLECTION, PAYMENT_KINDS, paymentIdForOperation, validateSupplierPayment, buildSupplierPaymentRecords,
-  applyPaymentToInvoice,
-} from './purchase-core.mjs?v=268.2';
+  PAYMENT_COLLECTION, PAYMENT_KINDS, paymentIdForOperation, paymentEntryIdOf, validateSupplierPayment, buildSupplierPaymentRecords,
+  applyPaymentToInvoice, applyAdvanceUse, editRightOf, validateInvoiceLimitedEdit, validatePaymentLimitedEdit,
+} from './purchase-core.mjs?v=268.3';
 import { DeliveryError, isSafeId, eventIdForOperation, requireReason, cleanText, assertSize } from './delivery-core.mjs?v=266.0';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
@@ -29,7 +29,7 @@ const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, de
 export const PURCHASE_ERR = Object.freeze({
   INVALID_INPUT: 'invalid-input', NOT_FOUND: 'not-found', INVALID_STATE: 'invalid-state', STALE: 'stale-revision',
   DUPLICATE_SUPPLIER_INVOICE: 'duplicate-supplier-invoice', NOT_ADMIN: 'not-admin', STOCK_USED: 'stock-used', ID_COLLISION: 'id-collision',
-  HAS_PAYMENTS: 'has-payments',
+  HAS_PAYMENTS: 'has-payments', ADVANCE_USED: 'advance-used', NOT_ALLOWED: 'not-allowed',
 });
 const PI_BYTES = 700 * 1024;
 
@@ -60,7 +60,15 @@ export function createPurchaseService(fs, options = {}) {
     account: id => doc(db, 'paymentAccounts', id),
     cashEntry: id => doc(db, 'cashEntries', id),
     cashLine: id => doc(db, 'cashLines', id),
+    payEvent: (id, ev) => doc(db, PAYMENT_COLLECTION, id, 'events', ev),
   };
+  /** V268.3: the advances used by payment lines (read inside the transaction). */
+  async function readAdvances(tx, groups) {
+    const map = new Map();
+    const ids = [...new Set(groups.flatMap(g => (g.lines || []).map(l => l && l.advanceId)).filter(isSafeId))];
+    for (const id of ids) { const s = await tx.get(refs.payment(id)); if (s.exists()) map.set(id, { ...s.data() }); }
+    return map;
+  }
   /** Reads the payment accounts used by payment lines, and the bank accounts linked to the cards among them. */
   async function readAccounts(tx, groups) {
     const map = new Map();
@@ -78,8 +86,14 @@ export function createPurchaseService(fs, options = {}) {
   }
   const checkNumbering = n => ensure(n && isSafeId(n.counterKey) && typeof n.displayPrefix === 'string', PURCHASE_ERR.INVALID_INPUT, 'Payment numbering is required');
   /** Writes one payment's records (payment + ledger entry + postings + accounts marked as having entries). */
-  function writePaymentRecords(tx, recs, accounts) {
+  function writePaymentRecords(tx, recs, accounts, advances, actor, at) {
     tx.set(refs.payment(recs.payment.id), recs.payment);
+    // V268.3: the advances this payment uses — each moves by exactly its amount, pointing at this payment
+    for (const advId of recs.payment.advanceIds || []) {
+      const adv = advances.get(advId);
+      const next = { ...adv, ...applyAdvanceUse(adv, recs.payment.advanceAmounts[advId], +1), revision: (Number(adv.revision) || 1) + 1, lastUseId: recs.payment.id, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid };
+      tx.set(refs.payment(advId), next); advances.set(advId, next);
+    }
     if (recs.entry) {
       tx.set(refs.cashEntry(recs.entry.id), recs.entry);
       for (const l of recs.lines) tx.set(refs.cashLine(l.id), l);
@@ -136,6 +150,8 @@ export function createPurchaseService(fs, options = {}) {
       ensure(groups.length <= 5, PURCHASE_ERR.INVALID_INPUT, 'At most 5 payment dates on one invoice.');
       groups.forEach(g => checkNumbering(g.numbering));
       const payAccounts = groups.length ? await readAccounts(tx, groups) : new Map();
+      const payAdvances = groups.length ? await readAdvances(tx, groups) : new Map();
+      const advSeen = new Set();
       const payCounters = groups.length ? await readCounters(tx, groups.map(g => g.numbering.counterKey)) : new Map();
 
       // ── writes ──
@@ -150,8 +166,9 @@ export function createPurchaseService(fs, options = {}) {
       // payments at entry: checked one after the other against the balance left
       const payRecs = [];
       groups.forEach((g, i) => {
-        const pv = validateSupplierPayment({ kind: PAYMENT_KINDS.payment, date: g.date, lines: g.lines, discount: 0 }, { invoice, accounts: payAccounts, today: (options.today ? options.today() : at.slice(0, 10)) });
+        const pv = validateSupplierPayment({ kind: PAYMENT_KINDS.payment, date: g.date, lines: g.lines, discount: 0 }, { invoice, accounts: payAccounts, advances: payAdvances, today: (options.today ? options.today() : at.slice(0, 10)) });
         if (!pv.ok) fail(PURCHASE_ERR.INVALID_INPUT, pv.errors.map(e => e.message).join(' '), { errors: pv.errors, field: 'payments' });
+        for (const a of pv.value.advanceIds) { ensure(!advSeen.has(a), PURCHASE_ERR.INVALID_INPUT, 'An advance can be used only once on one invoice.'); advSeen.add(a); }
         const n = payCounters.get(g.numbering.counterKey) + 1; payCounters.set(g.numbering.counterKey, n);
         const recs = buildSupplierPaymentRecords({ id: paymentIdForOperation(operationId, i + 1), spNo: formatNumber(g.numbering.displayPrefix, n), value: pv.value, invoice, accounts: payAccounts, actor, at, stamp: stamp(), operationId });
         Object.assign(invoice, applyPaymentToInvoice(invoice, recs.payment, +1));
@@ -164,7 +181,7 @@ export function createPurchaseService(fs, options = {}) {
       tx.set(refs.event(id, eventId), { id: eventId, kind: 'posted', invoiceId: id, piNo, operationId, toRevision: 1, total: val.totals.total,
         soIds: val.soIds, paymentIds: payRecs.map(r => r.payment.id), paid: invoice.paid, actor: actor.name, actorUid: actor.uid, at, recordedAt: stamp() });
       for (const [k, n] of payCounters) tx.set(refs.counter(k), { value: n, updatedAt: Date.now() });
-      payRecs.forEach(r => writePaymentRecords(tx, r, payAccounts));
+      payRecs.forEach(r => writePaymentRecords(tx, r, payAccounts, payAdvances, actor, at));
       tx.set(refs.ref(refKey), { id: refKey, supplierKey: val.supplierKey, supplierInvoiceNo: val.supplierInvoiceNo, invoiceId: id, piNo, createdByUid: actor.uid, created: at });
       writeLedgers(tx, soIds, orders, ledgers, v.deltas, +1, { id, eventId, actor, at });
       stockKeys.forEach((k, i) => {
@@ -259,8 +276,9 @@ export function createPurchaseService(fs, options = {}) {
       ensure(pi.status === PURCHASE_STATUS.posted, PURCHASE_ERR.INVALID_STATE, `${pi.piNo} is cancelled.`);
       if (input.expectedRevision != null) ensure(pi.revision === input.expectedRevision, PURCHASE_ERR.STALE, `${pi.piNo} was changed meanwhile. Please open it again.`);
       const accounts = await readAccounts(tx, [{ lines: input.lines || [] }]);
+      const advances = await readAdvances(tx, [{ lines: input.lines || [] }]);
       const counters = await readCounters(tx, [numbering.counterKey]);
-      const pv = validateSupplierPayment({ ...input, kind }, { invoice: pi, accounts, today: options.today ? options.today() : at.slice(0, 10) });
+      const pv = validateSupplierPayment({ ...input, kind }, { invoice: pi, accounts, advances, today: options.today ? options.today() : at.slice(0, 10) });
       if (!pv.ok) fail(PURCHASE_ERR.INVALID_INPUT, pv.errors.map(e => e.message).join(' '), { errors: pv.errors });
       const seq = counters.get(numbering.counterKey) + 1;
       const recs = buildSupplierPaymentRecords({ id, spNo: formatNumber(numbering.displayPrefix, seq), value: pv.value, invoice: pi, accounts, actor, at, stamp: stamp(), operationId });
@@ -268,7 +286,7 @@ export function createPurchaseService(fs, options = {}) {
       const figures = applyPaymentToInvoice(pi, recs.payment, +1);
       const next = { ...pi, ...figures, paymentCount: (Number(pi.paymentCount) || 0) + 1, revision, lastEventId: eventId, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid };
       tx.set(refs.counter(numbering.counterKey), { value: seq, updatedAt: Date.now() });
-      writePaymentRecords(tx, recs, accounts);
+      writePaymentRecords(tx, recs, accounts, advances, actor, at);
       tx.set(refs.pi(invoiceId), next);
       tx.set(refs.event(invoiceId, eventId), { id: eventId, kind: kind === PAYMENT_KINDS.cashback ? 'cashback' : 'payment', invoiceId, piNo: pi.piNo, operationId,
         paymentId: id, spNo: recs.payment.spNo, amount: recs.payment.amount, discount: recs.payment.discount,
@@ -279,7 +297,28 @@ export function createPurchaseService(fs, options = {}) {
   const recordSupplierPayment = input => recordOnInvoice(input || {}, PAYMENT_KINDS.payment);
   const recordSupplierCashBack = input => recordOnInvoice({ ...(input || {}), discount: 0 }, PAYMENT_KINDS.cashback);
 
-  /** Cancel a payment / cash back: it stays (void, with the reason); the ledger entry and the invoice go back. */
+  /** Reads a payment's ledger entry and its postings (inside the transaction). */
+  async function readEntry(tx, entryId) {
+    if (!entryId) return { entry: null, lines: [] };
+    const es = await tx.get(refs.cashEntry(entryId));
+    ensure(es.exists(), PURCHASE_ERR.INVALID_STATE, 'The ledger entry of this payment is missing.');
+    const entry = es.data(), lines = [];
+    for (const a of entry.accountIds || []) { const ls = await tx.get(refs.cashLine(`${entry.id}__${a}`)); if (ls.exists()) lines.push(ls.data()); }
+    return { entry, lines };
+  }
+  function voidEntry(tx, entry, lines, why, actor) {
+    if (!entry) return;
+    const er = Number(entry.revision) + 1;
+    tx.set(refs.cashEntry(entry.id), { ...entry, void: true, voidReason: why.slice(0, 200), revision: er, updatedByUid: actor.uid, updatedByName: actor.name, updatedAt: stamp() });
+    for (const l of lines) tx.update(refs.cashLine(l.id), { void: true, voidReason: why.slice(0, 200), entryRevision: er });
+  }
+  async function roleOf(tx, uid) {
+    const [accessSnap, settingsSnap] = await Promise.all([tx.get(refs.access()), tx.get(refs.settings())]);
+    const admins = accessSnap.exists() && Array.isArray(accessSnap.data().adminUids) ? accessSnap.data().adminUids : [];
+    return { isAdmin: admins.includes(uid), settings: effectivePurchaseSettings(settingsSnap.exists() ? settingsSnap.data() : null) };
+  }
+
+  /** Cancel a payment / cash back / advance: it stays (void, with the reason); the ledger entry, the invoice and any advance go back. */
   async function voidSupplierPayment(input = {}) {
     const { operationId, paymentId } = input;
     ensure(isSafeId(paymentId), PURCHASE_ERR.INVALID_INPUT, 'Payment reference required');
@@ -292,31 +331,230 @@ export function createPurchaseService(fs, options = {}) {
       const pay = paySnap.data();
       if (pay.status === PURCHASE_STATUS.voided) { ensure(pay.voidEventId === eventId, PURCHASE_ERR.INVALID_STATE, `${pay.spNo} is already cancelled`); return { alreadyApplied: true, payment: pay }; }
       if (input.expectedRevision != null) ensure(pay.revision === input.expectedRevision, PURCHASE_ERR.STALE, `${pay.spNo} was changed meanwhile. Please open it again.`);
-      const piSnap = await tx.get(refs.pi(pay.invoiceId));
-      ensure(piSnap.exists(), PURCHASE_ERR.NOT_FOUND, 'Purchase invoice not found');
-      const pi = piSnap.data();
-      let entry = null; const lineSnaps = [];
-      if (pay.entryId) {
-        const es = await tx.get(refs.cashEntry(pay.entryId));
-        ensure(es.exists(), PURCHASE_ERR.INVALID_STATE, 'The ledger entry of this payment is missing.');
-        entry = es.data();
-        for (const a of entry.accountIds || []) { const ls = await tx.get(refs.cashLine(`${entry.id}__${a}`)); if (ls.exists()) lineSnaps.push(ls.data()); }
+      const isAdv = pay.kind === PAYMENT_KINDS.advance;
+      if (isAdv) ensure(!(Number(pay.advanceUsed) > 0.005), PURCHASE_ERR.ADVANCE_USED, `${pay.spNo} is already used on an invoice (${Number(pay.advanceUsed).toFixed(2)}) — remove it from that invoice's payment first.`);
+      let pi = null;
+      if (!isAdv) { const piSnap = await tx.get(refs.pi(pay.invoiceId)); ensure(piSnap.exists(), PURCHASE_ERR.NOT_FOUND, 'Purchase invoice not found'); pi = piSnap.data(); }
+      const advances = await readAdvances(tx, [{ lines: pay.lines || [] }]);
+      const { entry, lines } = await readEntry(tx, pay.entryId);
+      let figures = null;
+      if (pi) {
+        figures = applyPaymentToInvoice(pi, pay, -1);
+        ensure(figures.paid >= -0.005 && figures.paymentDiscount >= -0.005, PURCHASE_ERR.INVALID_STATE, 'The invoice figures would become negative.');
+        if (pay.kind !== PAYMENT_KINDS.cashback) ensure(figures.cashBack <= figures.paid + 0.005, PURCHASE_ERR.INVALID_STATE, `Cancel the cash back of ${pi.piNo} first — it would be more than what is paid.`);
       }
-      const figures = applyPaymentToInvoice(pi, pay, -1);
-      ensure(figures.paid >= -0.005 && figures.paymentDiscount >= -0.005, PURCHASE_ERR.INVALID_STATE, 'The invoice figures would become negative.');
-      if (pay.kind !== PAYMENT_KINDS.cashback) ensure(figures.cashBack <= figures.paid + 0.005, PURCHASE_ERR.INVALID_STATE, `Cancel the cash back of ${pi.piNo} first — it would be more than what is paid.`);
-      const revision = pi.revision + 1;
       tx.set(refs.payment(paymentId), { ...pay, status: PURCHASE_STATUS.voided, voidReason: reason, voidedAt: at, voidedBy: actor.name, voidedByUid: actor.uid, voidEventId: eventId,
-        revision: pay.revision + 1, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid });
-      if (entry) {
-        const er = Number(entry.revision) + 1;
-        tx.set(refs.cashEntry(entry.id), { ...entry, void: true, voidReason: reason.slice(0, 200), revision: er, updatedByUid: actor.uid, updatedByName: actor.name, updatedAt: stamp() });
-        for (const l of lineSnaps) tx.update(refs.cashLine(l.id), { void: true, voidReason: reason.slice(0, 200), entryRevision: er });
+        revision: pay.revision + 1, lastEventId: eventId, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid });
+      tx.set(refs.payEvent(paymentId, eventId), { id: eventId, kind: 'voided', paymentId, spNo: pay.spNo, operationId, reason, toRevision: pay.revision + 1, actor: actor.name, actorUid: actor.uid, at, recordedAt: stamp() });
+      voidEntry(tx, entry, lines, reason, actor);
+      // the advances it used become available again
+      for (const advId of pay.advanceIds || []) {
+        const adv = advances.get(advId); if (!adv) continue;
+        tx.set(refs.payment(advId), { ...adv, ...applyAdvanceUse(adv, (pay.advanceAmounts || {})[advId], -1), revision: (Number(adv.revision) || 1) + 1, lastUseId: paymentId, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid });
       }
+      if (!pi) return { alreadyApplied: false, payment: { ...pay, status: PURCHASE_STATUS.voided } };
+      const revision = pi.revision + 1;
       const next = { ...pi, ...figures, revision, lastEventId: eventId, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid };
       tx.set(refs.pi(pi.id), next);
       tx.set(refs.event(pi.id, eventId), { id: eventId, kind: pay.kind === PAYMENT_KINDS.cashback ? 'cashback-voided' : 'payment-voided', invoiceId: pi.id, piNo: pi.piNo, operationId,
         paymentId, spNo: pay.spNo, amount: pay.amount, discount: pay.discount, reason, fromRevision: pi.revision, toRevision: revision, actor: actor.name, actorUid: actor.uid, at, recordedAt: stamp() });
+      return { alreadyApplied: false, invoice: next };
+    });
+  }
+
+  /* ───────── V268.3: advance (paid before the invoice) ───────── */
+  async function payAdvance(input = {}) {
+    const { operationId, numbering } = input;
+    checkNumbering(numbering);
+    const id = paymentIdForOperation(operationId);
+    const eventId = eventIdForOperation('adv', operationId);
+    const actor = actorOf(), at = now();
+    return transact(async tx => {
+      const paySnap = await tx.get(refs.payment(id));
+      if (paySnap.exists()) { const ex = paySnap.data(); ensure(ex.operationId === operationId, PURCHASE_ERR.ID_COLLISION, 'Payment ID already used'); return { alreadyApplied: true, payment: ex }; }
+      const accounts = await readAccounts(tx, [{ lines: input.lines || [] }]);
+      const counters = await readCounters(tx, [numbering.counterKey]);
+      const pv = validateSupplierPayment({ ...input, kind: PAYMENT_KINDS.advance, discount: 0, lines: (input.lines || []).filter(l => !l.advanceId) }, { accounts, today: options.today ? options.today() : at.slice(0, 10) });
+      if (!pv.ok) fail(PURCHASE_ERR.INVALID_INPUT, pv.errors.map(e => e.message).join(' '), { errors: pv.errors });
+      const seq = counters.get(numbering.counterKey) + 1;
+      const recs = buildSupplierPaymentRecords({ id, spNo: formatNumber(numbering.displayPrefix, seq), value: pv.value, invoice: null, accounts, actor, at, stamp: stamp(), operationId });
+      recs.payment.lastEventId = eventId;
+      tx.set(refs.counter(numbering.counterKey), { value: seq, updatedAt: Date.now() });
+      writePaymentRecords(tx, recs, accounts, new Map(), actor, at);
+      tx.set(refs.payEvent(id, eventId), { id: eventId, kind: 'posted', paymentId: id, spNo: recs.payment.spNo, operationId, amount: recs.payment.amount, toRevision: 1, actor: actor.name, actorUid: actor.uid, at, recordedAt: stamp() });
+      return { alreadyApplied: false, payment: recs.payment };
+    });
+  }
+
+  /* ───────── V268.3: edit a payment / cash back / advance ───────── */
+  async function editSupplierPayment(input = {}) {
+    const { operationId, paymentId, mode } = input;
+    ensure(isSafeId(paymentId), PURCHASE_ERR.INVALID_INPUT, 'Payment reference required');
+    const reason = String(input.reason || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    ensure(reason, PURCHASE_ERR.INVALID_INPUT, 'Enter the reason for the change.');
+    const eventId = eventIdForOperation('payedit', operationId);
+    const actor = actorOf(), at = now();
+    return transact(async tx => {
+      const paySnap = await tx.get(refs.payment(paymentId));
+      ensure(paySnap.exists(), PURCHASE_ERR.NOT_FOUND, 'Payment not found');
+      const pay = paySnap.data();
+      if (pay.lastEventId === eventId) return { alreadyApplied: true, payment: pay };
+      if (input.expectedRevision != null) ensure(pay.revision === input.expectedRevision, PURCHASE_ERR.STALE, `${pay.spNo} was changed meanwhile. Please open it again.`);
+      const role = await roleOf(tx, actor.uid);
+      const right = editRightOf(pay, { settings: role.settings, isAdmin: role.isAdmin, nowMs: Date.parse(at) });
+      ensure(right.right, PURCHASE_ERR.NOT_ALLOWED, right.why || 'You can\'t edit this payment.');
+      const revision = pay.revision + 1;
+      if (mode !== 'full') {
+        const v = validatePaymentLimitedEdit(pay, input);
+        if (!v.ok) fail(PURCHASE_ERR.INVALID_INPUT, v.errors.map(e => e.message).join(' '), { errors: v.errors });
+        tx.set(refs.payment(paymentId), { ...pay, lines: v.value.lines, note: v.value.note, revision, lastEventId: eventId, lastEditReason: reason, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid });
+        tx.set(refs.payEvent(paymentId, eventId), { id: eventId, kind: 'edited', mode: 'limited', paymentId, spNo: pay.spNo, operationId, reason, changes: v.changes, toRevision: revision, actor: actor.name, actorUid: actor.uid, at, recordedAt: stamp() });
+        return { alreadyApplied: false, payment: { ...pay, lines: v.value.lines, note: v.value.note, revision } };
+      }
+      ensure(right.right === 'full', PURCHASE_ERR.NOT_ALLOWED, 'Only administrators can change the amounts and accounts (Administration → Purchase Settings).');
+      ensure(!(pay.advanceIds || []).length, PURCHASE_ERR.NOT_ALLOWED, `${pay.spNo} uses an advance — cancel it and enter it again.`);
+      const isAdv = pay.kind === PAYMENT_KINDS.advance;
+      let pi = null, base = null;
+      if (!isAdv) {
+        const piSnap = await tx.get(refs.pi(pay.invoiceId)); ensure(piSnap.exists(), PURCHASE_ERR.NOT_FOUND, 'Purchase invoice not found'); pi = piSnap.data();
+        ensure(pi.status === PURCHASE_STATUS.posted, PURCHASE_ERR.INVALID_STATE, `${pi.piNo} is cancelled.`);
+        base = { ...pi, ...applyPaymentToInvoice(pi, pay, -1) };   // the invoice without this payment
+      }
+      const accounts = await readAccounts(tx, [{ lines: input.lines || [] }]);
+      const { entry, lines } = await readEntry(tx, pay.entryId);
+      const pv = validateSupplierPayment({ ...input, kind: pay.kind, lines: (input.lines || []).filter(l => !l.advanceId),
+        ...(isAdv ? { supplierId: pay.supplierId, supplierName: pay.supplierName } : {}) }, { invoice: base, accounts, today: options.today ? options.today() : at.slice(0, 10) });
+      if (!pv.ok) fail(PURCHASE_ERR.INVALID_INPUT, pv.errors.map(e => e.message).join(' '), { errors: pv.errors });
+      if (isAdv) {
+        ensure(pv.value.amount + 0.005 >= (Number(pay.advanceUsed) || 0), PURCHASE_ERR.INVALID_INPUT, `${Number(pay.advanceUsed).toFixed(2)} of this advance is already used — the amount can't be less.`);
+        pv.value.supplier.supplierKey = pay.supplierKey;
+      }
+      const newEntryId = `${paymentEntryIdOf(paymentId)}-r${revision}`;
+      const recs = buildSupplierPaymentRecords({ id: paymentId, spNo: pay.spNo, value: pv.value, invoice: base, accounts, actor, at, stamp: stamp(), operationId: pay.operationId, entryId: newEntryId, revision });
+      const keep = { created: pay.created, createdBy: pay.createdBy, createdByUid: pay.createdByUid, recordedAt: pay.recordedAt };
+      const nextPay = { ...recs.payment, ...keep, lastEventId: eventId, lastEditReason: reason,
+        ...(isAdv ? { soId: pay.soId || '', soNo: pay.soNo || '', advanceUsed: Number(pay.advanceUsed) || 0, advanceLeft: Math.round(((pv.value.amount) - (Number(pay.advanceUsed) || 0)) * 100) / 100, lastUseId: pay.lastUseId || '' } : {}) };
+      voidEntry(tx, entry, lines, `Changed (${pay.spNo} edited): ${reason}`, actor);
+      if (recs.entry) {
+        tx.set(refs.cashEntry(recs.entry.id), recs.entry);
+        for (const l of recs.lines) tx.set(refs.cashLine(l.id), l);
+        for (const a of recs.entry.accountIds) { const acc = accounts.get(a); if (acc && !acc.hasEntries) tx.update(refs.account(a), { hasEntries: true }); }
+      }
+      tx.set(refs.payment(paymentId), nextPay);
+      const sum = p => ({ date: p.date, amount: p.amount, discount: p.discount || 0, bankCharges: p.bankCharges || 0, accounts: (p.lines || []).map(l => `${l.accountCode || l.advanceNo || ''} ${l.amount}`).join(', ') });
+      tx.set(refs.payEvent(paymentId, eventId), { id: eventId, kind: 'edited', mode: 'full', paymentId, spNo: pay.spNo, operationId, reason, before: sum(pay), after: sum(nextPay), toRevision: revision, actor: actor.name, actorUid: actor.uid, at, recordedAt: stamp() });
+      if (pi) {
+        const figures = applyPaymentToInvoice(base, nextPay, +1);
+        if (pay.kind === PAYMENT_KINDS.payment) ensure(figures.cashBack <= figures.paid + 0.005, PURCHASE_ERR.INVALID_STATE, 'The cash back would be more than what is paid.');
+        const pr = pi.revision + 1;
+        tx.set(refs.pi(pi.id), { ...pi, ...figures, revision: pr, lastEventId: eventId, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid });
+        tx.set(refs.event(pi.id, eventId), { id: eventId, kind: pay.kind === PAYMENT_KINDS.cashback ? 'cashback-edited' : 'payment-edited', invoiceId: pi.id, piNo: pi.piNo, operationId,
+          paymentId, spNo: pay.spNo, amount: nextPay.amount, discount: nextPay.discount, before: sum(pay), reason, fromRevision: pi.revision, toRevision: pr, actor: actor.name, actorUid: actor.uid, at, recordedAt: stamp() });
+      }
+      return { alreadyApplied: false, payment: nextPay };
+    });
+  }
+
+  /* ───────── V268.3: edit a purchase invoice ───────── */
+  async function editPurchaseInvoice(input = {}) {
+    const { operationId, invoiceId, mode } = input;
+    ensure(isSafeId(invoiceId), PURCHASE_ERR.INVALID_INPUT, 'Invoice reference required');
+    const reason = String(input.reason || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    ensure(reason, PURCHASE_ERR.INVALID_INPUT, 'Enter the reason for the change.');
+    const eventId = eventIdForOperation('edit', operationId);
+    const actor = actorOf(), at = now();
+    return transact(async tx => {
+      const piSnap = await tx.get(refs.pi(invoiceId));
+      ensure(piSnap.exists(), PURCHASE_ERR.NOT_FOUND, 'Purchase invoice not found');
+      const pi = piSnap.data();
+      if (pi.lastEventId === eventId) return { alreadyApplied: true, invoice: pi };
+      if (input.expectedRevision != null) ensure(pi.revision === input.expectedRevision, PURCHASE_ERR.STALE, `${pi.piNo} was changed meanwhile. Please open it again.`);
+      const role = await roleOf(tx, actor.uid);
+      const right = editRightOf(pi, { settings: role.settings, isAdmin: role.isAdmin, nowMs: Date.parse(at) });
+      ensure(right.right, PURCHASE_ERR.NOT_ALLOWED, right.why || 'You can\'t edit this invoice.');
+      const revision = pi.revision + 1;
+      if (mode !== 'full') {
+        const v = validateInvoiceLimitedEdit(pi, input);
+        if (!v.ok) fail(PURCHASE_ERR.INVALID_INPUT, v.errors.map(e => e.message).join(' '), { errors: v.errors });
+        const newKey = supplierRefIdOf(pi.supplierKey, v.value.supplierInvoiceNo);
+        ensure(isSafeId(newKey), PURCHASE_ERR.INVALID_INPUT, 'Invalid supplier invoice no.');
+        if (newKey !== pi.supplierRefKey) {
+          const refSnap = await tx.get(refs.ref(newKey));
+          if (refSnap.exists()) fail(PURCHASE_ERR.DUPLICATE_SUPPLIER_INVOICE, `${pi.supplierName} invoice ${v.value.supplierInvoiceNo} is already recorded as ${refSnap.data().piNo || 'another purchase invoice'}.`, { field: 'supplierInvoiceNo' });
+        }
+        const next = { ...pi, supplierInvoiceNo: v.value.supplierInvoiceNo, supplierInvoiceKey: v.value.supplierInvoiceKey, supplierRefKey: newKey, zohoBillNo: v.value.zohoBillNo,
+          date: v.value.date, dueDate: v.value.dueDate, lines: v.value.lines, revision, lastEventId: eventId, lastEditReason: reason, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid };
+        tx.set(refs.pi(invoiceId), next);
+        tx.set(refs.event(invoiceId, eventId), { id: eventId, kind: 'edited', mode: 'limited', invoiceId, piNo: pi.piNo, operationId, reason, changes: v.changes, fromRevision: pi.revision, toRevision: revision, actor: actor.name, actorUid: actor.uid, at, recordedAt: stamp() });
+        if (newKey !== pi.supplierRefKey) {
+          tx.set(refs.ref(newKey), { id: newKey, supplierKey: pi.supplierKey, supplierInvoiceNo: v.value.supplierInvoiceNo, invoiceId, piNo: pi.piNo, createdByUid: actor.uid, created: at });
+          if (pi.supplierRefKey) tx.delete(refs.ref(pi.supplierRefKey));
+        }
+        return { alreadyApplied: false, invoice: next, changes: v.changes };
+      }
+      // full edit: same number; the purchased quantities and the stock move from the old figures to the new ones
+      ensure(right.right === 'full', PURCHASE_ERR.NOT_ALLOWED, 'Only administrators can change the lines and amounts (Administration → Purchase Settings).');
+      ensure(!(Number(pi.paid) > 0.005 || Number(pi.paymentDiscount) > 0.005 || Number(pi.cashBack) > 0.005), PURCHASE_ERR.HAS_PAYMENTS, `${pi.piNo} has payments — cancel them first, then change the lines and amounts.`);
+      const oldDeltas = new Map();
+      (pi.lines || []).forEach(l => (l.allocations || []).forEach(a => { if (!oldDeltas.has(a.soId)) oldDeltas.set(a.soId, new Map()); const m = oldDeltas.get(a.soId); m.set(a.soLineId, rq((m.get(a.soLineId) || 0) + Number(a.qty))); }));
+      const soIds = [...new Set([...(pi.soIds || []), ...soIdsOf(input.lines)])];
+      ensure(soIds.length <= 40, PURCHASE_ERR.INVALID_INPUT, 'One invoice can cover at most 40 sales orders.');
+      const soSnaps = await Promise.all(soIds.map(x => tx.get(refs.so(x))));
+      const ledSnaps = await Promise.all(soIds.map(x => tx.get(refs.ledger(x))));
+      const orders = new Map(), ledgers = new Map(), ledgersAdj = new Map();
+      soIds.forEach((x, i) => {
+        if (soSnaps[i].exists()) orders.set(x, { id: x, ...soSnaps[i].data() });
+        if (ledSnaps[i].exists()) {
+          const cur = ledSnaps[i].data(); ledgers.set(x, cur);
+          const lines = {}; Object.entries(cur.lines || {}).forEach(([k, v]) => { lines[k] = { purchased: Math.max(0, rq((Number(v.purchased) || 0) - ((oldDeltas.get(x) || new Map()).get(k) || 0))) }; });
+          ledgersAdj.set(x, { ...cur, lines });
+        }
+      });
+      const v = validatePurchaseInvoice({ ...input, operationId: pi.creationOperationId || operationId }, { settings: role.settings, orders, ledgers: ledgersAdj, isAdmin: role.isAdmin });
+      if (!v.ok) fail(PURCHASE_ERR.INVALID_INPUT, v.errors.map(e => e.message).join(' '), { errors: v.errors });
+      const val = v.value;
+      const newKey = supplierRefIdOf(val.supplierKey, val.supplierInvoiceNo);
+      ensure(isSafeId(newKey), PURCHASE_ERR.INVALID_INPUT, 'Invalid supplier invoice no.');
+      if (newKey !== pi.supplierRefKey) {
+        const refSnap = await tx.get(refs.ref(newKey));
+        if (refSnap.exists()) fail(PURCHASE_ERR.DUPLICATE_SUPPLIER_INVOICE, `${val.supplierName} invoice ${val.supplierInvoiceNo} is already recorded as ${refSnap.data().piNo || 'another purchase invoice'}.`, { field: 'supplierInvoiceNo' });
+      }
+      // stock: old quantities out, new quantities in
+      const oldStock = new Map();
+      (pi.lines || []).filter(l => Number(l.stockQty) > 0).forEach(l => { const x = oldStock.get(l.itemKey) || { qty: 0, value: 0 }; x.qty = rq(x.qty + Number(l.stockQty)); x.value = r2(x.value + Number(l.landedUnitCost) * Number(l.stockQty)); oldStock.set(l.itemKey, x); });
+      const stockKeys = [...new Set([...oldStock.keys(), ...v.stock.keys()])];
+      const stockSnaps = await Promise.all(stockKeys.map(k => tx.get(refs.stock(k))));
+      // ── writes ──
+      const next = { ...val, id: invoiceId, schemaVersion: pi.schemaVersion, piNo: pi.piNo, supplierRefKey: newKey, status: PURCHASE_STATUS.posted, revision, lastEventId: eventId,
+        creationOperationId: pi.creationOperationId, created: pi.created, createdBy: pi.createdBy, createdByUid: pi.createdByUid, recordedAt: pi.recordedAt,
+        paymentDiscount: 0, cashBack: 0, paymentCount: Number(pi.paymentCount) || 0, lastEditReason: reason, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid };
+      assertSize(next, PI_BYTES, 'Purchase invoice');
+      tx.set(refs.pi(invoiceId), next);
+      tx.set(refs.event(invoiceId, eventId), { id: eventId, kind: 'edited', mode: 'full', invoiceId, piNo: pi.piNo, operationId, reason,
+        before: { total: pi.totals.total, lines: (pi.lines || []).length, soIds: pi.soIds || [] }, after: { total: next.totals.total, lines: next.lines.length, soIds: next.soIds },
+        fromRevision: pi.revision, toRevision: revision, actor: actor.name, actorUid: actor.uid, at, recordedAt: stamp() });
+      if (newKey !== pi.supplierRefKey) {
+        tx.set(refs.ref(newKey), { id: newKey, supplierKey: val.supplierKey, supplierInvoiceNo: val.supplierInvoiceNo, invoiceId, piNo: pi.piNo, createdByUid: actor.uid, created: at });
+        if (pi.supplierRefKey) tx.delete(refs.ref(pi.supplierRefKey));
+      }
+      const deltas = new Map();
+      soIds.forEach(x => {
+        const m = new Map(), o = oldDeltas.get(x) || new Map(), n = v.deltas.get(x) || new Map();
+        new Set([...o.keys(), ...n.keys()]).forEach(k => { const q = rq((n.get(k) || 0) - (o.get(k) || 0)); if (Math.abs(q) > 1e-9) m.set(k, q); });
+        if (m.size) deltas.set(x, m);
+      });
+      writeLedgers(tx, [...deltas.keys()], orders, ledgers, deltas, +1, { id: invoiceId, eventId, actor, at });
+      stockKeys.forEach((k, i) => {
+        const cur = stockSnaps[i].exists() ? stockSnaps[i].data() : null, o = oldStock.get(k) || { qty: 0, value: 0 }, n = v.stock.get(k) || { qty: 0, value: 0, productId: '', code: '', desc: '', uom: '' };
+        const dq = rq(n.qty - o.qty), dv = r2(n.value - o.value);
+        if (Math.abs(dq) < 1e-9 && Math.abs(dv) < 0.005) return;
+        const qty = rq((cur ? Number(cur.qty) : 0) + dq);
+        ensure(qty >= -1e-9, PURCHASE_ERR.STOCK_USED, `Some of the stock from ${pi.piNo} (${(cur && cur.desc) || k}) has already been used — it can't be reduced.`);
+        tx.set(refs.stock(k), { ...(cur || { itemKey: k, productId: n.productId, code: n.code, desc: n.desc, uom: n.uom }), itemKey: k, qty: Math.max(0, qty), value: r2(Math.max(0, (cur ? Number(cur.value) : 0) + dv)),
+          revision: (cur ? Number(cur.revision) || 0 : 0) + 1, lastInvoiceId: invoiceId, lastEventId: eventId, updatedByUid: actor.uid, updatedAt: at });
+        const moveId = `${invoiceId}__${k}__edit${revision}`.slice(0, 700);
+        tx.set(refs.move(moveId), { id: moveId, itemKey: k, kind: 'purchase-edited', qty: dq, value: dv, invoiceId, piNo: pi.piNo, eventId, date: at.slice(0, 10), actorUid: actor.uid, at });
+      });
       return { alreadyApplied: false, invoice: next };
     });
   }
@@ -337,5 +575,5 @@ export function createPurchaseService(fs, options = {}) {
     });
   }
 
-  return { createPurchaseInvoice, voidPurchaseInvoice, savePurchaseSettings, recordSupplierPayment, recordSupplierCashBack, voidSupplierPayment };
+  return { createPurchaseInvoice, voidPurchaseInvoice, savePurchaseSettings, recordSupplierPayment, recordSupplierCashBack, voidSupplierPayment, payAdvance, editSupplierPayment, editPurchaseInvoice };
 }

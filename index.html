@@ -21,18 +21,18 @@
 <link href="css/administration-typography.css?v=247" rel="stylesheet"/>
 <link href="css/numbering-controls.css?v=266.5" rel="stylesheet"/>
 <link href="css/invoicing.css?v=266.5" rel="stylesheet"/>
-<link href="css/register-standard.css?v=268.14" rel="stylesheet"/>
+<link href="css/register-standard.css?v=268.3" rel="stylesheet"/>
 <link href="css/doc-view.css?v=266.5" rel="stylesheet"/>
 <link href="css/delivery-compact.css?v=266.5" rel="stylesheet"/>
 <link href="css/receipts.css?v=266.5" rel="stylesheet"/>
-<link href="css/shell.css?v=268.14" rel="stylesheet"/>
+<link href="css/shell.css?v=268.3" rel="stylesheet"/>
 <link href="css/accounts.css?v=268.2" rel="stylesheet"/>
 <link href="css/cash.css?v=268.2" rel="stylesheet"/>
-<link href="css/purchases.css?v=268.21" rel="stylesheet"/>
-<link href="css/responsive.css?v=268.13" rel="stylesheet"/>
+<link href="css/purchases.css?v=268.3" rel="stylesheet"/>
+<link href="css/responsive.css?v=268.3" rel="stylesheet"/>
 <link href="css/theme.css?v=266.5" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=265.2" defer></script>
-<script src="js/responsive.js?v=268.13" defer></script>
+<script src="js/responsive.js?v=268.3" defer></script>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
 .quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
@@ -146,6 +146,7 @@ document.addEventListener('error', function(e) {
 <div aria-label="Supplier RFQs" class="nav-item" data-nav-page="supplierrfqs" onclick="showPage('supplierrfqs',this)" role="button" tabindex="0" title="Supplier RFQs"><i class="ti ti-file-search"></i><span class="nav-text">Supplier RFQs</span><span class="nav-badge nav-badge-workflow" id="supplier-rfq-badge" style="display:none" title="Supplier RFQs requiring attention"></span></div>
 <div aria-label="Purchase Orders" class="nav-item" data-nav-page="purchaseorders" onclick="showPage('purchaseorders',this)" role="button" tabindex="0" title="Purchase Orders"><i class="ti ti-clipboard-check"></i><span class="nav-text">Purchase Orders</span><span class="nav-badge nav-badge-workflow" id="po-badge" style="display:none" title="Purchase orders requiring attention"></span></div>
 <div aria-label="Purchase Invoices" class="nav-item" data-nav-page="purchaseinvoices" onclick="showPage('purchaseinvoices',this)" role="button" tabindex="0" title="Purchase Invoices"><i class="ti ti-file-invoice"></i><span class="nav-text">Purchase Invoices</span><span class="nav-badge nav-badge-workflow" id="pi-badge" style="display:none" title="Purchase invoices requiring attention"></span></div>
+<div aria-label="Supplier Payments" class="nav-item" data-nav-page="supplierpayments" onclick="showPage('supplierpayments',this)" role="button" tabindex="0" title="Supplier Payments"><i class="ti ti-cash-banknote"></i><span class="nav-text">Supplier Payments</span><span class="nav-badge nav-badge-workflow" id="sp-badge" style="display:none" title="Open advances"></span></div>
 </div>
 </div>
 <div class="nav-group" data-group="finance">
@@ -710,6 +711,53 @@ document.addEventListener('error', function(e) {
         <th class="sortable-register-th" data-sort-screen="pi" data-sort-key="due" onclick="setRegisterSort('pi','due',renderPurchaseRegister)">Payment</th>
       </tr></thead><tbody id="pireg-body"></tbody></table></div>
       <div class="pi-cards" id="pireg-cards" aria-label="Purchase invoices"></div></div>
+    </div>
+  </div>
+</div>
+<!-- V268.3: Supplier Payments (js/supplier-payments.js) — same register standard as Receipts -->
+<div class="page" id="page-supplierpayments">
+  <div class="dn-register-shell module-main-workspace" id="sp-main-workspace" data-module-monitor="supplierpayments">
+    <aside class="dn-overview-panel module-monitor bc-monitor" aria-label="Payment Monitor">
+      <div class="dn-overview-head module-monitor-head"><div><strong>Payment Monitor</strong><span>Money paid to suppliers</span></div><button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('supplierpayments')" aria-label="Collapse Payment Monitor" title="Collapse Payment Monitor"><i class="ti ti-chevron-left"></i></button></div>
+      <div class="dn-overview-body module-monitor-body">
+        <button type="button" class="dn-overview-total dn-kpi active" data-sp-kpi="all" onclick="filterSupplierPaymentKPI('all')"><span>All supplier payments</span><strong id="spreg-k-total">0</strong></button>
+        <div class="dn-overview-section-label">Type</div>
+        <button type="button" class="dn-overview-row dn-kpi" data-sp-kpi="payment" onclick="filterSupplierPaymentKPI('payment')"><span><i class="dn-dot bc-dot-blue"></i>Invoice payments</span><strong id="spreg-k-payment">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-sp-kpi="advance" onclick="filterSupplierPaymentKPI('advance')"><span><i class="dn-dot bc-dot-purple"></i>Advances</span><strong id="spreg-k-advance">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-sp-kpi="cashback" onclick="filterSupplierPaymentKPI('cashback')"><span><i class="dn-dot bc-dot-teal"></i>Cash back</span><strong id="spreg-k-cashback">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-sp-kpi="Voided" onclick="filterSupplierPaymentKPI('Voided')"><span><i class="dn-dot bc-dot-gray"></i>Cancelled</span><strong id="spreg-k-voided">0</strong></button>
+        <div class="dn-overview-section-label">Attention</div>
+        <button type="button" class="dn-overview-row dn-kpi" data-sp-kpi="open" onclick="filterSupplierPaymentKPI('open')"><span><i class="dn-dot bc-dot-amber"></i>Open advances</span><strong id="spreg-k-open">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-sp-kpi="waiting" onclick="filterSupplierPaymentKPI('waiting')"><span><i class="dn-dot bc-dot-orange"></i>Cash waiting for custodian</span><strong id="spreg-k-waiting">0</strong></button>
+        <div class="dn-overview-section-label">Figures</div>
+        <div class="dn-overview-row bc-monitor-metric"><span>Paid (shown)</span><strong id="spreg-a-paid">0.00</strong></div>
+        <div class="dn-overview-row bc-monitor-metric"><span>Open advances</span><strong id="spreg-a-open">0.00</strong></div>
+      </div>
+    </aside>
+    <button class="module-monitor-rail" type="button" onclick="toggleModuleMonitor('supplierpayments')" aria-label="Expand Payment Monitor" title="Expand Payment Monitor"><i class="ti ti-layout-sidebar-left-expand"></i><span>Payments</span></button>
+    <div class="dn-register-area module-register-area">
+      <div class="dn-register-toolbar page-toolbar page-toolbar--sticky page-control-bar bc-filterbar" role="toolbar" aria-label="Supplier payment filters">
+        <div class="dn-toolbar-left bc-filterbar-left"><select id="spreg-sort" class="bc-filter bc-filter-sort" onchange="renderSupplierPayments()" aria-label="Sort supplier payments"><option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option><option value="no-asc">Number A–Z</option><option value="supplier-asc">Supplier A–Z</option><option value="amount-desc">Amount high–low</option></select><span class="bc-filter-count" id="spreg-count">0 payments</span></div>
+        <div class="dn-toolbar-right bc-filterbar-right">
+<select id="spreg-supplier" class="bc-filter bc-filter-customer" onchange="renderSupplierPayments()" aria-label="Filter by supplier"><option value="">All suppliers</option></select>
+<select id="spreg-status" class="bc-filter bc-filter-status" onchange="filterSupplierPaymentKPI(this.value||'all')" aria-label="Type"><option value="">All types</option><option value="payment">Invoice payments</option><option value="advance">Advances</option><option value="cashback">Cash back</option><option value="Voided">Cancelled</option><option value="open">Open advances</option><option value="waiting">Cash waiting for custodian</option></select>
+<div class="bc-date" data-bc-date="spreg" data-bc-date-title="Payment date"></div>
+<input id="spreg-q" class="bc-filter bc-filter-search" type="text" oninput="renderSupplierPayments()" placeholder="Search payment, supplier, invoice…" aria-label="Search supplier payments"/>
+<button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="spreg-clear" onclick="clearSupplierPaymentFilters()" type="button" title="Clear all filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
+<button class="btn bc-filter-new btn-primary" id="sp-new-btn" title="Pay an advance to a supplier" onclick="openPayAdvance()" type="button"><i class="ti ti-plus"></i><span>Pay Advance</span></button>
+        </div>
+      </div>
+      <div class="card dn-register-card"><div class="dn-table-scroll"><table id="spreg-table" class="sp-reg-table"><thead><tr>
+        <th class="sortable-register-th" data-sort-screen="sp" data-sort-key="no" onclick="setRegisterSort('sp','no',renderSupplierPayments)">Payment No.</th>
+        <th class="sortable-register-th" data-sort-screen="sp" data-sort-key="date" onclick="setRegisterSort('sp','date',renderSupplierPayments)">Date</th>
+        <th class="sortable-register-th" data-sort-screen="sp" data-sort-key="supplier" onclick="setRegisterSort('sp','supplier',renderSupplierPayments)">Supplier</th>
+        <th class="sortable-register-th" data-sort-screen="sp" data-sort-key="type" onclick="setRegisterSort('sp','type',renderSupplierPayments)">Type</th>
+        <th>For</th>
+        <th>Paid from</th>
+        <th class="sortable-register-th num" data-sort-screen="sp" data-sort-key="amount" onclick="setRegisterSort('sp','amount',renderSupplierPayments)">Amount (SAR)</th>
+        <th>Advance / Status</th>
+      </tr></thead><tbody id="spreg-body"></tbody></table></div>
+      <div class="sp-cards" id="spreg-cards" aria-label="Supplier payments"></div></div>
     </div>
   </div>
 </div>
@@ -2155,8 +2203,8 @@ import * as AccCore from './js/account-core.mjs?v=268.2';
 import { createAccountService } from './js/account-service.mjs?v=268.2';
 import * as LedgerCore from './js/ledger-core.mjs?v=267.2';
 import { createLedgerService } from './js/ledger-service.mjs?v=267.2';
-import * as PurchaseCore from './js/purchase-core.mjs?v=268.2';
-import { createPurchaseService } from './js/purchase-service.mjs?v=268.2';
+import * as PurchaseCore from './js/purchase-core.mjs?v=268.3';
+import { createPurchaseService } from './js/purchase-service.mjs?v=268.3';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile }
@@ -3247,15 +3295,17 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=268.2';
+      s.src = 'js/app.js?v=268.3';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d); };
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js
-    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=268.21'; pu.onload = start; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
+    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=268.3'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
+    // V268.3: supplier-payments.js (Supplier Payments, advances, edits) after purchases.js
+    const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=268.3'; sp.onload = start; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
     // V267.2: cash-ui.js + cashbank.js (Cash & Bank) after accounts.js, before app.js
-    const loadCash = () => { const u = document.createElement('script'); u.id = 'bizcore-cashui-script'; u.src = 'js/cash-ui.js?v=268.2'; u.onload = u.onerror = () => { const c = document.createElement('script'); c.id = 'bizcore-cashbank-script'; c.src = 'js/cashbank.js?v=268.2'; c.onload = loadPurchases; c.onerror = () => { console.error('[BizCore] cashbank.js could not be loaded'); loadPurchases(); }; document.body.appendChild(c); }; document.body.appendChild(u); };
+    const loadCash = () => { const u = document.createElement('script'); u.id = 'bizcore-cashui-script'; u.src = 'js/cash-ui.js?v=268.3'; u.onload = u.onerror = () => { const c = document.createElement('script'); c.id = 'bizcore-cashbank-script'; c.src = 'js/cashbank.js?v=268.3'; c.onload = loadPurchases; c.onerror = () => { console.error('[BizCore] cashbank.js could not be loaded'); loadPurchases(); }; document.body.appendChild(c); }; document.body.appendChild(u); };
     // V266: receipts.js (Payment Receipts) after invoicing.js, before app.js
     inv.onload = () => { const r = document.createElement('script'); r.id = 'bizcore-receipts-script'; r.src = 'js/receipts.js?v=266.61'; r.onload = () => { const pa = document.createElement('script'); pa.id = 'bizcore-accounts-script'; pa.src = 'js/accounts.js?v=268.2'; pa.onload = loadCash; pa.onerror = () => { console.error('[BizCore] accounts.js could not be loaded'); loadCash(); }; document.body.appendChild(pa); }; r.onerror = () => { console.error('[BizCore] receipts.js could not be loaded'); start(); }; document.body.appendChild(r); };
     inv.onerror = () => { console.error('[BizCore] invoicing.js could not be loaded'); start(); };

@@ -22,11 +22,11 @@
       return { title, sub };
     }
     // V268.2: supplier payment / cash back (details: reference, bank charge, card)
-    if (r.kind === 'supplier-payment' || r.kind === 'supplier-cashback')
+    if (r.kind === 'supplier-payment' || r.kind === 'supplier-cashback' || r.kind === 'supplier-advance')   // V268.3 advance
       return { title: r.description || r.kind, sub: [r.details, 'by ' + (r.recordedByName || '—')].filter(Boolean).join(' · ') };
     return { title: r.description || r.kind, sub: 'by ' + (r.recordedByName || '—') };
   }
-  const isSupplier = r => r.kind === 'supplier-payment' || r.kind === 'supplier-cashback';
+  const isSupplier = r => r.kind === 'supplier-payment' || r.kind === 'supplier-cashback' || r.kind === 'supplier-advance';
   /** A card's memo line: paid by card, the money left the linked bank account (no balance change here). */
   const memoHtml = r => r.memoOut ? `<span class="cl-memo" title="Paid by card — taken from the linked bank account">(${money(r.memoOut)})</span>` : '';
 
@@ -69,10 +69,10 @@
       const d = describe(r);
       const wait = r.status === 'pending' && !r.void;
       const staffEdit = opts.mode === 'staff' && r.kind === 'handover' && !r.void && opts.canEdit;
-      const openPi = opts.mode === 'staff' && isSupplier(r) && r.invoiceId;
+      const openPi = opts.mode === 'staff' && isSupplier(r) && (r.invoiceId || r.paymentId);
       return `<tr class="${wait ? 'cl-wait' : ''}${r.void ? ' cl-voided' : ''}" data-line="${esc(r.id)}">
         <td class="cl-date">${dShort(r.date)}</td>
-        <td class="cl-v">${staffEdit ? `<button type="button" class="cl-link" data-act="edit" data-entry="${esc(r.entryId)}">${esc(r.voucherNo)}</button>` : openPi ? `<button type="button" class="cl-link" data-act="open-pi" data-pi="${esc(r.invoiceId)}" title="Open ${esc(r.piNo || 'the purchase invoice')}">${esc(r.voucherNo)}</button>` : esc(r.voucherNo)}</td>
+        <td class="cl-v">${staffEdit ? `<button type="button" class="cl-link" data-act="edit" data-entry="${esc(r.entryId)}">${esc(r.voucherNo)}</button>` : openPi ? (r.invoiceId ? `<button type="button" class="cl-link" data-act="open-pi" data-pi="${esc(r.invoiceId)}" title="Open ${esc(r.piNo || 'the purchase invoice')}">${esc(r.voucherNo)}</button>` : `<button type="button" class="cl-link" data-act="open-sp" data-sp="${esc(r.paymentId)}" title="Open the advance">${esc(r.voucherNo)}</button>`) : esc(r.voucherNo)}</td>
         <td class="cl-det">${esc(d.title)}<span class="cl-sub">${esc(d.sub)}</span></td>
         <td class="n cl-in">${r.amountIn ? money(r.amountIn) : ''}</td>
         <td class="n cl-out">${r.amountOut ? money(r.amountOut) : memoHtml(r)}</td>
