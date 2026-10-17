@@ -354,6 +354,12 @@ function piRenderCosts(){
   document.getElementById('pe-costs').innerHTML = rows + d || '<p class="pi-muted" style="margin:2px 0">No additional costs' + (invDisc ? ' or discount' : '') + '.</p>';
 }
 
+/** Profit (green) or loss (red) on the orders: selling price on the Sales Orders × qty bought − landed cost. */
+function piProfitBox(p, note){
+  const loss = Number(p.profit) < -0.005;
+  return `<div class="pi-hl${loss ? ' loss' : ''}"><div class="pi-ps"><span>${loss ? 'Loss' : 'Profit'} on these orders</span><b class="${loss ? 'pi-red' : 'pi-green'}">${piF(p.profit)}</b></div>
+    <small>Sales value ${piF(p.sales)} − cost ${piF(p.cost)}${note ? ' · shown only to roles allowed in Administration' : ''}</small></div>`;
+}
 /* totals, checks, "To continue" */
 function piReadInput(){
   const s = piState(), sel = document.getElementById('pe-supplier');
@@ -404,7 +410,7 @@ function piRecalc(keepVatFocus){
   const prof = v.value.profit;
   document.getElementById('pe-cmp').innerHTML = `<div class="pi-ps"><span>Estimated (pricing)</span><b>${piF(est)}</b></div><div class="pi-ps"><span>Last paid (no estimate)</span><b>${piF(last)}</b></div><div class="pi-ps"><span>No reference</span><b>${piF(none)}</b></div>
     <div class="pi-ps"><span>Actual</span><b>${piF(actual)}</b></div><div class="pi-ps"><span>Difference <small>(lines with a reference)</small></span><b class="${diff > 0.005 ? 'pi-amber' : diff < -0.005 ? 'pi-blue' : ''}">${diff > 0 ? '+' : ''}${piF(diff)} (${pct > 0 ? '+' : ''}${pct.toFixed(1)}%)</b></div>
-    ${piCanSeeProfit() && prof.sales > 0 ? `<div class="pi-hl"><div class="pi-ps"><span>Profit on these orders</span><b class="pi-green">${piF(prof.profit)}</b></div><small>Shown only to roles allowed in Administration</small></div>` : ''}`;
+    ${piCanSeeProfit() && prof.sales > 0 ? piProfitBox(prof, true) : ''}`;
   // To continue
   const errs = v.errors, has = f => errs.some(e => f.includes(e.field));
   const chips = [];
@@ -469,7 +475,7 @@ function openPurchaseInvoiceView(id){
         <div class="pi-view-sum"><div class="pi-ps"><span>Lines (ex-VAT)</span><b>${piF(t.linesTotal)}</b></div>${t.costsTotal ? `<div class="pi-ps"><span>Additional costs</span><b>${piF(t.costsTotal)}</b></div>` : ''}${t.discount ? `<div class="pi-ps"><span>Discount</span><b class="pi-green">−${piF(t.discount)}</b></div>` : ''}
           <div class="pi-ps"><span>VAT (${t.vatRate}%)</span><b>${piF(t.vat)}</b></div>${t.rounding ? `<div class="pi-ps"><span>Rounding</span><b>${t.rounding > 0 ? '+' : ''}${piF(t.rounding)}</b></div>` : ''}
           <div class="pi-tot"><span>Total (SAR)</span><span>${piF(t.total)}</span></div><div class="pi-ps"><span>Balance to pay</span><b class="pi-amber">${v ? '—' : piF(pi.balance)}</b></div>
-          ${piCanSeeProfit() && pi.profit && pi.profit.sales > 0 ? `<div class="pi-hl"><div class="pi-ps"><span>Profit on these orders</span><b class="pi-green">${piF(pi.profit.profit)}</b></div></div>` : ''}</div>
+          ${piCanSeeProfit() && pi.profit && pi.profit.sales > 0 ? piProfitBox(pi.profit, false) : ''}</div>
       </div>
       <div class="inv-error" id="pv-error" hidden></div>
     </div>
