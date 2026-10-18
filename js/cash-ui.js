@@ -23,8 +23,8 @@
     }
     // V268.2: supplier payment / cash back (details: reference, bank charge, card)
     if (r.kind === 'supplier-payment' || r.kind === 'supplier-cashback' || r.kind === 'supplier-advance')   // V268.3 advance
-      return { title: r.description || r.kind, sub: [r.details, 'by ' + (r.recordedByName || '—')].filter(Boolean).join(' · ') };
-    return { title: r.description || r.kind, sub: 'by ' + (r.recordedByName || '—') };
+      { const sub = [r.details, 'by ' + (r.recordedByName || '—')].filter(Boolean).join(' · '); return { title: r.description || r.kind, sub: sub.charAt(0).toUpperCase() + sub.slice(1) }; }
+    return { title: r.description || r.kind, sub: 'By ' + (r.recordedByName || '—') };
   }
   const isSupplier = r => r.kind === 'supplier-payment' || r.kind === 'supplier-cashback' || r.kind === 'supplier-advance';
   /** A card's memo line: paid by card, the money left the linked bank account (no balance change here). */
@@ -34,7 +34,7 @@
   function counterpartTail(r) {
     const cp = r.counterpartStatus, who = esc(r.counterpartStatusByName || 'Receiver');
     return cp === 'confirmed' ? `${who} confirmed receipt ${when(r.counterpartStatusAt)}`
-      : cp === 'queried' ? `⚠ ${who} queried: “${esc(r.counterpartStatusNote || '')}”` : 'not confirmed yet';
+      : cp === 'queried' ? `⚠ ${who} queried: “${esc(r.counterpartStatusNote || '')}”` : 'Not confirmed yet';
   }
 
   /**
@@ -80,9 +80,9 @@
         <td class="cl-stc${stRight ? ' r' : ''}">${statusHtml(r, opts)}</td></tr>`;
     }).join('');
     const showOpening = f === 'all';
-    const open = showOpening ? `<tr><td class="cl-date">${dShort(ledger.opening.date)}</td><td class="cl-v">OPEN</td><td class="cl-det">Opening balance<span class="cl-sub">${ledger.opening.setBy ? 'set by ' + esc(ledger.opening.setBy) : 'set by the office'}</span></td>
+    const open = showOpening ? `<tr><td class="cl-date">${dShort(ledger.opening.date)}</td><td class="cl-v">OPEN</td><td class="cl-det">Opening balance<span class="cl-sub">${ledger.opening.setBy ? 'Set by ' + esc(ledger.opening.setBy) : 'Set by the office'}</span></td>
       <td class="n cl-in">${ledger.opening.amount >= 0 ? money(ledger.opening.amount) : ''}</td><td class="n cl-out">${ledger.opening.amount < 0 ? money(-ledger.opening.amount) : ''}</td><td class="n cl-bal">${money(ledger.opening.amount)}</td>
-      <td class="cl-stc${stRight ? ' r' : ''}"><span class="cl-st cl-c"><i class="ti ti-check"></i>Opening</span><span class="cl-sub">as of ${dFull(ledger.opening.date)}</span></td></tr>` : '';
+      <td class="cl-stc${stRight ? ' r' : ''}"><span class="cl-st cl-c"><i class="ti ti-check"></i>Opening</span><span class="cl-sub">As of ${dFull(ledger.opening.date)}</span></td></tr>` : '';
     const empty = !rows.length && !showOpening ? `<tr><td colspan="7" class="cl-empty">Nothing here.</td></tr>` : '';
     return `<div class="cl-table-wrap"><table class="cl-table"><thead><tr><th>Date</th><th>Voucher</th><th>Details</th><th class="n">In</th><th class="n">Out</th><th class="n">Balance</th><th class="${stRight ? 'r' : ''}">${opts.mode === 'custodian' ? 'Status' : 'Custodian status'}</th></tr></thead><tbody>${body}${open}${empty}</tbody></table></div>`;
   }

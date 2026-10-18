@@ -6681,6 +6681,12 @@ async function runScreenTransition({message='Preparing document…',immediate=fa
 }
 const BizCoreTransition={run:runScreenTransition,begin:beginScreenTransition,end:endScreenTransition,waitFor:waitForUiCondition,isModalOpen};
 window.BizCoreTransition=BizCoreTransition;
+/* V268.3: blocking "Saving…" overlay around one save / cancel / confirm (the screen shows its own error message) */
+async function bcBusy(message,fn){
+  beginScreenTransition(message||'Saving…',{immediate:true});
+  try{ return await fn(); }finally{ endScreenTransition({immediate:true}); }
+}
+window.bcBusy=bcBusy;
 
 async function closeEntryWithTransition(modalId,label='document'){
   // V223: when an entry form has a return context, swap back synchronously.

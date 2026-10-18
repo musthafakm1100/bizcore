@@ -8,7 +8,7 @@
 <link rel="icon" href="favicon.ico">
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
-<link rel="stylesheet" href="css/cash.css?v=268.2">
+<link rel="stylesheet" href="css/cash.css?v=268.32">
 </head>
 <!-- BizCore V267.2 — My Cash: the only screen of a cash custodian login (approved mockups 15 Oct 2026).
      The database rules let this login read only its own cash account(s) and their ledger lines. -->
@@ -39,7 +39,7 @@
 </div>
 <div id="mc-modal-host"></div>
 
-<script src="js/cash-ui.js?v=268.2"></script>
+<script src="js/cash-ui.js?v=268.32"></script>
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, onAuthStateChanged, signOut, updatePassword, connectAuthEmulator } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
@@ -79,6 +79,12 @@ const service = createLedgerService({ db, doc, runTransaction, serverTimestamp, 
 const $ = id => document.getElementById(id);
 const root = $('mc-root');
 const phone = () => window.matchMedia('(max-width:760px)').matches;
+/* V268.32: blocking "Saving…" overlay while a confirmation / query / handover is saved */
+async function busy(msg, fn) {
+  const o = document.createElement('div'); o.className = 'mc-busy'; o.setAttribute('role', 'status'); o.innerHTML = `<div class="mc-busy-box"><span class="mc-busy-spin"></span>${msg}</div>`;
+  document.body.appendChild(o);
+  try { return await fn(); } finally { o.remove(); }
+}
 function toast(msg, err) { document.querySelectorAll('.mc-toast').forEach(x => x.remove()); const t = document.createElement('div'); t.className = 'mc-toast' + (err ? ' err' : ''); t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), err ? 5000 : 2600); }
 const center = (icon, html) => { root.innerHTML = `<div class="mc-center"><i class="ti ${icon}"></i>${html}</div>`; };
 const today = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
@@ -158,14 +164,14 @@ root.addEventListener('click', async e => {
   const act = b.dataset.act;
   if (act === 'filter') { S.filter = b.dataset.filter; render(); }
   else if (act === 'account') { S.accountId = b.dataset.id; S.filter = 'all'; render(); }
-  else if (act === 'confirm') { b.disabled = true; try { await service.confirmLine(b.dataset.id); toast('Confirmed'); } catch (err) { toast(err.message, true); b.disabled = false; } }
+  else if (act === 'confirm') { b.disabled = true; try { await busy('Confirming…', () => service.confirmLine(b.dataset.id)); toast('Confirmed'); } catch (err) { toast(err.message, true); b.disabled = false; } }
   else if (act === 'query') openQuery(b.dataset.id);
   else if (act === 'confirm-all') {
     const acc = S.accounts.find(a => a.id === S.accountId);
     const ids = LC.confirmableLines(S.lines.filter(l => l.accountId === acc.id && !l.void), { uid: S.user.uid }).map(l => l.id);
     if (!ids.length || !confirm(`Confirm ${ids.length} waiting line${ids.length === 1 ? '' : 's'}?`)) return;
     b.disabled = true;
-    const r = await service.confirmLines(ids);
+    const r = await busy(`Confirming ${ids.length} line${ids.length === 1 ? '' : 's'}…`, () => service.confirmLines(ids));
     toast(r.failed.length ? `${r.done.length} confirmed, ${r.failed.length} not: ${r.failed[0].message}` : `${r.done.length} confirmed`, !!r.failed.length);
   }
   else if (act === 'handover') openHandover();
@@ -205,7 +211,7 @@ function openQuery(lineId) {
     '<i class="ti ti-message-question"></i>Send query', async (h, err) => {
       const note = h.querySelector('#mc-q').value;
       if (!LC.validateQueryNote(note).ok) { err('Say what is wrong (for example: not received).'); return false; }
-      await service.queryLine(lineId, note); toast('Query sent — the office can see it');
+      await busy('Sending query…', () => service.queryLine(lineId, note)); toast('Query sent — the office can see it');
     });
 }
 function openHandover() {
@@ -218,14 +224,14 @@ function openHandover() {
     <div class="full"><label for="mc-h-to">To *</label><select id="mc-h-to"><option value="">Choose who receives the cash…</option>${opt(others)}</select></div>
     <div><label for="mc-h-amt">Amount (SAR) *</label><input id="mc-h-amt" inputmode="decimal" autocomplete="off" placeholder="0.00"></div>
     <div><label for="mc-h-date">Date *</label><input id="mc-h-date" type="date" value="${today()}" max="${today()}"></div>
-    <div class="full"><label for="mc-h-note">Note</label><input id="mc-h-note" maxlength="200" placeholder="optional"></div>
+    <div class="full"><label for="mc-h-note">Note</label><input id="mc-h-note" maxlength="200" placeholder="Optional"></div>
     <div class="full cl-info">The receiver confirms when the cash reaches them. It leaves your balance now.</div>`,
     '<i class="ti ti-arrows-exchange"></i>Record handover', async (h, err) => {
       const input = { operationId: 'mc-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10), fromAccountId: h.querySelector('#mc-h-from').value, toAccountId: h.querySelector('#mc-h-to').value, amount: h.querySelector('#mc-h-amt').value, date: h.querySelector('#mc-h-date').value, description: h.querySelector('#mc-h-note').value };
       const from = S.accounts.find(a => a.id === input.fromAccountId), to = S.cashAccounts.find(a => a.id === input.toAccountId);
       const v = LC.validateHandover(input, { from, to, today: today() });
       if (!v.ok) { err(v.errors.map(x => x.message).join(' ')); return false; }
-      const r = await service.recordHandover(input); toast(`${r.entry.voucherNo} recorded`);
+      const r = await busy('Saving handover…', () => service.recordHandover(input)); toast(`${r.entry.voucherNo} recorded`);
     }, { okClass: 'cl-p' });
 }
 function openPassword(forced) {
@@ -238,7 +244,7 @@ function openPassword(forced) {
       const a = h.querySelector('#mc-pw1').value, b = h.querySelector('#mc-pw2').value;
       if (a.length < 8) { err('Use at least 8 characters.'); return false; }
       if (a !== b) { err('The two passwords are different.'); return false; }
-      try { await updatePassword(auth.currentUser, a); }
+      try { await busy('Saving password…', () => updatePassword(auth.currentUser, a)); }
       catch (e) {
         if (e.code === 'auth/requires-recent-login') { err('For safety, sign out and sign in again, then change the password.'); return false; }
         throw e;

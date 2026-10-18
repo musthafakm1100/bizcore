@@ -37,8 +37,8 @@ function renderCashBank() {
   const list = accounts.map(a => {
     const g = ledgers.get(a.id);
     const bank = a.type === 'card' ? accounts.find(x => x.id === a.linkedBankAccountId) : null;   // V268.2
-    const cust = a.type === 'cash' ? (a.custodianName ? 'Custodian: ' + cbEsc(a.custodianName) + (a.custodianUid ? '' : ' · no login') : 'no custodian')
-      : a.type === 'card' ? (bank ? 'from ' + cbEsc(bank.code) + ' · ' + cbEsc(bank.name) : 'no linked bank account') : 'bank account';
+    const cust = a.type === 'cash' ? (a.custodianName ? 'Custodian: ' + cbEsc(a.custodianName) + (a.custodianUid ? '' : ' · no login') : 'No custodian')
+      : a.type === 'card' ? (bank ? 'From ' + cbEsc(bank.code) + ' · ' + cbEsc(bank.name) : 'No linked bank account') : 'Bank account';
     return `<button type="button" class="cb-acc${a.id === cbAccountId ? ' on' : ''}${a.active === false ? ' off' : ''}" data-act="pick" data-id="${cbEsc(a.id)}" aria-pressed="${a.id === cbAccountId}">
       <span class="cb-ty ${cbEsc(a.type)}"><i class="ti ${CB_ICON[a.type] || 'ti-cash'}"></i></span>
       <span><span class="nm">${cbEsc(a.name)}</span><span class="cl-sub">${cust}${a.active === false ? ' · inactive' : ''}</span></span>
@@ -65,14 +65,14 @@ document.addEventListener('click', async e => {
   const act = b.dataset.act, lib = cbLib();
   if (act === 'pick') { cbAccountId = b.dataset.id; cbFilter = 'all'; renderCashBank(); }
   else if (act === 'filter') { cbFilter = b.dataset.filter; renderCashBank(); }
-  else if (act === 'confirm') { b.disabled = true; try { await lib.service.confirmLine(b.dataset.id); cbToast('Line confirmed'); } catch (err) { cbToast(err.message, 'error'); b.disabled = false; } }
+  else if (act === 'confirm') { b.disabled = true; try { await bcBusy('Confirming…', () => lib.service.confirmLine(b.dataset.id)); cbToast('Line confirmed'); } catch (err) { cbToast(err.message, 'error'); b.disabled = false; } }
   else if (act === 'query') cbOpenQuery(b.dataset.id);
   else if (act === 'confirm-all') {
     const ids = lib.core.confirmableLines(lib.lines.filter(l => l.accountId === cbAccountId && !l.void), cbWho()).map(l => l.id);
     if (!ids.length) return;
     const ok = typeof showConfirmAsync === 'function' ? await showConfirmAsync({ icon: '✓', title: 'Confirm all waiting?', message: `Confirm ${ids.length} waiting line${ids.length === 1 ? '' : 's'} of this account?`, confirmText: 'Confirm all', cancelText: 'Cancel' }) : true;
     if (!ok) return;
-    const r = await lib.service.confirmLines(ids);
+    const r = await bcBusy('Confirming lines…', () => lib.service.confirmLines(ids));
     cbToast(r.failed.length ? `${r.done.length} confirmed, ${r.failed.length} not: ${r.failed[0].message}` : `${r.done.length} line${r.done.length === 1 ? '' : 's'} confirmed`, r.failed.length ? 'error' : 'success');
   }
   else if (act === 'handover') cbOpenHandover(null);
@@ -108,7 +108,7 @@ async function cbSaveQuery(lineId) {
   const note = document.getElementById('cb-q-note').value, btn = document.getElementById('cb-q-save');
   if (!cbLib().core.validateQueryNote(note).ok) { cbErr('cb-query', 'Say what is wrong (for example: not received).'); return; }
   btn.disabled = true;
-  try { await cbLib().service.queryLine(lineId, note); closeModal('cb-query'); cbToast('Query recorded'); }
+  try { await bcBusy('Saving query…', () => cbLib().service.queryLine(lineId, note)); closeModal('cb-query'); cbToast('Query recorded'); }
   catch (e) { cbErr('cb-query', e.message); } finally { btn.disabled = false; }
 }
 
@@ -126,7 +126,7 @@ function cbOpenHandover(entryId) {
     <div class="full"><label for="cb-ho-to">To (receives the cash) *</label><select id="cb-ho-to"${entryId ? ' disabled' : ''}><option value="">Choose…</option>${opt(entryId ? cash : active, inL ? inL.accountId : '')}</select></div>
     <div><label for="cb-ho-amt">Amount (SAR) *</label><input id="cb-ho-amt" inputmode="decimal" autocomplete="off" placeholder="0.00" value="${inL ? cbUI().money(inL.amountIn) : ''}"></div>
     <div><label for="cb-ho-date">Date *</label><input id="cb-ho-date" type="date" max="${cbToday()}" value="${inL ? cbEsc(inL.date) : cbToday()}"></div>
-    <div class="full"><label for="cb-ho-note">Note</label><input id="cb-ho-note" maxlength="200" placeholder="optional" value="${inL ? cbEsc(inL.description || '') : ''}"></div>
+    <div class="full"><label for="cb-ho-note">Note</label><input id="cb-ho-note" maxlength="200" placeholder="Optional" value="${inL ? cbEsc(inL.description || '') : ''}"></div>
     <div class="full cl-info">${entryId
       ? `Recorded by ${cbEsc(inL.recordedByName)}. To change who gave or received the cash, cancel this handover and record a new one. A new amount or date must be confirmed again by the receiver.`
       : 'The cash leaves the giver\'s balance and reaches the receiver\'s at once; the receiver then confirms it.'}</div>`,
@@ -142,10 +142,10 @@ async function cbSaveHandover() {
   btn.disabled = true;
   try {
     if (m._entryId) {
-      const r = await lib.service.editHandover(m._entryId, input, { expectedRevision: m._rev });
+      const r = await bcBusy('Saving changes…', () => lib.service.editHandover(m._entryId, input, { expectedRevision: m._rev }));
       closeModal('cb-ho'); cbToast(r.reconfirm ? 'Saved — the receiver must confirm again' : 'Saved');
     } else {
-      const r = await lib.service.recordHandover({ ...input, operationId: 'cb-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10) });
+      const r = await bcBusy('Saving handover…', () => lib.service.recordHandover({ ...input, operationId: 'cb-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10) }));
       closeModal('cb-ho'); cbToast(`${r.entry.voucherNo} recorded`);
     }
   } catch (e) { cbErr('cb-ho', e.code === 'permission-denied' ? 'The server refused this change.' : e.message); }
@@ -163,7 +163,7 @@ async function cbSaveVoid() {
   const m = document.getElementById('cb-void'), why = document.getElementById('cb-void-why').value.trim(), btn = document.getElementById('cb-void-save');
   if (!why) { cbErr('cb-void', 'Enter the reason for cancelling.'); return; }
   btn.disabled = true;
-  try { await cbLib().service.voidHandover(m._entryId, why, { expectedRevision: m._rev }); closeModal('cb-void'); cbToast('Handover cancelled — kept in the ledger, not counted'); }
+  try { await bcBusy('Cancelling handover…', () => cbLib().service.voidHandover(m._entryId, why, { expectedRevision: m._rev })); closeModal('cb-void'); cbToast('Handover cancelled — kept in the ledger, not counted'); }
   catch (e) { cbErr('cb-void', e.message); } finally { btn.disabled = false; }
 }
 
@@ -193,13 +193,13 @@ function renderCustodianLogins() {
   const list = cbLib().custodians.slice().sort((x, y) => String(x.name).localeCompare(String(y.name)));
   if (!list.length) { host.innerHTML = '<p class="cl-sub" style="padding:6px 2px">No custodian logins yet. A custodian login sees only <b>My Cash</b>.</p>'; return; }
   host.innerHTML = `<table class="cc-list"><thead><tr><th>Name</th><th>Email (login)</th><th>Cash account(s)</th><th>Status</th><th></th></tr></thead><tbody>${list.map(c => {
-    const names = accs.filter(a => a.custodianUid === c.uid).map(a => cbEsc(a.name)).join(', ') || '<span class="cl-sub">none linked</span>';
+    const names = accs.filter(a => a.custodianUid === c.uid).map(a => cbEsc(a.name)).join(', ') || '<span class="cl-sub">None linked</span>';
     const st = c.active === false ? '<span class="cl-st cl-void">Inactive</span>' : c.mustChangePassword ? '<span class="cl-st cl-w">Temporary password</span>' : '<span class="cl-st cl-c">Active</span>';
     return `<tr><td><b>${cbEsc(c.name)}</b></td><td>${cbEsc(c.email)}</td><td>${names}</td><td>${st}</td><td style="text-align:right">${admin ? `<button type="button" class="btn btn-secondary btn-sm" onclick="cbToggleCustodian('${cbEsc(c.uid)}',${c.active === false})">${c.active === false ? 'Activate' : 'Deactivate'}</button>` : ''}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 async function cbToggleCustodian(uid, active) {
-  try { await cbLib().service.setCustodianActive(uid, active); cbToast(active ? 'Login activated' : 'Login deactivated — it can no longer see or confirm anything'); }
+  try { await bcBusy('Saving…', () => cbLib().service.setCustodianActive(uid, active)); cbToast(active ? 'Login activated' : 'Login deactivated — it can no longer see or confirm anything'); }
   catch (e) { cbToast(e.message, 'error'); }
 }
 function openCustodianLoginForm(accountId) {
@@ -210,7 +210,7 @@ function openCustodianLoginForm(accountId) {
     <div class="full"><label for="cc-name">Full name *</label><input id="cc-name" maxlength="120" autocomplete="off" value="${pre ? cbEsc(pre.custodianName || '') : ''}"></div>
     <div><label for="cc-email">Email (login) *</label><input id="cc-email" type="email" autocomplete="off" placeholder="name@downtowntradings.com"></div>
     <div><label for="cc-pw">Temporary password *</label><input id="cc-pw" type="text" autocomplete="off" minlength="8" placeholder="at least 8 characters"></div>
-    <div class="full"><label>Cash account(s) *</label><div class="cl-accpick" id="cc-accs">${cash.length ? cash.map(a => `<label><input type="checkbox" value="${cbEsc(a.id)}"${pre && pre.id === a.id ? ' checked' : ''}> ${cbEsc(a.name)}<small>${a.custodianUid ? 'has a login' : cbEsc(a.custodianName || '')}</small></label>`).join('') : '<span class="cl-sub">Add a cash account first (Payment Accounts).</span>'}</div></div>
+    <div class="full"><label>Cash account(s) *</label><div class="cl-accpick" id="cc-accs">${cash.length ? cash.map(a => `<label><input type="checkbox" value="${cbEsc(a.id)}"${pre && pre.id === a.id ? ' checked' : ''}> ${cbEsc(a.name)}<small>${a.custodianUid ? 'Has a login' : cbEsc(a.custodianName || '')}</small></label>`).join('') : '<span class="cl-sub">Add a cash account first (Payment Accounts).</span>'}</div></div>
     <label class="full cl-check"><input type="checkbox" id="cc-must" checked> Ask to change the password at first login</label>
     <div class="full cl-info"><b>What this login can do:</b> open <b>My Cash</b> only — see the linked cash account(s), confirm or query lines, and hand over cash from them. It can't see quotations, orders, customers, prices or any other screen (enforced by the database, not just hidden).</div>`,
     `<button class="btn btn-secondary" type="button" onclick="closeModal('cc-modal')">Cancel</button><button class="btn btn-primary" type="button" id="cc-save" onclick="cbCreateCustodianLogin()"><i class="ti ti-user-plus"></i>Create login</button>`);

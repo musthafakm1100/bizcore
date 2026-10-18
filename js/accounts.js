@@ -47,7 +47,7 @@ function renderPaymentAccounts(){
       <td>${paTypePill(a.type)}</td>
       <td>${cust}</td>
       <td class="pa-zoho">${a.zohoName ? paEsc(a.zohoName) : '<span class="pa-muted">—</span>'}</td>
-      <td class="num">${paMoney(a.openingBalance)}<small>as of ${paEsc(paDate(a.openingDate))}</small></td>
+      <td class="num">${paMoney(a.openingBalance)}<small>As of ${paEsc(paDate(a.openingDate))}</small></td>
       <td>${off ? '<span class="pa-status off">Inactive</span>' : '<span class="pa-status on">Active</span>'}</td>
       <td class="pa-act"><button type="button" class="btn btn-secondary btn-sm pa-edit" title="${paIsAdmin() ? 'Edit' : 'View'} ${paEsc(a.name)}" aria-label="${paIsAdmin() ? 'Edit' : 'View'} ${paEsc(a.name)}" onclick="openPaymentAccountForm('${paEsc(a.id)}')"><i class="ti ${paIsAdmin() ? 'ti-edit' : 'ti-eye'}"></i></button></td>
     </tr>`;
@@ -69,8 +69,8 @@ function paEnsureModal(){
         <button type="button" role="radio" data-type="cash" onclick="paSetType('cash')"><i class="ti ti-cash"></i>Cash</button><button type="button" role="radio" data-type="card" onclick="paSetType('card')"><i class="ti ti-credit-card"></i>Card</button><button type="button" role="radio" data-type="bank" onclick="paSetType('bank')"><i class="ti ti-building-bank"></i>Bank</button></div></div>
       <div class="form-group pa-f-cust" id="pa-cust-wrap"><label for="pa-cust">Custodian *</label><input id="pa-cust" maxlength="80" autocomplete="off" placeholder="Person who holds this cash"><small>A name — the person doesn't need a BizCore login.</small></div>
       <div class="form-group pa-f-cust" id="pa-bank-wrap" hidden><label for="pa-bank">Linked bank account *</label><select id="pa-bank"></select><small>Card payments come out of this bank account at once. Only bank accounts can be chosen.</small></div>
-      <div class="form-group pa-f-login" id="pa-login-wrap"><label for="pa-login">Custodian login <em>optional</em></label><select id="pa-login"></select><small>Link a BizCore login so the custodian confirms this cash ledger. Without a login an administrator confirms for them.</small></div>
-      <div class="form-group pa-f-zoho"><label for="pa-zoho">Zoho account name <em>optional</em></label><input id="pa-zoho" maxlength="120" autocomplete="off" placeholder="Exactly as in Zoho Books"></div>
+      <div class="form-group pa-f-login" id="pa-login-wrap"><label for="pa-login">Custodian login <em>Optional</em></label><select id="pa-login"></select><small>Link a BizCore login so the custodian confirms this cash ledger. Without a login an administrator confirms for them.</small></div>
+      <div class="form-group pa-f-zoho"><label for="pa-zoho">Zoho account name <em>Optional</em></label><input id="pa-zoho" maxlength="120" autocomplete="off" placeholder="Exactly as in Zoho Books"></div>
       <div class="form-group pa-f-bal"><label for="pa-bal">Opening balance (SAR)</label><input id="pa-bal" inputmode="decimal" autocomplete="off" placeholder="0.00"></div>
       <div class="form-group pa-f-date"><label for="pa-date">Balance as of *</label><input id="pa-date" type="date"></div>
       <label class="pa-f-active"><input type="checkbox" id="pa-active" checked> <span><b>Active</b> — can be chosen for new receipts and payments</span></label>
@@ -168,7 +168,7 @@ async function savePaymentAccount(){
   const btn = document.getElementById('pa-save'); btn.disabled = true;
   try {
     const before = existing ? (existing.custodianUid || '') : '';
-    const saved = await lib.service.saveAccount(input, m._id ? { id: m._id, expectedRevision: m._rev } : {});
+    const saved = await bcBusy('Saving account…', () => lib.service.saveAccount(input, m._id ? { id: m._id, expectedRevision: m._rev } : {}));
     // V267.2: lines already in the ledger follow the newly linked login
     if (existing && (saved.custodianUid || '') !== before && window.BizCoreCash) { try { await window.BizCoreCash.service.relinkLines(saved.id); } catch (e) { console.warn('[BizCore] relink lines:', e.message); } }
     closeModal('pa-modal');

@@ -45,6 +45,8 @@ export function createPurchaseService(fs, options = {}) {
     ensure(isSafeId(a.uid), PURCHASE_ERR.INVALID_STATE, 'You must be signed in');
     return { uid: a.uid, name: cleanText(a.name || a.email || a.uid, 200) };
   };
+  // V268.31: "today" is the user's own calendar day (Riyadh), not the UTC day — from midnight to 03:00 Riyadh, UTC is still on yesterday
+  const todayLocal = () => { if (options.today) return options.today(); const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const refs = {
     pi: id => doc(db, C.invoices, id),
     event: (id, ev) => doc(db, C.invoices, id, C.events, ev),
@@ -166,7 +168,7 @@ export function createPurchaseService(fs, options = {}) {
       // payments at entry: checked one after the other against the balance left
       const payRecs = [];
       groups.forEach((g, i) => {
-        const pv = validateSupplierPayment({ kind: PAYMENT_KINDS.payment, date: g.date, lines: g.lines, discount: 0 }, { invoice, accounts: payAccounts, advances: payAdvances, today: (options.today ? options.today() : at.slice(0, 10)) });
+        const pv = validateSupplierPayment({ kind: PAYMENT_KINDS.payment, date: g.date, lines: g.lines, discount: 0 }, { invoice, accounts: payAccounts, advances: payAdvances, today: (todayLocal()) });
         if (!pv.ok) fail(PURCHASE_ERR.INVALID_INPUT, pv.errors.map(e => e.message).join(' '), { errors: pv.errors, field: 'payments' });
         for (const a of pv.value.advanceIds) { ensure(!advSeen.has(a), PURCHASE_ERR.INVALID_INPUT, 'An advance can be used only once on one invoice.'); advSeen.add(a); }
         const n = payCounters.get(g.numbering.counterKey) + 1; payCounters.set(g.numbering.counterKey, n);
@@ -254,7 +256,7 @@ export function createPurchaseService(fs, options = {}) {
         tx.set(refs.stock(k), { ...cur, qty: rq(Number(cur.qty) - o.qty), value: r2(Math.max(0, Number(cur.value) - o.value)), revision: (Number(cur.revision) || 0) + 1,
           lastInvoiceId: invoiceId, lastEventId: eventId, updatedByUid: actor.uid, updatedAt: at });
         const moveId = `${invoiceId}__${k}__void`.slice(0, 700);
-        tx.set(refs.move(moveId), { id: moveId, itemKey: k, kind: 'purchase-cancelled', qty: -o.qty, value: -o.value, invoiceId, piNo: pi.piNo, eventId, date: at.slice(0, 10), actorUid: actor.uid, at });
+        tx.set(refs.move(moveId), { id: moveId, itemKey: k, kind: 'purchase-cancelled', qty: -o.qty, value: -o.value, invoiceId, piNo: pi.piNo, eventId, date: todayLocal(), actorUid: actor.uid, at });
       });
       return { alreadyApplied: false, invoice: next };
     });
@@ -278,7 +280,7 @@ export function createPurchaseService(fs, options = {}) {
       const accounts = await readAccounts(tx, [{ lines: input.lines || [] }]);
       const advances = await readAdvances(tx, [{ lines: input.lines || [] }]);
       const counters = await readCounters(tx, [numbering.counterKey]);
-      const pv = validateSupplierPayment({ ...input, kind }, { invoice: pi, accounts, advances, today: options.today ? options.today() : at.slice(0, 10) });
+      const pv = validateSupplierPayment({ ...input, kind }, { invoice: pi, accounts, advances, today: todayLocal() });
       if (!pv.ok) fail(PURCHASE_ERR.INVALID_INPUT, pv.errors.map(e => e.message).join(' '), { errors: pv.errors });
       const seq = counters.get(numbering.counterKey) + 1;
       const recs = buildSupplierPaymentRecords({ id, spNo: formatNumber(numbering.displayPrefix, seq), value: pv.value, invoice: pi, accounts, actor, at, stamp: stamp(), operationId });
@@ -374,7 +376,7 @@ export function createPurchaseService(fs, options = {}) {
       if (paySnap.exists()) { const ex = paySnap.data(); ensure(ex.operationId === operationId, PURCHASE_ERR.ID_COLLISION, 'Payment ID already used'); return { alreadyApplied: true, payment: ex }; }
       const accounts = await readAccounts(tx, [{ lines: input.lines || [] }]);
       const counters = await readCounters(tx, [numbering.counterKey]);
-      const pv = validateSupplierPayment({ ...input, kind: PAYMENT_KINDS.advance, discount: 0, lines: (input.lines || []).filter(l => !l.advanceId) }, { accounts, today: options.today ? options.today() : at.slice(0, 10) });
+      const pv = validateSupplierPayment({ ...input, kind: PAYMENT_KINDS.advance, discount: 0, lines: (input.lines || []).filter(l => !l.advanceId) }, { accounts, today: todayLocal() });
       if (!pv.ok) fail(PURCHASE_ERR.INVALID_INPUT, pv.errors.map(e => e.message).join(' '), { errors: pv.errors });
       const seq = counters.get(numbering.counterKey) + 1;
       const recs = buildSupplierPaymentRecords({ id, spNo: formatNumber(numbering.displayPrefix, seq), value: pv.value, invoice: null, accounts, actor, at, stamp: stamp(), operationId });
@@ -423,7 +425,7 @@ export function createPurchaseService(fs, options = {}) {
       const accounts = await readAccounts(tx, [{ lines: input.lines || [] }]);
       const { entry, lines } = await readEntry(tx, pay.entryId);
       const pv = validateSupplierPayment({ ...input, kind: pay.kind, lines: (input.lines || []).filter(l => !l.advanceId),
-        ...(isAdv ? { supplierId: pay.supplierId, supplierName: pay.supplierName } : {}) }, { invoice: base, accounts, today: options.today ? options.today() : at.slice(0, 10) });
+        ...(isAdv ? { supplierId: pay.supplierId, supplierName: pay.supplierName } : {}) }, { invoice: base, accounts, today: todayLocal() });
       if (!pv.ok) fail(PURCHASE_ERR.INVALID_INPUT, pv.errors.map(e => e.message).join(' '), { errors: pv.errors });
       if (isAdv) {
         ensure(pv.value.amount + 0.005 >= (Number(pay.advanceUsed) || 0), PURCHASE_ERR.INVALID_INPUT, `${Number(pay.advanceUsed).toFixed(2)} of this advance is already used — the amount can't be less.`);
@@ -553,7 +555,7 @@ export function createPurchaseService(fs, options = {}) {
         tx.set(refs.stock(k), { ...(cur || { itemKey: k, productId: n.productId, code: n.code, desc: n.desc, uom: n.uom }), itemKey: k, qty: Math.max(0, qty), value: r2(Math.max(0, (cur ? Number(cur.value) : 0) + dv)),
           revision: (cur ? Number(cur.revision) || 0 : 0) + 1, lastInvoiceId: invoiceId, lastEventId: eventId, updatedByUid: actor.uid, updatedAt: at });
         const moveId = `${invoiceId}__${k}__edit${revision}`.slice(0, 700);
-        tx.set(refs.move(moveId), { id: moveId, itemKey: k, kind: 'purchase-edited', qty: dq, value: dv, invoiceId, piNo: pi.piNo, eventId, date: at.slice(0, 10), actorUid: actor.uid, at });
+        tx.set(refs.move(moveId), { id: moveId, itemKey: k, kind: 'purchase-edited', qty: dq, value: dv, invoiceId, piNo: pi.piNo, eventId, date: todayLocal(), actorUid: actor.uid, at });
       });
       return { alreadyApplied: false, invoice: next };
     });

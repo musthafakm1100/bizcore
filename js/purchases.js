@@ -156,7 +156,7 @@ function piEnsureModal(){
             <div class="form-group pi-f-sup"><label for="pe-supplier">Supplier *</label><select id="pe-supplier" onchange="piHeadChanged()"></select></div>
             <div class="form-group"><label for="pe-invno">Supplier invoice no. *</label><input id="pe-invno" maxlength="60" autocomplete="off" oninput="piHeadChanged()"></div>
             <div class="form-group"><label for="pe-date">Invoice date *</label><input id="pe-date" type="date" onchange="piHeadChanged(true)"></div>
-            <div class="form-group"><label for="pe-zoho">Zoho bill no. <em>optional</em></label><input id="pe-zoho" maxlength="60" autocomplete="off" placeholder="Bill number"></div>
+            <div class="form-group"><label for="pe-zoho">Zoho bill no. <em>Optional</em></label><input id="pe-zoho" maxlength="60" autocomplete="off" placeholder="Bill number"></div>
             <div class="form-group pi-f-total"><label for="pe-suptotal">Supplier's invoice total (incl. VAT) *</label><input id="pe-suptotal" class="pi-money" inputmode="decimal" autocomplete="off" placeholder="0.00" oninput="piRecalc()" onblur="piMoneyBlur(this)"></div>
             <div class="pi-f-match" id="pe-match"></div>
             <div class="pi-f-match" id="pe-adv"></div>
@@ -171,7 +171,7 @@ function piEnsureModal(){
         </section>
         <section class="so-entry-card" id="pe-pay-card"><div class="so-entry-card-title so-items-title"><span class="pi-title-ic"><i class="ti ti-cash"></i>Payments <span id="pe-pay-pill"></span><span class="pi-sub pi-pay-hint">· one line per account or advance; paying more than the total is not allowed</span></span><span class="pi-actions"><button type="button" class="btn btn-secondary btn-sm" id="pe-add-pay" onclick="piAddPayLine()"><i class="ti ti-plus"></i>Add payment</button></span></div>
           <div class="pi-lines-wrap"><table class="pi-lines pi-pay-table"><thead id="pe-pay-head"></thead><tbody id="pe-pay"></tbody></table></div>
-          <div class="pi-pm-disc pi-pe-disc" id="pe-disc-row" hidden><i class="ti ti-discount"></i><b>Discount at payment</b><span class="pi-sub">optional — the supplier accepts less than the balance</span><input id="pe-pay-disc" class="pi-cell pi-money" inputmode="decimal" placeholder="0.00" aria-label="Discount at payment" oninput="piRecalc()" onblur="piMoneyBlur(this)"></div>
+          <div class="pi-pm-disc pi-pe-disc" id="pe-disc-row" hidden><i class="ti ti-discount"></i><b>Discount at payment</b><span class="pi-sub">Optional — the supplier accepts less than the balance</span><input id="pe-pay-disc" class="pi-cell pi-money" inputmode="decimal" placeholder="0.00" aria-label="Discount at payment" oninput="piRecalc()" onblur="piMoneyBlur(this)"></div>
           <div class="pi-due" id="pe-due-row"><i class="ti ti-clock"></i><span id="pe-due-text"></span><label for="pe-due">Payment due *</label><input id="pe-due" type="date" onchange="piState().dueTouched=true;piRecalc()"></div>
           <div class="pi-paid-full" id="pe-paid-full" hidden><i class="ti ti-circle-check"></i>Paid in full — nothing goes to the supplier's payable.</div>
         </section>
@@ -388,7 +388,7 @@ function piRenderPicker(){
   const rows = piOpenOrderLines().filter(x => !q || [x.so.soNo, x.so.customer, x.it.desc, x.it.code].some(v => String(v || '').toLowerCase().includes(q)));
   const groups = new Map(); rows.forEach(x => { if (!groups.has(x.so.id)) groups.set(x.so.id, []); groups.get(x.so.id).push(x); });
   document.getElementById('pi-pick-list').innerHTML = rows.length ? [...groups.values()].map(g => `<div class="pi-pick-group"><div class="pi-pick-head"><b>${piEsc(g[0].so.soNo)}</b> · ${piEsc(g[0].so.customer || '')}</div>
-    ${g.map(x => { const k = x.so.id + '|' + x.it.lineId, dis = taken.has(k); return `<label class="pi-pick-row${dis ? ' dis' : ''}"><input type="checkbox" ${dis ? 'disabled checked' : (m._sel.has(k) ? 'checked' : '')} onchange="piPickToggle('${piEsc(k)}',this.checked)"><span>${piEsc(x.it.desc)}<small>${piEsc(x.it.uom || '')}${dis ? ' · already on this invoice' : ''}</small></span><span class="num">still to buy <b>${piQ(x.left)}</b> of ${piQ(x.it.qty)}</span></label>`; }).join('')}</div>`).join('')
+    ${g.map(x => { const k = x.so.id + '|' + x.it.lineId, dis = taken.has(k); return `<label class="pi-pick-row${dis ? ' dis' : ''}"><input type="checkbox" ${dis ? 'disabled checked' : (m._sel.has(k) ? 'checked' : '')} onchange="piPickToggle('${piEsc(k)}',this.checked)"><span>${piEsc(x.it.desc)}<small>${piEsc(x.it.uom || '')}${dis ? ' · already on this invoice' : ''}</small></span><span class="num">Still to buy <b>${piQ(x.left)}</b> of ${piQ(x.it.qty)}</span></label>`; }).join('')}</div>`).join('')
     : '<div class="pi-empty">No open sales order lines' + (q ? ' match the search' : ' — everything ordered has been bought') + '.</div>';
   document.getElementById('pi-pick-count').textContent = m._sel.size ? `${m._sel.size} selected` : '';
 }
@@ -409,8 +409,8 @@ function piRenderCosts(){
   const invDisc = ['invoice', 'both'].includes(piSettings().discountMode);
   const b = document.getElementById('pe-add-disc'); if (b) b.style.display = !invDisc || s.discount ? 'none' : '';
   document.getElementById('pe-costs-title').innerHTML = invDisc ? 'Additional costs &amp; discount' : 'Additional costs';
-  const rows = s.costs.map((c, i) => `<div class="pi-cost-row"><input class="pi-cell pi-cost-label" maxlength="100" value="${piEsc(c.label)}" aria-label="Cost" oninput="piState().costs[${i}].label=this.value;piRecalc()"><span class="pi-sub">shared by value over the lines</span><input class="pi-cell pi-cost-amt pi-money" inputmode="decimal" value="${piEsc(c.amount)}" placeholder="0.00" aria-label="Amount" oninput="piState().costs[${i}].amount=this.value;piRecalc()" onblur="piMoneyBlur(this)"><button type="button" class="pi-x" aria-label="Remove cost" onclick="piState().costs.splice(${i},1);piRenderCosts();piRecalc()"><i class="ti ti-x"></i></button></div>`).join('');
-  const d = s.discount && invDisc ? `<div class="pi-cost-row pi-disc-row"><span class="pi-cost-label">Discount on the whole invoice</span><span class="pi-sub">shared by value over the lines, lowers each item's cost</span>
+  const rows = s.costs.map((c, i) => `<div class="pi-cost-row"><input class="pi-cell pi-cost-label" maxlength="100" value="${piEsc(c.label)}" aria-label="Cost" oninput="piState().costs[${i}].label=this.value;piRecalc()"><span class="pi-sub">Shared by value over the lines</span><input class="pi-cell pi-cost-amt pi-money" inputmode="decimal" value="${piEsc(c.amount)}" placeholder="0.00" aria-label="Amount" oninput="piState().costs[${i}].amount=this.value;piRecalc()" onblur="piMoneyBlur(this)"><button type="button" class="pi-x" aria-label="Remove cost" onclick="piState().costs.splice(${i},1);piRenderCosts();piRecalc()"><i class="ti ti-x"></i></button></div>`).join('');
+  const d = s.discount && invDisc ? `<div class="pi-cost-row pi-disc-row"><span class="pi-cost-label">Discount on the whole invoice</span><span class="pi-sub">Shared by value over the lines, lowers each item's cost</span>
       <span class="pi-disc-in"><select id="pe-disc-mode" aria-label="Discount type" onchange="piState().discount.mode=this.value;piRecalc()"><option value="amount"${s.discount.mode === 'amount' ? ' selected' : ''}>SAR</option><option value="percent"${s.discount.mode === 'percent' ? ' selected' : ''}>%</option></select><input id="pe-disc-val" class="pi-cell pi-money" inputmode="decimal" value="${piEsc(s.discount.value)}" placeholder="0.00" aria-label="Discount" oninput="piState().discount.value=this.value;piRecalc()"></span>
       <button type="button" class="pi-x" aria-label="Remove discount" onclick="piState().discount=null;piRenderCosts();piRecalc()"><i class="ti ti-x"></i></button></div>` : '';
   document.getElementById('pe-costs').innerHTML = rows + d || '<p class="pi-muted" style="margin:2px 0">No additional costs' + (invDisc ? ' or discount' : '') + '.</p>';
@@ -472,8 +472,8 @@ function piPayInfo(p, onCharge){
     return `<span class="pi-sub pi-adv-info"><i class="ti ti-wallet"></i>From the advance — no money moves now · ${rest > 0.005 ? piF(rest) + ' stays open' : 'nothing left'}</span>`; }
   const a = piAccOf(p.accountId); if (!a) return '';
   if (a.type === 'cash') return `<span class="pi-wait">⏳ ${piEsc(String(a.custodianName || 'Custodian').split(/\s+/)[0])} confirms</span>`;
-  if (a.type === 'card') { const b = piAccOf(a.linkedBankAccountId); return b ? `<span class="pi-via"><i class="ti ti-building-bank"></i>via ${piEsc(b.name)} — bank balance, at once</span>` : '<span class="pi-red pi-via"><i class="ti ti-alert-triangle"></i>No linked bank account — set it in Administration → Payment Accounts</span>'; }
-  return onCharge ? `<span class="pi-chg"><label>Bank charge</label><input class="pi-cell pi-money" inputmode="decimal" placeholder="0.00" value="${piEsc(p.bankCharge || '')}" aria-label="Bank charge" oninput="${onCharge}"></span><span class="pi-sub">→ bank expense, not the supplier</span>` : '<span class="pi-sub">Bank — no confirmation</span>';
+  if (a.type === 'card') { const b = piAccOf(a.linkedBankAccountId); return b ? `<span class="pi-via"><i class="ti ti-building-bank"></i>Via ${piEsc(b.name)} — bank balance, at once</span>` : '<span class="pi-red pi-via"><i class="ti ti-alert-triangle"></i>No linked bank account — set it in Administration → Payment Accounts</span>'; }
+  return onCharge ? `<span class="pi-chg"><label>Bank charge</label><input class="pi-cell pi-money" inputmode="decimal" placeholder="0.00" value="${piEsc(p.bankCharge || '')}" aria-label="Bank charge" oninput="${onCharge}"></span><span class="pi-sub">→ Bank expense, not the supplier</span>` : '<span class="pi-sub">Bank — no confirmation</span>';
 }
 /** Payment lines of the new invoice → one payment per date. */
 function piPayGroups(pays, invDate){
@@ -565,7 +565,7 @@ function piRenderPays(){
     return `<tr class="pi-pay-line${ad ? ' pi-adv-line' : ''}" data-p="${i}"><td><span class="pi-pay-sel">${ad ? piAccIcon('advance') : a ? piAccIcon(a.type) : ''}<select class="pi-pay-acc" aria-label="Paid from" onchange="piSetPay(${i},'accountId',this.value,true)">${piAccOptions(ad ? 'adv:' + ad.id : p.accountId, null, opts)}</select></span></td>
       <td><input class="pi-cell pi-pay-date" type="date" value="${piEsc(ad ? (ad.date || invDate) : p.date)}" aria-label="Payment date"${ad ? ' disabled title="The date the advance was paid"' : ''} onchange="piSetPay(${i},'date',this.value)"></td>
       <td class="num"><input class="pi-cell pi-money pi-pay-amt" inputmode="decimal" placeholder="0.00" value="${piEsc(p.amount)}" aria-label="Amount" oninput="piSetPay(${i},'amount',this.value)" onblur="piMoneyBlur(this)"></td>
-      <td><input class="pi-cell pi-pay-ref" maxlength="60" placeholder="optional" value="${piEsc(ad ? advRef : p.reference)}" aria-label="Reference"${ad ? ' disabled' : ''} oninput="piSetPay(${i},'reference',this.value)"></td>
+      <td><input class="pi-cell pi-pay-ref" maxlength="60" placeholder="Optional" value="${piEsc(ad ? advRef : p.reference)}" aria-label="Reference"${ad ? ' disabled' : ''} oninput="piSetPay(${i},'reference',this.value)"></td>
       <td class="pi-pay-info">${piPayInfo(p, `piSetPay(${i},'bankCharge',this.value)`)}</td>
       <td><button type="button" class="pi-x" title="Remove payment" aria-label="Remove payment" onclick="piState().pays.splice(${i},1);piRenderPays();piRecalc()"><i class="ti ti-x"></i></button></td></tr>`;
   }).join('') : `<tr><td class="pi-empty-lines pi-nopay"><i class="ti ti-cash-off"></i>No payment now — the whole total goes to the supplier's payable. Use <b>Add payment</b> if you paid all or part of it.</td></tr>`;
@@ -609,7 +609,7 @@ function piRecalc(keepVatFocus){
     ${t.discountAmount ? `<div class="pi-ps"><span>Discount</span><b class="pi-green">−${piF(t.discountAmount)}</b></div>` : ''}
     <div class="pi-ps"><span>VAT (${set.vatRate}%)</span><input id="pe-vat" class="pi-cell pi-vat" inputmode="decimal" value="${piEsc(vatInput)}" title="Adjust by a few halalas to match the supplier's VAT" oninput="piSetVat(this.value)"></div>
     <div class="pi-ps"><span>BizCore total</span><b>${piF(t.calcTotal)}</b></div>
-    <div class="pi-ps"><span>Rounding <small>(to supplier's total)</small></span><b>${t.rounding == null ? '—' : (t.rounding > 0 ? '+' : '') + piF(t.rounding)}</b></div>
+    <div class="pi-ps"><span>Rounding <small>(To supplier's total)</small></span><b>${t.rounding == null ? '—' : (t.rounding > 0 ? '+' : '') + piF(t.rounding)}</b></div>
     <div class="pi-tot"><span>Total (SAR)</span><span>${piF(t.supplierTotal != null ? t.supplierTotal : t.calcTotal)}</span></div>
     <div class="pi-ps"><span>Paid now${pc.accounts ? ` <small>(${pc.accounts} account${pc.accounts > 1 ? 's' : ''})</small>` : ''}</span><b>${piF(pc.paid)}</b></div>
     ${pc.discount ? `<div class="pi-ps"><span>Discount at payment</span><b class="pi-green">−${piF(pc.discount)}</b></div>` : ''}
@@ -622,7 +622,7 @@ function piRecalc(keepVatFocus){
   const diff = refd - est - last, pct = est + last > 0 ? diff / (est + last) * 100 : 0;
   const prof = v.value.profit;
   document.getElementById('pe-cmp').innerHTML = `<div class="pi-ps"><span>Estimated (pricing)</span><b>${piF(est)}</b></div><div class="pi-ps"><span>Last paid (no estimate)</span><b>${piF(last)}</b></div><div class="pi-ps"><span>No reference</span><b>${piF(none)}</b></div>
-    <div class="pi-ps"><span>Actual</span><b>${piF(actual)}</b></div><div class="pi-ps"><span>Difference <small>(lines with a reference)</small></span><b class="${diff > 0.005 ? 'pi-amber' : diff < -0.005 ? 'pi-blue' : ''}">${diff > 0 ? '+' : ''}${piF(diff)} (${pct > 0 ? '+' : ''}${pct.toFixed(1)}%)</b></div>
+    <div class="pi-ps"><span>Actual</span><b>${piF(actual)}</b></div><div class="pi-ps"><span>Difference <small>(Lines with a reference)</small></span><b class="${diff > 0.005 ? 'pi-amber' : diff < -0.005 ? 'pi-blue' : ''}">${diff > 0 ? '+' : ''}${piF(diff)} (${pct > 0 ? '+' : ''}${pct.toFixed(1)}%)</b></div>
     ${piCanSeeProfit() && prof.sales > 0 ? piProfitBox(prof, true) : ''}`;
   // To continue
   const errs = v.errors, has = f => errs.some(e => f.includes(e.field));
@@ -662,7 +662,7 @@ async function savePurchaseInvoice(){
     if (!why) { err.hidden = false; err.dataset.pay = ''; err.textContent = 'Enter the reason for the change.'; document.getElementById('pe-edit-why').focus(); return; }
     btn.disabled = true; err.hidden = true;
     try {
-      const r = await lib.service.editPurchaseInvoice({ ...input, payments: [], operationId: s.op, invoiceId: s.editOf.id, expectedRevision: s.editOf.revision, mode: 'full', reason: why });
+      const r = await bcBusy('Saving changes…', () => lib.service.editPurchaseInvoice({ ...input, payments: [], operationId: s.op, invoiceId: s.editOf.id, expectedRevision: s.editOf.revision, mode: 'full', reason: why }));
       closeModal('pi-new-modal');
       if (typeof showToast === 'function') showToast(`${r.invoice.piNo} changed — total ${piF(r.invoice.totals.total)}`, 'success');
     } catch (e) { err.hidden = false; err.textContent = e.code === 'permission-denied' ? 'The server refused the change. Please reload and try again.' : (e.message || 'Could not save the changes.'); btn.disabled = false; }
@@ -672,13 +672,13 @@ async function savePurchaseInvoice(){
   const x = typeof docNumberParts === 'function' ? docNumberParts('purchaseInvoice', date) : { counterKey: 'doc_purchaseInvoice_all', displayPrefix: 'PI-' };
   btn.disabled = true; err.hidden = true;
   try {
-    let r = await lib.service.createPurchaseInvoice({ ...input, numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix } });
+    let r = await bcBusy('Saving purchase invoice…', () => lib.service.createPurchaseInvoice({ ...input, numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix } }));
     // V268.21: the discount at payment typed on the new invoice — saved at once as a discount-only payment
     const disc = s._pay ? s._pay.discount : 0;
     if (disc > 0 && !r.alreadyApplied) {
       const dd = input.date && input.date <= piToday() ? input.date : piToday();
       try {
-        const d = await lib.service.recordSupplierPayment({ operationId: s.op + '-disc', invoiceId: r.invoice.id, expectedRevision: r.invoice.revision, numbering: piPayNumbering(dd), date: dd, lines: [], discount: String(disc) });
+        const d = await bcBusy('Saving discount at payment…', () => lib.service.recordSupplierPayment({ operationId: s.op + '-disc', invoiceId: r.invoice.id, expectedRevision: r.invoice.revision, numbering: piPayNumbering(dd), date: dd, lines: [], discount: String(disc) }));
         if (d.invoice) r = { ...r, invoice: d.invoice };
       } catch (e2) {
         closeModal('pi-new-modal');
@@ -703,6 +703,7 @@ function openPurchaseInvoiceView(id, retried){
   piStartAccounts();
   let m = document.getElementById('pi-view-modal');
   if (!m) { m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'pi-view-modal'; document.body.appendChild(m); }
+  else if (!m.classList.contains('open')) document.body.appendChild(m);   // V268.3: in front
   m._id = id;
   const t = pi.totals || {}, v = pi.status === 'Voided';
   const pl = piCanSeeProfit();
@@ -757,6 +758,7 @@ function piAskCancel(id){
   const pi = piInvoices().find(p => p.id === id); if (!pi) return;
   let m = document.getElementById('pi-void-modal');
   if (!m) { m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'pi-void-modal'; document.body.appendChild(m); }
+  else if (!m.classList.contains('open')) document.body.appendChild(m);   // V268.3: in front
   m.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="pi-void-title" style="width:min(480px,96vw);max-width:480px;height:auto">
     <div class="modal-header"><div class="modal-header-title-wrap"><h2 id="pi-void-title">Cancel ${piEsc(pi.piNo)}</h2></div><button class="close-btn" type="button" onclick="closeModal('pi-void-modal')" aria-label="Close">✕</button></div>
     <div class="modal-body"><p class="pi-note" style="margin-top:0">The invoice stays in the register, marked Cancelled. The quantities go back to "still to buy" on the orders, its stock is removed, and supplier invoice ${piEsc(pi.supplierInvoiceNo)} can be entered again.</p>
@@ -770,7 +772,7 @@ async function piDoCancel(id){
   if (!why) { err.hidden = false; err.textContent = 'Enter the reason for cancelling.'; return; }
   const btn = document.getElementById('pi-void-save'); btn.disabled = true;
   try {
-    await piLib().service.voidPurchaseInvoice({ operationId: 'piv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10), invoiceId: id, reason: why, expectedRevision: pi.revision });
+    await bcBusy(`Cancelling ${pi.piNo}…`, () => piLib().service.voidPurchaseInvoice({ operationId: 'piv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10), invoiceId: id, reason: why, expectedRevision: pi.revision }));
     closeModal('pi-void-modal'); closeModal('pi-view-modal');
     if (typeof showToast === 'function') showToast(`${pi.piNo} cancelled`, 'success');
   } catch (e) { err.hidden = false; err.textContent = e.message || 'Could not cancel.'; btn.disabled = false; }
@@ -803,10 +805,10 @@ function piPaymentsSection(pi, pays, money){
   const rows = pays.map(p => {
     const off = p.status === 'Voided', cb = p.kind === 'cashback';
     const ls = p.lines || [];
-    const acc = ls.map(l => `<div class="pi-pv-acc"><span class="acc">${piAccIcon(l.accountType)}${l.advanceId ? piEsc(l.accountName) : `${piEsc(l.accountCode)} · ${piEsc(l.accountName)}`}</span>${l.viaAccountId ? `<div class="pi-sub pi-pv-via">from ${piEsc(l.viaAccountCode)} · ${piEsc(l.viaAccountName)}</div>` : ''}</div>`).join('')
+    const acc = ls.map(l => `<div class="pi-pv-acc"><span class="acc">${piAccIcon(l.accountType)}${l.advanceId ? piEsc(l.accountName) : `${piEsc(l.accountCode)} · ${piEsc(l.accountName)}`}</span>${l.viaAccountId ? `<div class="pi-sub pi-pv-via">From ${piEsc(l.viaAccountCode)} · ${piEsc(l.viaAccountName)}</div>` : ''}</div>`).join('')
       + (!ls.length && p.discount ? '<div class="pi-sub">Discount only — no money moved</div>' : '');
     const refs = ls.map(l => `<div>${l.reference ? piEsc(l.reference) : '<span class="pi-muted">—</span>'}</div>`).join('') + (p.note ? `<div class="pi-sub">${piEsc(p.note)}</div>` : '');
-    const amt = ls.map(l => `<div>${piF(l.amount)}${l.bankCharge ? `<div class="pi-sub">+ bank charge ${piF(l.bankCharge)}</div>` : ''}</div>`).join('') + (p.discount ? `<div class="pi-sub pi-green">discount ${piF(p.discount)}</div>` : '');
+    const amt = ls.map(l => `<div>${piF(l.amount)}${l.bankCharge ? `<div class="pi-sub">+ Bank charge ${piF(l.bankCharge)}</div>` : ''}</div>`).join('') + (p.discount ? `<div class="pi-sub pi-green">Discount ${piF(p.discount)}</div>` : '');
     const conf = off ? `<span class="pi-status voided">Cancelled — ${piEsc(p.voidReason || '')}</span>` : ls.map(l => `<div>${piConfirmHtml(p, l)}</div>`).join('');
     return `<tr class="${off ? 'pi-pv-void' : ''}" data-pay="${piEsc(p.id)}"><td><b class="pi-spno">${piEsc(p.spNo)}</b>${cb ? '<span class="pi-cbtag">Cash back</span>' : ''}</td><td>${piDate(p.date)}</td>
       <td>${acc}</td><td class="pi-sub">${refs}</td><td class="num">${amt}</td><td>${conf}</td>
@@ -822,6 +824,7 @@ function piPaymentsSection(pi, pays, money){
 function piPayModalEl(){
   let m = document.getElementById('pi-pay-modal');
   if (!m) { m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'pi-pay-modal'; document.body.appendChild(m); }
+  if (!m.classList.contains('open')) document.body.appendChild(m);   // V268.3: opens in front of the screen it is called from
   return m;
 }
 function piOpenPayModal(id){
@@ -837,8 +840,8 @@ function piOpenPayModal(id){
       ${(() => { const advs = piOpenAdvances(pi.supplierKey); return advs.length ? `<div class="pi-match adv"><i class="ti ti-wallet"></i><span><b>${piEsc(pi.supplierName)} has ${advs.length} open advance${advs.length > 1 ? 's' : ''}: ${piF(advs.reduce((x, a) => x + piCore().advanceLeftOf(a), 0))}</b> — choose it in <b>Paid from</b>, under Advances.</span></div>` : ''; })()}
       <div class="form-group pi-pm-date"><label for="pm-date">Payment date *</label><input id="pm-date" type="date" value="${piToday()}" max="${piToday()}" onchange="piPayModalEl()._st.date=this.value;piPmRecalc()"></div>
       <div class="pi-lines-wrap"><table class="pi-lines pi-pay-table"><thead><tr><th>Paid from (payment account)</th><th class="num" style="width:140px">Amount</th><th style="width:160px">Reference</th><th style="width:230px"></th><th style="width:34px"></th></tr></thead><tbody id="pm-lines"></tbody></table></div>
-      <div class="pi-pm-add"><button type="button" class="btn btn-secondary btn-sm" onclick="piPmAdd()"><i class="ti ti-plus"></i>Add account</button><span class="pi-sub">split the payment over cash, card and bank</span></div>
-      <div class="pi-pm-disc"><i class="ti ti-discount"></i><b>Discount at payment</b><span class="pi-sub">optional</span><input id="pm-disc" class="pi-cell pi-money" inputmode="decimal" placeholder="0.00" aria-label="Discount at payment" oninput="piPayModalEl()._st.discount=this.value;piPmRecalc()" onblur="piMoneyBlur(this)"></div>
+      <div class="pi-pm-add"><button type="button" class="btn btn-secondary btn-sm" onclick="piPmAdd()"><i class="ti ti-plus"></i>Add account</button><span class="pi-sub">Split the payment over cash, card and bank</span></div>
+      <div class="pi-pm-disc"><i class="ti ti-discount"></i><b>Discount at payment</b><span class="pi-sub">Optional</span><input id="pm-disc" class="pi-cell pi-money" inputmode="decimal" placeholder="0.00" aria-label="Discount at payment" oninput="piPayModalEl()._st.discount=this.value;piPmRecalc()" onblur="piMoneyBlur(this)"></div>
       <p class="pi-note">The supplier accepted less than the balance. Recorded as a supplier discount on this invoice — it lowers the cost of its items (and the P/L follows).</p>
       <div class="pi-pm-after" id="pm-after"></div>
       <p class="pi-note">Cash lines wait for the custodian to confirm; card lines take the money from the card's linked bank account. Paying more than the balance is not allowed — pay the extra as an advance (Purchasing → Supplier Payments).</p>
@@ -868,7 +871,7 @@ function piPmRender(){
     const opts = advs.slice(); if (ad && !opts.some(x => x.id === ad.id)) opts.push(ad);
     return `<tr class="pi-pay-line${ad ? ' pi-adv-line' : ''}"><td><span class="pi-pay-sel">${ad ? piAccIcon('advance') : a ? piAccIcon(a.type) : ''}<select class="pi-pay-acc" aria-label="Paid from" onchange="piPmSet(${i},'accountId',this.value,true)">${piAccOptions(ad ? 'adv:' + ad.id : l.accountId, null, opts)}</select></span></td>
       <td class="num"><input class="pi-cell pi-money pi-pay-amt" inputmode="decimal" placeholder="0.00" value="${piEsc(l.amount)}" aria-label="Amount" oninput="piPmSet(${i},'amount',this.value)" onblur="piMoneyBlur(this)"></td>
-      <td><input class="pi-cell pi-pay-ref" maxlength="60" placeholder="optional" value="${piEsc(ad ? ((ad.lines || []).map(x => x.reference).filter(Boolean)[0] || '—') : l.reference)}" aria-label="Reference"${ad ? ' disabled' : ''} oninput="piPmSet(${i},'reference',this.value)"></td>
+      <td><input class="pi-cell pi-pay-ref" maxlength="60" placeholder="Optional" value="${piEsc(ad ? ((ad.lines || []).map(x => x.reference).filter(Boolean)[0] || '—') : l.reference)}" aria-label="Reference"${ad ? ' disabled' : ''} oninput="piPmSet(${i},'reference',this.value)"></td>
       <td class="pi-pay-info">${piPayInfo(l, `piPmSet(${i},'bankCharge',this.value)`)}</td>
       <td><button type="button" class="pi-x" title="Remove this account" aria-label="Remove account" onclick="piPayModalEl()._st.lines.splice(${i},1);piPmRender()"><i class="ti ti-x"></i></button></td></tr>`;
   }).join('') || '<tr><td colspan="5" class="pi-empty-lines pi-nopay"><i class="ti ti-cash-off"></i>No money paid now — enter the <b>discount at payment</b> below, or use <b>Add account</b>.</td></tr>';
@@ -895,7 +898,7 @@ async function piSavePayment(){
   if (!v || !v.ok) { err.hidden = false; err.textContent = (v ? v.errors : []).map(e => e.message).join(' ') || 'Check the payment.'; return; }
   const btn = document.getElementById('pm-save'); btn.disabled = true; err.hidden = true;
   try {
-    const r = await lib.service.recordSupplierPayment({ ...piPmInput(), operationId: m._op, invoiceId: m._pi, expectedRevision: m._rev, numbering: piPayNumbering(m._st.date) });
+    const r = await bcBusy('Saving payment…', () => lib.service.recordSupplierPayment({ ...piPmInput(), operationId: m._op, invoiceId: m._pi, expectedRevision: m._rev, numbering: piPayNumbering(m._st.date) }));
     closeModal('pi-pay-modal');
     if (typeof showToast === 'function') showToast(`${r.payment.spNo} saved — ${r.invoice ? (r.invoice.payStatus === 'Paid' ? 'invoice Paid' : `${piF(r.invoice.balance)} left`) : 'payment recorded'}`, 'success');
   } catch (e) { err.hidden = false; err.textContent = e.code === 'permission-denied' ? 'The server refused the payment. Please reload and try again.' : (e.message || 'Could not save the payment.'); btn.disabled = false; }
@@ -915,7 +918,7 @@ function piOpenCashBack(id){
         <div class="form-group"><label for="cb-date">Date *</label><input id="cb-date" type="date" value="${piToday()}" max="${piToday()}" oninput="piCbRecalc()"></div>
         <div class="form-group"><label for="cb-amt">Amount received *</label><input id="cb-amt" class="pi-money" inputmode="decimal" placeholder="0.00" oninput="piCbRecalc()" onblur="piMoneyBlur(this)"></div>
         <div class="form-group pi-cb-acc"><label for="cb-acc">Received into *</label><select id="cb-acc" onchange="piCbRecalc()">${piAccOptions('', ['cash', 'bank'])}</select><small id="cb-info"></small></div>
-        <div class="form-group pi-cb-note"><label for="cb-note">Note <em>optional</em></label><input id="cb-note" maxlength="200" placeholder="e.g. discount returned in cash by the salesman"></div>
+        <div class="form-group pi-cb-note"><label for="cb-note">Note <em>Optional</em></label><input id="cb-note" maxlength="200" placeholder="e.g. discount returned in cash by the salesman"></div>
       </div>
       <p class="pi-note">The supplier's invoice stays as it is (same total, still ${piEsc(piCore().payStatusOf(pi))}). The cash back is recorded as a discount after payment: it lowers the cost of this invoice's items, and the P/L follows. VAT stays as on the supplier's invoice.</p>
       <div class="inv-error" id="cb-error" hidden></div>
@@ -942,7 +945,7 @@ async function piSaveCashBack(){
   const btn = document.getElementById('cb-save'); btn.disabled = true; err.hidden = true;
   const input = piCbInput();
   try {
-    const r = await lib.service.recordSupplierCashBack({ ...input, operationId: m._op, invoiceId: m._pi, expectedRevision: m._rev, numbering: piPayNumbering(input.date) });
+    const r = await bcBusy('Saving cash back…', () => lib.service.recordSupplierCashBack({ ...input, operationId: m._op, invoiceId: m._pi, expectedRevision: m._rev, numbering: piPayNumbering(input.date) }));
     closeModal('pi-pay-modal');
     if (typeof showToast === 'function') showToast(`${r.payment.spNo} — cash back ${piF(r.payment.amount)} recorded`, 'success');
   } catch (e) { err.hidden = false; err.textContent = e.message || 'Could not save the cash back.'; btn.disabled = false; }
@@ -969,7 +972,7 @@ async function piDoCancelPay(){
   if (why.length < 5) { err.hidden = false; err.textContent = 'Enter the reason for cancelling (at least 5 characters).'; return; }
   const btn = document.getElementById('cp-save'); btn.disabled = true;
   try {
-    await piLib().service.voidSupplierPayment({ operationId: m._op, paymentId: p.id, reason: why, expectedRevision: p.revision });
+    await bcBusy(`Cancelling ${p.spNo}…`, () => piLib().service.voidSupplierPayment({ operationId: m._op, paymentId: p.id, reason: why, expectedRevision: p.revision }));
     closeModal('pi-pay-modal');
     if (typeof showToast === 'function') showToast(`${p.spNo} cancelled`, 'success');
   } catch (e) { err.hidden = false; err.textContent = e.message || 'Could not cancel.'; btn.disabled = false; }
@@ -985,6 +988,8 @@ const PI_LOCK_MODALS = ['pi-new-modal', 'pi-edit-modal', 'sp-edit-modal'];
 /** Runs open() while this user holds the document lock; the lock stays with the screen that open() shows. */
 async function piWithLock(docType, id, label, activity, open){
   if (typeof acquireDocLock !== 'function') return open();
+  if (typeof beginScreenTransition === 'function') beginScreenTransition('Opening ' + label + '…');
+  try {
   const ok = await acquireDocLock(docType, id, label, activity); if (!ok) return false;
   const before = new Set(typeof openOverlayIds === 'function' ? openOverlayIds() : []);
   let res;
@@ -993,6 +998,7 @@ async function piWithLock(docType, id, label, activity, open){
   if (opened.length && typeof _activeLock !== 'undefined' && _activeLock) _activeLock.modalId = opened[opened.length - 1];
   else await releaseLock();
   return res;
+  } finally { if (typeof endScreenTransition === 'function') endScreenTransition(); }
 }
 const piHasMoney = pi => piN(pi.paid) > 0.005 || piN(pi.paymentDiscount) > 0.005 || piN(pi.cashBack) > 0.005;
 function piEditInvoiceClick(id){
@@ -1006,6 +1012,7 @@ function piOpenLimitedEdit(id){
   const r = piEditRight(pi), set = piSettings();
   let m = document.getElementById('pi-edit-modal');
   if (!m) { m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'pi-edit-modal'; document.body.appendChild(m); }
+  else if (!m.classList.contains('open')) document.body.appendChild(m);   // V268.3: in front
   m._id = id; m._rev = pi.revision; m._op = 'pie-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
   const why = piHasMoney(pi) ? 'this invoice has payments' : 'your role allows limited edits';
   const above = (pi.lines || []).filter(l => l.costCheck === 'above');
@@ -1039,7 +1046,7 @@ async function piSaveLimitedEdit(){
   if (!v.ok) { err.hidden = false; err.textContent = v.errors.map(e => e.message).join(' '); return; }
   const btn = document.getElementById('pie-save'); btn.disabled = true; err.hidden = true;
   try {
-    await piLib().service.editPurchaseInvoice({ ...input, operationId: m._op, invoiceId: pi.id, expectedRevision: m._rev, mode: 'limited' });
+    await bcBusy('Saving changes…', () => piLib().service.editPurchaseInvoice({ ...input, operationId: m._op, invoiceId: pi.id, expectedRevision: m._rev, mode: 'limited' }));
     closeModal('pi-edit-modal');
     if (typeof showToast === 'function') showToast(`${pi.piNo} changed — ${v.changes.map(c => c.field).join(', ')}`, 'success');
   } catch (e) { err.hidden = false; err.textContent = e.code === 'permission-denied' ? 'The server refused the change. Please reload and try again.' : (e.message || 'Could not save.'); btn.disabled = false; }
@@ -1057,6 +1064,7 @@ function piOpenFullEdit(id){
   const pi = piInvoices().find(p => p.id === id); if (!pi) return false;
   openNewPurchaseInvoice();
   const m = document.getElementById('pi-new-modal'), s = m._s;
+  document.body.appendChild(m);   // in front of the open invoice view
   s.editOf = pi; s.op = 'pief-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10); s.dueTouched = true;
   s.editOwn = new Map();
   (pi.lines || []).forEach(l => (l.allocations || []).forEach(a => { if (!s.editOwn.has(a.soId)) s.editOwn.set(a.soId, new Map()); const x = s.editOwn.get(a.soId); x.set(a.soLineId, (x.get(a.soLineId) || 0) + piN(a.qty)); }));
@@ -1109,7 +1117,7 @@ async function savePurchaseSettingsForm(){
   const g = id => document.getElementById(id).value;
   const btn = document.getElementById('ps-save'), err = document.getElementById('ps-error'); btn.disabled = true; err.hidden = true;
   try {
-    await piLib().service.savePurchaseSettings({ costLimitPct: g('ps-limit'), costLimitAction: g('ps-action'), discountMode: g('ps-disc'), roundingLimit: g('ps-round'), vatRate: g('ps-vat'), profitVisibility: g('ps-profit'), editMode: g('ps-edit'), editDays: g('ps-edit-days') });
+    await bcBusy('Saving settings…', () => piLib().service.savePurchaseSettings({ costLimitPct: g('ps-limit'), costLimitAction: g('ps-action'), discountMode: g('ps-disc'), roundingLimit: g('ps-round'), vatRate: g('ps-vat'), profitVisibility: g('ps-profit'), editMode: g('ps-edit'), editDays: g('ps-edit-days') }));
     if (typeof showToast === 'function') showToast('Purchase settings saved', 'success');
   } catch (e) { err.hidden = false; err.textContent = e.message || 'Could not save.'; }
   finally { btn.disabled = false; }

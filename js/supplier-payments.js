@@ -39,7 +39,7 @@ function spWaitingFor(p){
 function spUsesOf(adv){ return spPays().filter(x => x.status !== 'Voided' && (x.advanceIds || []).includes(adv.id)); }
 function spPaidFromHtml(p){
   const ls = p.lines || [];
-  if (!ls.length) return `<span class="pi-muted">${p.discount ? 'no money moved' : '—'}</span>`;
+  if (!ls.length) return `<span class="pi-muted">${p.discount ? 'No money moved' : '—'}</span>`;
   const l = ls.find(x => !x.advanceId) || ls[0], label = l.advanceId ? l.accountName : `${l.accountCode} · ${l.accountName}`;   // the money first
   return `<span class="sp-from">${piAccIcon(l.accountType)}<span>${piEsc(label)}${ls.length > 1 ? ` <span class="pi-muted">+${ls.length - 1}</span>` : ''}</span></span>`;
 }
@@ -56,7 +56,7 @@ function spStatusHtml(p){
   }
   const w = spWaitingFor(p);
   if (w) return `<span class="pi-wait">⏳ ${piEsc(w)}</span>`;
-  if (piN(p.advanceTotal) > 0.005) return `<span class="pi-sub">incl. advance ${piF(p.advanceTotal)}</span>`;
+  if (piN(p.advanceTotal) > 0.005) return `<span class="pi-sub">Incl. advance ${piF(p.advanceTotal)}</span>`;
   return '<span class="pi-muted">—</span>';
 }
 function spOpenInvoice(id){ if (typeof openPurchaseInvoiceView === 'function') openPurchaseInvoiceView(id); }
@@ -117,7 +117,7 @@ function renderSupplierPayments(){
   const cards = document.getElementById('spreg-cards');
   if (cards) cards.innerHTML = rows.length ? rows.map(p => `<article class="pi-card sp-card${p.status === 'Voided' ? ' voided' : ''}" role="button" tabindex="0" onclick="${openFn(p)}"><div class="r1"><b>${piEsc(p.spNo)}</b>${spTypePill(p)}</div><div class="r2">${piEsc(p.supplierName)}</div>
       <div class="r3"><span>${piDate(p.date)} · ${spForHtml(p, false)}</span><span class="amt">${amt(p)}</span></div><div class="r4">${spStatusHtml(p)}</div></article>`).join('') : '<div class="pi-empty">No supplier payments found</div>';
-  const nb = document.getElementById('sp-badge'); if (nb) { nb.textContent = waiting.length; nb.style.display = waiting.length ? '' : 'none'; nb.title = waiting.length ? `${waiting.length} cash payment(s) waiting for the custodian` : ''; }
+  // (no nav badge — as in mockup PI_11; cash waiting is shown in the monitor and in Cash & Bank)
 }
 
 /* ═══════════════════════════════ PAYMENT VIEW ═══════════════════════════════ */
@@ -126,13 +126,14 @@ function openSupplierPaymentView(id){
   piStartAccounts();
   let m = document.getElementById('sp-view-modal');
   if (!m) { m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'sp-view-modal'; document.body.appendChild(m); }
+  else if (!m.classList.contains('open')) document.body.appendChild(m);   // V268.3: in front
   m._id = id;
   const off = p.status === 'Voided', adv = p.kind === 'advance', ls = p.lines || [];
   const right = off ? { right: null } : piEditRight(p);
-  const rows = ls.map(l => `<tr><td><div class="pi-pv-acc"><span class="acc">${piAccIcon(l.accountType)}${l.advanceId ? piEsc(l.accountName) : `${piEsc(l.accountCode)} · ${piEsc(l.accountName)}`}</span>${l.viaAccountId ? `<div class="pi-sub pi-pv-via">from ${piEsc(l.viaAccountCode)} · ${piEsc(l.viaAccountName)}</div>` : ''}</div></td>
-      <td class="num">${piF(l.amount)}${l.bankCharge ? `<div class="pi-sub">+ bank charge ${piF(l.bankCharge)}</div>` : ''}</td><td class="pi-sub">${l.reference ? piEsc(l.reference) : '—'}</td><td>${piConfirmHtml(p, l)}</td></tr>`).join('');
+  const rows = ls.map(l => `<tr><td><div class="pi-pv-acc"><span class="acc">${piAccIcon(l.accountType)}${l.advanceId ? piEsc(l.accountName) : `${piEsc(l.accountCode)} · ${piEsc(l.accountName)}`}</span>${l.viaAccountId ? `<div class="pi-sub pi-pv-via">From ${piEsc(l.viaAccountCode)} · ${piEsc(l.viaAccountName)}</div>` : ''}</div></td>
+      <td class="num">${piF(l.amount)}${l.bankCharge ? `<div class="pi-sub">+ Bank charge ${piF(l.bankCharge)}</div>` : ''}</td><td class="pi-sub">${l.reference ? piEsc(l.reference) : '—'}</td><td>${piConfirmHtml(p, l)}</td></tr>`).join('');
   const uses = adv ? spUsesOf(p) : [];
-  const forTxt = adv ? (p.soNo ? 'for ' + p.soNo : 'no sales order') : p.piNo;
+  const forTxt = adv ? (p.soNo ? 'For ' + p.soNo : 'No sales order') : p.piNo;
   m.innerHTML = `<div class="modal pi-paym sp-view" role="dialog" aria-modal="true" aria-labelledby="spv-title" style="--pi-w:900px">
     <div class="modal-header"><div><h2 id="spv-title">${piEsc(p.spNo)} ${spTypePill(p)}</h2><div class="so-create-subtitle">${piEsc(p.supplierName)} · ${piEsc(forTxt || '')} · ${piDate(p.date)}</div></div><button class="close-btn" type="button" onclick="closeModal('sp-view-modal')" aria-label="Close">✕</button></div>
     <div class="modal-body">
@@ -164,6 +165,7 @@ function openSupplierPaymentView(id){
 function spAdvEl(){
   let m = document.getElementById('sp-adv-modal');
   if (!m) { m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'sp-adv-modal'; document.body.appendChild(m); }
+  else if (!m.classList.contains('open')) document.body.appendChild(m);   // V268.3: in front
   return m;
 }
 function openPayAdvance(){
@@ -181,11 +183,11 @@ function openPayAdvance(){
       <div class="sp-adv-grid">
         <div class="form-group"><label for="spa-sup">Supplier *</label><select id="spa-sup" onchange="spAdvRecalc()"><option value="">Choose the supplier…</option>${sups.map(s => `<option value="${piEsc(s.id)}">${piEsc(s.company || s.name || s.id)}</option>`).join('')}</select></div>
         <div class="form-group"><label for="spa-date">Date *</label><input id="spa-date" type="date" value="${today}" max="${today}" onchange="spAdvRecalc()"></div>
-        <div class="form-group"><label for="spa-so">For sales order <em>optional</em></label><select id="spa-so" onchange="spAdvRecalc()"><option value="">No sales order</option>${sos.map(so => `<option value="${piEsc(so.id)}">${piEsc(so.soNo)} · ${piEsc(so.customer || '')}</option>`).join('')}</select></div>
+        <div class="form-group"><label for="spa-so">For sales order <em>Optional</em></label><select id="spa-so" onchange="spAdvRecalc()"><option value="">No sales order</option>${sos.map(so => `<option value="${piEsc(so.id)}">${piEsc(so.soNo)} · ${piEsc(so.customer || '')}</option>`).join('')}</select></div>
       </div>
       <div class="pi-lines-wrap"><table class="pi-lines pi-pay-table"><thead><tr><th>Paid from (payment account)</th><th class="num" style="width:140px">Amount</th><th style="width:160px">Reference</th><th style="width:230px"></th><th style="width:34px"></th></tr></thead><tbody id="spa-lines"></tbody></table></div>
-      <div class="pi-pm-add"><button type="button" class="btn btn-secondary btn-sm" onclick="spAdvEl()._st.lines.push({accountId:'',amount:'',reference:'',bankCharge:''});spAdvRender()"><i class="ti ti-plus"></i>Add account</button><span class="pi-sub">split over cash, card and bank</span></div>
-      <div class="form-group"><label for="spa-note">Note <em>optional</em></label><input id="spa-note" maxlength="300" placeholder="e.g. 50% advance for the Pelican flashlights" oninput="spAdvRecalc()"></div>
+      <div class="pi-pm-add"><button type="button" class="btn btn-secondary btn-sm" onclick="spAdvEl()._st.lines.push({accountId:'',amount:'',reference:'',bankCharge:''});spAdvRender()"><i class="ti ti-plus"></i>Add account</button><span class="pi-sub">Split over cash, card and bank</span></div>
+      <div class="form-group"><label for="spa-note">Note <em>Optional</em></label><input id="spa-note" maxlength="300" placeholder="e.g. 50% advance for the Pelican flashlights" oninput="spAdvRecalc()"></div>
       <div class="pi-match adv sp-adv-info" id="spa-info"></div>
       <div class="inv-error" id="spa-error" hidden></div>
     </div>
@@ -206,7 +208,7 @@ function spAdvRender(){
     const a = piAccOf(l.accountId);
     return `<tr class="pi-pay-line"><td><span class="pi-pay-sel">${a ? piAccIcon(a.type) : ''}<select class="pi-pay-acc" aria-label="Paid from" onchange="spAdvSet(${i},'accountId',this.value,true)">${piAccOptions(l.accountId)}</select></span></td>
       <td class="num"><input class="pi-cell pi-money pi-pay-amt" inputmode="decimal" placeholder="0.00" value="${piEsc(l.amount)}" aria-label="Amount" oninput="spAdvSet(${i},'amount',this.value)" onblur="piMoneyBlur(this)"></td>
-      <td><input class="pi-cell pi-pay-ref" maxlength="60" placeholder="optional" value="${piEsc(l.reference)}" aria-label="Reference" oninput="spAdvSet(${i},'reference',this.value)"></td>
+      <td><input class="pi-cell pi-pay-ref" maxlength="60" placeholder="Optional" value="${piEsc(l.reference)}" aria-label="Reference" oninput="spAdvSet(${i},'reference',this.value)"></td>
       <td class="pi-pay-info">${piPayInfo(l, `spAdvSet(${i},'bankCharge',this.value)`)}</td>
       <td><button type="button" class="pi-x" title="Remove this account" aria-label="Remove account" onclick="spAdvEl()._st.lines.splice(${i},1);spAdvRender()"><i class="ti ti-x"></i></button></td></tr>`;
   }).join('') || '<tr><td colspan="5" class="pi-empty-lines pi-nopay"><i class="ti ti-cash-off"></i>Use <b>Add account</b> to say where the money came from.</td></tr>';
@@ -235,7 +237,7 @@ async function spSaveAdvance(){
   const btn = document.getElementById('spa-save'); btn.disabled = true; err.hidden = true;
   const input = spAdvInput();
   try {
-    const r = await lib.service.payAdvance({ ...input, operationId: m._op, numbering: piPayNumbering(input.date) });
+    const r = await bcBusy('Saving advance…', () => lib.service.payAdvance({ ...input, operationId: m._op, numbering: piPayNumbering(input.date) }));
     closeModal('sp-adv-modal');
     if (typeof showToast === 'function') showToast(`${r.payment.spNo} — advance ${piF(r.payment.amount)} to ${r.payment.supplierName} saved`, 'success');
   } catch (e) { err.hidden = false; err.textContent = e.code === 'permission-denied' ? 'The server refused the advance. Please reload and try again.' : (e.message || 'Could not save the advance.'); btn.disabled = false; }
@@ -254,6 +256,7 @@ function spEditPaymentClick(id){
 function spEditEl(){
   let m = document.getElementById('sp-edit-modal');
   if (!m) { m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'sp-edit-modal'; document.body.appendChild(m); }
+  else if (!m.classList.contains('open')) document.body.appendChild(m);   // V268.3: in front
   return m;
 }
 function spOpenEdit(id, full){
@@ -263,7 +266,7 @@ function spOpenEdit(id, full){
   m._id = id; m._rev = p.revision; m._full = full; m._op = spNewOp('spe');
   m._st = { lines: (p.lines || []).map(l => ({ accountId: l.accountId, amount: piF(l.amount), reference: l.reference || '', bankCharge: l.bankCharge ? piF(l.bankCharge) : '' })) };
   const what = p.kind === 'advance' ? 'Advance' : p.kind === 'cashback' ? 'Cash back' : 'Payment';
-  const sub = `${what} · ${p.kind === 'advance' ? (p.soNo || 'no sales order') : p.piNo} · ${p.supplierName}`;
+  const sub = `${what} · ${p.kind === 'advance' ? (p.soNo || 'No sales order') : p.piNo} · ${p.supplierName}`;
   const limitedWhy = (p.advanceIds || []).length ? 'it uses an advance — to change the amounts, cancel it and enter it again' : 'your role allows limited edits — to change the amounts an administrator edits it';
   m.innerHTML = `<div class="modal pi-paym" role="dialog" aria-modal="true" aria-labelledby="spe-title" style="--pi-w:${full ? 820 : 620}px">
     <div class="modal-header"><div><h2 id="spe-title">Edit ${piEsc(p.spNo)}</h2><div class="so-create-subtitle">${piEsc(sub)}</div></div><button class="close-btn" type="button" onclick="closeModal('sp-edit-modal')" aria-label="Close">✕</button></div>
@@ -272,11 +275,11 @@ function spOpenEdit(id, full){
         <div class="form-group pi-pm-date"><label for="spe-date">${p.kind === 'cashback' ? 'Date' : 'Payment date'} *</label><input id="spe-date" type="date" value="${piEsc(p.date)}" max="${piToday()}" onchange="spEditRecalc()"></div>
         <div class="pi-lines-wrap"><table class="pi-lines pi-pay-table"><thead><tr><th>${p.kind === 'cashback' ? 'Received into' : 'Paid from'}</th><th class="num" style="width:140px">Amount</th><th style="width:160px">Reference</th><th style="width:230px"></th><th style="width:34px"></th></tr></thead><tbody id="spe-lines"></tbody></table></div>
         ${p.kind === 'cashback' ? '' : `<div class="pi-pm-add"><button type="button" class="btn btn-secondary btn-sm" onclick="spEditEl()._st.lines.push({accountId:'',amount:'',reference:'',bankCharge:''});spEditRender()"><i class="ti ti-plus"></i>Add account</button></div>`}
-        ${p.kind === 'payment' ? `<div class="pi-pm-disc"><i class="ti ti-discount"></i><b>Discount at payment</b><span class="pi-sub">optional</span><input id="spe-disc" class="pi-cell pi-money" inputmode="decimal" placeholder="0.00" value="${p.discount ? piF(p.discount) : ''}" aria-label="Discount at payment" oninput="spEditRecalc()" onblur="piMoneyBlur(this)"></div>` : ''}
+        ${p.kind === 'payment' ? `<div class="pi-pm-disc"><i class="ti ti-discount"></i><b>Discount at payment</b><span class="pi-sub">Optional</span><input id="spe-disc" class="pi-cell pi-money" inputmode="decimal" placeholder="0.00" value="${p.discount ? piF(p.discount) : ''}" aria-label="Discount at payment" oninput="spEditRecalc()" onblur="piMoneyBlur(this)"></div>` : ''}
         <div class="pi-pm-after" id="spe-after"></div>`
       : `<div class="pi-edit-mode lim"><i class="ti ti-lock"></i><span><b>Limited edit</b> — ${limitedWhy}. You can change the references and the note.</span></div>
         <div class="pi-lines-wrap"><table class="pi-lines pi-pay-table"><thead><tr><th>${p.kind === 'cashback' ? 'Received into' : 'Paid from'}</th><th class="num">Amount</th><th style="width:200px">Reference</th></tr></thead><tbody>${(p.lines || []).map((l, i) => `<tr><td>${piAccIcon(l.accountType)}${l.advanceId ? piEsc(l.accountName) : `${piEsc(l.accountCode)} · ${piEsc(l.accountName)}`}</td><td class="num">${piF(l.amount)}</td><td><input class="pi-cell spe-ref" data-i="${i}" maxlength="60" value="${piEsc(l.reference || '')}"${l.advanceId ? ' disabled' : ''} aria-label="Reference"></td></tr>`).join('') || '<tr><td colspan="3" class="pi-muted">Discount only — no money moved.</td></tr>'}</tbody></table></div>`}
-      <div class="form-group"><label for="spe-note">Note <em>optional</em></label><input id="spe-note" maxlength="300" value="${piEsc(p.note || '')}"></div>
+      <div class="form-group"><label for="spe-note">Note <em>Optional</em></label><input id="spe-note" maxlength="300" value="${piEsc(p.note || '')}"></div>
       <div class="form-group"><label for="spe-why">Reason for the change *</label><input id="spe-why" maxlength="300" placeholder="e.g. cash count was 880"></div>
       <p class="pi-note">${r.until ? `Editable until ${piDate(r.until)} (${set.editDays} days) · administrators any time · ` : ''}the payment is locked while you edit · every change is kept in its history.</p>
       <div class="inv-error" id="spe-err" hidden></div>
@@ -300,7 +303,7 @@ function spEditRender(){
     const a = piAccOf(l.accountId);
     return `<tr class="pi-pay-line"><td><span class="pi-pay-sel">${a ? piAccIcon(a.type) : ''}<select class="pi-pay-acc" aria-label="Account" onchange="spEditSet(${i},'accountId',this.value,true)">${piAccOptions(l.accountId, types)}</select></span></td>
       <td class="num"><input class="pi-cell pi-money pi-pay-amt" inputmode="decimal" placeholder="0.00" value="${piEsc(l.amount)}" aria-label="Amount" oninput="spEditSet(${i},'amount',this.value)" onblur="piMoneyBlur(this)"></td>
-      <td><input class="pi-cell pi-pay-ref" maxlength="60" placeholder="optional" value="${piEsc(l.reference)}" aria-label="Reference" oninput="spEditSet(${i},'reference',this.value)"></td>
+      <td><input class="pi-cell pi-pay-ref" maxlength="60" placeholder="Optional" value="${piEsc(l.reference)}" aria-label="Reference" oninput="spEditSet(${i},'reference',this.value)"></td>
       <td class="pi-pay-info">${p.kind === 'cashback' ? '' : piPayInfo(l, `spEditSet(${i},'bankCharge',this.value)`)}</td>
       <td>${p.kind === 'cashback' ? '' : `<button type="button" class="pi-x" title="Remove this account" aria-label="Remove account" onclick="spEditEl()._st.lines.splice(${i},1);spEditRender()"><i class="ti ti-x"></i></button>`}</td></tr>`;
   }).join('') || '<tr><td colspan="5" class="pi-empty-lines pi-nopay"><i class="ti ti-cash-off"></i>No money paid — enter the discount at payment, or use <b>Add account</b>.</td></tr>';
@@ -351,7 +354,7 @@ async function spSaveEdit(){
   }
   const btn = document.getElementById('spe-save'); btn.disabled = true; err.hidden = true;
   try {
-    await lib.service.editSupplierPayment({ ...req, operationId: m._op, paymentId: p.id, expectedRevision: m._rev, reason });
+    await bcBusy('Saving changes…', () => lib.service.editSupplierPayment({ ...req, operationId: m._op, paymentId: p.id, expectedRevision: m._rev, reason }));
     closeModal('sp-edit-modal');
     if (typeof showToast === 'function') showToast(`${p.spNo} changed`, 'success');
   } catch (e) { err.hidden = false; err.textContent = e.code === 'permission-denied' ? 'The server refused the change. Please reload and try again.' : (e.message || 'Could not save.'); btn.disabled = false; }

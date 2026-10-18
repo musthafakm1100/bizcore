@@ -164,3 +164,8 @@ body.mc-body{margin:0;font-family:Inter,system-ui,sans-serif;background:#f1f5f9;
 #cashbank-root .cl-acts{flex-wrap:nowrap}
 /* V268.2: a card's memo amount (paid by card — taken from the linked bank account) */
 .cl-memo{color:#94a3b8;font-style:italic;font-variant-numeric:tabular-nums}
+/* V268.32: My Cash "Saving…" overlay */
+.mc-busy{position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.35);display:flex;align-items:center;justify-content:center}
+.mc-busy-box{display:flex;align-items:center;gap:10px;background:#fff;border-radius:12px;padding:14px 20px;font:600 14px Inter,system-ui,sans-serif;color:#0f172a;box-shadow:0 10px 30px rgba(15,23,42,.2)}
+.mc-busy-spin{width:18px;height:18px;border:2.5px solid #cbd5e1;border-top-color:#1e4f86;border-radius:50%;animation:mcspin .8s linear infinite}
+@keyframes mcspin{to{transform:rotate(360deg)}}
