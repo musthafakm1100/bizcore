@@ -171,3 +171,4 @@ Built from the approved mockups V5_1 – V5_6; details are in docs/V268_5_DATA_S
 - Administration → Data Health. Type-and-search pickers. Product required on stock lines + New Product. New Unit. Change Item (stockChanges).
 - Rules changed: run the emulator tests, then publish.
 - Later (agreed): product required on quotation / SO lines; Firebase Users & Roles screen; Stock Count; "from stock" on the SO view; data plan step 1 decisions.
+- **V268.51 (18 Oct):** pickers open only on click / typing (not when the screen opens); the list floats over the window and fits the space on screen (opens upwards when there is more room); sales orders show the SO no. first. No rule changes.

@@ -1159,7 +1159,6 @@ function bcPickEnhance(selId, cfg){
     sel.insertAdjacentElement('afterend', box); sel.hidden = true; sel.classList.add('bc-pick-native'); sel.tabIndex = -1;
     const q = document.getElementById(selId + '-q');
     q.addEventListener('input', () => { BC_PK[selId].idx = 0; bcPickOpen(selId); });
-    q.addEventListener('focus', () => bcPickOpen(selId));
     q.addEventListener('click', () => bcPickOpen(selId));
     q.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== q) bcPickClose(selId, true); }, 150));
     q.addEventListener('keydown', e => bcPickKey(selId, e));
@@ -1205,7 +1204,19 @@ function bcPickOpen(selId){
     e.addEventListener('mousemove', () => { const i = +e.dataset.i; if (c.idx === i) return; c.idx = i; list.querySelectorAll('.rct-pick-opt').forEach((x, j) => x.classList.toggle('on', j === i)); });
   });
   list.hidden = false; q.setAttribute('aria-expanded', 'true'); document.getElementById(selId + '-pk').classList.add('open');
+  bcPickPlace(selId);
 }
+/* V268.51: the list floats over the window, fits the space left on screen (below, or above when there is more room) */
+function bcPickPlace(selId){
+  const c = BC_PK[selId], list = document.getElementById(selId + '-list'), box = document.getElementById(selId + '-pk'); if (!list || !box || list.hidden) return;
+  const r = (document.getElementById(selId + '-search').hidden ? document.getElementById(selId + '-chosen') : document.getElementById(selId + '-search')).getBoundingClientRect();
+  const vw = window.innerWidth, vh = window.innerHeight, w = Math.min(vw - 16, Math.max(r.width, (c && c.listWidth) || 340));
+  const below = vh - r.bottom - 10, above = r.top - 10, up = below < 220 && above > below;
+  Object.assign(list.style, { position: 'fixed', left: Math.max(8, Math.min(r.left, vw - w - 8)) + 'px', right: 'auto', width: w + 'px', zIndex: '100000',
+    top: up ? 'auto' : (r.bottom + 4) + 'px', bottom: up ? (vh - r.top + 4) + 'px' : 'auto', maxHeight: Math.max(140, Math.min(380, (up ? above : below) - 4)) + 'px', margin: '0' });
+}
+window.addEventListener('resize', () => Object.keys(BC_PK).forEach(id => bcPickClose(id, true)));
+document.addEventListener('scroll', e => { if (e.target && e.target.closest && e.target.closest('.rct-pick-list')) return; Object.keys(BC_PK).forEach(id => { const l = document.getElementById(id + '-list'); if (l && !l.hidden) bcPickClose(id, true); }); }, true);
 function bcPickClose(selId, restore){
   const list = document.getElementById(selId + '-list'), q = document.getElementById(selId + '-q'); if (!list) return;
   list.hidden = true; if (q) q.setAttribute('aria-expanded', 'false'); document.getElementById(selId + '-pk')?.classList.remove('open');
@@ -1275,6 +1286,7 @@ function piProdOpen(i, input){
   el.style.position = 'fixed'; el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px'; el.style.width = w + 'px';
   const below = window.innerHeight - r.bottom;
   if (below < 260 && r.top > below) { el.style.top = 'auto'; el.style.bottom = (window.innerHeight - r.top + 4) + 'px'; } else { el.style.bottom = 'auto'; el.style.top = (r.bottom + 4) + 'px'; }
+  el.style.maxHeight = Math.max(140, Math.min(340, (below < 260 && r.top > below ? r.top : below) - 14)) + 'px';
   el.style.zIndex = '100000'; el.hidden = false; input.setAttribute('aria-expanded', 'true');
 }
 function piProdClose(){ const el = document.getElementById('pi-prod-list'); if (el) el.hidden = true; if (PI_PP.input) PI_PP.input.setAttribute('aria-expanded', 'false'); }

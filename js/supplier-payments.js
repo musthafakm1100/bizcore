@@ -199,9 +199,9 @@ function openPayAdvance(){
   // V268.5: type-and-search pickers (approved mockup V5_1)
   bcPickEnhance('spa-sup', { items: bcSupplierPickItems, placeholder: 'Search supplier…', empty: 'No supplier matches. Check the spelling, or add the supplier in Master Data.' });
   bcPickEnhance('spa-so', { items: () => sos.map(so => { const its = (so.items || []).filter(it => it && (it.desc || it.description)); const d = so.date ? (typeof fmtDate === 'function' ? fmtDate(so.date) : so.date) : '';
-      return { key: so.id, title: `${so.customer || ''} · ${so.soNo || ''}`, right: d, sub: `${its.length} line${its.length === 1 ? '' : 's'}${its.length ? ' · ' + its.slice(0, 2).map(it => it.desc || it.description).join(', ') + (its.length > 2 ? ' …' : '') : ''}`,
+      return { key: so.id, title: `${so.soNo || ''} · ${so.customer || ''}`, right: d, sub: `${its.length} line${its.length === 1 ? '' : 's'}${its.length ? ' · ' + its.slice(0, 2).map(it => it.desc || it.description).join(', ') + (its.length > 2 ? ' …' : '') : ''}`,
         text: [so.soNo, so.customer, so.ref || '', ...its.map(it => it.desc || it.description)].join(' ') }; }),
-    placeholder: 'Search by SO no., customer or item…', clearLabel: 'No sales order', empty: 'No open sales order matches.',
+    placeholder: 'Search by SO no., customer or item…', clearLabel: 'No sales order', listWidth: 420, empty: 'No open sales order matches.',
     hint: '↑ ↓ to move · Enter to choose · cancelled orders hidden' });
   if (typeof openModalWithSize === 'function') openModalWithSize('sp-adv-modal'); else m.classList.add('open');
   setTimeout(() => bcPickFocus('spa-sup'), 60);

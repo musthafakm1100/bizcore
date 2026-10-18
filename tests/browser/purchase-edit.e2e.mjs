@@ -75,12 +75,16 @@ test('V268.3 supplier payments page, advances, edits', { timeout: 300000 }, asyn
     await aisha.click('#sp-new-btn'); await aisha.waitForSelector('#sp-adv-modal.open');
     assert.equal(await aisha.isDisabled('#spa-save'), true);
     // V268.5: type-and-search pickers (approved mockup V5_1)
+    assert.equal(await aisha.isVisible('#spa-sup-list'), false, 'no list until the field is clicked');
+    await aisha.click('#spa-sup-q'); await sleep(60);
+    const fits = await aisha.evaluate(() => { const r = document.getElementById('spa-sup-list').getBoundingClientRect(); return r.bottom <= window.innerHeight && r.top >= 0; });
+    assert.equal(fits, true, 'the list fits in the window');
     await aisha.fill('#spa-sup-q', 'abc'); await sleep(80);
     assert.match(await aisha.textContent('#spa-sup-list'), /ABC Trading Est/); assert.doesNotMatch(await aisha.textContent('#spa-sup-list'), /Blue Crystal/);
     await aisha.press('#spa-sup-q', 'Enter'); await sleep(80);
     assert.equal(await aisha.inputValue('#spa-sup'), 'sup1'); assert.match(await aisha.textContent('#spa-sup-chosen'), /ABC Trading Est/);
     await aisha.fill('#spa-so-q', 'snc 0004'); await sleep(80);
-    assert.match(await aisha.textContent('#spa-so-list'), /SNC Lavalin Arabia · SO-2610-0004/);
+    assert.match(await aisha.textContent('#spa-so-list'), /SO-2610-0004 · SNC Lavalin Arabia/);
     await aisha.keyboard.press('Enter'); await sleep(80);
     assert.equal(await aisha.inputValue('#spa-so'), 'so4');
     await sleep(200); await shot(aisha, 'V2685_pay_advance_picker');

@@ -3386,11 +3386,11 @@ onAuthStateChanged(auth, user => {
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js
-    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=268.5'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
+    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=268.51'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
     // V268.3: supplier-payments.js (Supplier Payments, advances, edits) after purchases.js
     // V268.4: stock.js (Purchasing → Stock) after supplier-payments.js
     const loadStock = () => { const st = document.createElement('script'); st.id = 'bizcore-stock-script'; st.src = 'js/stock.js?v=268.5'; st.onload = start; st.onerror = () => { console.error('[BizCore] stock.js could not be loaded'); start(); }; document.body.appendChild(st); };
-    const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=268.5'; sp.onload = loadStock; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
+    const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=268.51'; sp.onload = loadStock; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
     // V267.2: cash-ui.js + cashbank.js (Cash & Bank) after accounts.js, before app.js
     const loadCash = () => { const u = document.createElement('script'); u.id = 'bizcore-cashui-script'; u.src = 'js/cash-ui.js?v=268.31'; u.onload = u.onerror = () => { const c = document.createElement('script'); c.id = 'bizcore-cashbank-script'; c.src = 'js/cashbank.js?v=268.31'; c.onload = loadPurchases; c.onerror = () => { console.error('[BizCore] cashbank.js could not be loaded'); loadPurchases(); }; document.body.appendChild(c); }; document.body.appendChild(u); };
     // V266: receipts.js (Payment Receipts) after invoicing.js, before app.js
