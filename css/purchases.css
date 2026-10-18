@@ -440,3 +440,23 @@ tr.pi-adv-line .pi-pay-acc{background:#faf8ff}
 .bc-label-row{display:flex!important;align-items:center;justify-content:space-between;gap:8px}
 .bc-label-link{border:0;background:none;color:var(--c-1d5fa3,#1d5fa3);font-size:11.5px;font-weight:650;cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:3px;text-transform:none;letter-spacing:0}
 .bc-label-link:hover{text-decoration:underline}
+
+/* ── V268.6 lookup window (approved mockup V6_2) ── */
+.bc-picker .bc-lk-btn{margin-left:auto;border:0;width:30px;height:28px;border-radius:7px;background:#eef5fc;color:var(--c-1d5fa3,#1d5fa3);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 30px;font-size:15px}
+.bc-picker .bc-lk-btn:hover{background:#e0ecf8}
+.bc-lk .bc-lk-search{margin-bottom:10px}
+.bc-lk-wrap{border:1px solid #e2e8f0;border-radius:9px;overflow:auto;max-height:min(420px,55vh)}
+.bc-lk-table{width:100%;border-collapse:collapse;font-size:13px}
+.bc-lk-table th{position:sticky;top:0;z-index:1;background:#f8fafc;text-align:left;font-size:11px;font-weight:700;color:#64748b;letter-spacing:.04em;text-transform:uppercase;padding:9px 12px;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+.bc-lk-table td{padding:9px 12px;border-bottom:1px solid #eef1f5;white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.bc-lk-table tr:last-child td{border-bottom:0}
+.bc-lk-table tbody tr:hover td{background:#f6f9fc}
+.bc-lk-table tbody tr.on td{background:var(--c-eef5fc,#eef5fc)}
+.bc-lk-table tbody tr.on td:first-child{box-shadow:inset 3px 0 0 var(--c-2e75b6,#2e75b6)}
+.bc-lk-table .num{text-align:right;font-variant-numeric:tabular-nums}
+.bc-lk-table td.bc-lk-no{font-weight:650!important;color:var(--c-1d5fa3,#1d5fa3)!important}
+.bc-lk-table td.bc-lk-mut{color:#64748b!important;font-size:12.5px}
+.bc-lk-table tr.cur td:first-child::after{content:' ✓';color:#16a34a;font-weight:700}
+.bc-lk-empty{color:#64748b;text-align:center;padding:22px!important;cursor:default}
+.bc-lk-foot{font-size:12px;color:#64748b;margin-top:9px}
+@media (max-width:760px){ .bc-lk-wrap{max-height:none} .bc-lk-table td{max-width:180px} }

@@ -212,6 +212,9 @@ const DEFAULT_UOM_MASTER = [
   {id:'uom-lumpsum',code:'Lump sum',name:'Lump sum',decimals:0,step:1,active:true}
 ];
 let uomMaster=[];
+/* V268.51: every list of names is shown A → Z (case ignored, numbers in order) */
+function bcSortBy(list,keyFn){ return (list||[]).slice().sort((a,b)=>String(keyFn(a)??'').localeCompare(String(keyFn(b)??''),undefined,{sensitivity:'base',numeric:true})); }
+function bcSortContacts(list){ return bcSortBy(list,c=>c.name).sort((a,b)=>(b.isDefault?1:0)-(a.isDefault?1:0)); }
 let editingUomId=null;
 function loadUomMaster(){
   try{uomMaster=JSON.parse(localStorage.getItem('bizcore_uom_master')||'[]');}catch(e){uomMaster=[];}
@@ -2185,20 +2188,19 @@ let quoteCustomerHighlight = -1;
 function resetQuoteProductDropdownPosition(){
   const dd=document.getElementById('prod-search-dd');
   if(!dd)return;
-  dd.style.position='absolute';dd.style.top='100%';dd.style.left='0';dd.style.right='0';dd.style.width='auto';
+  dd._anchor=document.getElementById('prod-search-inp');   // V268.51: floats under the search field and fits the screen
 }
 function positionQuoteProductDropdown(anchor){
   const dd=document.getElementById('prod-search-dd');
   if(!dd||!anchor)return;
-  const r=anchor.getBoundingClientRect();
-  dd.style.position='fixed';dd.style.top=(r.bottom+2)+'px';dd.style.left=r.left+'px';dd.style.right='auto';dd.style.width=Math.max(360,r.width)+'px';dd.style.zIndex='1400';
+  dd._anchor=anchor; bcFitList(dd,anchor,360);   // V268.51: fits the screen, opens upwards when needed
 }
 function openProdSearch() { activeQuoteProductRow=null; resetQuoteProductDropdownPosition(); filterProdSearch(); }
 function closeProdSearch() { const dd=document.getElementById('prod-search-dd'); if(dd) dd.style.display='none'; quoteProductHighlight=-1; }
 function filterProdSearch() {
   const q = document.getElementById('prod-search-inp')?.value.toLowerCase()||'';
   const dd = document.getElementById('prod-search-dd'); if (!dd) return;
-  const matches = products.filter(p => !q || `${p.name} ${p.brand} ${p.model} ${p.code}`.toLowerCase().includes(q)).slice(0,12);
+  const matches = bcSortBy(products.filter(p => !q || `${p.name} ${p.brand} ${p.model} ${p.code}`.toLowerCase().includes(q)),p=>p.name).slice(0,12);
   dd.innerHTML = matches.map(p => {
     const specPill = (p.specs||[]).slice(0,3).map(s=>`<span style="background:var(--c-ebf3fb);color:var(--c-1f4e79);border-radius:3px;padding:1px 5px;font-size:10px;margin-right:3px">${s.k}: ${s.v}</span>`).join('');
     const ddImg = p.image
@@ -2214,6 +2216,7 @@ function filterProdSearch() {
     </div>`;
   }).join('') || `<div style="padding:10px 12px;font-size:12px;color:var(--gray)">No products found. <a href="#" onmousedown="showPage('products',null);closeModal('quote-modal');return false" style="color:var(--blue)">Add to database</a></div>`;
   dd.style.display = 'block';
+  if (dd._anchor) bcFitList(dd, dd._anchor, 360);
   quoteProductHighlight = matches.length ? 0 : -1;
   updateQuoteProductHighlight();
 }
@@ -2675,7 +2678,7 @@ function saveQuickUom(){
   if(quickUomTarget){const sel=document.getElementById(quickUomTarget);if(sel){if(![...sel.options].some(o=>o.value===code)){const o=document.createElement('option');o.value=code;o.textContent=code+' — '+name;sel.appendChild(o);}sel.value=code;sel.dispatchEvent(new Event('change',{bubbles:true}));}}
   closeModal('qu-modal'); showToast(`Unit ${code} — ${name} added for everyone`,'success');
 }
-function refreshProductUomSelect(){ const sel=document.getElementById('pm-uom');if(!sel)return;const current=sel.value;sel.innerHTML=uomMaster.filter(u=>u.active).map(u=>`<option value="${escapeHtml(u.code)}">${escapeHtml(u.code)} — ${escapeHtml(u.name)}</option>`).join('');if([...sel.options].some(o=>o.value===current))sel.value=current; }
+function refreshProductUomSelect(){ const sel=document.getElementById('pm-uom');if(!sel)return;const current=sel.value;sel.innerHTML=bcSortBy(uomMaster.filter(u=>u.active),u=>u.code).map(u=>`<option value="${escapeHtml(u.code)}">${escapeHtml(u.code)} — ${escapeHtml(u.name)}</option>`).join('');if([...sel.options].some(o=>o.value===current))sel.value=current; }
 
 function escapeHtml(value){
   return String(value??'').replace(/[&<>"']/g,function(ch){
@@ -3660,7 +3663,7 @@ function renderTable() {
   const fCust=document.getElementById('filter-customer').value;
   const fSort=document.getElementById('filter-sort').value;
 
-  const custSet=[...new Set(quotations.map(q=>q.company))].sort();
+  const custSet=bcSortBy([...new Set(quotations.map(q=>q.company).filter(Boolean))],x=>x);
   const sel=document.getElementById('filter-customer');
   const prev=sel.value;
   sel.innerHTML='<option value="">All customers</option>'+custSet.map(c=>`<option${c===prev?' selected':''}>${c}</option>`).join('');
@@ -4455,7 +4458,7 @@ function filterCustDropdown() { renderCustDropdown(document.getElementById('f-cu
 function renderCustDropdown(q) {
   const dd=document.getElementById('cust-dd');
   const term=q.toLowerCase();
-  const matches=customers.filter(c=>!term||c.company.toLowerCase().includes(term)||(c.contact||'').toLowerCase().includes(term));
+  const matches=bcSortBy(customers.filter(c=>!term||c.company.toLowerCase().includes(term)||(c.contact||'').toLowerCase().includes(term)),c=>c.company);
   dd.innerHTML=matches.map(c=>`
     <div class="cust-option" data-customer-id="${c.id}" onmousedown="selectCustomer('${c.id}')">
       <div class="co-name">${c.company}</div>
@@ -4479,6 +4482,7 @@ function handleQuoteCustomerKey(event){
   const dd=document.getElementById('cust-dd');
   const options=dd?[...dd.querySelectorAll('.cust-option[data-customer-id]')]:[];
   if(event.key==='Escape'){closeCustDropdown();return;}
+  if(event.key==='ArrowDown'&&!dd?.classList.contains('open')){event.preventDefault();openCustDropdown();return;}   // V268.51: opens on click, typing or ↓
   if(!options.length)return;
   if(event.key==='ArrowDown'){event.preventDefault();quoteCustomerHighlight=(quoteCustomerHighlight+1)%options.length;updateQuoteCustomerHighlight();return;}
   if(event.key==='ArrowUp'){event.preventDefault();quoteCustomerHighlight=(quoteCustomerHighlight-1+options.length)%options.length;updateQuoteCustomerHighlight();return;}
@@ -4548,7 +4552,7 @@ function renderContactDropdown(q) {
   const contacts = getSelectedCustomerContacts();
   if (!contacts.length) { dd.classList.remove('open'); return; }
   const term = (q||'').toLowerCase();
-  const matches = contacts.filter(ct => !term || ct.name.toLowerCase().includes(term));
+  const matches = bcSortContacts(contacts.filter(ct => !term || ct.name.toLowerCase().includes(term)));
   dd.innerHTML = matches.map(ct => `
     <div class="cust-option" onmousedown="selectContact('${ct.name.replace(/'/g,"\'")}')">
       <div class="co-name">${ct.name}${ct.isDefault?' <span style="font-size:10px;background:var(--blue);color:#fff;padding:1px 6px;border-radius:8px;margin-left:4px">Default</span>':''}</div>
@@ -4939,7 +4943,7 @@ function addItemRow(item={}) {
   const selectedUom=item.uom||(isProduct?'Pcs':'Job');
   const options=(isProduct?uomMaster.filter(u=>u.active):uomMaster.filter(u=>u.active && ['Job','Hours','Days','Months','Visit','Lump sum','EA'].includes(u.code)));
   if(!options.some(u=>u.code===selectedUom)) options.push(getUomRule(selectedUom));
-  const uomOptions=options.map(u=>`<option value="${escapeHtml(u.code)}"${u.code===selectedUom?' selected':''}>${escapeHtml(u.code)}</option>`).join('');
+  const uomOptions=bcSortBy(options,u=>u.code).map(u=>`<option value="${escapeHtml(u.code)}"${u.code===selectedUom?' selected':''}>${escapeHtml(u.code)}</option>`).join('');
   const qtyValue=item.qty!==undefined&&item.qty!==''?formatQtyForUom(item.qty,selectedUom):(isProduct?'':'1');
   const priceValue=item.up!==undefined&&item.up!==''?parseBizNumber(item.up).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'';
   if (isProduct) {
@@ -5084,7 +5088,7 @@ function setModalSize(modalId, size) {
 const modalNavHistory = [];
 let lastClosedModal = null;
 let lastClosedModalAt = 0;
-const modalNavExcluded = new Set(['confirm-modal','validation-dialog','template-picker-modal','ds-move-modal','ds-ask-modal','ds-dec-modal','qu-modal','pi-np-modal']);   // V268.5: small dialogs get no Back button
+const modalNavExcluded = new Set(['confirm-modal','validation-dialog','template-picker-modal','ds-move-modal','ds-ask-modal','ds-dec-modal','qu-modal','pi-np-modal','bc-lookup-modal']);   // V268.5: small dialogs get no Back button
 /* V264.8 — Entry screens of the order workflow. Once one of them is closed (saved or cancelled) its work is
    finished, so it must never become a "Back" target: the screen opened right after it (e.g. the Sales Order
    refreshed after saving an invoice) must not record it as the screen to return to, and any return entry that
@@ -7400,7 +7404,7 @@ function filterRFQCustDD() {
   const searchEl = document.getElementById('rfq-cust-search');
   const q = searchEl.value.toLowerCase();
   const dd = document.getElementById('rfq-cust-dd');
-  const matches = customers.filter(c=>!q||c.company.toLowerCase().includes(q));
+  const matches = bcSortBy(customers.filter(c=>!q||c.company.toLowerCase().includes(q)),c=>c.company);
   const customerRows = matches.map(c=>`<div class="cust-option" data-rfq-customer-id="${c.id}" role="option" aria-selected="false" onmousedown="selectRFQCustomer('${c.id}')"><div class="co-name">${c.company}</div><div class="co-sub">${c.contact||''}</div></div>`).join('');
   const addLabel = searchEl.value.trim() ? `Add “${searchEl.value.trim()}” as new customer` : 'Add new customer';
   dd.innerHTML = customerRows + `<div class="cust-option add-new" data-rfq-add-new="1" role="option" aria-selected="false" onmousedown="quickAddCustomerFromRFQ(event)"><i class="ti ti-plus" style="margin-right:6px"></i>${addLabel}</div>`;
@@ -7427,7 +7431,7 @@ function populateRFQContacts(customer, selectedName='') {
     select.value = '';
     return;
   }
-  select.innerHTML = contacts.map(ct=>`<option value="${ct.name.replace(/"/g,'&quot;')}">${ct.name}${ct.title?' — '+ct.title:''}${ct.isDefault?' (Default)':''}</option>`).join('');
+  select.innerHTML = bcSortContacts(contacts).map(ct=>`<option value="${ct.name.replace(/"/g,'&quot;')}">${ct.name}${ct.title?' — '+ct.title:''}${ct.isDefault?' (Default)':''}</option>`).join('');
   const def = contacts.find(x=>x.isDefault)||contacts[0];
   select.value = contacts.some(x=>x.name===selectedName) ? selectedName : (def?.name||'');
 }
@@ -8091,7 +8095,7 @@ function closePricingSupDD() { document.getElementById('pricing-sup-dd').classLi
 function filterPricingSupDD() {
   const q = document.getElementById('pricing-sup-search').value.toLowerCase();
   const dd = document.getElementById('pricing-sup-dd');
-  const matches = suppliers.filter(s=>!q||s.company.toLowerCase().includes(q));
+  const matches = bcSortBy(suppliers.filter(s=>!q||s.company.toLowerCase().includes(q)),s=>s.company);
   const supplierRows = matches.map(s=>`<div class="cust-option" onmousedown="selectPricingSupplier('${s.id}')"><div class="co-name">${s.company}</div><div class="co-sub">${s.contact||''} ${s.phone||''}</div></div>`).join('');
   const typedName = document.getElementById('pricing-sup-search').value.trim();
   dd.innerHTML = supplierRows
@@ -8196,7 +8200,7 @@ function addPricingRow(item={}) {
   const primaryRef = document.getElementById('pricing-sup-ref')?.value.trim() || '';
   const rowSupplier = item.supplierName ?? item.supplier ?? primarySupplier;
   const rowSupRef = item.supRef ?? item.supplierRef ?? primaryRef;
-  const supplierOptions = ['<option value=""></option>'].concat(suppliers.map(s=>`<option value="${String(s.company).replace(/"/g,'&quot;')}">${s.company}</option>`)).join('');
+  const supplierOptions = ['<option value=""></option>'].concat(bcSortBy(suppliers,s=>s.company).map(s=>`<option value="${String(s.company).replace(/"/g,'&quot;')}">${s.company}</option>`)).join('');
   const tr = document.createElement('tr');
   tr.dataset.lineId = item.lineId || ('pricing-line-' + Date.now() + '-' + Math.random().toString(36).slice(2,8));
   tr.dataset.sortOrder = String(Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : n);
@@ -8607,7 +8611,7 @@ function closePricingProdSearch() { const dd=document.getElementById('pricing-pr
 function filterPricingProdSearch() {
   const q = (document.getElementById('pricing-prod-search')?.value||'').toLowerCase();
   const dd = document.getElementById('pricing-prod-dd'); if (!dd) return;
-  const matches = products.filter(p => !q || `${p.name} ${p.brand} ${p.model} ${p.code} ${p.category}`.toLowerCase().includes(q)).slice(0,15);
+  const matches = bcSortBy(products.filter(p => !q || `${p.name} ${p.brand} ${p.model} ${p.code} ${p.category}`.toLowerCase().includes(q)),p=>p.name).slice(0,15);
   const resultRows = matches.map(p => {
     const imgHtml = p.image
       ? `<img src="${p.image}" style="width:32px;height:32px;object-fit:contain;border-radius:3px;border:1px solid var(--border);flex-shrink:0">`
@@ -9944,7 +9948,7 @@ function renderSOPage() {
   const customerSelect=document.getElementById('so-customer-filter');
   if(customerSelect){
     const selected=customerSelect.value;
-    const names=[...new Set(all.map(s=>s.customer).filter(Boolean))].sort();
+    const names=bcSortBy([...new Set(all.map(s=>s.customer).filter(Boolean))],x=>x);
     customerSelect.innerHTML='<option value="">All customers</option>'+names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
     customerSelect.value=names.includes(selected)?selected:'';
   }
@@ -14368,4 +14372,40 @@ window.addEventListener('load',()=>{
   clearAllDNFilters = function(){ D.set('dn', { preset:'all' }); return _clearAllDN.apply(this, arguments); };
   // Invoices (state read by renderInvoiceRegister)
   D.register('invreg', () => { if (typeof renderInvoiceRegister === 'function') renderInvoiceRegister(); });
+})();
+
+/* ══════════════════════════════════════════════════
+   V268.51 — drop-down lists float over the window and fit the screen
+   (opens upwards when there is more room above; scroll inside the list, never the window).
+   Older search lists (.cust-dropdown), the New Receipt customer picker and the quotation product list.
+══════════════════════════════════════════════════ */
+function bcFitList(list, anchor, minWidth){
+  if(!list||!anchor) return;
+  const r=anchor.getBoundingClientRect(), vw=window.innerWidth, vh=window.innerHeight;
+  if(!r.width&&!r.height) return;
+  const w=Math.min(vw-16,Math.max(r.width,minWidth||0)), below=vh-r.bottom-10, above=r.top-10, up=below<200&&above>below;
+  Object.assign(list.style,{position:'fixed',left:Math.max(8,Math.min(r.left,vw-w-8))+'px',right:'auto',width:w+'px',zIndex:'100000',margin:'0',
+    top:up?'auto':(r.bottom+2)+'px',bottom:up?(vh-r.top+2)+'px':'auto',maxHeight:Math.max(130,Math.min(380,(up?above:below)-4))+'px',overflowY:'auto'});
+}
+function bcUnfitList(list){ if(!list) return; ['position','left','right','width','zIndex','margin','top','bottom','maxHeight','overflowY'].forEach(k=>list.style[k]=''); }
+function bcListAnchor(list){
+  if(list.classList.contains('cust-dropdown')) return list.parentElement.querySelector('input')||list.parentElement;
+  if(list.id==='rn-cust-list'){ const s=document.getElementById('rn-pick-search'); return s&&!s.hidden?s:document.getElementById('rn-chosen'); }
+  return null;
+}
+function bcListOpen(list){ return list.classList.contains('cust-dropdown')?list.classList.contains('open'):!list.hidden; }
+function bcRefitLists(){
+  document.querySelectorAll('.cust-dropdown.open, #rn-cust-list:not([hidden])').forEach(l=>bcFitList(l,bcListAnchor(l),l.id==='rn-cust-list'?340:260));
+  const pd=document.getElementById('prod-search-dd'); if(pd&&pd.style.display==='block'&&pd._anchor) bcFitList(pd,pd._anchor,360);
+}
+(function(){
+  if(window.__bcListObserver) return;
+  window.__bcListObserver=new MutationObserver(muts=>{
+    muts.forEach(m=>{ const t=m.target; if(!(t instanceof HTMLElement)) return;
+      if(!(t.classList.contains('cust-dropdown')||t.id==='rn-cust-list')) return;
+      if(bcListOpen(t)) bcFitList(t,bcListAnchor(t),t.id==='rn-cust-list'?340:260); else bcUnfitList(t); });
+  });
+  window.__bcListObserver.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','hidden']});
+  window.addEventListener('resize',bcRefitLists);
+  document.addEventListener('scroll',e=>{ if(e.target&&e.target.closest&&e.target.closest('.cust-dropdown,#rn-cust-list,#prod-search-dd')) return; bcRefitLists(); },true);
 })();

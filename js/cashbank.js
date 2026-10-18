@@ -119,7 +119,7 @@ function cbOpenHandover(entryId) {
   const outL = entryId ? lib.lines.find(l => l.entryId === entryId && l.amountOut > 0) : null;
   if (entryId && (!inL || !outL)) { cbToast('This handover is not loaded yet.', 'error'); return; }
   const active = cash.filter(a => a.active !== false);
-  const opt = (list, sel) => list.map(a => `<option value="${cbEsc(a.id)}"${a.id === sel ? ' selected' : ''}>${cbEsc(a.name)}${a.custodianName ? ' (' + cbEsc(a.custodianName) + ')' : ''}</option>`).join('');
+  const opt = (list, sel) => bcSortBy(list, a => a.name).map(a => `<option value="${cbEsc(a.id)}"${a.id === sel ? ' selected' : ''}>${cbEsc(a.name)}${a.custodianName ? ' (' + cbEsc(a.custodianName) + ')' : ''}</option>`).join('');
   const fromSel = outL ? outL.accountId : (cbAcc().find(a => a.id === cbAccountId && a.type === 'cash') ? cbAccountId : '');
   const m = cbModal('cb-ho', entryId ? `Handover ${outL.voucherNo}` : 'New handover', `
     <div class="full"><label for="cb-ho-from">From (gives the cash) *</label><select id="cb-ho-from"${entryId ? ' disabled' : ''}><option value="">Choose…</option>${opt(entryId ? cash : active, fromSel)}</select></div>

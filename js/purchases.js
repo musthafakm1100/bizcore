@@ -199,7 +199,7 @@ function openNewPurchaseInvoice(){
   piStartAccounts();
   const sups = (typeof suppliers !== 'undefined' ? suppliers : []).slice().sort((a, b) => String(a.company || '').localeCompare(String(b.company || '')));
   document.getElementById('pe-supplier').innerHTML = '<option value="">Choose the supplier…</option>' + sups.map(s => `<option value="${piEsc(s.id)}">${piEsc(s.company || s.name || s.id)}</option>`).join('');
-  bcPickEnhance('pe-supplier', { items: bcSupplierPickItems, placeholder: 'Search supplier…', empty: 'No supplier matches. Check the spelling, or add the supplier in Master Data.' });   // V268.5
+  bcPickEnhance('pe-supplier', { items: bcSupplierPickItems, lookup: BC_SUPPLIER_LOOKUP, placeholder: 'Search supplier…', empty: 'No supplier matches. Check the spelling, or add the supplier in Master Data.' });   // V268.5
   ['pe-invno', 'pe-zoho', 'pe-suptotal', 'pe-pay-disc'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('pe-date').value = today;
   document.getElementById('pe-due').value = piAddDays(today, 30);
@@ -461,7 +461,7 @@ function piAccIcon(t){ const m = PI_TY[t] || PI_TY.cash; return `<span class="pi
 function piAccLabel(a){ return a ? `${a.code} · ${a.name}` : ''; }
 /** Account choices, grouped by type (only active accounts; the current one is kept). */
 function piAccOptions(current, types, advances){
-  const list = piAccounts().filter(a => (a.active !== false || a.id === current) && (!types || types.includes(a.type)));
+  const list = bcSortBy(piAccounts().filter(a => (a.active !== false || a.id === current) && (!types || types.includes(a.type))), a => a.code + ' ' + a.name);
   const grp = { cash: 'Cash', card: 'Card', bank: 'Bank' };
   const adv = (advances || []).length ? `<optgroup label="Advances">${advances.map(a => `<option value="adv:${piEsc(a.id)}"${'adv:' + a.id === current ? ' selected' : ''}>${piEsc(piAdvLabel(a))}</option>`).join('')}</optgroup>` : '';
   return '<option value="">Choose the account…</option>' + adv + Object.keys(grp).filter(t => list.some(a => a.type === t)).map(t =>
@@ -1155,11 +1155,11 @@ function bcPickEnhance(selId, cfg){
   if (!box) {
     box = document.createElement('div'); box.id = selId + '-pk';
     box.className = 'rct-picker bc-picker' + (cfg.compact ? ' bc-pick-compact' : '');
-    box.innerHTML = `<div class="rct-pick-chosen" id="${selId}-chosen" hidden></div><div class="rct-pick-search" id="${selId}-search"><i class="ti ti-search"></i><input id="${selId}-q" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="${selId}-list"></div><div class="rct-pick-list" id="${selId}-list" role="listbox" hidden></div>`;
+    box.innerHTML = `<div class="rct-pick-chosen" id="${selId}-chosen" hidden></div><div class="rct-pick-search" id="${selId}-search"><i class="ti ti-search"></i><input id="${selId}-q" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="${selId}-list">${cfg.lookup ? `<button type="button" class="bc-lk-btn" tabindex="-1" title="Open the list" aria-label="Open the list" onclick="bcLookupOpen('${selId}','')"><i class="ti ti-list-search"></i></button>` : ''}</div><div class="rct-pick-list" id="${selId}-list" role="listbox" hidden></div>`;
     sel.insertAdjacentElement('afterend', box); sel.hidden = true; sel.classList.add('bc-pick-native'); sel.tabIndex = -1;
     const q = document.getElementById(selId + '-q');
-    q.addEventListener('input', () => { BC_PK[selId].idx = 0; bcPickOpen(selId); });
-    q.addEventListener('click', () => bcPickOpen(selId));
+    q.addEventListener('input', () => { const c = BC_PK[selId]; if (c.lookup) { const t = q.value; q.value = ''; bcLookupOpen(selId, t); return; } c.idx = 0; bcPickOpen(selId); });
+    q.addEventListener('click', () => { if (BC_PK[selId].lookup) bcLookupOpen(selId, ''); else bcPickOpen(selId); });
     q.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== q) bcPickClose(selId, true); }, 150));
     q.addEventListener('keydown', e => bcPickKey(selId, e));
     document.getElementById(selId + '-list').addEventListener('mousedown', e => e.preventDefault());
@@ -1224,6 +1224,7 @@ function bcPickClose(selId, restore){
 }
 function bcPickKey(selId, e){
   const c = BC_PK[selId]; if (!c) return;
+  if (c.lookup) { if (e.key === 'ArrowDown' || e.key === 'Enter') { e.preventDefault(); bcLookupOpen(selId, ''); } return; }
   const list = document.getElementById(selId + '-list');
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     e.preventDefault(); if (list.hidden) { bcPickOpen(selId); return; }
@@ -1244,16 +1245,91 @@ function bcPickSetValue(selId, key){
 function bcPickChoose(selId, i){ const c = BC_PK[selId], it = c && c.shown[i]; if (it) bcPickSetValue(selId, it.key); }
 function bcPickClear(selId){ bcPickSetValue(selId, ''); setTimeout(() => document.getElementById(selId + '-q')?.focus(), 0); }
 function bcPickChange(selId){
+  if (BC_PK[selId] && BC_PK[selId].lookup) { bcLookupOpen(selId, ''); return; }
   document.getElementById(selId + '-chosen').hidden = true; document.getElementById(selId + '-search').hidden = false;
   const q = document.getElementById(selId + '-q'); q.value = ''; q.disabled = false; q.focus();
 }
 function bcPickFocus(selId){ const sel = document.getElementById(selId); if (sel && sel.value) document.querySelector(`#${selId}-chosen .rct-pick-change`)?.focus(); else document.getElementById(selId + '-q')?.focus(); }
+/* ═══ V268.6 LOOKUP WINDOW (approved mockup V6_2, option 3) ═══
+   Clicking or typing in a picker opens "Choose …": a search box and a table; ↑ ↓, Enter or double-click chooses.
+   cfg.lookup = { title, sub, noun, columns: [{ label, cls }] }; each item has cells: [...] in the same order. */
+const BC_LK = { selId: null, idx: 0, shown: [] };
+function bcLookupOpen(selId, text){
+  const c = BC_PK[selId], sel = document.getElementById(selId); if (!c || !c.lookup || !sel || sel.disabled) return;
+  let m = document.getElementById('bc-lookup-modal');
+  if (!m) { m = document.createElement('div'); m.id = 'bc-lookup-modal'; m.className = 'modal-overlay bc-ds-overlay'; }
+  document.body.appendChild(m);   // in front
+  BC_LK.selId = selId; BC_LK.idx = 0;
+  const L = c.lookup, cols = L.columns || [{ label: L.noun || 'Name' }];
+  const sub = typeof L.sub === 'function' ? L.sub() : (L.sub || '');
+  m.innerHTML = `<div class="modal pi-paym bc-lk" role="dialog" aria-modal="true" aria-labelledby="bclk-title" style="--pi-w:${L.width || 800}px">
+    <div class="modal-header"><div><h2 id="bclk-title">${piEsc(L.title || 'Choose')}</h2>${sub ? `<div class="so-create-subtitle">${piEsc(sub)}</div>` : ''}</div><button class="close-btn" type="button" onclick="bcLookupClose()" aria-label="Close">✕</button></div>
+    <div class="modal-body">
+      <div class="rct-pick-search bc-lk-search"><i class="ti ti-search"></i><input id="bclk-q" autocomplete="off" placeholder="${piEsc(c.placeholder || 'Search…')}" aria-label="Search"></div>
+      <div class="bc-lk-wrap"><table class="bc-lk-table"><thead><tr>${cols.map(k => `<th class="${k.cls || ''}">${piEsc(k.label)}</th>`).join('')}</tr></thead><tbody id="bclk-body"></tbody></table></div>
+      <div class="bc-lk-foot" id="bclk-foot"></div>
+    </div>
+    <div class="modal-footer">${c.clearLabel && sel.value ? `<button class="btn btn-secondary" type="button" onclick="bcLookupPick(-1)"><i class="ti ti-x"></i>${piEsc(c.clearLabel)}</button><span style="flex:1"></span>` : ''}<button class="btn btn-secondary" type="button" onclick="bcLookupClose()">Cancel</button><button class="btn btn-primary" type="button" id="bclk-go" onclick="bcLookupPick(BC_LK.idx)" disabled>Choose</button></div></div>`;
+  const z = Math.max(0, ...[...document.querySelectorAll('.modal-overlay.open')].filter(e => e !== m).map(e => Number(getComputedStyle(e).zIndex) || 0)); m.style.zIndex = z ? String(z + 1) : '';
+  if (typeof openModalWithSize === 'function') openModalWithSize('bc-lookup-modal'); else m.classList.add('open');
+  const q = document.getElementById('bclk-q'); q.value = text || '';
+  q.addEventListener('input', () => { BC_LK.idx = 0; bcLookupRender(); });
+  q.addEventListener('keydown', bcLookupKey);
+  m.onkeydown = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); bcLookupClose(); } };
+  bcLookupRender();
+  const fq = () => { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }; fq(); setTimeout(fq, 30);
+}
+function bcLookupRender(){
+  const c = BC_PK[BC_LK.selId]; if (!c) return;
+  const q = document.getElementById('bclk-q'), body = document.getElementById('bclk-body'), sel = document.getElementById(BC_LK.selId);
+  const words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const all = bcPickItems(BC_LK.selId), hit = all.filter(it => { const h = String(it.text || ((it.title || '') + ' ' + (it.sub || ''))).toLowerCase(); return words.every(w => h.includes(w)); });
+  BC_LK.shown = hit.slice(0, 200);
+  if (!words.length && sel.value) { const i = BC_LK.shown.findIndex(it => it.key === sel.value); if (i >= 0 && BC_LK.idx === 0) BC_LK.idx = i; }
+  if (BC_LK.idx >= BC_LK.shown.length) BC_LK.idx = 0;
+  const cols = (c.lookup.columns || [{}]).length;
+  body.innerHTML = BC_LK.shown.length ? BC_LK.shown.map((it, i) => `<tr data-i="${i}" class="${i === BC_LK.idx ? 'on' : ''}${it.key === sel.value ? ' cur' : ''}">${(it.cells || [it.title]).map((v, k) => `<td class="${(c.lookup.columns[k] || {}).cls || ''}">${piEsc(v == null ? '' : v)}</td>`).join('')}</tr>`).join('')
+    : `<tr><td colspan="${cols}" class="bc-lk-empty">${piEsc(c.empty || 'Nothing matches. Check the spelling.')}</td></tr>`;
+  body.querySelectorAll('tr[data-i]').forEach(tr => {
+    tr.addEventListener('click', () => { BC_LK.idx = +tr.dataset.i; bcLookupMark(); });
+    tr.addEventListener('dblclick', () => bcLookupPick(+tr.dataset.i));
+  });
+  const nounOf = n => { const w = c.lookup.noun || 'items'; return n === 1 ? w.replace(/s$/, '') : w; };
+  document.getElementById('bclk-foot').textContent = `${hit.length === all.length ? all.length + ' ' + nounOf(all.length) : hit.length + ' of ' + all.length + ' ' + nounOf(all.length)}${hit.length > BC_LK.shown.length ? ' · first ' + BC_LK.shown.length + ' shown, type more to narrow' : ''} · ↑ ↓ to move · Enter or double-click to choose`;
+  bcLookupMark();
+}
+function bcLookupMark(){
+  const body = document.getElementById('bclk-body'); if (!body) return;
+  body.querySelectorAll('tr[data-i]').forEach(tr => tr.classList.toggle('on', +tr.dataset.i === BC_LK.idx));
+  const it = BC_LK.shown[BC_LK.idx], go = document.getElementById('bclk-go'), c = BC_PK[BC_LK.selId];
+  go.disabled = !it; go.innerHTML = '<i class="ti ti-check"></i>' + (it ? 'Choose ' + piEsc(it.short || it.title) : 'Choose');
+  body.querySelector('tr.on')?.scrollIntoView({ block: 'nearest' });
+}
+function bcLookupKey(e){
+  const n = BC_LK.shown.length;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (!n) return; BC_LK.idx = (BC_LK.idx + (e.key === 'ArrowDown' ? 1 : n - 1)) % n; bcLookupMark(); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (n) bcLookupPick(BC_LK.idx); }
+}
+function bcLookupClose(){
+  const id = BC_LK.selId;
+  if (typeof closeModal === 'function') closeModal('bc-lookup-modal'); else document.getElementById('bc-lookup-modal')?.classList.remove('open');
+  if (id) { bcPickSync(id); setTimeout(() => bcPickFocus(id), 0); }
+}
+function bcLookupPick(i){
+  const id = BC_LK.selId; if (!id) return;
+  const it = i >= 0 ? BC_LK.shown[i] : null; if (i >= 0 && !it) return;
+  if (typeof closeModal === 'function') closeModal('bc-lookup-modal'); else document.getElementById('bc-lookup-modal')?.classList.remove('open');
+  bcPickSetValue(id, it ? it.key : '');
+  setTimeout(() => bcPickFocus(id), 0);
+}
 /* Supplier list for the picker: the supplier master, newest name order */
 function bcSupplierPickItems(){
   return (typeof suppliers !== 'undefined' ? suppliers : []).filter(s => s && s.id).slice().sort((a, b) => String(a.company || a.name || '').localeCompare(String(b.company || b.name || '')))
     .map(s => { const name = s.company || s.name || s.id; const sub = [s.contact || s.contactPerson || '', s.city || '', s.vat ? 'VAT ' + s.vat : ''].filter(Boolean).join(' · ');
-      return { key: s.id, title: name, sub, text: [name, s.code || '', s.contact || '', s.city || '', s.vat || ''].join(' ') }; });
+      return { key: s.id, title: name, sub, text: [name, s.code || '', s.contact || '', s.city || '', s.vat || '', s.phone || ''].join(' '),
+        cells: [name, s.contact || s.contactPerson || '', s.phone || s.mobile || '', s.city || '', s.vat || ''] }; });
 }
+const BC_SUPPLIER_LOOKUP = { title: 'Choose Supplier', noun: 'suppliers', width: 860, columns: [{ label: 'Supplier' }, { label: 'Contact' }, { label: 'Phone' }, { label: 'City' }, { label: 'VAT no.' }] };
 
 /* ═══════════════════════════════ V268.5 PRODUCT ON STOCK LINES + NEW PRODUCT (approved mockup V5_2) ═══════════════════════════════ */
 const PI_PP = { i: -1, idx: 0, shown: [], q: '' };
@@ -1268,7 +1344,7 @@ function piCanAddProduct(){ return piSettings().newProductRight !== 'admins' || 
 function piProdOpen(i, input){
   const el = piProdListEl(); PI_PP.i = i; PI_PP.input = input; PI_PP.q = input.value;
   const words = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const all = piProducts().filter(p => { const h = [p.name, p.code, p.brand, p.model, p.category].join(' ').toLowerCase(); return words.every(w => h.includes(w)); });
+  const all = bcSortBy(piProducts().filter(p => { const h = [p.name, p.code, p.brand, p.model, p.category].join(' ').toLowerCase(); return words.every(w => h.includes(w)); }), p => p.name);
   PI_PP.shown = all.slice(0, 40); if (PI_PP.idx >= PI_PP.shown.length + 1) PI_PP.idx = 0;
   const C = piCore();
   const opt = (p, k) => { let last = ''; try { const ref = C ? C.lastPaidOf(piInvoices(), C.itemKeyOf({ kind: 'stock', productId: p.id, code: p.code, desc: p.name, uom: p.uom })) : null; if (ref && ref.unit > 0) last = ` · last paid ${piF(ref.unit)}${ref.refNo ? ' (' + ref.refNo + ')' : ''}`; } catch (e) {}
@@ -1338,7 +1414,7 @@ function piOpenNewProduct(lineIdx, typed){
   const m = document.getElementById('pi-np-modal') || Object.assign(document.createElement('div'), { id: 'pi-np-modal', className: 'modal-overlay bc-ds-overlay' });
   document.body.appendChild(m);   // in front of the invoice
   m._line = lineIdx; m._warned = '';
-  const units = (typeof uomMaster !== 'undefined' ? uomMaster : []).filter(u => u.active);
+  const units = bcSortBy((typeof uomMaster !== 'undefined' ? uomMaster : []).filter(u => u.active), u => u.code);
   const s = piState(), l = s && s.lines[lineIdx], defUom = (l && l.uom) || 'Pcs';
   m.innerHTML = `<div class="modal pi-paym" role="dialog" aria-modal="true" aria-labelledby="pnp-title" style="--pi-w:560px">
     <div class="modal-header"><div><h2 id="pnp-title">New Product</h2><div class="so-create-subtitle">Added to Master Data → Products and used on this line</div></div><button class="close-btn" type="button" onclick="piCloseNewProduct()" aria-label="Close">✕</button></div>

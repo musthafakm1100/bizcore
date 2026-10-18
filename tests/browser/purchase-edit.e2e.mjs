@@ -74,18 +74,23 @@ test('V268.3 supplier payments page, advances, edits', { timeout: 300000 }, asyn
     await aisha.evaluate(() => showPage('supplierpayments')); await sleep(300);
     await aisha.click('#sp-new-btn'); await aisha.waitForSelector('#sp-adv-modal.open');
     assert.equal(await aisha.isDisabled('#spa-save'), true);
-    // V268.5: type-and-search pickers (approved mockup V5_1)
-    assert.equal(await aisha.isVisible('#spa-sup-list'), false, 'no list until the field is clicked');
-    await aisha.click('#spa-sup-q'); await sleep(60);
-    const fits = await aisha.evaluate(() => { const r = document.getElementById('spa-sup-list').getBoundingClientRect(); return r.bottom <= window.innerHeight && r.top >= 0; });
-    assert.equal(fits, true, 'the list fits in the window');
-    await aisha.fill('#spa-sup-q', 'abc'); await sleep(80);
-    assert.match(await aisha.textContent('#spa-sup-list'), /ABC Trading Est/); assert.doesNotMatch(await aisha.textContent('#spa-sup-list'), /Blue Crystal/);
-    await aisha.press('#spa-sup-q', 'Enter'); await sleep(80);
+    // V268.6: lookup window (approved mockup V6_2) — opens on click or typing, not when the screen opens
+    assert.equal(await aisha.evaluate(() => !!document.getElementById('bc-lookup-modal')?.classList.contains('open')), false, 'nothing opens by itself');
+    await aisha.click('#spa-sup-q'); await aisha.waitForSelector('#bc-lookup-modal.open');
+    assert.match(await aisha.textContent('#bclk-title'), /Choose Supplier/);
+    await aisha.keyboard.press('Escape'); await sleep(100);
+    assert.equal(await aisha.evaluate(() => document.getElementById('bc-lookup-modal').classList.contains('open')), false);
+    assert.equal(await aisha.evaluate(() => document.getElementById('sp-adv-modal').classList.contains('open')), true, 'Esc closes only the lookup');
+    await aisha.fill('#spa-sup-q', 'abc'); await aisha.waitForSelector('#bc-lookup-modal.open');
+    assert.equal(await aisha.inputValue('#bclk-q'), 'abc');
+    assert.match(await aisha.textContent('#bclk-body'), /ABC Trading Est/); assert.doesNotMatch(await aisha.textContent('#bclk-body'), /Blue Crystal/);
+    await aisha.keyboard.press('Enter'); await sleep(120);
     assert.equal(await aisha.inputValue('#spa-sup'), 'sup1'); assert.match(await aisha.textContent('#spa-sup-chosen'), /ABC Trading Est/);
-    await aisha.fill('#spa-so-q', 'snc 0004'); await sleep(80);
-    assert.match(await aisha.textContent('#spa-so-list'), /SO-2610-0004 · SNC Lavalin Arabia/);
-    await aisha.keyboard.press('Enter'); await sleep(80);
+    await aisha.fill('#spa-so-q', 'snc 0004'); await aisha.waitForSelector('#bc-lookup-modal.open'); await sleep(100);
+    assert.match(await aisha.textContent('#bc-lookup-modal'), /Choose Sales Order[\s\S]*For the advance to ABC Trading Est/);
+    assert.match(await aisha.textContent('#bclk-body'), /SO-2610-0004[\s\S]*SNC Lavalin Arabia[\s\S]*3 lines/);
+    await shot(aisha, 'V2686_lookup_so');
+    await aisha.dblclick('#bclk-body tr[data-i="0"]'); await sleep(120);
     assert.equal(await aisha.inputValue('#spa-so'), 'so4');
     await sleep(200); await shot(aisha, 'V2685_pay_advance_picker');
     await pick(aisha, '#spa-lines .pi-pay-acc', 'bank1'); await sleep(60);

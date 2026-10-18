@@ -131,12 +131,12 @@ function paFillLogins(current){
   (cash ? cash.custodians : []).filter(c => c.active !== false || c.uid === current).forEach(c => add(c.uid, `${c.name} · ${c.email} (cash login)`));
   (cash ? cash.directory : []).forEach(d => add(d.uid, `${d.name || d.email} · ${d.email} (office)`));
   if (current && !seen.has(current)) add(current, `Linked login (${current.slice(0, 8)}…)`);
-  sel.innerHTML = opts.join(''); sel.value = current || '';
+  sel.innerHTML = opts[0] + bcSortBy(opts.slice(1), o => o.replace(/<[^>]+>/g, '')).join(''); sel.value = current || '';   // V268.51: A → Z
 }
 /* V268.2: the bank account a card is linked to */
 function paFillBanks(current, selfId){
   const sel = document.getElementById('pa-bank'); if (!sel) return;
-  const banks = paAccounts().filter(x => x.type === 'bank' && x.id !== selfId && (x.active !== false || x.id === current));
+  const banks = bcSortBy(paAccounts().filter(x => x.type === 'bank' && x.id !== selfId && (x.active !== false || x.id === current)), b => b.code + ' ' + b.name);
   sel.innerHTML = '<option value="">Choose the bank account…</option>' + banks.map(b => `<option value="${paEsc(b.id)}">${paEsc(b.code)} · ${paEsc(b.name)}</option>`).join('');
   sel.value = banks.some(b => b.id === current) ? current : '';
 }
