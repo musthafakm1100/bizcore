@@ -183,7 +183,23 @@ test('V268.5 + New Product on a stock line: only products, a look-alike warning,
     const docs = prefix => Object.entries(h.fs.dump(prefix)).filter(([k]) => k.split('/').length === 2).map(([, d]) => d);
     await aisha.evaluate(() => { showPage('purchaseinvoices'); openNewPurchaseInvoice(); }); await aisha.waitForSelector('#pi-new-modal.open');
     // supplier: type-and-search
-    await aisha.fill('#pe-supplier-q', 'abc'); await sleep(80); await aisha.keyboard.press('Enter'); await sleep(120);
+    // V268.7 (mockups V7_1 / V7_2): + New Supplier at the bottom of the list, look-alike warning, chosen after saving; pencil to change
+    await aisha.fill('#pe-supplier-q', 'abc trading'); await sleep(80);
+    assert.match(await aisha.textContent('#pe-supplier-list'), /ABC Trading Est[\s\S]*New Supplier “abc trading”…/);
+    await aisha.click('#pe-supplier-list .bc-pick-add'); await aisha.waitForSelector('#bc-ns-modal.open');
+    assert.match(await aisha.textContent('#bns-dup'), /Did you mean “ABC Trading Est”\?/);
+    await aisha.fill('#bns-name', 'ABC Trading Est'); await sleep(50); await aisha.click('#bns-save');
+    await aisha.waitForFunction(() => /already exists/.test(document.getElementById('bns-err').textContent) && !document.getElementById('bns-err').hidden, null, { timeout: 3000 });
+    await aisha.fill('#bns-name', 'Zeta Lighting Co'); await aisha.fill('#bns-vat', '12345'); await sleep(50); await aisha.click('#bns-save');
+    await aisha.waitForFunction(() => /15 digits/.test(document.getElementById('bns-err').textContent) && !document.getElementById('bns-err').hidden, null, { timeout: 3000 });
+    await aisha.fill('#bns-vat', '300000000000099'); await aisha.fill('#bns-contact', 'Omar');
+    await shot(aisha, 'V2687_new_supplier');
+    await aisha.click('#bns-save'); await sleep(700);
+    const ns = docs('suppliers/').find(x => x.company === 'Zeta Lighting Co');
+    assert.ok(ns, 'saved to Suppliers'); assert.deepEqual([ns.vat, ns.contact, ns.createdFrom], ['300000000000099', 'Omar', 'purchasing']);
+    assert.equal(await aisha.inputValue('#pe-supplier'), ns.id); assert.match(await aisha.textContent('#pe-supplier-chosen'), /Zeta Lighting Co/);
+    assert.equal(await aisha.evaluate(() => { const b = document.querySelector('#pe-supplier-chosen .bc-pick-pen'); return !!(b && b.querySelector('.ti-pencil') && b.title === 'Change' && !b.textContent.trim()); }), true, 'a pencil, not the word Change');
+    await aisha.click('#pe-supplier-chosen .bc-pick-pen'); await aisha.fill('#pe-supplier-q', 'abc'); await sleep(80); await aisha.keyboard.press('Enter'); await sleep(120);
     assert.equal(await aisha.inputValue('#pe-supplier'), 'sup1');
     await aisha.evaluate(() => piAddStockLine()); await sleep(100);
     // typed text that matches nothing → error, can't save

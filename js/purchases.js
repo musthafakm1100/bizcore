@@ -199,7 +199,7 @@ function openNewPurchaseInvoice(){
   piStartAccounts();
   const sups = (typeof suppliers !== 'undefined' ? suppliers : []).slice().sort((a, b) => String(a.company || '').localeCompare(String(b.company || '')));
   document.getElementById('pe-supplier').innerHTML = '<option value="">Choose the supplier…</option>' + sups.map(s => `<option value="${piEsc(s.id)}">${piEsc(s.company || s.name || s.id)}</option>`).join('');
-  bcPickEnhance('pe-supplier', { items: bcSupplierPickItems, placeholder: 'Search supplier…', empty: 'No supplier matches. Check the spelling, or add the supplier in Master Data.' });   // V268.5
+  bcPickEnhance('pe-supplier', { items: bcSupplierPickItems, addNew: BC_NEW_SUPPLIER, placeholder: 'Search supplier…', empty: 'No supplier matches. Check the spelling, or add the supplier in Master Data.' });   // V268.5
   ['pe-invno', 'pe-zoho', 'pe-suptotal', 'pe-pay-disc'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('pe-date').value = today;
   document.getElementById('pe-due').value = piAddDays(today, 30);
@@ -1183,7 +1183,7 @@ function bcPickSync(selId){
   const it = sel.value ? (bcPickItems(selId).find(x => x.key === sel.value) || { key: sel.value, title: (sel.selectedOptions[0] || {}).textContent || sel.value }) : null;
   if (it) {
     const tail = sel.disabled ? '<span class="rct-pick-lock" title="Can\'t be changed here"><i class="ti ti-lock"></i></span>'
-      : `<button type="button" class="rct-pick-change" onclick="bcPickChange('${selId}')">Change</button>${c.clearLabel ? `<button type="button" class="bc-pick-x" title="${piEsc(c.clearLabel)}" aria-label="${piEsc(c.clearLabel)}" onclick="bcPickClear('${selId}')"><i class="ti ti-x"></i></button>` : ''}`;
+      : `<button type="button" class="rct-pick-change bc-pick-pen" title="Change" aria-label="Change" onclick="bcPickChange('${selId}')"><i class="ti ti-pencil"></i></button>${c.clearLabel ? `<button type="button" class="bc-pick-x" title="${piEsc(c.clearLabel)}" aria-label="${piEsc(c.clearLabel)}" onclick="bcPickClear('${selId}')"><i class="ti ti-x"></i></button>` : ''}`;
     chosen.title = [it.title, it.sub].filter(Boolean).join(' · ');
     chosen.innerHTML = `<span class="rct-pick-txt"><b>${piEsc(it.title)}</b>${it.sub && !c.compact ? `<small>${piEsc(it.sub)}</small>` : ''}</span>${tail}`;
     chosen.hidden = false; search.hidden = true;
@@ -1195,10 +1195,11 @@ function bcPickOpen(selId){
   const c = BC_PK[selId], q = document.getElementById(selId + '-q'), list = document.getElementById(selId + '-list'); if (!c || !q) return;
   const words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const all = bcPickItems(selId).filter(it => { const h = String(it.text || ((it.title || '') + ' ' + (it.sub || ''))).toLowerCase(); return words.every(w => h.includes(w)); });
-  c.shown = all.slice(0, c.max || 60); if (c.idx >= c.shown.length) c.idx = 0;
+  c.shown = all.slice(0, c.max || 60); if (c.idx > c.shown.length || (c.idx === c.shown.length && !c.addNew)) c.idx = 0;
   list.innerHTML = (c.shown.length ? c.shown.map((it, i) => `<div class="rct-pick-opt${i === c.idx ? ' on' : ''}" role="option" id="${selId}-opt-${i}" aria-selected="${i === c.idx}" data-i="${i}"><span class="rct-pick-txt"><b>${piEsc(it.title)}</b>${it.sub ? `<small>${piEsc(it.sub)}</small>` : ''}</span>${it.right ? `<span class="rct-pick-amt bc-pick-right">${piEsc(it.right)}</span>` : ''}</div>`).join('')
       : `<div class="rct-pick-empty">${piEsc(c.empty || 'Nothing matches. Check the spelling.')}</div>`)
     + (all.length > c.shown.length ? `<div class="rct-pick-empty">${all.length - c.shown.length} more — type more to narrow the list</div>` : '')
+    + (c.addNew ? (() => { const t = q.value.trim(); return `<div class="rct-pick-opt pi-np-opt bc-pick-add${c.idx === c.shown.length ? ' on' : ''}" role="option" data-i="${c.shown.length}"><span class="pi-np-plus"><i class="ti ti-plus"></i></span><span class="rct-pick-txt"><b>${piEsc(c.addNew.label)}${t ? ' “' + piEsc(t) + '”…' : '…'}</b><small>${piEsc(c.addNew.sub || '')}</small></span></div>`; })() : '')
     + (c.hint ? `<div class="bc-pick-hint">${piEsc(c.hint)}</div>` : '');
   list.querySelectorAll('.rct-pick-opt').forEach(e => {
     e.addEventListener('click', () => bcPickChoose(selId, +e.dataset.i));
@@ -1226,10 +1227,10 @@ function bcPickKey(selId, e){
   const list = document.getElementById(selId + '-list');
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     e.preventDefault(); if (list.hidden) { bcPickOpen(selId); return; }
-    const n = c.shown.length; if (!n) return; c.idx = (c.idx + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
+    const n = c.shown.length + (c.addNew ? 1 : 0); if (!n) return; c.idx = (c.idx + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
     list.querySelectorAll('.rct-pick-opt').forEach((x, j) => x.classList.toggle('on', j === c.idx));
     document.getElementById(selId + '-opt-' + c.idx)?.scrollIntoView({ block: 'nearest' });
-  } else if (e.key === 'Enter') { if (!list.hidden && c.shown.length) { e.preventDefault(); bcPickChoose(selId, c.idx); } }
+  } else if (e.key === 'Enter') { if (!list.hidden && (c.shown.length || c.addNew)) { e.preventDefault(); bcPickChoose(selId, c.idx); } }
   else if (e.key === 'Escape') { if (!list.hidden) { e.preventDefault(); e.stopPropagation(); bcPickClose(selId, true); } }
 }
 function bcPickSetValue(selId, key){
@@ -1240,7 +1241,11 @@ function bcPickSetValue(selId, key){
   bcPickSync(selId);
   BC_PK[selId]._setting = true; try { sel.dispatchEvent(new Event('change', { bubbles: true })); } finally { BC_PK[selId]._setting = false; }
 }
-function bcPickChoose(selId, i){ const c = BC_PK[selId], it = c && c.shown[i]; if (it) bcPickSetValue(selId, it.key); }
+function bcPickChoose(selId, i){
+  const c = BC_PK[selId]; if (!c) return;
+  if (c.addNew && i === c.shown.length) { const t = (document.getElementById(selId + '-q') || {}).value || ''; bcPickClose(selId); c.addNew.open(selId, t.trim()); return; }
+  const it = c.shown[i]; if (it) bcPickSetValue(selId, it.key);
+}
 function bcPickClear(selId){ bcPickSetValue(selId, ''); setTimeout(() => document.getElementById(selId + '-q')?.focus(), 0); }
 function bcPickChange(selId){
   if (BC_PK[selId] && BC_PK[selId].lookup) { bcLookupOpen(selId, ''); return; }
@@ -1330,6 +1335,77 @@ function bcSupplierPickItems(){
 /* V268.6 lookup window (mockup V6_2) — kept for later, not used now (V6_1 chosen) */
 const BC_SUPPLIER_LOOKUP = { title: 'Choose Supplier', noun: 'suppliers', width: 860, columns: [{ label: 'Supplier' }, { label: 'Contact' }, { label: 'Phone' }, { label: 'City' }, { label: 'VAT no.' }] };
 
+/* ═══════════════════════════════ V268.7 NEW SUPPLIER from a picker (approved mockups V7_1 / V7_2) ═══════════════════════════════ */
+const BC_NEW_SUPPLIER = { label: 'New Supplier', sub: 'Not in the list? Add it to Master Data → Suppliers', open: (selId, typed) => bcOpenNewSupplier(selId, typed) };
+const bcSupNorm = v => String(v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+function bcSimilarSuppliers(name, vat){
+  const n = piNormName(name), v = String(vat || '').replace(/\D/g, '');
+  return (typeof suppliers !== 'undefined' ? suppliers : []).filter(x => {
+    if (v && String(x.vat || '').replace(/\D/g, '') === v) return true;
+    const xn = piNormName(x.company || x.name); if (!n || !xn) return false;
+    return xn === n || (n.length >= 5 && (xn.includes(n) || n.includes(xn))) || (n.length >= 6 && piLev(n, xn) <= 2);
+  }).slice(0, 3);
+}
+function bcOpenNewSupplier(selId, typed){
+  let m = document.getElementById('bc-ns-modal');
+  if (!m) { m = document.createElement('div'); m.id = 'bc-ns-modal'; m.className = 'modal-overlay bc-ds-overlay'; }
+  document.body.appendChild(m);   // in front
+  m._sel = selId; m._warned = '';
+  m.innerHTML = `<div class="modal pi-paym" role="dialog" aria-modal="true" aria-labelledby="bns-title" style="--pi-w:580px">
+    <div class="modal-header"><div><h2 id="bns-title">New Supplier</h2><div class="so-create-subtitle">Added to Master Data → Suppliers and chosen here</div></div><button class="close-btn" type="button" onclick="bcCloseNewSupplier()" aria-label="Close">✕</button></div>
+    <div class="modal-body">
+      <div id="bns-dup"></div>
+      <div class="pi-np-grid">
+        <div class="form-group pi-np-wide"><label for="bns-name">Company name *</label><input id="bns-name" maxlength="200" value="${piEsc(typed || '')}" oninput="bcNewSupplierCheck()"></div>
+        <div class="form-group"><label for="bns-contact">Contact person <em>Optional</em></label><input id="bns-contact" maxlength="120" placeholder="e.g. Muhammed"></div>
+        <div class="form-group"><label for="bns-phone">Phone <em>Optional</em></label><input id="bns-phone" maxlength="40" placeholder="e.g. 05x xxx xxxx"></div>
+        <div class="form-group"><label for="bns-vat">VAT no. <em>Optional</em></label><input id="bns-vat" maxlength="20" inputmode="numeric" placeholder="15 digits" oninput="bcNewSupplierCheck()"></div>
+        <div class="form-group"><label for="bns-city">City <em>Optional</em></label><input id="bns-city" maxlength="80" placeholder="e.g. Riyadh"></div>
+      </div>
+      <p class="ds-note">The full supplier (address, bank, documents) can be completed later in Master Data → Suppliers. The same name or the same VAT no. as an existing supplier is refused.</p>
+      <div class="inv-error" id="bns-err" hidden></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" type="button" onclick="bcCloseNewSupplier()">Cancel</button><button class="btn btn-primary" type="button" id="bns-save" onclick="bcSaveNewSupplier()"><i class="ti ti-plus"></i>Add supplier</button></div></div>`;
+  const z = Math.max(0, ...[...document.querySelectorAll('.modal-overlay.open')].filter(e => e !== m).map(e => Number(getComputedStyle(e).zIndex) || 0)); m.style.zIndex = z ? String(z + 1) : '';
+  if (typeof openModalWithSize === 'function') openModalWithSize('bc-ns-modal'); else m.classList.add('open');
+  bcNewSupplierCheck();
+  setTimeout(() => { const i = document.getElementById('bns-name'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 60);
+}
+function bcCloseNewSupplier(){ const m = document.getElementById('bc-ns-modal'); if (typeof closeModal === 'function') closeModal('bc-ns-modal'); else m?.classList.remove('open'); if (m && m._sel) setTimeout(() => bcPickFocus(m._sel), 0); }
+function bcNewSupplierCheck(){
+  const m = document.getElementById('bc-ns-modal'); if (!m) return;
+  const e = document.getElementById('bns-err'); if (e) e.hidden = true;
+  const sim = bcSimilarSuppliers(document.getElementById('bns-name').value, document.getElementById('bns-vat').value), key = sim.map(x => x.id).join(',');
+  m._sim = sim; if (key !== m._warned) m._warned = '';
+  document.getElementById('bns-dup').innerHTML = sim.length ? `<div class="pi-match warn pi-np-dup"><i class="ti ti-alert-triangle"></i><span><b>Did you mean ${sim.map(x => '“' + piEsc(x.company || x.name) + '”').join(' or ')}?</b> It looks the same. Use it instead — or continue to add a new supplier.</span>${sim.map(x => `<button type="button" class="btn btn-secondary btn-sm" onclick="bcUseExistingSupplier('${piEsc(x.id)}')">${sim.length > 1 ? 'Use ' + piEsc(String(x.company || x.name).slice(0, 18)) : 'Use it'}</button>`).join('')}</div>` : '';
+  document.getElementById('bns-save').innerHTML = sim.length && m._warned !== key ? '<i class="ti ti-plus"></i>Add as a new supplier' : '<i class="ti ti-plus"></i>Add supplier';
+}
+function bcUseExistingSupplier(id){ const m = document.getElementById('bc-ns-modal'); if (!m) return; const sel = m._sel; if (typeof closeModal === 'function') closeModal('bc-ns-modal'); bcPickSetValue(sel, id); setTimeout(() => bcPickFocus(sel), 0); }
+async function bcSaveNewSupplier(){
+  const m = document.getElementById('bc-ns-modal'); if (!m) return;
+  const err = document.getElementById('bns-err'); err.hidden = true;
+  const fail = t => { err.textContent = t; err.hidden = false; };
+  const company = document.getElementById('bns-name').value.trim(), vat = document.getElementById('bns-vat').value.trim();
+  if (!company) { fail('Enter the company name.'); document.getElementById('bns-name').focus(); return; }
+  if (vat && !/^\d{15}$/.test(vat.replace(/\s/g, ''))) { fail('The VAT no. has 15 digits.'); return; }
+  const all = typeof suppliers !== 'undefined' ? suppliers : [];
+  const sameName = all.find(x => bcSupNorm(x.company || x.name) === bcSupNorm(company));
+  if (sameName) { fail(`“${sameName.company || sameName.name}” already exists. Use it from the list.`); return; }
+  const v = vat.replace(/\s/g, ''), sameVat = v && all.find(x => String(x.vat || '').replace(/\D/g, '') === v);
+  if (sameVat) { fail(`VAT no. ${v} is already used by “${sameVat.company || sameVat.name}”.`); return; }
+  const sim = m._sim || [], key = sim.map(x => x.id).join(',');
+  if (sim.length && m._warned !== key) { m._warned = key; bcNewSupplierCheck(); document.getElementById('bns-save').innerHTML = '<i class="ti ti-plus"></i>Yes, add a new supplier'; return; }
+  const sup = { id: 's' + Date.now().toString(36), company, contact: document.getElementById('bns-contact').value.trim(), phone: document.getElementById('bns-phone').value.trim(), mobile: '', email: '',
+    vat: v, city: document.getElementById('bns-city').value.trim(), createdFrom: 'purchasing', createdBy: (window.currentUser && window.currentUser.name) || '', createdAt: new Date().toISOString() };
+  try {
+    await bcBusy('Adding supplier…', async () => { suppliers.push(sup); try { await saveSuppliers(); } catch (e) { suppliers.splice(suppliers.indexOf(sup), 1); throw e; } });
+  } catch (e) { fail('The supplier could not be saved: ' + (e && e.message || e)); return; }
+  if (typeof renderSuppliers === 'function') try { renderSuppliers(); } catch (e) {}
+  const sel = m._sel;
+  if (typeof closeModal === 'function') closeModal('bc-ns-modal'); else m.classList.remove('open');
+  bcPickSetValue(sel, sup.id); setTimeout(() => bcPickFocus(sel), 0);
+  if (typeof showToast === 'function') showToast(`${company} added to Suppliers and chosen`, 'success');
+}
 /* ═══════════════════════════════ V268.5 PRODUCT ON STOCK LINES + NEW PRODUCT (approved mockup V5_2) ═══════════════════════════════ */
 const PI_PP = { i: -1, idx: 0, shown: [], q: '' };
 const piProducts = () => (typeof products !== 'undefined' && Array.isArray(products) ? products : []);

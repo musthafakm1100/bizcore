@@ -473,3 +473,7 @@ tr.pi-adv-line .pi-pay-acc{background:#faf8ff}
 .bc-picker:not(.bc-pick-compact) .rct-pick-chosen .rct-pick-txt small::before{content:'· '}
 .bc-picker:not(.bc-pick-compact) .rct-pick-chosen .rct-pick-change{padding:4px 6px;font-size:12.5px;flex:0 0 auto}
 .bc-picker:not(.bc-pick-compact) .rct-pick-chosen .bc-pick-x{width:24px;height:24px;flex-basis:24px}
+/* V268.7: pencil instead of "Change" (mockup V7_1) */
+.bc-picker .rct-pick-chosen .bc-pick-pen{width:28px;height:28px;padding:0!important;display:inline-flex;align-items:center;justify-content:center;font-size:15px;border-radius:7px}
+.bc-picker .rct-pick-chosen .bc-pick-pen:hover{background:#eef5fc}
+.bc-pick-add{border-top:1px solid #e2e8f0}

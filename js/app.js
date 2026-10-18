@@ -5088,7 +5088,7 @@ function setModalSize(modalId, size) {
 const modalNavHistory = [];
 let lastClosedModal = null;
 let lastClosedModalAt = 0;
-const modalNavExcluded = new Set(['confirm-modal','validation-dialog','template-picker-modal','ds-move-modal','ds-ask-modal','ds-dec-modal','qu-modal','pi-np-modal','bc-lookup-modal']);   // V268.5: small dialogs get no Back button
+const modalNavExcluded = new Set(['confirm-modal','validation-dialog','template-picker-modal','ds-move-modal','ds-ask-modal','ds-dec-modal','qu-modal','pi-np-modal','bc-lookup-modal','bc-ns-modal']);   // V268.5: small dialogs get no Back button
 /* V264.8 — Entry screens of the order workflow. Once one of them is closed (saved or cancelled) its work is
    finished, so it must never become a "Back" target: the screen opened right after it (e.g. the Sales Order
    refreshed after saving an invoice) must not record it as the screen to return to, and any return entry that
