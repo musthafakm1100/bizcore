@@ -21,7 +21,8 @@ import {
   supplierRefIdOf, r2, rq,
   PAYMENT_COLLECTION, PAYMENT_KINDS, paymentIdForOperation, paymentEntryIdOf, validateSupplierPayment, buildSupplierPaymentRecords,
   applyPaymentToInvoice, applyAdvanceUse, editRightOf, validateInvoiceLimitedEdit, validatePaymentLimitedEdit,
-} from './purchase-core.mjs?v=268.3';
+  STOCK_ALLOC_COLLECTION, allocationIdForOperation, validateAllocation,
+} from './purchase-core.mjs?v=268.4';
 import { DeliveryError, isSafeId, eventIdForOperation, requireReason, cleanText, assertSize } from './delivery-core.mjs?v=266.0';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
@@ -63,6 +64,7 @@ export function createPurchaseService(fs, options = {}) {
     cashEntry: id => doc(db, 'cashEntries', id),
     cashLine: id => doc(db, 'cashLines', id),
     payEvent: (id, ev) => doc(db, PAYMENT_COLLECTION, id, 'events', ev),
+    alloc: id => doc(db, STOCK_ALLOC_COLLECTION, id),
   };
   /** V268.3: the advances used by payment lines (read inside the transaction). */
   async function readAdvances(tx, groups) {
@@ -207,7 +209,7 @@ export function createPurchaseService(fs, options = {}) {
         const prev = lines[lineId] || { purchased: 0 };
         const purchased = rq((Number(prev.purchased) || 0) + sign * q);
         ensure(purchased >= -1e-9, PURCHASE_ERR.INVALID_STATE, 'Purchased quantity would become negative.');
-        lines[lineId] = { purchased: Math.max(0, purchased) };
+        lines[lineId] = { ...prev, purchased: Math.max(0, purchased) };   // V268.4: keeps fromStock
       }
       tx.set(refs.ledger(soId), { salesOrderId: soId, soNo: (orders.get(soId) || {}).soNo || cur.soNo || '', lines,
         revision: (Number(cur.revision) || 0) + 1, lastInvoiceId: id, lastEventId: eventId, updatedByUid: actor.uid, updatedAt: at });
@@ -561,6 +563,76 @@ export function createPurchaseService(fs, options = {}) {
     });
   }
 
+
+  /* ───────── V268.4: allocate stock to a sales order line (and cancel it) ───────── */
+  async function allocateStock(input = {}) {
+    const { operationId, itemKey, soId } = input;
+    const id = allocationIdForOperation(operationId);
+    ensure(isSafeId(id) && isSafeId(itemKey) && isSafeId(soId), PURCHASE_ERR.INVALID_INPUT, 'Choose the stock item and the sales order line.');
+    const eventId = eventIdForOperation('alloc', operationId);
+    const actor = actorOf(), at = now();
+    return transact(async tx => {
+      const [aSnap, iSnap, soSnap, lSnap] = await Promise.all([tx.get(refs.alloc(id)), tx.get(refs.stock(itemKey)), tx.get(refs.so(soId)), tx.get(refs.ledger(soId))]);
+      if (aSnap.exists()) { const ex = aSnap.data(); ensure(ex.operationId === operationId, PURCHASE_ERR.ID_COLLISION, 'Allocation ID already used'); return { alreadyApplied: true, allocation: ex }; }
+      const item = iSnap.exists() ? iSnap.data() : null, so = soSnap.exists() ? { id: soId, ...soSnap.data() } : null, ledger = lSnap.exists() ? lSnap.data() : null;
+      const v = validateAllocation(input, { item, so, ledger, today: todayLocal() });
+      if (!v.ok) fail(PURCHASE_ERR.INVALID_INPUT, v.errors.map(e => e.message).join(' '), { errors: v.errors });
+      const val = v.value;
+      const allocation = { id, schemaVersion: PURCHASE_SCHEMA_VERSION, operationId, status: PURCHASE_STATUS.posted, revision: 1, lastEventId: eventId,
+        itemKey, desc: val.desc, uom: val.uom, soId, soNo: val.soNo, customer: val.customer, soLineId: val.soLineId,
+        qty: val.qty, unitCost: val.unitCost, value: val.value, sellUnit: val.sellUnit, date: val.date, note: val.note,
+        created: at, createdBy: actor.name, createdByUid: actor.uid, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid, recordedAt: stamp() };
+      tx.set(refs.alloc(id), allocation);
+      writeStockForAllocation(tx, item, -val.qty, -val.value, { id, eventId, actor, at });
+      writeLedgerForAllocation(tx, so, ledger, val.soLineId, +val.qty, { id, eventId, actor, at });
+      const moveId = `${id}__out`;
+      tx.set(refs.move(moveId), { id: moveId, itemKey, kind: 'allocated', qty: -val.qty, value: -val.value, allocationId: id, soId, soNo: val.soNo, soLineId: val.soLineId,
+        eventId, date: val.date, note: val.note, actor: actor.name, actorUid: actor.uid, at });
+      return { alreadyApplied: false, allocation };
+    });
+  }
+  async function cancelStockAllocation(input = {}) {
+    const { operationId, allocationId } = input;
+    ensure(isSafeId(allocationId), PURCHASE_ERR.INVALID_INPUT, 'Allocation reference required');
+    const reason = requireReason(input.reason);
+    const eventId = eventIdForOperation('allocvoid', operationId);
+    const actor = actorOf(), at = now();
+    return transact(async tx => {
+      const aSnap = await tx.get(refs.alloc(allocationId));
+      ensure(aSnap.exists(), PURCHASE_ERR.NOT_FOUND, 'Allocation not found');
+      const a = aSnap.data();
+      if (a.status === PURCHASE_STATUS.voided) { ensure(a.lastEventId === eventId, PURCHASE_ERR.INVALID_STATE, 'This allocation is already cancelled.'); return { alreadyApplied: true, allocation: a }; }
+      const [iSnap, soSnap, lSnap] = await Promise.all([tx.get(refs.stock(a.itemKey)), tx.get(refs.so(a.soId)), tx.get(refs.ledger(a.soId))]);
+      const ledger = lSnap.exists() ? lSnap.data() : null;
+      const cur = ledger && (ledger.lines || {})[a.soLineId];
+      ensure(cur && Number(cur.purchased) + 1e-9 >= a.qty, PURCHASE_ERR.INVALID_STATE, `${a.soNo} no longer has this quantity bought.`);
+      const next = { ...a, status: PURCHASE_STATUS.voided, voidReason: reason, voidedAt: at, voidedBy: actor.name, voidedByUid: actor.uid,
+        revision: a.revision + 1, lastEventId: eventId, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid };
+      tx.set(refs.alloc(allocationId), next);
+      const item = iSnap.exists() ? iSnap.data() : { itemKey: a.itemKey, desc: a.desc, uom: a.uom, qty: 0, value: 0, revision: 0 };
+      writeStockForAllocation(tx, item, +a.qty, +a.value, { id: allocationId, eventId, actor, at });
+      writeLedgerForAllocation(tx, soSnap.exists() ? { id: a.soId, ...soSnap.data() } : { id: a.soId, soNo: a.soNo }, ledger, a.soLineId, -a.qty, { id: allocationId, eventId, actor, at });
+      const moveId = `${allocationId}__back`;
+      tx.set(refs.move(moveId), { id: moveId, itemKey: a.itemKey, kind: 'allocation-cancelled', qty: a.qty, value: a.value, allocationId, soId: a.soId, soNo: a.soNo, soLineId: a.soLineId,
+        eventId, date: todayLocal(), note: reason, actor: actor.name, actorUid: actor.uid, at });
+      return { alreadyApplied: false, allocation: next };
+    });
+  }
+  function writeStockForAllocation(tx, item, dq, dv, { id, eventId, actor, at }) {
+    const qty = rq((Number(item.qty) || 0) + dq);
+    ensure(qty >= -1e-9, PURCHASE_ERR.STOCK_USED, `Not enough ${item.desc || 'stock'} in stock.`);
+    tx.set(refs.stock(item.itemKey), { ...item, qty: Math.max(0, qty), value: qty <= 1e-9 ? 0 : r2(Math.max(0, (Number(item.value) || 0) + dv)),
+      revision: (Number(item.revision) || 0) + 1, lastAllocationId: id, lastEventId: eventId, updatedByUid: actor.uid, updatedAt: at });
+  }
+  function writeLedgerForAllocation(tx, so, ledger, lineId, dq, { id, eventId, actor, at }) {
+    const cur = ledger || { salesOrderId: so.id, lines: {}, revision: 0 };
+    const prev = (cur.lines || {})[lineId] || { purchased: 0 };
+    const purchased = rq((Number(prev.purchased) || 0) + dq), fromStock = rq((Number(prev.fromStock) || 0) + dq);
+    ensure(purchased >= -1e-9 && fromStock >= -1e-9, PURCHASE_ERR.INVALID_STATE, 'Purchased quantity would become negative.');
+    tx.set(refs.ledger(so.id), { ...cur, salesOrderId: so.id, soNo: so.soNo || cur.soNo || '', lines: { ...(cur.lines || {}), [lineId]: { ...prev, purchased: Math.max(0, purchased), fromStock: Math.max(0, fromStock) } },
+      revision: (Number(cur.revision) || 0) + 1, lastAllocationId: id, lastEventId: eventId, updatedByUid: actor.uid, updatedAt: at });
+  }
+
   /* ───────── Administration → Purchase settings ───────── */
   async function savePurchaseSettings(input = {}) {
     const actor = actorOf();
@@ -577,5 +649,5 @@ export function createPurchaseService(fs, options = {}) {
     });
   }
 
-  return { createPurchaseInvoice, voidPurchaseInvoice, savePurchaseSettings, recordSupplierPayment, recordSupplierCashBack, voidSupplierPayment, payAdvance, editSupplierPayment, editPurchaseInvoice };
+  return { createPurchaseInvoice, voidPurchaseInvoice, savePurchaseSettings, recordSupplierPayment, recordSupplierCashBack, voidSupplierPayment, payAdvance, editSupplierPayment, editPurchaseInvoice, allocateStock, cancelStockAllocation };
 }

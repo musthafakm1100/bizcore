@@ -15,18 +15,18 @@
   html body .mobile-menu-btn{display:inline-flex!important}
 
   /* Registers: monitor becomes status chips (+ "Summary" panel); the register uses the full width */
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) :is(.module-main-workspace,.dn-register-shell,.rfq-main-workspace){display:block!important;grid-template-columns:1fr!important}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) :is(aside.dn-overview-panel.module-monitor.bc-monitor,aside.module-monitor.module-monitor.module-monitor,button.module-monitor-rail.module-monitor-rail.module-monitor-rail,.rfq-monitor-expand.rfq-monitor-expand.rfq-monitor-expand){display:none!important}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) :is(.module-register-area,.rfq-register-area,.dn-register-area){grid-column:auto!important;width:auto!important;margin-left:0!important;min-width:0!important}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-chiprow{display:flex;gap:7px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-chiprow::-webkit-scrollbar{display:none}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) :is(.module-main-workspace,.dn-register-shell,.rfq-main-workspace){display:block!important;grid-template-columns:1fr!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) :is(aside.dn-overview-panel.module-monitor.bc-monitor,aside.module-monitor.module-monitor.module-monitor,button.module-monitor-rail.module-monitor-rail.module-monitor-rail,.rfq-monitor-expand.rfq-monitor-expand.rfq-monitor-expand){display:none!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) :is(.module-register-area,.rfq-register-area,.dn-register-area){grid-column:auto!important;width:auto!important;margin-left:0!important;min-width:0!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-chiprow{display:flex;gap:7px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-chiprow::-webkit-scrollbar{display:none}
 
   /* Tables: show every column again (the old rule hid them up to 768 px); the table scrolls sideways if needed */
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) table .mob-hide{display:table-cell!important}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-table-wrap{overflow-x:auto!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) table .mob-hide{display:table-cell!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-table-wrap{overflow-x:auto!important}
   /* the table wrapper scrolls sideways, so the column headings stick to its own top (not 48 px down) */
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-table-wrap :is(#quotes-table,#so-register-table,#dn-register-table,#invreg-table,#rctreg-table,.pricing-register-table,table) thead th{top:0!important}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-chiprow{padding-left:2px}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-table-wrap :is(#quotes-table,#so-register-table,#dn-register-table,#invreg-table,#rctreg-table,.pricing-register-table,table) thead th{top:0!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-chiprow{padding-left:2px}
 }
 
 /* Chips (status row and filter panel) */
@@ -66,17 +66,17 @@ html body .bcr-sheet aside.bc-in-sheet .module-monitor-collapse{visibility:hidde
 /* ═════════ Phone (≤ 760 px) ═════════ */
 @media (max-width: 760px){
   /* Toolbar: one line — search, filter icon, Excel, + new */
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-filterbar{flex-wrap:nowrap!important;height:auto!important;min-height:0!important;padding:8px!important;gap:8px!important;position:static!important;overflow:visible!important}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-filterbar-left{display:none!important}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-filterbar-right{flex:1 1 auto!important;flex-wrap:nowrap!important;justify-content:flex-start!important;gap:8px!important;min-width:0!important;width:100%!important}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-filterbar-right>:is(.bc-filter-customer,.bc-filter-status,.bc-date,.register-clear-filters){display:none!important}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-filterbar-right>input.bc-filter.bc-filter-search{order:1;min-height:40px!important;flex:1 1 auto!important;min-width:0!important;max-width:none!important;height:40px!important;font-size:14px!important}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-filterbar-right>.bc-mfilter{order:2;display:inline-flex!important}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-filterbar-right>.btn:not(.bc-mfilter){order:3}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-filterbar-right>.bc-filter-new{order:4}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-filterbar-right>:is(.btn,.bc-mfilter){flex:0 0 40px!important;width:40px!important;height:40px!important;min-height:40px!important;padding:0!important;justify-content:center!important;align-items:center!important;position:relative}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-filterbar-right>.btn span:not(.bc-mfilter-n){display:none!important}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-filterbar-right>.btn i{margin:0!important;font-size:19px}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar{flex-wrap:nowrap!important;height:auto!important;min-height:0!important;padding:8px!important;gap:8px!important;position:static!important;overflow:visible!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-left{display:none!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right{flex:1 1 auto!important;flex-wrap:nowrap!important;justify-content:flex-start!important;gap:8px!important;min-width:0!important;width:100%!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>:is(.bc-filter-customer,.bc-filter-status,.bc-date,.register-clear-filters){display:none!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>input.bc-filter.bc-filter-search{order:1;min-height:40px!important;flex:1 1 auto!important;min-width:0!important;max-width:none!important;height:40px!important;font-size:14px!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-mfilter{order:2;display:inline-flex!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.btn:not(.bc-mfilter){order:3}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-new{order:4}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>:is(.btn,.bc-mfilter){flex:0 0 40px!important;width:40px!important;height:40px!important;min-height:40px!important;padding:0!important;justify-content:center!important;align-items:center!important;position:relative}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.btn span:not(.bc-mfilter-n){display:none!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.btn i{margin:0!important;font-size:19px}
   .bc-mfilter.on{border-color:var(--blue)!important;color:var(--blue)!important}
   .bc-mfilter-n{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--blue);color:#fff;font:700 10px/18px Inter,system-ui,sans-serif;text-align:center;border:2px solid #fff;box-sizing:border-box}
   /* Receipts: the green floating button is replaced by the + in the toolbar */
@@ -84,9 +84,9 @@ html body .bcr-sheet aside.bc-in-sheet .module-monitor-collapse{visibility:hidde
   html body #page-receipts #rct-new-btn{display:inline-flex!important}
 
   /* Cards instead of the table */
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-cards-wrap{display:none!important}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-cards{display:block;padding:8px 0 4px;width:100%}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) :is(.dn-register-card,.quotation-register-card,.so-register-card,.card){background:transparent!important;border:0!important;box-shadow:none!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-cards-wrap{display:none!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-cards{display:block;padding:8px 0 4px;width:100%}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) :is(.dn-register-card,.quotation-register-card,.so-register-card,.card){background:transparent!important;border:0!important;box-shadow:none!important}
   .bc-card{background:#fff;border:1px solid #dfe6ee;border-radius:12px;padding:11px 12px;margin:0 0 9px;cursor:pointer}
   .bc-card:active{background:#f8fbff}
   .bc-card:focus-visible{outline:2px solid var(--blue-mid);outline-offset:1px}
@@ -102,7 +102,7 @@ html body .bcr-sheet aside.bc-in-sheet .module-monitor-collapse{visibility:hidde
   .bc-card-amt{font-size:15.5px;font-weight:700;color:#0f172a;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
   .bc-card-extra{display:block;font-size:11.5px;font-weight:500;color:#64748b}
   .bc-cards-empty{padding:30px 10px;text-align:center;color:#64748b}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .rows-per-page-bar{justify-content:center!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .rows-per-page-bar{justify-content:center!important}
 
   /* View / entry screens: action bar keeps two buttons + "⋯" */
   html body .modal-overlay.open .bc-more-hidden{display:none!important}
@@ -139,20 +139,20 @@ html body .bcr-sheet aside.bc-in-sheet .module-monitor-collapse{visibility:hidde
 /* ═════════ Tablet landscape / small laptop (901–1279 px) ═════════ */
 @media (min-width: 901px) and (max-width: 1279px){
   /* customer names stay on one line (rows were three lines tall); the table scrolls sideways if needed */
-  html body :is(#page-quotations #quotes-table,#page-salesorders #so-register-table,#page-deliverynotes #dn-register-table,#page-customerinvoices #invreg-table,#page-receipts #rctreg-table,#page-purchaseinvoices #pireg-table,#page-supplierpayments #spreg-table) td{white-space:nowrap}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-table-wrap{overflow-x:auto!important}
+  html body :is(#page-quotations #quotes-table,#page-salesorders #so-register-table,#page-deliverynotes #dn-register-table,#page-customerinvoices #invreg-table,#page-receipts #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) td{white-space:nowrap}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-table-wrap{overflow-x:auto!important}
 }
 
 /* ═════════ Tablets and small laptops (≤ 1279 px) ═════════ */
 @media (max-width: 1279px){
   /* When the table wrapper scrolls sideways, the column headings stick to its own top
      (with 48 px they covered the first row and left an empty band above the headings) */
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .bc-table-wrap :is(#quotes-table,#so-register-table,#dn-register-table,#invreg-table,#rctreg-table,.pricing-register-table,table) thead th{top:0!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-table-wrap :is(#quotes-table,#so-register-table,#dn-register-table,#invreg-table,#rctreg-table,.pricing-register-table,table) thead th{top:0!important}
 }
 @media (min-width: 901px) and (max-width: 1279px){
   /* Monitor: sticks to the top of the page (was 96 px down — a gap above it) and scrolls on its own when taller than the screen */
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) aside.dn-overview-panel.module-monitor.bc-monitor{position:sticky!important;top:0!important;align-self:start!important;max-height:calc(100vh - 72px)!important;overflow-y:auto!important;overscroll-behavior:contain}
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) :is(button.module-monitor-rail.module-monitor-rail,.rfq-monitor-expand.module-monitor-rail.rfq-monitor-expand.module-monitor-rail){top:0!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) aside.dn-overview-panel.module-monitor.bc-monitor{position:sticky!important;top:0!important;align-self:start!important;max-height:calc(100vh - 72px)!important;overflow-y:auto!important;overscroll-behavior:contain}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) :is(button.module-monitor-rail.module-monitor-rail,.rfq-monitor-expand.module-monitor-rail.rfq-monitor-expand.module-monitor-rail){top:0!important}
 }
 
 /* ═════════ Quotation / Invoice / Payment Receipt views below 900 px: Document | Details tabs ═════════ */

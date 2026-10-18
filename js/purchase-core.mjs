@@ -637,3 +637,56 @@ export function validatePaymentLimitedEdit(pay, input = {}) {
   if (!changes.length) errors.push({ field: 'changes', message: 'Nothing was changed.' });
   return { ok: errors.length === 0, value: { lines, note, reason }, changes, errors };
 }
+
+/* ═══════════════════════ V268.4 STOCK — allocate stock to a sales order line ═══════════════════════
+ * stockAllocations/{SA-…}: { itemKey, soId, soNo, soLineId, qty, unitCost (average landed cost at that moment),
+ *   value, sellUnit, date, note, status Posted|Voided, revision, lastEventId }.
+ * Allocating counts the quantity as bought for the order line (salesOrderPurchasing.lines[line].purchased and
+ * .fromStock) and takes it out of stock at the average cost; no money moves. Cancelling puts it back. */
+export const STOCK_ALLOC_COLLECTION = 'stockAllocations';
+export const allocationIdForOperation = op => { const k = String(op || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 200); return k.length >= 8 ? 'SA-' + k : ''; };
+/** Average landed cost of what is in stock now. */
+export function avgCostOf(item) {
+  const q = Number(item && item.qty) || 0, v = Number(item && item.value) || 0;
+  return q > 1e-9 ? Math.round((v / q) * 10000) / 10000 : 0;
+}
+/** The sales order lines (open, something still to buy) for the same item as a stock item. */
+export function openDemandOf(item, orders, ledgers) {
+  const out = [];
+  (orders || []).forEach(so => {
+    if (!so || /cancel|void|closed/i.test(String(so.status || ''))) return;
+    (so.items || []).forEach(it => {
+      if (!it || !it.lineId) return;
+      if (itemKeyOf({ productId: it.prodId || it.productId, code: it.code, desc: it.desc, uom: it.uom }) !== item.itemKey) return;
+      const left = stillToBuy(it.qty, ((ledgers.get(so.id) || {}).lines || {})[it.lineId]);
+      if (left > 1e-9) out.push({ soId: so.id, soNo: so.soNo || '', customer: so.customer || '', soLineId: it.lineId, lineNo: (so.items || []).indexOf(it) + 1, desc: it.desc || '', ordered: Number(it.qty) || 0, left, sellUnit: Number(it.up) || 0 });
+    });
+  });
+  return out.sort((a, b) => String(a.soNo).localeCompare(String(b.soNo), undefined, { numeric: true }));
+}
+/**
+ * input: { itemKey, soId, soLineId, qty, date, note }
+ * ctx:   { item (stockItems doc), so (salesOrders doc), ledger (salesOrderPurchasing doc or null), today }
+ */
+export function validateAllocation(input = {}, { item = null, so = null, ledger = null, today = new Date().toISOString().slice(0, 10) } = {}) {
+  const errors = [], err = (field, message) => errors.push({ field, message });
+  const qty = rq(num(input.qty)), date = String(input.date || '').slice(0, 10), note = clean(input.note, 200);
+  if (!item) err('item', 'This stock item no longer exists.');
+  const line = so && (so.items || []).find(x => x && x.lineId === input.soLineId);
+  if (!so || !line) err('soLine', 'Choose the sales order line.');
+  if (!isDate(date)) err('date', 'Enter the date.'); else if (date > today) err('date', 'The date can\'t be in the future.');
+  if (!(qty > 0)) err('qty', 'Enter the quantity.');
+  let left = 0;
+  if (item && line) {
+    if (/cancel|void|closed/i.test(String(so.status || ''))) err('soLine', `${so.soNo} is ${String(so.status).toLowerCase()}.`);
+    if (itemKeyOf({ productId: line.prodId || line.productId, code: line.code, desc: line.desc, uom: line.uom }) !== item.itemKey) err('soLine', `${so.soNo} line is not for ${item.desc}.`);
+    left = stillToBuy(line.qty, ((ledger || {}).lines || {})[line.lineId]);
+    if (qty > left + 1e-9) err('qty', `${so.soNo} needs only ${left} more.`);
+    if (qty > (Number(item.qty) || 0) + 1e-9) err('qty', `Only ${Number(item.qty) || 0} in stock.`);
+  }
+  const unitCost = avgCostOf(item);
+  const value = r2(unitCost * (Number.isFinite(qty) ? qty : 0));
+  return { ok: errors.length === 0, errors, value: { itemKey: item ? item.itemKey : '', desc: item ? clean(item.desc, 500) : '', uom: item ? clean(item.uom, 30) : '',
+    soId: so ? so.id : '', soNo: so ? clean(so.soNo, 40) : '', customer: so ? clean(so.customer, 200) : '', soLineId: line ? line.lineId : '',
+    qty, unitCost, value, sellUnit: line ? r4(Number(line.up) || 0) : 0, date, note, left } };
+}

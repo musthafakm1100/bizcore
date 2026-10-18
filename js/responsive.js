@@ -31,6 +31,7 @@
     receipts:         { noun: 'receipts', ownCards: true, tabletHide: ['method', 'reference'] },
     purchaseinvoices: { noun: 'purchase invoices', ownCards: true, who: 'Supplier', tabletHide: ['supplier inv.', 'zoho bill', 'orders'] },   // V268.13
     supplierpayments: { noun: 'supplier payments', ownCards: true, who: 'Supplier', tabletHide: ['for', 'paid from'] },   // V268.3
+    stock:            { noun: 'stock items', ownCards: true, tabletHide: ['unit', 'avg. cost', 'last bought'] },   // V268.4
   };
   const pageOf = id => document.getElementById('page-' + id);
 

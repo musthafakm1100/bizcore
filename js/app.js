@@ -4447,6 +4447,7 @@ function showPage(page, el) {
   if(page==='cashbank'&&typeof renderCashBank==='function'){document.getElementById('page-title').textContent='Cash & Bank';renderCashBank();}   // V267.2
   if(page==='purchaseinvoices'&&typeof renderPurchaseRegister==='function'){renderPurchaseRegister();}   // V268.1
   if(page==='supplierpayments'&&typeof renderSupplierPayments==='function'){renderSupplierPayments();}   // V268.3
+  if(page==='stock'&&typeof renderStockRegister==='function'){renderStockRegister();}   // V268.4
   closeMobileSidebar();
 }
 
@@ -7244,7 +7245,7 @@ function applyRFQMonitorFilter(status, btn) {
 }
 function moduleMonitorStorageKey(moduleKey){ return `bizcore-${moduleKey}-monitor-collapsed`; }
 function getModuleMonitorWorkspace(moduleKey){
-  const ids={rfq:'rfq-main-workspace',quotations:'quotation-main-workspace',pricing:'pricing-main-workspace',salesorders:'salesorders-main-workspace',deliverynotes:'deliverynotes-main-workspace',customerinvoices:'customerinvoices-main-workspace',receipts:'receipts-main-workspace',purchaseinvoices:'pi-main-workspace',supplierpayments:'sp-main-workspace'};
+  const ids={rfq:'rfq-main-workspace',quotations:'quotation-main-workspace',pricing:'pricing-main-workspace',salesorders:'salesorders-main-workspace',deliverynotes:'deliverynotes-main-workspace',customerinvoices:'customerinvoices-main-workspace',receipts:'receipts-main-workspace',purchaseinvoices:'pi-main-workspace',supplierpayments:'sp-main-workspace',stock:'st-main-workspace'};
   return document.getElementById(ids[moduleKey]||'');
 }
 function setModuleMonitorState(moduleKey, collapsed, persist=true){
@@ -7260,7 +7261,7 @@ function toggleModuleMonitor(moduleKey){
   setModuleMonitorState(moduleKey,!workspace.classList.contains('monitor-collapsed'),true);
 }
 function restoreModuleMonitors(){
-  ['rfq','quotations','pricing','salesorders','deliverynotes','customerinvoices','receipts','purchaseinvoices','supplierpayments'].forEach(moduleKey=>{
+  ['rfq','quotations','pricing','salesorders','deliverynotes','customerinvoices','receipts','purchaseinvoices','supplierpayments','stock'].forEach(moduleKey=>{
     const workspace=getModuleMonitorWorkspace(moduleKey);
     if(!workspace) return;
     const saved=localStorage.getItem(moduleMonitorStorageKey(moduleKey));
@@ -12457,7 +12458,7 @@ const TOPBAR_CONTEXT={
   Pricing:{group:'Sales',action:null},
   Quotations:{group:'Sales',action:null},
   'Sales Orders':{group:'Sales',action:null},'Delivery Notes':{group:'Sales',action:null},Invoices:{group:'Sales',action:null},
-  'Supplier RFQs':{group:'Purchasing',action:null},'Purchase Orders':{group:'Purchasing',action:null},'Purchase Invoices':{group:'Purchasing',action:null},'Supplier Payments':{group:'Purchasing',action:null},
+  'Supplier RFQs':{group:'Purchasing',action:null},'Purchase Orders':{group:'Purchasing',action:null},'Purchase Invoices':{group:'Purchasing',action:null},'Supplier Payments':{group:'Purchasing',action:null},'Stock':{group:'Purchasing',action:null},
   'Master Data':{group:'',action:null},Customers:{group:'Master Data',action:{label:'New Customer',icon:'ti-plus',run:()=>openAddCustomer()}},Suppliers:{group:'Master Data',action:{label:'New Supplier',icon:'ti-plus',run:()=>openAddSupplier()}},Products:{group:'Master Data',action:{label:'New Product',icon:'ti-plus',run:()=>openAddProduct()}},Employees:{group:'Master Data',action:{label:'New Employee',icon:'ti-user-plus',run:()=>openEmployeeForm()}},'Units of Measure':{group:'Master Data',action:null},
   Reports:{group:'',action:null},Administration:{group:'',action:null},Users:{group:'Administration',action:{label:'New User',icon:'ti-user-plus',run:()=>openUserForm()}},'System Preferences':{group:'Administration',action:null}
 };
@@ -12503,7 +12504,7 @@ function updateTopbarContext(){
 }
 function runTopbarPrimaryAction(){if(topbarPrimaryAction?.run)topbarPrimaryAction.run();}
 const TOPBAR_SEARCH_PAGES=[
-  ['dashboard','Dashboard','Overview and business summary','ti-layout-dashboard'],['rfq','RFQs','Sales requests for quotation','ti-inbox'],['costing','Pricing','Supplier pricing and costing','ti-calculator'],['quotations','Quotations','Customer quotations','ti-file-text'],['salesorders','Sales Orders','Confirmed customer orders','ti-shopping-cart'],['deliverynotes','Delivery Notes','Material deliveries','ti-truck-delivery'],['customerinvoices','Invoices','Customer invoices','ti-receipt'],['supplierrfqs','Supplier RFQs','Purchasing enquiries','ti-file-search'],['purchaseorders','Purchase Orders','Supplier orders','ti-clipboard-check'],['purchaseinvoices','Purchase Invoices','Supplier invoices','ti-file-invoice'],['supplierpayments','Supplier Payments','Payments and advances to suppliers','ti-cash-banknote'],['masters','Master Data','Customers, suppliers, products and employees','ti-database'],['analytics','Reports','Business reports and analytics','ti-chart-bar'],['setup','Administration','Company and system settings','ti-settings-cog']
+  ['dashboard','Dashboard','Overview and business summary','ti-layout-dashboard'],['rfq','RFQs','Sales requests for quotation','ti-inbox'],['costing','Pricing','Supplier pricing and costing','ti-calculator'],['quotations','Quotations','Customer quotations','ti-file-text'],['salesorders','Sales Orders','Confirmed customer orders','ti-shopping-cart'],['deliverynotes','Delivery Notes','Material deliveries','ti-truck-delivery'],['customerinvoices','Invoices','Customer invoices','ti-receipt'],['supplierrfqs','Supplier RFQs','Purchasing enquiries','ti-file-search'],['purchaseorders','Purchase Orders','Supplier orders','ti-clipboard-check'],['purchaseinvoices','Purchase Invoices','Supplier invoices','ti-file-invoice'],['supplierpayments','Supplier Payments','Payments and advances to suppliers','ti-cash-banknote'],['stock','Stock','Stock items, movements and allocation to orders','ti-box'],['masters','Master Data','Customers, suppliers, products and employees','ti-database'],['analytics','Reports','Business reports and analytics','ti-chart-bar'],['setup','Administration','Company and system settings','ti-settings-cog']
 ];
 let globalSearchSelection=0;
 function handleGlobalSearch(value){

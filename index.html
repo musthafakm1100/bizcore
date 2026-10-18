@@ -21,18 +21,18 @@
 <link href="css/administration-typography.css?v=247" rel="stylesheet"/>
 <link href="css/numbering-controls.css?v=266.5" rel="stylesheet"/>
 <link href="css/invoicing.css?v=266.5" rel="stylesheet"/>
-<link href="css/register-standard.css?v=268.3" rel="stylesheet"/>
+<link href="css/register-standard.css?v=268.4" rel="stylesheet"/>
 <link href="css/doc-view.css?v=266.5" rel="stylesheet"/>
 <link href="css/delivery-compact.css?v=266.5" rel="stylesheet"/>
 <link href="css/receipts.css?v=266.5" rel="stylesheet"/>
-<link href="css/shell.css?v=268.3" rel="stylesheet"/>
+<link href="css/shell.css?v=268.4" rel="stylesheet"/>
 <link href="css/accounts.css?v=268.2" rel="stylesheet"/>
 <link href="css/cash.css?v=268.32" rel="stylesheet"/>
-<link href="css/purchases.css?v=268.31" rel="stylesheet"/>
-<link href="css/responsive.css?v=268.3" rel="stylesheet"/>
+<link href="css/purchases.css?v=268.4" rel="stylesheet"/>
+<link href="css/responsive.css?v=268.4" rel="stylesheet"/>
 <link href="css/theme.css?v=266.5" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=265.2" defer></script>
-<script src="js/responsive.js?v=268.3" defer></script>
+<script src="js/responsive.js?v=268.4" defer></script>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
 .quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
@@ -147,6 +147,7 @@ document.addEventListener('error', function(e) {
 <div aria-label="Purchase Orders" class="nav-item" data-nav-page="purchaseorders" onclick="showPage('purchaseorders',this)" role="button" tabindex="0" title="Purchase Orders"><i class="ti ti-clipboard-check"></i><span class="nav-text">Purchase Orders</span><span class="nav-badge nav-badge-workflow" id="po-badge" style="display:none" title="Purchase orders requiring attention"></span></div>
 <div aria-label="Purchase Invoices" class="nav-item" data-nav-page="purchaseinvoices" onclick="showPage('purchaseinvoices',this)" role="button" tabindex="0" title="Purchase Invoices"><i class="ti ti-file-invoice"></i><span class="nav-text">Purchase Invoices</span><span class="nav-badge nav-badge-workflow" id="pi-badge" style="display:none" title="Purchase invoices requiring attention"></span></div>
 <div aria-label="Supplier Payments" class="nav-item" data-nav-page="supplierpayments" onclick="showPage('supplierpayments',this)" role="button" tabindex="0" title="Supplier Payments"><i class="ti ti-cash-banknote"></i><span class="nav-text">Supplier Payments</span></div>
+<div aria-label="Stock" class="nav-item" data-nav-page="stock" onclick="showPage('stock',this)" role="button" tabindex="0" title="Stock"><i class="ti ti-box"></i><span class="nav-text">Stock</span></div>
 </div>
 </div>
 <div class="nav-group" data-group="finance">
@@ -761,7 +762,50 @@ document.addEventListener('error', function(e) {
     </div>
   </div>
 </div>
-<div class="page" id="page-stock"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-box"></i></div><h2>Stock</h2><p>Monitor quantities received, issued, reserved, and available across your inventory.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
+<!-- V268.4: Purchasing → Stock (js/stock.js) — same register standard as Receipts -->
+<div class="page" id="page-stock">
+  <div class="dn-register-shell module-main-workspace" id="st-main-workspace" data-module-monitor="stock">
+    <aside class="dn-overview-panel module-monitor bc-monitor" aria-label="Stock Monitor">
+      <div class="dn-overview-head module-monitor-head"><div><strong>Stock Monitor</strong><span>Bought, not allocated to an order yet</span></div><button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('stock')" aria-label="Collapse Stock Monitor" title="Collapse Stock Monitor"><i class="ti ti-chevron-left"></i></button></div>
+      <div class="dn-overview-body module-monitor-body">
+        <button type="button" class="dn-overview-total dn-kpi active" data-st-kpi="all" onclick="filterStockKPI('all')"><span>All stock items</span><strong id="streg-k-total">0</strong></button>
+        <div class="dn-overview-section-label">Status</div>
+        <button type="button" class="dn-overview-row dn-kpi" data-st-kpi="in" onclick="filterStockKPI('in')"><span><i class="dn-dot bc-dot-green"></i>In stock</span><strong id="streg-k-in">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-st-kpi="zero" onclick="filterStockKPI('zero')"><span><i class="dn-dot bc-dot-gray"></i>Used up</span><strong id="streg-k-zero">0</strong></button>
+        <div class="dn-overview-section-label">Attention</div>
+        <button type="button" class="dn-overview-row dn-kpi" data-st-kpi="demand" onclick="filterStockKPI('demand')"><span><i class="dn-dot bc-dot-amber"></i>Open demand</span><strong id="streg-k-demand">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-st-kpi="old" onclick="filterStockKPI('old')"><span><i class="dn-dot bc-dot-red"></i>In stock over 90 days</span><strong id="streg-k-old">0</strong></button>
+        <div class="dn-overview-section-label">Figures</div>
+        <div class="dn-overview-row bc-monitor-metric"><span>Stock value</span><strong id="streg-a-value">0.00</strong></div>
+        <div class="dn-overview-row bc-monitor-metric"><span>Could go to orders</span><strong id="streg-a-demand">0.00</strong></div>
+      </div>
+    </aside>
+    <button class="module-monitor-rail" type="button" onclick="toggleModuleMonitor('stock')" aria-label="Expand Stock Monitor" title="Expand Stock Monitor"><i class="ti ti-layout-sidebar-left-expand"></i><span>Stock</span></button>
+    <div class="dn-register-area module-register-area">
+      <div class="dn-register-toolbar page-toolbar page-toolbar--sticky page-control-bar bc-filterbar" role="toolbar" aria-label="Stock filters">
+        <div class="dn-toolbar-left bc-filterbar-left"><select id="streg-sort" class="bc-filter bc-filter-sort" onchange="renderStockRegister()" aria-label="Sort stock"><option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option><option value="item-asc">Item A–Z</option><option value="value-desc">Value high–low</option><option value="qty-desc">Quantity high–low</option></select><span class="bc-filter-count" id="streg-count">0 items</span></div>
+        <div class="dn-toolbar-right bc-filterbar-right">
+<select id="streg-status" class="bc-filter bc-filter-status" onchange="filterStockKPI(this.value||'all')" aria-label="Status"><option value="">All statuses</option><option value="in">In stock</option><option value="zero">Used up</option><option value="demand">Open demand</option><option value="old">In stock over 90 days</option></select>
+<div class="bc-date" data-bc-date="streg" data-bc-date-title="Last bought"></div>
+<input id="streg-q" class="bc-filter bc-filter-search" type="text" oninput="renderStockRegister()" placeholder="Search item, code, invoice…" aria-label="Search stock"/>
+<button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="streg-clear" onclick="clearStockFilters()" type="button" title="Clear all filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
+<button class="btn bc-filter-new btn-secondary" id="st-moves-btn" title="All stock movements" onclick="openStockMovements()" type="button"><i class="ti ti-history"></i><span>Movements</span></button>
+        </div>
+      </div>
+      <div class="card dn-register-card"><div class="dn-table-scroll"><table id="streg-table" class="st-reg-table"><thead><tr>
+        <th class="sortable-register-th" data-sort-screen="st" data-sort-key="item" onclick="setRegisterSort('st','item',renderStockRegister)">Item</th>
+        <th>Unit</th>
+        <th class="sortable-register-th num" data-sort-screen="st" data-sort-key="qty" onclick="setRegisterSort('st','qty',renderStockRegister)">In stock</th>
+        <th class="num">Avg. cost</th>
+        <th class="sortable-register-th num" data-sort-screen="st" data-sort-key="value" onclick="setRegisterSort('st','value',renderStockRegister)">Value (SAR)</th>
+        <th class="sortable-register-th" data-sort-screen="st" data-sort-key="date" onclick="setRegisterSort('st','date',renderStockRegister)">Last bought</th>
+        <th>Open demand</th>
+        <th></th>
+      </tr></thead><tbody id="streg-body"></tbody></table></div>
+      <div class="st-cards" id="streg-cards" aria-label="Stock items"></div></div>
+    </div>
+  </div>
+</div>
 <div class="page" id="page-warehouses"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-building-warehouse"></i></div><h2>Warehouses</h2><p>Maintain warehouse locations and prepare the system for location-based stock tracking.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
 <div class="page" id="page-categories"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-category"></i></div><h2>Product Categories</h2><p>Organize products into categories for faster searching, reporting, and inventory control.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
 <!-- SETUP PAGE -->
@@ -2203,8 +2247,8 @@ import * as AccCore from './js/account-core.mjs?v=268.2';
 import { createAccountService } from './js/account-service.mjs?v=268.2';
 import * as LedgerCore from './js/ledger-core.mjs?v=267.2';
 import { createLedgerService } from './js/ledger-service.mjs?v=267.2';
-import * as PurchaseCore from './js/purchase-core.mjs?v=268.3';
-import { createPurchaseService } from './js/purchase-service.mjs?v=268.31';
+import * as PurchaseCore from './js/purchase-core.mjs?v=268.4';
+import { createPurchaseService } from './js/purchase-service.mjs?v=268.4';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile }
@@ -3062,7 +3106,7 @@ const purchaseService = createPurchaseService({ db, doc, runTransaction, serverT
   actor: () => { const u = auth.currentUser, cu = window.currentUser || {}; return u ? { uid: u.uid, name: cu.name || u.displayName || u.email || u.uid } : {}; },
   formatNumber: (prefix, n) => prefix + String(n).padStart(4, '0'),
 });
-let _piUnsubs = null, _piList = [], _piLedgers = new Map(), _piStock = new Map(), _piPays = [], _piSettings = PurchaseCore.effectivePurchaseSettings(null);
+let _piUnsubs = null, _piList = [], _piLedgers = new Map(), _piStock = new Map(), _piPays = [], _piAllocs = [], _piSettings = PurchaseCore.effectivePurchaseSettings(null);
 const _piListeners = new Set();
 const _piFire = () => _piListeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } });
 window.BizCorePI = {
@@ -3072,6 +3116,9 @@ window.BizCorePI = {
   get ledgers() { return _piLedgers; },
   get stock() { return _piStock; },
   get payments() { return _piPays; },   // V268.2 supplierPayments
+  get allocations() { return _piAllocs; },   // V268.4 stockAllocations
+  /** V268.4: the movements of one stock item (read when its screen opens). */
+  async movesOf(itemKey) { const snap = await getDocs(query(collection(db, PurchaseCore.PURCHASE_COLLECTIONS.stockMoves), where('itemKey', '==', String(itemKey)))); const out = []; snap.forEach(d => out.push(d.data())); return out; },
   get settings() { return _piSettings; },
   get isAdministrator() { return _isAdministrator; },
   onChange(fn) { _piListeners.add(fn); return () => _piListeners.delete(fn); },
@@ -3084,6 +3131,7 @@ window.BizCorePI = {
       onSnapshot(collection(db, C.stockItems), snap => { const m = new Map(); snap.forEach(d => m.set(d.id, d.data())); _piStock = m; _piFire(); }, warn('Stock')),
       onSnapshot(doc(db, ...PurchaseCore.PURCHASE_SETTINGS_PATH), snap => { _piSettings = PurchaseCore.effectivePurchaseSettings(snap.exists() ? snap.data() : null); _piFire(); }, warn('Purchase settings')),
       onSnapshot(collection(db, PurchaseCore.PAYMENT_COLLECTION), snap => { const out = []; snap.forEach(d => out.push(d.data())); _piPays = out; _piFire(); }, warn('Supplier payments')),
+      onSnapshot(collection(db, PurchaseCore.STOCK_ALLOC_COLLECTION), snap => { const out = []; snap.forEach(d => out.push(d.data())); _piAllocs = out; _piFire(); }, warn('Stock allocations')),
     ];
     // V268.2: the payment accounts (payment lines) and the cash ledger (custodian confirmations)
     if (window.BizCoreAcc) { window.BizCoreAcc.start(); window.BizCoreAcc.onChange(_piFire); }
@@ -3295,7 +3343,7 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=268.31';
+      s.src = 'js/app.js?v=268.4';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d); };
       document.body.appendChild(s);
@@ -3303,7 +3351,9 @@ onAuthStateChanged(auth, user => {
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js
     const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=268.32'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
     // V268.3: supplier-payments.js (Supplier Payments, advances, edits) after purchases.js
-    const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=268.32'; sp.onload = start; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
+    // V268.4: stock.js (Purchasing → Stock) after supplier-payments.js
+    const loadStock = () => { const st = document.createElement('script'); st.id = 'bizcore-stock-script'; st.src = 'js/stock.js?v=268.4'; st.onload = start; st.onerror = () => { console.error('[BizCore] stock.js could not be loaded'); start(); }; document.body.appendChild(st); };
+    const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=268.32'; sp.onload = loadStock; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
     // V267.2: cash-ui.js + cashbank.js (Cash & Bank) after accounts.js, before app.js
     const loadCash = () => { const u = document.createElement('script'); u.id = 'bizcore-cashui-script'; u.src = 'js/cash-ui.js?v=268.31'; u.onload = u.onerror = () => { const c = document.createElement('script'); c.id = 'bizcore-cashbank-script'; c.src = 'js/cashbank.js?v=268.31'; c.onload = loadPurchases; c.onerror = () => { console.error('[BizCore] cashbank.js could not be loaded'); loadPurchases(); }; document.body.appendChild(c); }; document.body.appendChild(u); };
     // V266: receipts.js (Payment Receipts) after invoicing.js, before app.js
