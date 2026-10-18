@@ -2555,11 +2555,13 @@ async function fbSave(col, arr, opts = {}) {
     const currentIds = new Set();
     const writes = []; // {docId, data, json}
     const only = Array.isArray(opts.onlyIds) ? new Set(opts.onlyIds.map(String)) : null;
+    const skip = Array.isArray(opts.skipIds) ? new Set(opts.skipIds.map(String)) : null;   // V269: records whose own save failed — not written, not deleted
     for (const record of (arr || [])) {
       if (!record || record.id == null) continue;
       const docId = _docIdFor(col, record);
       currentIds.add(docId);
       if (only && !only.has(String(record.id)) && !only.has(docId)) continue;
+      if (skip && skip.has(String(record.id))) continue;
       const json = JSON.stringify(record);
       if (cache[docId] !== json) {
         const estimatedBytes = _bizcoreEncoder.encode(json).length;
@@ -2624,6 +2626,37 @@ async function fbLoad(col) {
     return records;
   } catch(e) { console.warn('FB load failed:', col, e.message); return null; }
 }
+
+/* ── V269: one record together with its sub-documents, in ONE batch (both or neither) ──
+   Used for an RFQ and its pricing versions (rfqs/{id}/pricingVersions/v{N}). extras: [{ path: [segments…], data, merge }].
+   Only this record is written — never the whole list, never an implicit delete. */
+async function fbSaveRecordWith(col, record, extras = []) {
+  try {
+    window.BizCoreStorageDiagnostics.lastSaveError = null;
+    if (!record || record.id == null) return false;
+    if (_EMBEDDED_IMAGE_COLLECTIONS.has(col)) { _stripEmbeddedImages(record); extras.forEach(x => _stripEmbeddedImages(x.data)); }
+    await _migrateCollectionIfNeeded(col);
+    const docId = _docIdFor(col, record), json = JSON.stringify(record);
+    const estimatedBytes = _bizcoreEncoder.encode(json).length;
+    if (estimatedBytes >= BIZCORE_RECORD_WARN_BYTES) console.warn('[BizCore storage size warning]', { collection: col, recordId: docId, estimatedBytes, level: estimatedBytes >= BIZCORE_RECORD_CRITICAL_BYTES ? 'critical' : 'warning' });
+    const batch = writeBatch(db);
+    batch.set(doc(db, col, docId), record);
+    extras.forEach(x => x.merge ? batch.set(doc(db, ...x.path.map(String)), x.data, { merge: true }) : batch.set(doc(db, ...x.path.map(String)), x.data));
+    await batch.commit();
+    (_lastSynced[col] || (_lastSynced[col] = {}))[docId] = json;
+    return true;
+  } catch (e) {
+    window.BizCoreStorageDiagnostics.lastSaveError = { collection: col, code: e?.code || 'unknown', message: String(e?.message || e), timestamp: new Date().toISOString() };
+    console.error('[BizCore storage save failed]', window.BizCoreStorageDiagnostics.lastSaveError);
+    return false;
+  }
+}
+/** The copy of a record as last read from / written to the server (JSON), or null. */
+function fbSyncedJSON(col, id) { const c = _lastSynced[col]; return c ? (c[_safeDocId(id)] ?? null) : null; }
+/** One document by path segments → data | null. Throws when the server can't be reached. */
+async function fbReadDoc(...path) { const s = await getDoc(doc(db, ...path.map(String))); return s.exists() ? s.data() : null; }
+/** Every document of a (sub)collection by path segments → [data]. */
+async function fbReadAll(...path) { const s = await getDocs(collection(db, ...path.map(String))); const out = []; s.forEach(d => out.push(d.data())); return out; }
 
 async function fbSaveSettings(obj) {
   try {
@@ -3252,7 +3285,7 @@ window.BizCoreRct = {
   },
 };
 /* Expose to app.js */
-window.FB = { fbSave, fbLoad, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
+window.FB = { fbSave, fbLoad, fbSaveRecordWith, fbSyncedJSON, fbReadDoc, fbReadAll, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
   getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, finalizeProvisionalNumber, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
 
   /* ═══════════════════════════════════════════════════
@@ -3378,7 +3411,7 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=268.7';
+      s.src = 'js/app.js?v=269';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
@@ -3386,7 +3419,7 @@ onAuthStateChanged(auth, user => {
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js
-    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=268.7'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
+    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=269'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
     // V268.3: supplier-payments.js (Supplier Payments, advances, edits) after purchases.js
     // V268.4: stock.js (Purchasing → Stock) after supplier-payments.js
     const loadStock = () => { const st = document.createElement('script'); st.id = 'bizcore-stock-script'; st.src = 'js/stock.js?v=268.61'; st.onload = start; st.onerror = () => { console.error('[BizCore] stock.js could not be loaded'); start(); }; document.body.appendChild(st); };

@@ -43,8 +43,11 @@ function piEstimateFor(so, soLine){
     if (!q) return null;
     const r = rs.find(x => x.id === q.rfqId || x.rfqNo === q.rfqId) || rs.find(x => x.quotationId === q.id || x.quotationId === q.qno);
     if (!r) return null;
-    const versions = typeof ensurePricingVersions === 'function' ? ensurePricingVersions(r) : (r.pricingVersions || []);
-    const v = versions.find(x => Number(x.version) === Number(q.pricingVersion || r.currentPricingVersion || 1)) || versions[versions.length - 1];
+    // V269: the current version's lines are in the RFQ; an older version comes from its own document (read ahead when
+    // New Purchase Invoice opens). Not read yet → no estimate for now (the last paid price is used instead).
+    const n = Number(q.pricingVersion || r.currentPricingVersion || 1);
+    const v = typeof pvFull === 'function' ? pvFull(r, n) : null;
+    if (!v && typeof pvLoad === 'function' && n !== Number(r.currentPricingVersion || 1)) { pvLoad(r, n).catch(() => {}); return null; }
     const items = (v && v.pricingItems) || r.pricingItems || [];
     const qi = (q.items || [])[Number(soLine.origIdx)] || {};
     const low = s => String(s || '').trim().toLowerCase();
@@ -197,6 +200,7 @@ function openNewPurchaseInvoice(){
   m._s = { lines: [], costs: [], discount: null, vatTouched: false, pays: [], op: 'pi-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10) };
   piSetEditMode(m, null);
   piStartAccounts();
+  if (typeof pvPrefetchForSalesOrders === 'function') { try { pvPrefetchForSalesOrders([...new Set(piOpenOrderLines().map(x => x.so))]); } catch (e) {} }   // V269: pricing versions the open orders were quoted from
   const sups = (typeof suppliers !== 'undefined' ? suppliers : []).slice().sort((a, b) => String(a.company || '').localeCompare(String(b.company || '')));
   document.getElementById('pe-supplier').innerHTML = '<option value="">Choose the supplier…</option>' + sups.map(s => `<option value="${piEsc(s.id)}">${piEsc(s.company || s.name || s.id)}</option>`).join('');
   bcPickEnhance('pe-supplier', { items: bcSupplierPickItems, addNew: BC_NEW_SUPPLIER, placeholder: 'Search supplier…', empty: 'No supplier matches. Check the spelling, or add the supplier in Master Data.' });   // V268.5

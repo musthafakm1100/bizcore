@@ -39,47 +39,218 @@ let pricingSaveInProgress = false;
 let pricingConvertInProgress = false;
 let pricingReorderHadPriorDirty = false;
 
+/* ══════════════════════════════════════════════════════════════════════════
+   V269 — PRICING VERSIONS, one document per version (data plan step 1)
+   rfqs/{id}                        RFQ header + the CURRENT version's working copy (pricingItems, internalCosts,
+                                    vendorQuotes, pricingAttachment, internalNotes, supplier fields) as before, plus
+                                    pricingIndex[] — a small summary of every version (status, dates, totals, suppliers)
+                                    and pricingProductRefs[] — the products used by the earlier versions ("in use" checks).
+   rfqs/{id}/pricingVersions/v{N}   the full version (lines, costs, vendor quotes, notes). Written in the SAME batch as
+                                    the RFQ by saveRFQs(); a converted / superseded version never changes again
+                                    (only its status). Older versions are read only when opened.
+   RFQs that still carry the old pricingVersions[] array are converted the first time RFQs are saved.
+   ══════════════════════════════════════════════════════════════════════════ */
+const PV_META_KEYS = ['version','status','revisionReason','previousVersion','created','updated','convertedDate','quotationId','supplierName','supplierId','supRef','supDate'];
+const PV_SUMMARY_KEYS = ['lineCount','materialCost','extraCost','totalSell','supplierRefs'];
+const PV_LOCKED = ['Converted','Superseded','Cancelled'];
+const pvCache = new Map();   // 'rfqId#N' → full version document (read from the server)
+const pvLegacy = new Map();  // rfqId → full versions from the old embedded array, written on the next save
+const pvLocked = status => PV_LOCKED.includes(status);
+const pvClean = o => JSON.parse(JSON.stringify(o === undefined ? null : o));
+const pvPick = (o, keys) => { const out = {}; keys.forEach(k => { if (o && o[k] !== undefined) out[k] = o[k]; }); return out; };
+const pvNorm = s => String(s || '').trim().toLowerCase();
+
+function pvSupplierRefs(src) {
+  const seen = new Set(), out = [];
+  const add = (id, name) => { id = String(id || ''); name = String(name || '').trim(); if (!id && !name) return; const k = id ? 'i:' + id : 'n:' + pvNorm(name); if (seen.has(k)) return; seen.add(k); out.push(id ? { supplierId: id, supplierName: name } : { supplierName: name }); };
+  if (!src) return out;
+  add(src.supplierId, src.supplierName);
+  (src.pricingItems || []).forEach(it => it && add(it.supplierId, it.supplierName || it.supplier));
+  (src.vendorQuotes || []).forEach(q => q && add(q.supplierId, q.supplierName || q.supplier));
+  return out;
+}
+function pvProductRefs(items) {
+  const out = [];
+  (items || []).forEach(it => { if (!it) return; const id = String(it.productId || it.prodId || it.itemId || ''), code = String(it.code || '').trim(), desc = String(it.desc || it.name || '').trim(); if (!id && !code && !desc) return; const ref = {}; if (id) ref.productId = id; if (code) ref.code = code; if (desc) ref.desc = desc; out.push(ref); });
+  return out;
+}
+function pvMergeProductRefs(a, b) {
+  const seen = new Set(), out = [];
+  [...(a || []), ...(b || [])].forEach(ref => { const k = [ref.productId || '', pvNorm(ref.code), pvNorm(ref.desc)].join('|'); if (seen.has(k)) return; seen.add(k); out.push(ref); });
+  return out;
+}
+/** Summary figures of one version's content (the same sums the Pricing register shows). */
+function pvSummary(src) {
+  const items = Array.isArray(src && src.pricingItems) ? src.pricingItems : [];
+  const materialCost = items.reduce((s, it) => s + (Number(it && it.buy) || 0) * (Number(it && it.qty) || 0), 0);
+  const totalSell = items.reduce((s, it) => s + (Number(it && it.sell) || 0) * (Number(it && it.qty) || 0), 0);
+  const extraCost = (Array.isArray(src && src.internalCosts) ? src.internalCosts : []).filter(c => c && typeof c === 'object').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  return { lineCount: items.length, materialCost, extraCost, totalSell, supplierRefs: pvSupplierRefs(src) };
+}
+function pvEntryFrom(v) { return { ...pvPick(v, PV_META_KEYS), version: Number(v.version) || 1, status: v.status || 'Saved', ...pvSummary(v) }; }
+
+/** Pure: the version index of an RFQ record in any format → { index, current, legacy }. Doesn't change the record. */
+function pvIndexFrom(rec) {
+  if (!rec) return { index: [], current: 1, legacy: null };
+  let index = [], legacy = null;
+  if (Array.isArray(rec.pricingIndex)) index = rec.pricingIndex;
+  else if (Array.isArray(rec.pricingVersions) && rec.pricingVersions.length) { legacy = rec.pricingVersions; index = legacy.map(pvEntryFrom); }
+  else if (Array.isArray(rec.pricingItems) && rec.pricingItems.length) {
+    index = [pvEntryFrom({ version: 1, status: rec.quotationId ? 'Converted' : 'Saved', revisionReason: '', created: rec.created || new Date().toISOString(), updated: rec.updated || rec.created || new Date().toISOString(),
+      convertedDate: rec.quotationId ? (rec.quotedDate || null) : null, quotationId: rec.quotationId || null, supplierName: rec.supplierName || '', supplierId: rec.supplierId || '', supRef: rec.supRef || '', supDate: rec.supDate || '',
+      pricingItems: rec.pricingItems, internalCosts: rec.internalCosts, vendorQuotes: rec.vendorQuotes })];
+  }
+  const current = Number(rec.currentPricingVersion) || (index.length ? Math.max(...index.map(e => Number(e.version) || 1)) : 1);
+  return { index, current, legacy };
+}
+/** In memory only: bring an RFQ to the V269 shape (index on the RFQ, old embedded versions put aside for the next save). */
+function pvNormalize(r) {
+  if (!r || Array.isArray(r.pricingIndex) && !Array.isArray(r.pricingVersions)) { if (r && r.pricingIndex && r.pricingIndex.length && !r.currentPricingVersion) r.currentPricingVersion = pvIndexFrom(r).current; return; }
+  const p = pvIndexFrom(r);
+  if (p.legacy) {
+    pvLegacy.set(String(r.id), pvClean(p.legacy)); delete r.pricingVersions;
+    const cur = p.legacy.find(v => Number(v.version) === Number(p.current));   // working copy missing → take it from the current old version
+    if (cur && !(Array.isArray(r.pricingItems) && r.pricingItems.length)) ['pricingItems','internalCosts','vendorQuotes','pricingAttachment','internalNotes','supRef','supDate'].forEach(k => { if (cur[k] !== undefined) r[k] = pvClean(cur[k]); });
+  }
+  else if (Array.isArray(r.pricingVersions)) delete r.pricingVersions;   // empty old array
+  if (p.index.length) { r.pricingIndex = p.index; r.currentPricingVersion = p.current; }
+}
+function pvAddEntry(r, entry) {
+  pvNormalize(r);
+  if (!Array.isArray(r.pricingIndex)) r.pricingIndex = [];
+  const e = { status: 'Saved', created: new Date().toISOString(), ...entry, version: Number(entry.version) || 1 };
+  r.pricingIndex = r.pricingIndex.filter(x => Number(x.version) !== e.version).concat([e]).sort((a, b) => Number(a.version) - Number(b.version));
+  return r.pricingIndex.find(x => Number(x.version) === e.version);
+}
+/** The full document of the CURRENT version, built from the RFQ's working copy. */
+function pvCurrentDoc(rec, index, currentNo) {
+  const e = (index || []).find(x => Number(x.version) === Number(currentNo)) || { version: Number(currentNo) || 1, status: 'Saved' };
+  return pvClean({ rfqId: String(rec.id), ...pvPick(e, PV_META_KEYS), ...pvPick(e, PV_SUMMARY_KEYS), version: Number(e.version) || 1,
+    pricingItems: rec.pricingItems || [], internalCosts: rec.internalCosts || [], vendorQuotes: rec.vendorQuotes || [], pricingAttachment: rec.pricingAttachment || null, internalNotes: rec.internalNotes || '' });
+}
+function pvDocFromFull(rfqId, v) {
+  return pvClean({ rfqId: String(rfqId), ...pvEntryFrom(v), pricingItems: v.pricingItems || [], internalCosts: v.internalCosts || [], vendorQuotes: v.vendorQuotes || [], pricingAttachment: v.pricingAttachment || null, internalNotes: v.internalNotes || '' });
+}
+/** Keeps the current version's summary in step with the working copy (only while it can still be edited). */
+function pvRefreshCurrent(r) {
+  const e = getCurrentPricingVersion(r); if (!e || pvLocked(e.status)) return;
+  e.supplierName = r.supplierName || ''; e.supplierId = r.supplierId || e.supplierId || ''; e.supRef = r.supRef || ''; e.supDate = r.supDate || '';
+  Object.assign(e, pvSummary(r));
+}
+
 function ensurePricingVersions(r) {
   if (!r) return [];
-  if (!Array.isArray(r.pricingVersions) || !r.pricingVersions.length) {
-    if (Array.isArray(r.pricingItems) && r.pricingItems.length) {
-      r.pricingVersions = [{
-        version: 1,
-        status: r.quotationId ? 'Converted' : 'Saved',
-        revisionReason: '',
-        created: r.created || new Date().toISOString(),
-        updated: new Date().toISOString(),
-        convertedDate: r.quotationId ? (r.quotedDate || new Date().toISOString()) : null,
-        quotationId: r.quotationId || null,
-        supplierName: r.supplierName || '', supRef: r.supRef || '', supDate: r.supDate || '',
-        pricingItems: JSON.parse(JSON.stringify(r.pricingItems || [])),
-        internalCosts: JSON.parse(JSON.stringify(r.internalCosts || [])),
-        vendorQuotes: JSON.parse(JSON.stringify(r.vendorQuotes || [])),
-        pricingAttachment: r.pricingAttachment || null,
-        internalNotes: r.internalNotes || ''
-      }];
-      r.currentPricingVersion = 1;
-    } else {
-      r.pricingVersions = [];
-      r.currentPricingVersion = 1;
-    }
-  }
-  if (!r.currentPricingVersion) r.currentPricingVersion = Math.max(1, ...r.pricingVersions.map(v=>Number(v.version)||1));
-  return r.pricingVersions;
+  pvNormalize(r);
+  return Array.isArray(r.pricingIndex) ? r.pricingIndex : [];
 }
+/** The current version's index entry (status, dates, totals). Its lines are the RFQ's working copy. */
 function getCurrentPricingVersion(r) {
-  const versions=ensurePricingVersions(r);
-  return versions.find(v=>Number(v.version)===Number(r.currentPricingVersion)) || versions[versions.length-1] || null;
+  const versions = ensurePricingVersions(r);
+  return versions.find(v => Number(v.version) === Number(r.currentPricingVersion)) || versions[versions.length - 1] || null;
+}
+/** A full version (lines included) if it is already here: the current one, a loaded one or an old embedded one. */
+function pvFull(r, versionNo) {
+  if (!r) return null;
+  const n = Number(versionNo) || 1, e = ensurePricingVersions(r).find(x => Number(x.version) === n);
+  if (!e) return null;
+  if (n === Number(r.currentPricingVersion)) return pvCurrentDoc(r, r.pricingIndex, n);
+  const legacy = (pvLegacy.get(String(r.id)) || []).find(v => Number(v.version) === n);
+  const doc = pvCache.get(r.id + '#' + n) || (legacy && pvDocFromFull(r.id, legacy));
+  return doc ? { ...doc, ...pvPick(e, PV_META_KEYS) } : null;
+}
+/** Reads a version from the server when it isn't here yet (old versions are read only when opened). */
+async function pvLoad(r, versionNo) {
+  const have = pvFull(r, versionNo); if (have) return have;
+  if (!window.FB || !window.FB.fbReadDoc) return null;
+  const n = Number(versionNo) || 1;
+  const data = await window.FB.fbReadDoc('rfqs', r.id, 'pricingVersions', 'v' + n);
+  if (!data) return null;
+  pvCache.set(r.id + '#' + n, data);
+  return pvFull(r, n);
+}
+/** Opens an old version, with a short "Loading…" and a clear message when it can't be read. */
+async function pvLoadWithMessage(r, versionNo) {
+  const n = Number(versionNo) || 1;
+  if (pvFull(r, n)) return pvFull(r, n);
+  const t = setTimeout(() => showToast('Loading pricing V' + n + '…', 'info'), 250);
+  try {
+    const v = await pvLoad(r, n);
+    if (!v) showToast('Pricing V' + n + ' of ' + (r.rfqNo || 'this RFQ') + ' was not found.', 'error');
+    return v;
+  } catch (e) {
+    showToast(navigator.onLine === false ? 'You are offline. Connect to open pricing V' + n + '.' : 'Pricing V' + n + ' could not be loaded. Check the connection and try again.', 'error');
+    return null;
+  } finally { clearTimeout(t); }
+}
+/** Purchase Invoices: read the pricing versions that open Sales Orders were quoted from (if not the current one). */
+function pvPrefetchForSalesOrders(sos) {
+  try {
+    const seen = new Set();
+    (sos || []).forEach(so => {
+      const q = quotations.find(x => x.id === so.quotationId || x.qno === so.quotationId); if (!q || !q.pricingVersion) return;
+      const r = rfqs.find(x => x.id === q.rfqId || x.rfqNo === q.rfqId) || rfqs.find(x => x.quotationId === q.id || x.quotationId === q.qno); if (!r) return;
+      const k = r.id + '#' + Number(q.pricingVersion); if (seen.has(k) || pvFull(r, q.pricingVersion)) return; seen.add(k);
+      pvLoad(r, q.pricingVersion).catch(() => {});
+    });
+  } catch (e) {}
+}
+window.pvPrefetchForSalesOrders = pvPrefetchForSalesOrders;
+/* V269: viewing an older version must not change the RFQ (its current version stays current). */
+const PV_WORKING_KEYS = ['currentPricingVersion','pricingItems','internalCosts','vendorQuotes','pricingAttachment','internalNotes','supplierName','supplierId','supRef','supDate','status'];
+let pvViewing = null;   // { rfqId, version } — the older version shown in the read-only Pricing view
+function pvSnapshot(r) { const s = {}; PV_WORKING_KEYS.forEach(k => { s[k] = Object.prototype.hasOwnProperty.call(r, k) ? JSON.parse(JSON.stringify(r[k] === undefined ? null : r[k])) : undefined; }); return s; }
+function pvRestore(r, s) { PV_WORKING_KEYS.forEach(k => { if (s[k] === undefined) delete r[k]; else r[k] = s[k]; }); }
+function rfqSaveFailedMessage() {
+  const err = window.BizCoreStorageDiagnostics && window.BizCoreStorageDiagnostics.lastSaveError;
+  if (!navigator.onLine) return 'You are offline. Nothing was saved — reconnect and try again.';
+  if (err && err.code === 'permission-denied') return 'The database refused the change. Nothing was saved — reload BizCore and try again.';
+  return 'The database did not confirm the change' + (err && err.message ? ' (' + err.message + ')' : '') + '. Nothing was saved — please try again.';
+}
+
+/** For one RFQ: refresh its summary and work out which version documents go into the same batch. null = RFQ only. */
+function pvPrepareSave(r) {
+  pvNormalize(r);
+  const legacy = pvLegacy.get(String(r.id)) || null;
+  const idx = Array.isArray(r.pricingIndex) ? r.pricingIndex : [];
+  if (!idx.length) return null;
+  pvRefreshCurrent(r);
+  const cur = getCurrentPricingVersion(r); const curNo = Number(cur.version) || 1;
+  if (Number(r.currentPricingVersion) !== curNo) r.currentPricingVersion = curNo;
+  const prevJson = window.FB && window.FB.fbSyncedJSON ? window.FB.fbSyncedJSON('rfqs', r.id) : null;
+  let prev = null; try { prev = prevJson ? JSON.parse(prevJson) : null; } catch (e) {}
+  const pi = pvIndexFrom(prev);
+  // products of versions that are no longer edited (for the "product in use" check)
+  let refs = r.pricingProductRefs || [];
+  if (pvLocked(cur.status)) refs = pvMergeProductRefs(refs, pvProductRefs(r.pricingItems));
+  if (prev && Number(pi.current) !== curNo && Array.isArray(prev.pricingItems)) refs = pvMergeProductRefs(refs, pvProductRefs(prev.pricingItems));
+  if (legacy) legacy.forEach(v => { if (Number(v.version) !== curNo) refs = pvMergeProductRefs(refs, pvProductRefs(v.pricingItems)); });
+  if (refs.length) r.pricingProductRefs = refs;
+  if (prevJson && prevJson === JSON.stringify(r)) return null;
+  const extras = [], path = n => ['rfqs', r.id, 'pricingVersions', 'v' + n];
+  if (legacy) legacy.forEach(v => { if (Number(v.version) !== curNo) extras.push({ path: path(Number(v.version) || 1), data: pvDocFromFull(r.id, v) }); });
+  const pe = pi.index.find(e => Number(e.version) === curNo);
+  let writeCur = !!legacy || !pe;
+  if (!writeCur && !pvLocked(pe.status)) writeCur = Number(pi.current) !== curNo || JSON.stringify(pvCurrentDoc(prev, pi.index, curNo)) !== JSON.stringify(pvCurrentDoc(r, idx, curNo));
+  if (writeCur) extras.push({ path: path(curNo), data: pvCurrentDoc(r, idx, curNo) });
+  if (!legacy) idx.forEach(e => {
+    const n = Number(e.version); if (writeCur && n === curNo) return;
+    const p = pi.index.find(x => Number(x.version) === n); if (!p) return;
+    if ((e.status || '') !== (p.status || '') || (e.updated || '') !== (p.updated || ''))
+      extras.push({ path: path(n), merge: true, data: { rfqId: String(r.id), version: n, status: e.status || 'Saved', updated: e.updated || '' } });   // a fixed version: only its status changes
+  });
+  return extras;
 }
 function syncRFQFromPricingVersion(r,v) {
   if(!r||!v)return;
   r.currentPricingVersion=Number(v.version)||1;
+  if(!Array.isArray(v.pricingItems))return;   // V269: an index entry (no lines) only moves the pointer; the lines are already the working copy
   r.pricingItems=JSON.parse(JSON.stringify(v.pricingItems||[]));
   r.internalCosts=JSON.parse(JSON.stringify(v.internalCosts||[]));
   r.vendorQuotes=JSON.parse(JSON.stringify(v.vendorQuotes||[]));
   r.pricingAttachment=v.pricingAttachment||null;
   r.internalNotes=v.internalNotes||'';
   r.supplierName=v.supplierName||''; r.supRef=v.supRef||''; r.supDate=v.supDate||'';
+  if(v.supplierId!==undefined) r.supplierId=v.supplierId||'';
 }
 function isPricingVersionLocked(r) {
   const v=getCurrentPricingVersion(r);
@@ -1683,7 +1854,7 @@ function migrateMasterRelationshipIds(){
     const stampSupplier=(obj)=>{if(!obj)return;if(!obj.supplierId){const sp=findUniqueMasterByName(suppliers,obj.supplierName||obj.supplier);if(sp){obj.supplierId=sp.id;changed.rfqs=true;}}};
     (r.pricingItems||[]).forEach(stampSupplier);
     (r.vendorQuotes||[]).forEach(stampSupplier);
-    (r.pricingVersions||[]).forEach(v=>{stampSupplier(v);(v.pricingItems||[]).forEach(stampSupplier);(v.vendorQuotes||[]).forEach(stampSupplier);});
+    // V269: earlier pricing versions are fixed documents; only the working copy above is stamped
   });
   salesOrders.forEach(so=>{
     if(!so.custId){
@@ -1748,11 +1919,7 @@ function getMasterDependencies(type, rec) {
       let used = recordBelongsToSupplier(r,rec);
       if (!used) used = (r.pricingItems || []).some(it => supplierRefMatches(it,rec));
       if (!used) used = (r.vendorQuotes || []).some(v => supplierRefMatches(v,rec));
-      if (!used) used = (r.pricingVersions || []).some(v =>
-        supplierRefMatches(v,rec) ||
-        (v.pricingItems || []).some(it => supplierRefMatches(it,rec)) ||
-        (v.vendorQuotes || []).some(q => supplierRefMatches(q,rec))
-      );
+      if (!used) used = ensurePricingVersions(r).some(v => supplierRefMatches(v,rec) || (v.supplierRefs || []).some(o => supplierRefMatches(o,rec)));   // V269
       if (used) rfqCount++;
     });
     if (rfqCount) deps.push(`${rfqCount} RFQ/pricing document${rfqCount===1?'':'s'}`);
@@ -1768,7 +1935,7 @@ function getMasterDependencies(type, rec) {
     const rCount = rfqs.filter(r =>
       (r.items || []).some(itemUsesProduct) ||
       (r.pricingItems || []).some(itemUsesProduct) ||
-      (r.pricingVersions || []).some(v => (v.pricingItems || []).some(itemUsesProduct))
+      (ensurePricingVersions(r), (r.pricingProductRefs || []).some(itemUsesProduct))   // V269: products of the earlier versions
     ).length;
     const soCount = salesOrders.filter(so => (so.items || []).some(itemUsesProduct)).length;
     if (qCount) deps.push(`${qCount} quotation${qCount===1?'':'s'}`);
@@ -2439,6 +2606,7 @@ function pricingViewAttachmentHtml(file, index){
 
 function viewPricingReadOnly(rfqId) {
   const r = rfqs.find(x=>x.id===rfqId); if (!r) return;
+  pvViewing = null;
   ensurePricingVersions(r);
   const activeVersion=getCurrentPricingVersion(r);
   if(activeVersion) syncRFQFromPricingVersion(r,activeVersion);
@@ -4044,18 +4212,18 @@ let pricingDateFilter={preset:'all',from:'',to:''};
 function getPricingDocuments(){
   const docs=[];
   rfqs.forEach(r=>{
-    ensurePricingVersions(r).forEach((v,index)=>{
-      if(!Array.isArray(v.pricingItems)||!v.pricingItems.length)return;
-      const version=Number(v.version)||index+1;
+    ensurePricingVersions(r).forEach((e,index)=>{
+      // V269: from the version index (no extra reads); the current version is summed from the working copy
+      const version=Number(e.version)||index+1;
+      const isCur=version===Number(r.currentPricingVersion);
+      const v=isCur?{...e,...pvSummary(r),supplierName:r.supplierName||e.supplierName,supRef:r.supRef||e.supRef}:e;
+      if(!(Number(v.lineCount)>0))return;
       const status=v.status==='Converted'?'Converted':(v.status==='Superseded'?'Converted':'Saved');
       const quote=quotations.find(q=>q.id===v.quotationId || q.qno===v.quotationId)
         || (version===Number(r.currentPricingVersion)&&r.quotationId
           ? quotations.find(q=>q.id===r.quotationId || q.qno===r.quotationId)
           : null);
-      const items=v.pricingItems||[];
-      const material=items.reduce((sum,it)=>sum+(Number(it.buy)||0)*(Number(it.qty)||0),0);
-      const extras=(v.internalCosts||[]).reduce((sum,c)=>sum+(Number(c.amount)||0),0);
-      const selling=items.reduce((sum,it)=>sum+(Number(it.sell)||0)*(Number(it.qty)||0),0);
+      const material=Number(v.materialCost)||0, extras=Number(v.extraCost)||0, selling=Number(v.totalSell)||0;
       const cost=material+extras;
       const profit=selling-cost;
       const marginPct=selling>0?(profit/selling)*100:0;
@@ -4213,11 +4381,15 @@ function clearAllPricingFilters(){
   document.getElementById('pricing-doc-f-all')?.classList.add('active');
   updatePricingDateFilterUI();closePricingDateMenu();renderPricingDocuments();
 }
-function openPricingDocument(rfqId,version){
+async function openPricingDocument(rfqId,version){
   const r=rfqs.find(x=>x.id===rfqId);if(!r)return;
-  const v=ensurePricingVersions(r).find(x=>Number(x.version)===Number(version));if(!v)return;
+  if(Number(version)===Number(r.currentPricingVersion||1)){openPricingSheet(rfqId);return;}
+  const v=await pvLoadWithMessage(r,version);if(!v)return;   // V269: an older version is read when it is opened
+  // shown read-only; the RFQ keeps its current version (Revise pricing from this view starts from the version shown)
+  const keep=pvSnapshot(r);
   syncRFQFromPricingVersion(r,v);
-  openPricingSheet(rfqId);
+  try{viewPricingReadOnly(rfqId);}finally{pvRestore(r,keep);}
+  pvViewing={rfqId:String(rfqId),version:Number(version)};
 }
 function openPricingLinkedQuotation(id){
   if(!id)return;
@@ -4334,7 +4506,7 @@ function openPricingExcelExportDialog(){
 function buildPricingLineItemRows(rows){
   const output=[];
   rows.forEach(d=>{
-    const v=d.versionData||ensurePricingVersions(d.rfq).find(x=>Number(x.version)===Number(d.version))||{};
+    const v=pvFull(d.rfq,d.version)||{};   // V269: loaded by exportPricingRegisterExcel first
     (v.pricingItems||[]).slice().sort((a,b)=>(Number(a.sortOrder)||0)-(Number(b.sortOrder)||0)).forEach((it,index)=>{
       const qty=Number(it.qty)||0,buy=Number(it.buy)||0,sell=Number(it.sell)||0;
       const cost=qty*buy,selling=qty*sell,profit=selling-cost,margin=selling>0?(profit/selling)*100:0;
@@ -4343,17 +4515,26 @@ function buildPricingLineItemRows(rows){
   });
   return output;
 }
-function exportPricingRegisterExcel(includeLines=false,prefetchedRows=null){
+async function exportPricingRegisterExcel(includeLines=false,prefetchedRows=null){
   if(typeof XLSX==='undefined'){showToast('Excel library is not available. Check your internet connection and try again.','error');return;}
   const rows=prefetchedRows||getPricingRegisterExportRows();
   if(!rows.length){showToast('No pricing documents match the current filters. Nothing to export.','warning');return;}
+  if(includeLines){   // V269: older versions' lines are read first (one read each)
+    const need=rows.filter(d=>!pvFull(d.rfq,d.version));
+    if(need.length){
+      showToast('Loading '+need.length+' pricing version'+(need.length===1?'':'s')+'…','info');
+      const res=await Promise.allSettled(need.map(d=>pvLoad(d.rfq,d.version)));
+      const missing=res.filter((x,i)=>x.status!=='fulfilled'||!x.value).length;
+      if(missing){showToast(missing+' pricing version'+(missing===1?'':'s')+' could not be loaded. Check the connection and try again.','error');return;}
+    }
+  }
   try{
     const now=new Date(),exportedAt=now.toLocaleString(),companyName=settings?.coname||'BizCore';
     const headers=['Pricing No.','RFQ No.','Updated','Customer','Customer Reference','Version','Status','Primary Supplier','Supplier Quote Ref.','Material Cost','Additional Cost','Total Cost','Selling Value','Profit','Margin %','Quotation No.'];
     const data=rows.map(d=>{
       const v=d.versionData||{};
-      const material=(v.pricingItems||[]).reduce((sum,it)=>sum+(Number(it.buy)||0)*(Number(it.qty)||0),0);
-      const extras=(v.internalCosts||[]).reduce((sum,c)=>sum+(Number(c.amount)||0),0);
+      const material=Number(v.materialCost)||0;
+      const extras=Number(v.extraCost)||0;
       return [d.pricingNo,d.rfq.rfqNo||'',String(d.updated||'').slice(0,10),d.rfq.company||'',d.rfq.ref||'',d.version,d.status,v.supplierName||d.rfq.supplierName||'',v.supRef||d.rfq.supRef||'',material,extras,d.cost,d.selling,d.profit,d.marginPct,d.quote?.qno||''];
     });
     const ws=XLSX.utils.aoa_to_sheet([[`${companyName} — Pricing Register`],[`Exported: ${exportedAt}`],[`Filters: ${pricingExportFilterSummary()}`],[`Records: ${rows.length}`],[],headers,...data]);
@@ -5430,10 +5611,10 @@ async function saveQuotation(mode='save') {
   if (capturedRFQId && !capturedEditingId) {
     const rfq = rfqs.find(x=>x.id===capturedRFQId);
     if (rfq) {
-      ensurePricingVersions(rfq);
-      const pv=rfq.pricingVersions.find(v=>Number(v.version)===Number(document._pendingPricingVersion||rfq.currentPricingVersion||1));
+      const _pvIndex=ensurePricingVersions(rfq);   // V269: index entries; saveRFQs writes the version documents
+      const pv=_pvIndex.find(v=>Number(v.version)===Number(document._pendingPricingVersion||rfq.currentPricingVersion||1));
       if(pv){
-        if(Number(pv.version)>1) rfq.pricingVersions.filter(v=>Number(v.version)<Number(pv.version)&&v.status==='Converted').forEach(v=>v.status='Superseded');
+        if(Number(pv.version)>1) _pvIndex.filter(v=>Number(v.version)<Number(pv.version)&&v.status==='Converted').forEach(v=>v.status='Superseded');
         pv.status='Converted';pv.quotationId=q.id;pv.convertedDate=new Date().toISOString();pv.updated=new Date().toISOString();
       }
       if(q.revisionNo>0){
@@ -6773,7 +6954,7 @@ async function reopenRFQ(id) {
 }
 function deleteRFQRecord(id) {
   const r=rfqs.find(x=>x.id===id); if(!r)return;
-  if((r.pricingItems&&r.pricingItems.length)||r.quotationId){showValidationDialog('RFQ cannot be deleted','This RFQ already has pricing or a quotation. Close it as No Bid instead.');return;}
+  if((r.pricingItems&&r.pricingItems.length)||ensurePricingVersions(r).length||r.quotationId){showValidationDialog('RFQ cannot be deleted','This RFQ already has pricing or a quotation. Close it as No Bid instead.');return;}
   showConfirm({icon:'🗑️',title:'Delete RFQ permanently?',message:'Use Delete only for an RFQ entered by mistake. This action cannot be undone.',details:{'RFQ':r.rfqNo,'Customer':r.company},confirmText:'Delete RFQ',confirmClass:'btn-danger',onConfirm:async()=>{rfqs=rfqs.filter(x=>x.id!==id);await saveRFQs();closeModal('rfq-view-modal');renderRFQPage();showToast('RFQ deleted','success');}});
 }
 
@@ -6796,7 +6977,9 @@ async function revisePricingFromRO(btn) {
   const rid=btn.getAttribute('data-rid');
   if(!rid)return;
   const r=rfqs.find(x=>x.id===rid); if(!r)return;
-  const current=getCurrentPricingVersion(r);
+  // V269: from the read-only view of an older version, the revision starts from that version
+  const viewing=pvViewing&&pvViewing.rfqId===String(rid)&&pvViewing.version!==Number(r.currentPricingVersion)?pvFull(r,pvViewing.version):null;
+  const current=viewing||getCurrentPricingVersion(r);
   if(!current || !['Converted','Superseded'].includes(current.status)){closeModal('pricing-ro-modal');openPricingSheet(rid);return;}
 
   const reason = await showReasonPrompt({
@@ -6813,13 +6996,19 @@ async function revisePricingFromRO(btn) {
   if(!reason)return;
 
   const nextVersion=Math.max(0,...ensurePricingVersions(r).map(v=>Number(v.version)||0))+1;
-  const revised={
-    ...JSON.parse(JSON.stringify(current)), version:nextVersion, status:'Revision Draft', revisionReason:reason,
+  // V269: the new version starts as a copy of the current working copy (it stays in the RFQ); its own document is written by saveRFQs
+  pvAddEntry(r,{
+    ...pvPick(current,PV_META_KEYS), version:nextVersion, status:'Revision Draft', revisionReason:reason,
     previousVersion:Number(current.version)||1, quotationId:null, convertedDate:null,
     created:new Date().toISOString(), updated:new Date().toISOString()
-  };
-  r.pricingVersions.push(revised); r.currentPricingVersion=nextVersion; syncRFQFromPricingVersion(r,revised); r.status='Pricing';
-  await saveRFQs();
+  });
+  const _before=pvSnapshot(r);
+  if(viewing) syncRFQFromPricingVersion(r,viewing);
+  r.currentPricingVersion=nextVersion; r.status='Pricing'; pvViewing=null;
+  if(!(await saveRFQs())){
+    r.pricingIndex=r.pricingIndex.filter(v=>Number(v.version)!==nextVersion); pvRestore(r,_before);
+    showToast(rfqSaveFailedMessage(),'error','Not saved'); return;
+  }
   closeModal('pricing-ro-modal'); renderRFQPage(); openPricingSheet(rid);
   showToast('Pricing V'+nextVersion+' created for revision','success');
 }
@@ -6858,9 +7047,21 @@ async function saveSuppliers() {
   try { localStorage.setItem('dtq_suppliers', JSON.stringify(suppliers)); } catch(e) {}
   if (window.FB) await window.FB.fbSave('suppliers', suppliers);
 }
+/* V269: an RFQ whose pricing changed is saved on its own, together with its pricing version documents, in one batch.
+   The other changed RFQs are saved as before. Returns false when something was not saved. */
 async function saveRFQs() {
   try { localStorage.setItem('dtq_rfqs', JSON.stringify(rfqs)); } catch(e) {}
-  if (window.FB) await window.FB.fbSave('rfqs', rfqs);
+  if (!window.FB) return true;
+  let ok = true; const failed = [];
+  if (window.FB.fbSaveRecordWith) for (const r of rfqs) {
+    if (!r || r.id == null) continue;
+    const extras = pvPrepareSave(r);
+    if (!extras || !extras.length) continue;
+    if (await window.FB.fbSaveRecordWith('rfqs', r, extras)) pvLegacy.delete(String(r.id));
+    else { ok = false; failed.push(String(r.id)); }
+  }
+  const rest = await window.FB.fbSave('rfqs', rfqs, failed.length ? { skipIds: failed } : {});
+  return ok && rest !== false;
 }
 
 function renderSuppliers() {
@@ -6905,13 +7106,15 @@ function viewSupplier(id) {
   const sname=normalizeMasterValue(sp.company);
   const related=rfqs.filter(r=>{
     if(recordBelongsToSupplier(r,sp))return true;
-    return (r.pricingItems||[]).some(it=>supplierRefMatches(it,sp)) || (r.vendorQuotes||[]).some(v=>supplierRefMatches(v,sp)) || (r.pricingVersions||[]).some(v=>supplierRefMatches(v,sp) || (v.pricingItems||[]).some(it=>supplierRefMatches(it,sp)) || (v.vendorQuotes||[]).some(q=>supplierRefMatches(q,sp)));
+    return (r.pricingItems||[]).some(it=>supplierRefMatches(it,sp)) || (r.vendorQuotes||[]).some(v=>supplierRefMatches(v,sp)) || ensurePricingVersions(r).some(v=>supplierRefMatches(v,sp) || (v.supplierRefs||[]).some(o=>supplierRefMatches(o,sp)));
   });
   const pricingDocs=[];
   related.forEach(r=>{
-    const versions=(r.pricingVersions&&r.pricingVersions.length)?r.pricingVersions:[{version:r.currentPricingVersion||1,status:r.status,updated:r.updated,date:r.date,supplierName:r.supplierName}];
+    const index=ensurePricingVersions(r);
+    const versions=index.length?index:[{version:r.currentPricingVersion||1,status:r.status,updated:r.updated,date:r.date,supplierName:r.supplierName}];
     versions.forEach(v=>{
-      const used=supplierRefMatches(v,sp) || recordBelongsToSupplier(r,sp) || (v.pricingItems||r.pricingItems||[]).some(it=>supplierRefMatches(it,sp));
+      const isCur=Number(v.version)===Number(r.currentPricingVersion||1);
+      const used=supplierRefMatches(v,sp) || recordBelongsToSupplier(r,sp) || (isCur?(r.pricingItems||[]).some(it=>supplierRefMatches(it,sp))||(r.vendorQuotes||[]).some(q=>supplierRefMatches(q,sp)):(v.supplierRefs||[]).some(o=>supplierRefMatches(o,sp)));
       if(used) pricingDocs.push({r,v});
     });
   });
@@ -7000,7 +7203,7 @@ function getRFQWorkflowStage(r) {
   ].filter(Boolean));
   if ([...quoteIds].some(qid => salesOrders.some(so => so.quotationId === qid))) return 'Sales Order';
   if (quoteIds.size) return 'Quoted';
-  if ((r.pricingItems && r.pricingItems.length) || (r.pricingVersions && r.pricingVersions.length)) return 'Pricing';
+  if ((r.pricingItems && r.pricingItems.length) || ensurePricingVersions(r).length) return 'Pricing';
   // Repair legacy false-positive status created by older builds that marked Pricing on screen open.
   if (r.status === 'Pricing') return 'New';
   return r.status || 'New';
@@ -7914,7 +8117,7 @@ async function saveRFQ() {
     internalNotes: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.internalNotes||'' : '',
     vendorQuotes: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.vendorQuotes||[] : [],
     pricingAttachment: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.pricingAttachment||null : null,
-    pricingVersions: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.pricingVersions||[] : [],
+    ...(editingRFQId ? (o=>{if(o)ensurePricingVersions(o);return pvPick(o||{},['pricingIndex','pricingProductRefs','supplierId']);})(rfqs.find(x=>x.id===editingRFQId)) : {}),   // V269
     currentPricingVersion: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.currentPricingVersion||1 : 1,
     quotationId: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.quotationId : null,
     quotationIds: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.quotationIds||[] : [],
@@ -8339,13 +8542,12 @@ async function autoSavePricingDraftAfterReorder(wasDirtyBeforeReorder,sequence) 
   const r=rfqs.find(x=>x.id===pricingRFQId); if(!r) return;
   const items=readPricingItemsFromDOM();
   r.pricingItems=items;
-  const versions=ensurePricingVersions(r);
-  let version=getCurrentPricingVersion(r);
-  if(!version){version={version:r.currentPricingVersion||1,created:new Date().toISOString()};versions.push(version);}
+  let version=getCurrentPricingVersion(r);   // V269: the index entry; the lines stay in the RFQ and go to the version document on save
+  if(!version) version=pvAddEntry(r,{version:r.currentPricingVersion||1});
+  r.currentPricingVersion=Number(version.version)||1;
   version.status=version.status==='Revision Draft'?'Revision Draft':'Saved';
   version.updated=new Date().toISOString();
-  version.pricingItems=JSON.parse(JSON.stringify(items));
-  await saveRFQs();
+  if(!(await saveRFQs())){showToast(rfqSaveFailedMessage(),'error','Line order not saved');markPricingDirty();return;}
   if(wasDirtyBeforeReorder) {
     markPricingDirty();
     const note=document.getElementById('pricing-save-note');
@@ -9269,18 +9471,16 @@ async function savePricing() {
   r.internalCosts = readInternalCosts(materialCost,totalSell).costs;
   r.vendorQuotes = pricingVendorQuotes;
   r.pricingAttachment = pricingVendorQuotes[0] || null; // legacy compatibility
-  const versions=ensurePricingVersions(r);
+  // V269: the current version's index entry; its lines, costs and quotes are the RFQ working copy set above,
+  // and saveRFQs() writes them to rfqs/{id}/pricingVersions/v{N} in the same batch as the RFQ.
   let version=getCurrentPricingVersion(r);
-  if(!version){version={version:r.currentPricingVersion||1,created:new Date().toISOString()};versions.push(version);}
+  if(!version) version=pvAddEntry(r,{version:r.currentPricingVersion||1});
+  r.currentPricingVersion=Number(version.version)||1;
   version.status = version.status==='Revision Draft' ? 'Revision Draft' : 'Saved';
   version.updated = new Date().toISOString();
-  version.supplierName=r.supplierName; version.supplierId=r.supplierId||''; version.supRef=r.supRef; version.supDate=r.supDate; version.internalNotes=r.internalNotes||'';
-  version.pricingItems=JSON.parse(JSON.stringify(r.pricingItems||[]));
-  version.internalCosts=JSON.parse(JSON.stringify(r.internalCosts||[]));
-  version.vendorQuotes=JSON.parse(JSON.stringify(r.vendorQuotes||[]));
-  version.pricingAttachment=r.pricingAttachment||null;
+  version.supplierName=r.supplierName; version.supplierId=r.supplierId||''; version.supRef=r.supRef; version.supDate=r.supDate;
   if (r.status==='New') r.status='Pricing';
-  await saveRFQs();
+  if (!(await saveRFQs())) { showToast(rfqSaveFailedMessage(),'error','Pricing not saved'); return false; }
   setPricingSavedState(true);
   // Synchronize the global safe-close/autosave system with the successful Pricing save.
   if(typeof window.bizcoreFormSaved==='function') window.bizcoreFormSaved('pricing-modal');
