@@ -199,6 +199,7 @@ function openNewPurchaseInvoice(){
   piStartAccounts();
   const sups = (typeof suppliers !== 'undefined' ? suppliers : []).slice().sort((a, b) => String(a.company || '').localeCompare(String(b.company || '')));
   document.getElementById('pe-supplier').innerHTML = '<option value="">Choose the supplier…</option>' + sups.map(s => `<option value="${piEsc(s.id)}">${piEsc(s.company || s.name || s.id)}</option>`).join('');
+  bcPickEnhance('pe-supplier', { items: bcSupplierPickItems, placeholder: 'Search supplier…', empty: 'No supplier matches. Check the spelling, or add the supplier in Master Data.' });   // V268.5
   ['pe-invno', 'pe-zoho', 'pe-suptotal', 'pe-pay-disc'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('pe-date').value = today;
   document.getElementById('pe-due').value = piAddDays(today, 30);
@@ -207,7 +208,7 @@ function openNewPurchaseInvoice(){
   document.getElementById('pe-error').hidden = true;
   piRenderLines(); piRenderCosts(); piRenderPays(); piRecalc();
   if (typeof openModalWithSize === 'function') openModalWithSize('pi-new-modal'); else m.classList.add('open');
-  setTimeout(() => document.getElementById('pe-supplier').focus(), 60);
+  setTimeout(() => bcPickFocus('pe-supplier'), 60);
 }
 function piHeadChanged(dateChanged){
   const s = piState(); if (!s) return;
@@ -319,16 +320,15 @@ function piRenderLines(){
           <button type="button" class="pi-opt" onclick="piSetLine(${i},'qty','${piQ(left)}',true)"><i class="ti ti-pencil"></i>Correct quantity to ${piQ(left)}</button></div></td></tr>`;
       } else if (extra > 0 && l.extra) rows += `<tr class="pi-ask-row"><td colspan="${cols}"><div class="pi-placed"><i class="ti ti-circle-check"></i>${piQ(extra)} extra → ${l.extra.to === 'stock' ? 'Unassigned stock' : piEsc(l.extra.soNo)} <button type="button" class="pi-link" onclick="piPlaceExtra(${i},null)">change</button></div></td></tr>`;
     } else {
-      rows = `<tr class="pi-line" data-i="${i}"><td class="pi-c-item"><input class="pi-cell pi-stock-desc" list="pe-products" value="${piEsc(l.desc)}" placeholder="Item (product or description)" aria-label="Item" onchange="piSetStockItem(${i},this.value)"><div class="pi-sub"><input class="pi-cell pi-uom" value="${piEsc(l.uom)}" aria-label="Unit" onchange="piSetLine(${i},'uom',this.value,true)"> · <span class="pi-stock-tag"><i class="ti ti-box"></i> for stock</span></div></td>
+      // V268.5: the item must be a product (approved mockup V5_2) — type to search, or + New Product
+      const bad = !l.productId && String(l.desc || '').trim();
+      rows = `<tr class="pi-line" data-i="${i}"><td class="pi-c-item"><input class="pi-cell pi-stock-desc${bad ? ' pi-bad' : ''}" value="${piEsc(l.desc)}" placeholder="Search product…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="pi-prod-list" aria-label="Product" oninput="piProdOpen(${i},this)" onfocus="piProdOpen(${i},this)" onkeydown="piProdKey(${i},event)" onblur="piProdBlur(${i},this)"><div class="pi-sub">${l.productId ? `${piEsc([l.code, l.uom].filter(Boolean).join(' · '))} · <span class="pi-prod-ok"><i class="ti ti-package"></i> Product</span>` : bad ? '<span class="pi-red">Choose a product from the list, or add it with + New Product.</span>' : piEsc(l.uom || '')} · <span class="pi-stock-tag"><i class="ti ti-box"></i> for stock</span></div></td>
         ${qtyTd}${costTd}${discTd}${amtTd}${plTd}<td class="pi-c-goes"><span class="pi-dest stock"><i class="ti ti-box"></i>Unassigned stock · ${piQ(l.qty)}</span></td>${xTd}</tr>`;
     }
     if (tag.chk.kind === 'above' && piSettings().costLimitAction === 'reason')
       rows += `<tr class="pi-ask-row"><td colspan="${cols}"><div class="pi-reason"><i class="ti ti-alert-triangle"></i>Reason for the higher cost * <input class="pi-cell" maxlength="300" value="${piEsc(l.costReason)}" placeholder="e.g. supplier price increase, urgent purchase" oninput="piSetLine(${i},'costReason',this.value)"></div></td></tr>`;
     return rows;
   }).join('');
-  let dl = document.getElementById('pe-products');
-  if (!dl) { dl = document.createElement('datalist'); dl.id = 'pe-products'; document.body.appendChild(dl); }
-  dl.innerHTML = (typeof products !== 'undefined' ? products : []).map(p => `<option value="${piEsc(p.name)}">${piEsc([p.code, p.uom].filter(Boolean).join(' · '))}</option>`).join('');
 }
 /** Fill each line's Selling → P/L from the checked invoice (landed cost includes the shared costs and discount). */
 function piFillLinePL(v){
@@ -351,10 +351,11 @@ function piSetLine(i, field, value, rerender){
   }
   piRecalc();
 }
-function piSetStockItem(i, value){
+function piSetStockItem(i, value, productId){
   const s = piState(), l = s.lines[i]; if (!l) return;
-  const p = (typeof products !== 'undefined' ? products : []).find(x => String(x.name || '').trim().toLowerCase() === String(value || '').trim().toLowerCase());
-  l.desc = value; l.productId = p ? p.id : ''; l.code = p ? (p.code || '') : ''; if (p && p.uom) l.uom = p.uom;
+  const all = typeof products !== 'undefined' ? products : [];
+  const p = productId ? all.find(x => x.id === productId) : all.find(x => String(x.name || '').trim().toLowerCase() === String(value || '').trim().toLowerCase());
+  l.desc = p ? p.name : value; l.productId = p ? p.id : ''; l.code = p ? (p.code || '') : ''; if (p && p.uom) l.uom = p.uom;
   l.reference = piReferenceFor(l);
   if (l.reference && (l.unitCost === '' || l.unitCost == null)) l.unitCost = l.reference.unit;
   piRenderLines(); piRecalc();
@@ -631,7 +632,7 @@ function piRecalc(keepVatFocus){
   if (!s.lines.length) chips.push('<span class="pi-todo-c">Add lines</span>');
   const nReason = errs.filter(e => e.field === 'costReason').length; if (nReason) chips.push(`<span class="pi-todo-c">${nReason} Reason${nReason > 1 ? 's' : ''}</span>`);
   const nExtra = errs.filter(e => e.field === 'extra').length; if (nExtra) chips.push(`<span class="pi-todo-c">${nExtra} Extra qty to place</span>`);
-  const nLine = errs.filter(e => ['qty', 'unitCost', 'desc', 'soLine', 'discountPct'].includes(e.field)).length; if (nLine) chips.push(`<span class="pi-todo-c">${nLine} Line${nLine > 1 ? 's' : ''} to complete</span>`);
+  const nLine = errs.filter(e => ['qty', 'unitCost', 'desc', 'product', 'soLine', 'discountPct'].includes(e.field)).length; if (nLine) chips.push(`<span class="pi-todo-c">${nLine} Line${nLine > 1 ? 's' : ''} to complete</span>`);
   if (has(['costs', 'discount', 'vat'])) chips.push('<span class="pi-todo-c">Costs / discount / VAT</span>');
   chips.push(has(['supplierTotal']) ? '<span class="pi-todo-c">Supplier total</span>' : '<span class="pi-todo-c ok"><i class="ti ti-check"></i>Supplier total matches</span>');
   if (pc.errors.length) chips.push('<span class="pi-todo-c">Payments to complete</span>');
@@ -1071,7 +1072,7 @@ function piOpenFullEdit(id){
   piSetEditMode(m, pi);
   const sel = document.getElementById('pe-supplier');
   if (![...sel.options].some(o => o.value === pi.supplierId)) sel.insertAdjacentHTML('beforeend', `<option value="${piEsc(pi.supplierId)}">${piEsc(pi.supplierName)}</option>`);
-  sel.value = pi.supplierId;
+  sel.value = pi.supplierId; bcPickSync('pe-supplier');
   document.getElementById('pe-invno').value = pi.supplierInvoiceNo || '';
   document.getElementById('pe-zoho').value = pi.zohoBillNo || '';
   document.getElementById('pe-date').value = pi.date;
@@ -1109,6 +1110,7 @@ function renderPurchaseSettings(){
     <div class="form-group"><label for="ps-profit">Profit on orders is shown to</label><select id="ps-profit"${dis}><option value="admins"${s.profitVisibility === 'admins' ? ' selected' : ''}>Administrators only</option><option value="everyone"${s.profitVisibility === 'everyone' ? ' selected' : ''}>Everyone</option></select></div>
     <div class="form-group"><label for="ps-edit">Edit purchase invoices &amp; supplier payments</label><select id="ps-edit"${dis}>${[['off', 'Off — cancel and enter again'], ['limited', 'Limited for everyone'], ['limited-admin', 'Limited for staff, full for administrators'], ['full', 'Full for everyone']].map(([v, t]) => `<option value="${v}"${s.editMode === v ? ' selected' : ''}>${t}</option>`).join('')}</select><small>Limited: numbers, dates, references and reasons. Full: lines, amounts and accounts.</small></div>
     <div class="form-group"><label for="ps-edit-days">Edit time limit (days)</label><input id="ps-edit-days" inputmode="numeric" value="${s.editDays}"${dis}><small>After that only administrators edit; others cancel and enter again.</small></div>
+    <div class="form-group"><label for="ps-newprod">+ New Product on a purchase invoice</label><select id="ps-newprod"${dis}>${[['everyone', 'Everyone'], ['admins', 'Administrators only']].map(([v, t]) => `<option value="${v}"${s.newProductRight === v ? ' selected' : ''}>${t}</option>`).join('')}</select><small>An item for stock must be a product. This decides who may add a missing one from the invoice.</small></div>
     <div class="form-group"><label for="ps-edit-paid">Full edit of an invoice with payments</label><select id="ps-edit-paid" disabled><option>Not allowed — cancel the payments first</option></select></div>
   </div><div class="inv-error" id="ps-error" hidden></div>
   <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">${admin ? '<button class="btn btn-primary" type="button" id="ps-save" onclick="savePurchaseSettingsForm()"><i class="ti ti-device-floppy"></i>Save settings</button>' : '<span class="pi-muted">Only administrators can change these settings.</span>'}</div>`;
@@ -1117,7 +1119,7 @@ async function savePurchaseSettingsForm(){
   const g = id => document.getElementById(id).value;
   const btn = document.getElementById('ps-save'), err = document.getElementById('ps-error'); btn.disabled = true; err.hidden = true;
   try {
-    await bcBusy('Saving settings…', () => piLib().service.savePurchaseSettings({ costLimitPct: g('ps-limit'), costLimitAction: g('ps-action'), discountMode: g('ps-disc'), roundingLimit: g('ps-round'), vatRate: g('ps-vat'), profitVisibility: g('ps-profit'), editMode: g('ps-edit'), editDays: g('ps-edit-days') }));
+    await bcBusy('Saving settings…', () => piLib().service.savePurchaseSettings({ costLimitPct: g('ps-limit'), costLimitAction: g('ps-action'), discountMode: g('ps-disc'), roundingLimit: g('ps-round'), vatRate: g('ps-vat'), profitVisibility: g('ps-profit'), editMode: g('ps-edit'), editDays: g('ps-edit-days'), newProductRight: g('ps-newprod') }));
     if (typeof showToast === 'function') showToast('Purchase settings saved', 'success');
   } catch (e) { err.hidden = false; err.textContent = e.message || 'Could not save.'; }
   finally { btn.disabled = false; }
@@ -1140,3 +1142,245 @@ async function savePurchaseSettingsForm(){
   go();
 })();
 console.log('Purchase Invoices V268.3 ✅ (payments · advances · edit · discount at payment · cash back)');
+
+/* ═══════════════════════════════ V268.5 TYPE-AND-SEARCH PICKER (approved mockup V5_1) ═══════════════════════════════
+   Same look and keys as the customer picker on New Receipt. It enhances a <select>: the select stays (hidden) and keeps
+   the value, so the code around it is unchanged. cfg: { items() → [{key,title,sub,right,text}], placeholder, empty,
+   hint, clearLabel (optional field: × clears it), compact (filter bar) }. */
+const BC_PK = {};
+function bcPickEnhance(selId, cfg){
+  const sel = document.getElementById(selId); if (!sel) return;
+  cfg = cfg || {};
+  let box = document.getElementById(selId + '-pk');
+  if (!box) {
+    box = document.createElement('div'); box.id = selId + '-pk';
+    box.className = 'rct-picker bc-picker' + (cfg.compact ? ' bc-pick-compact' : '');
+    box.innerHTML = `<div class="rct-pick-chosen" id="${selId}-chosen" hidden></div><div class="rct-pick-search" id="${selId}-search"><i class="ti ti-search"></i><input id="${selId}-q" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="${selId}-list"></div><div class="rct-pick-list" id="${selId}-list" role="listbox" hidden></div>`;
+    sel.insertAdjacentElement('afterend', box); sel.hidden = true; sel.classList.add('bc-pick-native'); sel.tabIndex = -1;
+    const q = document.getElementById(selId + '-q');
+    q.addEventListener('input', () => { BC_PK[selId].idx = 0; bcPickOpen(selId); });
+    q.addEventListener('focus', () => bcPickOpen(selId));
+    q.addEventListener('click', () => bcPickOpen(selId));
+    q.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== q) bcPickClose(selId, true); }, 150));
+    q.addEventListener('keydown', e => bcPickKey(selId, e));
+    document.getElementById(selId + '-list').addEventListener('mousedown', e => e.preventDefault());
+    document.querySelectorAll(`label[for="${selId}"]`).forEach(l => { l.htmlFor = selId + '-q'; });
+    if (sel.getAttribute('aria-label')) q.setAttribute('aria-label', sel.getAttribute('aria-label'));
+    sel.addEventListener('change', () => { if (BC_PK[selId] && !BC_PK[selId]._setting) bcPickSync(selId); });
+  }
+  BC_PK[selId] = { ...cfg, idx: 0, shown: [] };
+  document.getElementById(selId + '-q').placeholder = cfg.placeholder || 'Type to search…';
+  bcPickSync(selId);
+}
+function bcPickItems(selId){
+  const c = BC_PK[selId], sel = document.getElementById(selId);
+  if (c && typeof c.items === 'function') return c.items() || [];
+  return [...(sel ? sel.options : [])].filter(o => o.value).map(o => ({ key: o.value, title: o.textContent, text: o.textContent }));
+}
+/** Shows the chosen value (call after the code sets select.value or rebuilds its options). */
+function bcPickSync(selId){
+  const sel = document.getElementById(selId), c = BC_PK[selId]; if (!sel || !c) return;
+  const chosen = document.getElementById(selId + '-chosen'), search = document.getElementById(selId + '-search'), q = document.getElementById(selId + '-q');
+  const it = sel.value ? (bcPickItems(selId).find(x => x.key === sel.value) || { key: sel.value, title: (sel.selectedOptions[0] || {}).textContent || sel.value }) : null;
+  if (it) {
+    const tail = sel.disabled ? '<span class="rct-pick-lock" title="Can\'t be changed here"><i class="ti ti-lock"></i></span>'
+      : `<button type="button" class="rct-pick-change" onclick="bcPickChange('${selId}')">Change</button>${c.clearLabel ? `<button type="button" class="bc-pick-x" title="${piEsc(c.clearLabel)}" aria-label="${piEsc(c.clearLabel)}" onclick="bcPickClear('${selId}')"><i class="ti ti-x"></i></button>` : ''}`;
+    chosen.innerHTML = `<span class="rct-pick-txt"><b>${piEsc(it.title)}</b>${it.sub && !c.compact ? `<small>${piEsc(it.sub)}</small>` : ''}</span>${tail}`;
+    chosen.hidden = false; search.hidden = true;
+    chosen.onclick = c.compact && !sel.disabled ? (e => { if (!e.target.closest('.bc-pick-x')) bcPickChange(selId); }) : null;
+  } else { chosen.hidden = true; search.hidden = false; q.disabled = !!sel.disabled; }
+  bcPickClose(selId);
+}
+function bcPickOpen(selId){
+  const c = BC_PK[selId], q = document.getElementById(selId + '-q'), list = document.getElementById(selId + '-list'); if (!c || !q) return;
+  const words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const all = bcPickItems(selId).filter(it => { const h = String(it.text || ((it.title || '') + ' ' + (it.sub || ''))).toLowerCase(); return words.every(w => h.includes(w)); });
+  c.shown = all.slice(0, c.max || 60); if (c.idx >= c.shown.length) c.idx = 0;
+  list.innerHTML = (c.shown.length ? c.shown.map((it, i) => `<div class="rct-pick-opt${i === c.idx ? ' on' : ''}" role="option" id="${selId}-opt-${i}" aria-selected="${i === c.idx}" data-i="${i}"><span class="rct-pick-txt"><b>${piEsc(it.title)}</b>${it.sub ? `<small>${piEsc(it.sub)}</small>` : ''}</span>${it.right ? `<span class="rct-pick-amt bc-pick-right">${piEsc(it.right)}</span>` : ''}</div>`).join('')
+      : `<div class="rct-pick-empty">${piEsc(c.empty || 'Nothing matches. Check the spelling.')}</div>`)
+    + (all.length > c.shown.length ? `<div class="rct-pick-empty">${all.length - c.shown.length} more — type more to narrow the list</div>` : '')
+    + (c.hint ? `<div class="bc-pick-hint">${piEsc(c.hint)}</div>` : '');
+  list.querySelectorAll('.rct-pick-opt').forEach(e => {
+    e.addEventListener('click', () => bcPickChoose(selId, +e.dataset.i));
+    e.addEventListener('mousemove', () => { const i = +e.dataset.i; if (c.idx === i) return; c.idx = i; list.querySelectorAll('.rct-pick-opt').forEach((x, j) => x.classList.toggle('on', j === i)); });
+  });
+  list.hidden = false; q.setAttribute('aria-expanded', 'true'); document.getElementById(selId + '-pk').classList.add('open');
+}
+function bcPickClose(selId, restore){
+  const list = document.getElementById(selId + '-list'), q = document.getElementById(selId + '-q'); if (!list) return;
+  list.hidden = true; if (q) q.setAttribute('aria-expanded', 'false'); document.getElementById(selId + '-pk')?.classList.remove('open');
+  if (restore) { const sel = document.getElementById(selId); if (sel && sel.value && document.getElementById(selId + '-chosen').hidden) { q.value = ''; bcPickSync(selId); } }
+}
+function bcPickKey(selId, e){
+  const c = BC_PK[selId]; if (!c) return;
+  const list = document.getElementById(selId + '-list');
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault(); if (list.hidden) { bcPickOpen(selId); return; }
+    const n = c.shown.length; if (!n) return; c.idx = (c.idx + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
+    list.querySelectorAll('.rct-pick-opt').forEach((x, j) => x.classList.toggle('on', j === c.idx));
+    document.getElementById(selId + '-opt-' + c.idx)?.scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') { if (!list.hidden && c.shown.length) { e.preventDefault(); bcPickChoose(selId, c.idx); } }
+  else if (e.key === 'Escape') { if (!list.hidden) { e.preventDefault(); e.stopPropagation(); bcPickClose(selId, true); } }
+}
+function bcPickSetValue(selId, key){
+  const sel = document.getElementById(selId); if (!sel) return;
+  if (key && ![...sel.options].some(o => o.value === key)) { const it = bcPickItems(selId).find(x => x.key === key); const o = document.createElement('option'); o.value = key; o.textContent = it ? it.title : key; sel.appendChild(o); }
+  sel.value = key || '';
+  document.getElementById(selId + '-q').value = '';
+  bcPickSync(selId);
+  BC_PK[selId]._setting = true; try { sel.dispatchEvent(new Event('change', { bubbles: true })); } finally { BC_PK[selId]._setting = false; }
+}
+function bcPickChoose(selId, i){ const c = BC_PK[selId], it = c && c.shown[i]; if (it) bcPickSetValue(selId, it.key); }
+function bcPickClear(selId){ bcPickSetValue(selId, ''); setTimeout(() => document.getElementById(selId + '-q')?.focus(), 0); }
+function bcPickChange(selId){
+  document.getElementById(selId + '-chosen').hidden = true; document.getElementById(selId + '-search').hidden = false;
+  const q = document.getElementById(selId + '-q'); q.value = ''; q.disabled = false; q.focus();
+}
+function bcPickFocus(selId){ const sel = document.getElementById(selId); if (sel && sel.value) document.querySelector(`#${selId}-chosen .rct-pick-change`)?.focus(); else document.getElementById(selId + '-q')?.focus(); }
+/* Supplier list for the picker: the supplier master, newest name order */
+function bcSupplierPickItems(){
+  return (typeof suppliers !== 'undefined' ? suppliers : []).filter(s => s && s.id).slice().sort((a, b) => String(a.company || a.name || '').localeCompare(String(b.company || b.name || '')))
+    .map(s => { const name = s.company || s.name || s.id; const sub = [s.contact || s.contactPerson || '', s.city || '', s.vat ? 'VAT ' + s.vat : ''].filter(Boolean).join(' · ');
+      return { key: s.id, title: name, sub, text: [name, s.code || '', s.contact || '', s.city || '', s.vat || ''].join(' ') }; });
+}
+
+/* ═══════════════════════════════ V268.5 PRODUCT ON STOCK LINES + NEW PRODUCT (approved mockup V5_2) ═══════════════════════════════ */
+const PI_PP = { i: -1, idx: 0, shown: [], q: '' };
+const piProducts = () => (typeof products !== 'undefined' && Array.isArray(products) ? products : []);
+const piNormName = v => String(v || '').toLowerCase().replace(/[^a-z0-9؀-ۿ]+/g, '');
+function piProdListEl(){
+  let el = document.getElementById('pi-prod-list');
+  if (!el) { el = document.createElement('div'); el.id = 'pi-prod-list'; el.className = 'rct-pick-list pi-prod-list'; el.setAttribute('role', 'listbox'); el.hidden = true; el.addEventListener('mousedown', e => e.preventDefault()); document.body.appendChild(el); }
+  return el;
+}
+function piCanAddProduct(){ return piSettings().newProductRight !== 'admins' || piIsAdmin(); }
+function piProdOpen(i, input){
+  const el = piProdListEl(); PI_PP.i = i; PI_PP.input = input; PI_PP.q = input.value;
+  const words = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const all = piProducts().filter(p => { const h = [p.name, p.code, p.brand, p.model, p.category].join(' ').toLowerCase(); return words.every(w => h.includes(w)); });
+  PI_PP.shown = all.slice(0, 40); if (PI_PP.idx >= PI_PP.shown.length + 1) PI_PP.idx = 0;
+  const C = piCore();
+  const opt = (p, k) => { let last = ''; try { const ref = C ? C.lastPaidOf(piInvoices(), C.itemKeyOf({ kind: 'stock', productId: p.id, code: p.code, desc: p.name, uom: p.uom })) : null; if (ref && ref.unit > 0) last = ` · last paid ${piF(ref.unit)}${ref.refNo ? ' (' + ref.refNo + ')' : ''}`; } catch (e) {}
+    return `<div class="rct-pick-opt${k === PI_PP.idx ? ' on' : ''}" role="option" data-k="${k}"><span class="rct-pick-txt"><b>${piEsc(p.name)}</b><small>${piEsc([p.code, p.uom].filter(Boolean).join(' · '))} · Product${piEsc(last)}</small></span></div>`; };
+  const typed = input.value.trim(), canAdd = piCanAddProduct();
+  el.innerHTML = (PI_PP.shown.length ? PI_PP.shown.map(opt).join('') : `<div class="rct-pick-empty">No product matches${typed ? ' “' + piEsc(typed) + '”' : ''}.</div>`)
+    + (all.length > PI_PP.shown.length ? `<div class="rct-pick-empty">${all.length - PI_PP.shown.length} more — type more to narrow the list</div>` : '')
+    + (canAdd ? `<div class="rct-pick-opt pi-np-opt${PI_PP.idx === PI_PP.shown.length ? ' on' : ''}" role="option" data-k="${PI_PP.shown.length}"><span class="pi-np-plus"><i class="ti ti-plus"></i></span><span class="rct-pick-txt"><b>New Product${typed ? ' “' + piEsc(typed) + '”…' : '…'}</b><small>Not in the list? Add it to Master Data → Products</small></span></div>`
+      : '<div class="bc-pick-hint">Not in the list? Ask an administrator to add it in Master Data → Products.</div>');
+  el.querySelectorAll('.rct-pick-opt').forEach(e => {
+    e.addEventListener('click', () => piProdChoose(+e.dataset.k));
+    e.addEventListener('mousemove', () => { const k = +e.dataset.k; if (PI_PP.idx === k) return; PI_PP.idx = k; el.querySelectorAll('.rct-pick-opt').forEach(x => x.classList.toggle('on', +x.dataset.k === k)); });
+  });
+  const r = input.getBoundingClientRect(), w = Math.max(r.width, 340);
+  el.style.position = 'fixed'; el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px'; el.style.width = w + 'px';
+  const below = window.innerHeight - r.bottom;
+  if (below < 260 && r.top > below) { el.style.top = 'auto'; el.style.bottom = (window.innerHeight - r.top + 4) + 'px'; } else { el.style.bottom = 'auto'; el.style.top = (r.bottom + 4) + 'px'; }
+  el.style.zIndex = '100000'; el.hidden = false; input.setAttribute('aria-expanded', 'true');
+}
+function piProdClose(){ const el = document.getElementById('pi-prod-list'); if (el) el.hidden = true; if (PI_PP.input) PI_PP.input.setAttribute('aria-expanded', 'false'); }
+function piProdChoose(k){
+  const i = PI_PP.i, typed = PI_PP.input ? PI_PP.input.value.trim() : '';
+  piProdClose();
+  if (k < PI_PP.shown.length) { const p = PI_PP.shown[k]; PI_PP.input = null; piSetStockItem(i, p.name, p.id); return; }
+  if (piCanAddProduct()) { PI_PP.adding = true; piOpenNewProduct(i, typed); }
+}
+function piProdKey(i, e){
+  const el = piProdListEl(), n = PI_PP.shown.length + (piCanAddProduct() ? 1 : 0);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (el.hidden) { piProdOpen(i, e.target); return; } if (!n) return; PI_PP.idx = (PI_PP.idx + (e.key === 'ArrowDown' ? 1 : n - 1)) % n; el.querySelectorAll('.rct-pick-opt').forEach(x => x.classList.toggle('on', +x.dataset.k === PI_PP.idx)); el.querySelector(`.rct-pick-opt[data-k="${PI_PP.idx}"]`)?.scrollIntoView({ block: 'nearest' }); }
+  else if (e.key === 'Enter') { if (!el.hidden && n) { e.preventDefault(); piProdChoose(PI_PP.idx); } }
+  else if (e.key === 'Escape') { if (!el.hidden) { e.preventDefault(); e.stopPropagation(); piProdClose(); } }
+  else PI_PP.idx = 0;
+}
+function piProdBlur(i, input){
+  setTimeout(() => {
+    if (!input.isConnected || document.activeElement === input || document.getElementById('pi-np-modal')?.classList.contains('open')) return;   // re-drawn, still typing, or adding
+    piProdClose();
+    const s = piState(), l = s && s.lines[i]; if (!l) return;
+    const v = input.value.trim();
+    if (l.productId && v === String(l.desc || '').trim()) return;
+    piSetStockItem(i, v);   // an exact product name is taken; anything else stays as typed and shows the error
+  }, 160);
+}
+window.addEventListener('resize', piProdClose);
+document.addEventListener('scroll', e => { if (!e.target.closest || !e.target.closest('#pi-prod-list')) piProdClose(); }, true);
+
+/* + New Product — short form; warns when a similar name or the same code already exists */
+function piProdCategories(){
+  const built = ['Electrical', 'Mechanical', 'Safety', 'Cleaning', 'Stationery', 'Tools', 'Plumbing', 'Hardware', 'Consumables', 'Food & Beverages', 'IT Hardware & Software', 'Other'];
+  const custom = (typeof settings !== 'undefined' && settings && settings.customCategories) || [];
+  return [...new Set([...built, ...custom, ...piProducts().map(p => p.category).filter(Boolean)])].sort((a, b) => a.localeCompare(b));
+}
+function piLev(a, b){ if (Math.abs(a.length - b.length) > 2) return 3; const d = Array.from({ length: a.length + 1 }, (_, i) => [i]); for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[a.length][b.length]; }
+/** Products that look the same: same code, or a name equal / contained / 1–2 letters apart (spaces and signs ignored). */
+function piSimilarProducts(name, code){
+  const n = piNormName(name), c = String(code || '').trim().toLowerCase();
+  return piProducts().filter(p => {
+    const pn = piNormName(p.name);
+    if (c && String(p.code || '').trim().toLowerCase() === c) return true;
+    if (!n || !pn) return false;
+    return pn === n || (n.length >= 6 && (pn.includes(n) || n.includes(pn))) || (n.length >= 6 && piLev(n, pn) <= 2);
+  }).slice(0, 3);
+}
+function piOpenNewProduct(lineIdx, typed){
+  const m = document.getElementById('pi-np-modal') || Object.assign(document.createElement('div'), { id: 'pi-np-modal', className: 'modal-overlay bc-ds-overlay' });
+  document.body.appendChild(m);   // in front of the invoice
+  m._line = lineIdx; m._warned = '';
+  const units = (typeof uomMaster !== 'undefined' ? uomMaster : []).filter(u => u.active);
+  const s = piState(), l = s && s.lines[lineIdx], defUom = (l && l.uom) || 'Pcs';
+  m.innerHTML = `<div class="modal pi-paym" role="dialog" aria-modal="true" aria-labelledby="pnp-title" style="--pi-w:560px">
+    <div class="modal-header"><div><h2 id="pnp-title">New Product</h2><div class="so-create-subtitle">Added to Master Data → Products and used on this line</div></div><button class="close-btn" type="button" onclick="piCloseNewProduct()" aria-label="Close">✕</button></div>
+    <div class="modal-body">
+      <div id="pnp-dup"></div>
+      <div class="pi-np-grid">
+        <div class="form-group pi-np-wide"><label for="pnp-name">Product name *</label><input id="pnp-name" maxlength="200" value="${piEsc(typed || '')}" oninput="piNewProductCheck()"></div>
+        <div class="form-group"><label for="pnp-code">Item code / SKU <em>Optional</em></label><input id="pnp-code" maxlength="100" placeholder="e.g. PEL7600-B" oninput="piNewProductCheck()"></div>
+        <div class="form-group"><label for="pnp-cat">Category</label><select id="pnp-cat"><option value="">— Choose —</option>${piProdCategories().map(c => `<option>${piEsc(c)}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="bc-label-row" for="pnp-uom"><span>Unit *</span><button class="bc-label-link" type="button" onclick="openQuickUom('pnp-uom')"><i class="ti ti-plus"></i>New Unit</button></label><select id="pnp-uom">${units.map(u => `<option value="${piEsc(u.code)}"${u.code === defUom ? ' selected' : ''}>${piEsc(u.code)} — ${piEsc(u.name)}</option>`).join('')}</select></div>
+        <div class="form-group"><label for="pnp-brand">Brand <em>Optional</em></label><input id="pnp-brand" maxlength="100"></div>
+      </div>
+      <p class="ds-note">The full product (picture, specifications, price) can be completed later in Master Data → Products.</p>
+      <div class="inv-error" id="pnp-err" hidden></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" type="button" onclick="piCloseNewProduct()">Cancel</button><button class="btn btn-primary" type="button" id="pnp-save" onclick="piSaveNewProduct()"><i class="ti ti-plus"></i>Add product</button></div></div>`;
+  const z = Math.max(0, ...[...document.querySelectorAll('.modal-overlay.open')].filter(e => e !== m).map(e => Number(getComputedStyle(e).zIndex) || 0)); m.style.zIndex = z ? String(z + 1) : '';
+  if (typeof openModalWithSize === 'function') openModalWithSize('pi-np-modal'); else m.classList.add('open');
+  piNewProductCheck();
+  setTimeout(() => document.getElementById('pnp-name')?.focus(), 60);
+}
+function piCloseNewProduct(){ if (typeof closeModal === 'function') closeModal('pi-np-modal'); else document.getElementById('pi-np-modal')?.classList.remove('open'); }
+function piNewProductCheck(){
+  const m = document.getElementById('pi-np-modal'); if (!m) return;
+  const name = document.getElementById('pnp-name').value, code = document.getElementById('pnp-code').value;
+  const sim = piSimilarProducts(name, code), box = document.getElementById('pnp-dup');
+  m._sim = sim;
+  box.innerHTML = sim.length ? `<div class="pi-match warn pi-np-dup"><i class="ti ti-alert-triangle"></i><span><b>Did you mean ${sim.map(p => `“${piEsc(p.name)}”${p.code ? ' (' + piEsc(p.code) + ')' : ''}`).join(' or ')}?</b> It looks the same. Use it instead — or continue to add a new product.</span>${sim.map(p => `<button type="button" class="btn btn-secondary btn-sm" onclick="piUseExistingProduct('${piEsc(p.id)}')">Use ${piEsc(p.code || p.name.slice(0, 18))}</button>`).join('')}</div>` : '';
+  const key = sim.map(p => p.id).join(',');
+  if (key !== m._warned) m._warned = '';   // a new match must be seen again
+  document.getElementById('pnp-save').innerHTML = sim.length && m._warned !== key ? '<i class="ti ti-plus"></i>Add as a new product' : '<i class="ti ti-plus"></i>Add product';
+}
+function piUseExistingProduct(id){
+  const m = document.getElementById('pi-np-modal'), p = piProducts().find(x => x.id === id); if (!m || !p) return;
+  piCloseNewProduct(); piSetStockItem(m._line, p.name, p.id);
+}
+async function piSaveNewProduct(){
+  const m = document.getElementById('pi-np-modal'); if (!m) return;
+  const err = document.getElementById('pnp-err'); err.hidden = true;
+  const name = document.getElementById('pnp-name').value.trim(), code = document.getElementById('pnp-code').value.trim(), uom = document.getElementById('pnp-uom').value;
+  if (!name) { err.textContent = 'Enter the product name.'; err.hidden = false; document.getElementById('pnp-name').focus(); return; }
+  if (!uom) { err.textContent = 'Choose the unit.'; err.hidden = false; return; }
+  if (code && piProducts().some(p => String(p.code || '').trim().toLowerCase() === code.toLowerCase())) { err.textContent = `The code ${code} is already used by another product. Use that product, or give a different code.`; err.hidden = false; return; }
+  if (piProducts().some(p => String(p.name || '').trim().toLowerCase().replace(/\s+/g, ' ') === name.toLowerCase().replace(/\s+/g, ' '))) { err.textContent = `A product named “${name}” already exists. Use it from the list.`; err.hidden = false; return; }
+  const sim = m._sim || [], key = sim.map(p => p.id).join(',');
+  if (sim.length && m._warned !== key) { m._warned = key; piNewProductCheck(); document.getElementById('pnp-save').innerHTML = '<i class="ti ti-plus"></i>Yes, add a new product'; return; }
+  if (!piCanAddProduct()) { err.textContent = 'Only administrators may add a new product (Administration → Purchase Settings).'; err.hidden = false; return; }
+  const p = { id: 'p' + Date.now().toString(36), name, code, brand: document.getElementById('pnp-brand').value.trim(), model: '', category: document.getElementById('pnp-cat').value, uom, price: 0, notes: '', specs: [], image: null, imagePath: null,
+    createdFrom: 'purchase-invoice', createdBy: (window.currentUser && window.currentUser.name) || '', createdAt: new Date().toISOString() };
+  try {
+    await bcBusy('Adding product…', async () => { products.unshift(p); try { await saveProducts(); } catch (e) { products.splice(products.indexOf(p), 1); throw e; } });
+  } catch (e) { err.textContent = 'The product could not be saved: ' + (e && e.message || e); err.hidden = false; return; }
+  if (typeof renderProducts === 'function') try { renderProducts(); } catch (e) {}
+  piCloseNewProduct();
+  piSetStockItem(m._line, p.name, p.id);
+  if (typeof showToast === 'function') showToast(`${p.name} added to Products and used on this line`, 'success');
+}

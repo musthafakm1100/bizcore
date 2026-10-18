@@ -33,9 +33,11 @@ export const DISCOUNT_MODES = Object.freeze(['invoice', 'line', 'both']);
 export const COST_ACTIONS = Object.freeze(['reason', 'block']);
 export const PROFIT_VISIBILITY = Object.freeze(['admins', 'everyone']);
 export const EDIT_MODES = Object.freeze(['off', 'limited', 'limited-admin', 'full']);
+export const NEW_PRODUCT_RIGHTS = Object.freeze(['everyone', 'admins']);
 export const DEFAULT_PURCHASE_SETTINGS = Object.freeze({
   costLimitPct: 5, costLimitAction: 'reason', discountMode: 'invoice', roundingLimit: 1, vatRate: 15, profitVisibility: 'admins',
   editMode: 'limited-admin', editDays: 7,   // V268.3
+  newProductRight: 'everyone',               // V268.5: who may add a product with + New Product
 });
 export const LIMITS = Object.freeze({ lines: 300, costs: 20, text: 300, reason: 300, invNo: 60 });
 
@@ -61,6 +63,7 @@ export function effectivePurchaseSettings(stored) {
     profitVisibility: PROFIT_VISIBILITY.includes(s.profitVisibility) ? s.profitVisibility : 'admins',
     editMode: EDIT_MODES.includes(s.editMode) ? s.editMode : 'limited-admin',
     editDays: Number.isInteger(Number(s.editDays)) && Number(s.editDays) >= 0 && Number(s.editDays) <= 365 ? Number(s.editDays) : 7,
+    newProductRight: NEW_PRODUCT_RIGHTS.includes(s.newProductRight) ? s.newProductRight : 'everyone',
   };
 }
 export function validatePurchaseSettings(input = {}) {
@@ -71,6 +74,7 @@ export function validatePurchaseSettings(input = {}) {
     discountMode: String(input.discountMode || ''), roundingLimit: n(input.roundingLimit),
     vatRate: n(input.vatRate), profitVisibility: String(input.profitVisibility || ''),
     editMode: String(input.editMode || 'limited-admin'), editDays: n(input.editDays == null || input.editDays === '' ? 7 : input.editDays),
+    newProductRight: String(input.newProductRight || 'everyone'),
   };
   if (!Number.isFinite(v.costLimitPct) || v.costLimitPct < 0 || v.costLimitPct > 1000) errors.push({ field: 'costLimitPct', message: 'Cost limit: 0 to 1000 %.' });
   if (!COST_ACTIONS.includes(v.costLimitAction)) errors.push({ field: 'costLimitAction', message: 'Choose what happens above the limit.' });
@@ -80,6 +84,7 @@ export function validatePurchaseSettings(input = {}) {
   if (!PROFIT_VISIBILITY.includes(v.profitVisibility)) errors.push({ field: 'profitVisibility', message: 'Choose who sees the profit.' });
   if (!EDIT_MODES.includes(v.editMode)) errors.push({ field: 'editMode', message: 'Choose who may edit.' });
   if (!Number.isInteger(v.editDays) || v.editDays < 0 || v.editDays > 365) errors.push({ field: 'editDays', message: 'Edit time limit: 0 to 365 whole days.' });
+  if (!NEW_PRODUCT_RIGHTS.includes(v.newProductRight)) errors.push({ field: 'newProductRight', message: 'Choose who may add a new product.' });
   v.costLimitPct = r2(v.costLimitPct); v.roundingLimit = r2(v.roundingLimit); v.vatRate = r2(v.vatRate);
   return { ok: errors.length === 0, value: v, errors };
 }
@@ -236,6 +241,8 @@ export function validatePurchaseInvoice(input = {}, ctx = {}) {
     } else {
       Object.assign(line, { productId: clean(l.productId, 120), code: clean(l.code, 100), desc: clean(l.desc, 500), uom: clean(l.uom, 30) || 'Pcs', stockQty: qty });
       if (!line.desc) err('desc', `Line ${n}: enter the item.`, i);
+      // V268.5: an item for stock must be a product from Master Data (or added with + New Product)
+      else if (!line.productId) err('product', `Line ${n}: choose a product from the list, or add it with + New Product.`, i);
     }
     line.itemKey = itemKeyOf(line);
     // cost against the estimate / last paid price
@@ -689,4 +696,34 @@ export function validateAllocation(input = {}, { item = null, so = null, ledger 
   return { ok: errors.length === 0, errors, value: { itemKey: item ? item.itemKey : '', desc: item ? clean(item.desc, 500) : '', uom: item ? clean(item.uom, 30) : '',
     soId: so ? so.id : '', soNo: so ? clean(so.soNo, 40) : '', customer: so ? clean(so.customer, 200) : '', soLineId: line ? line.lineId : '',
     qty, unitCost, value, sellUnit: line ? r4(Number(line.up) || 0) : 0, date, note, left } };
+}
+
+/* ───────── V268.5: Change Item (the wrong item was chosen on a purchase invoice) ─────────
+   stockChanges/{SC-op}: part or all of one stock item moves to the correct product at the same average cost.
+   Same unit only; reason required; administrators; can be cancelled (with a reason) while the stock is still there. */
+export const STOCK_CHANGE_COLLECTION = 'stockChanges';
+export const stockChangeIdForOperation = op => { const k = String(op || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 200); return k.length >= 8 ? 'SC-' + k : ''; };
+export function validateStockChange(input = {}, { item = null, product = null, today = new Date().toISOString().slice(0, 10) } = {}) {
+  const errors = [], err = (field, message) => errors.push({ field, message });
+  const qty = rq(num(input.qty)), reason = clean(input.reason, 300), date = String(input.date || today).slice(0, 10);
+  if (!item) err('item', 'This stock item no longer exists.');
+  if (!product || !clean(product.id, 120)) err('product', 'Choose the correct product from the list.');
+  if (!(qty > 0)) err('qty', 'Enter the quantity.');
+  else if (item && qty > (Number(item.qty) || 0) + 1e-9) err('qty', `Only ${Number(item.qty) || 0} in stock.`);
+  if (reason.length < 5) err('reason', 'Give the reason (at least 5 characters).');
+  if (!isDate(date)) err('date', 'Enter the date.'); else if (date > today) err('date', 'The date can\'t be in the future.');
+  let toKey = '', toUom = '';
+  if (item && product && product.id) {
+    toUom = clean(product.uom, 30) || clean(item.uom, 30);
+    toKey = itemKeyOf({ productId: product.id, code: product.code, desc: product.name, uom: toUom });
+    if (toKey === item.itemKey) err('product', 'Choose a different product — this is the same item.');
+    if (String(toUom).trim().toLowerCase() !== String(item.uom || '').trim().toLowerCase()) err('product', `The units must be the same (${item.uom || '—'} → ${toUom || '—'}).`);
+  }
+  const unitCost = avgCostOf(item);
+  const all = item && Math.abs(qty - (Number(item.qty) || 0)) < 1e-9;
+  const value = all ? r2(Number(item.value) || 0) : r2(unitCost * (Number.isFinite(qty) ? qty : 0));
+  return { ok: errors.length === 0, errors, value: {
+    fromKey: item ? item.itemKey : '', fromDesc: item ? clean(item.desc, 500) : '', fromCode: item ? clean(item.code, 100) : '', uom: item ? clean(item.uom, 30) : '',
+    toKey, toProductId: product ? clean(product.id, 120) : '', toCode: product ? clean(product.code, 100) : '', toDesc: product ? clean(product.name, 500) : '',
+    qty, unitCost, value, reason, date } };
 }

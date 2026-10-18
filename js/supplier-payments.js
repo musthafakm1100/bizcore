@@ -79,7 +79,10 @@ function renderSupplierPayments(){
   const ds = window.BCDateFilter ? BCDateFilter.get('spreg') : { preset: 'all', from: '', to: '' };
   const all = spPays();
   const supSel = document.getElementById('spreg-supplier');
-  if (supSel) { const cur = supSel.value; const names = [...new Set(all.map(p => p.supplierName).filter(Boolean))].sort((a, b) => a.localeCompare(b)); supSel.innerHTML = '<option value="">All suppliers</option>' + names.map(n => `<option value="${piEsc(n)}">${piEsc(n)}</option>`).join(''); supSel.value = names.includes(cur) ? cur : ''; }
+  if (supSel) { const cur = supSel.value; const names = [...new Set(all.map(p => p.supplierName).filter(Boolean))].sort((a, b) => a.localeCompare(b)); supSel.innerHTML = '<option value="">All suppliers</option>' + names.map(n => `<option value="${piEsc(n)}">${piEsc(n)}</option>`).join(''); supSel.value = names.includes(cur) ? cur : '';
+    // V268.5: type-and-search (approved mockup V5_1)
+    bcPickEnhance('spreg-supplier', { compact: true, placeholder: 'All suppliers', clearLabel: 'All suppliers', empty: 'No supplier matches.',
+      items: () => names.map(n => { const c = all.filter(p => p.supplierName === n).length; return { key: n, title: n, right: String(c), text: n }; }) }); }
   const sup = supSel ? supSel.value : '';
   const scope = all.filter(p => (!sup || p.supplierName === sup) && (!ds.from || (p.date || '') >= ds.from) && (!ds.to || (p.date || '') <= ds.to)
     && (!q || [p.spNo, p.supplierName, p.piNo, p.soNo, p.note, ...(p.lines || []).map(l => l.reference), ...(p.lines || []).map(l => l.accountName)].some(v => String(v || '').toLowerCase().includes(q))));
@@ -193,8 +196,15 @@ function openPayAdvance(){
     </div>
     <div class="modal-footer"><button class="btn btn-secondary" type="button" onclick="closeModal('sp-adv-modal')">Cancel</button><button class="btn btn-primary" type="button" id="spa-save" onclick="spSaveAdvance()" disabled><i class="ti ti-device-floppy"></i>Save advance</button></div></div>`;
   spAdvRender();
+  // V268.5: type-and-search pickers (approved mockup V5_1)
+  bcPickEnhance('spa-sup', { items: bcSupplierPickItems, placeholder: 'Search supplier…', empty: 'No supplier matches. Check the spelling, or add the supplier in Master Data.' });
+  bcPickEnhance('spa-so', { items: () => sos.map(so => { const its = (so.items || []).filter(it => it && (it.desc || it.description)); const d = so.date ? (typeof fmtDate === 'function' ? fmtDate(so.date) : so.date) : '';
+      return { key: so.id, title: `${so.customer || ''} · ${so.soNo || ''}`, right: d, sub: `${its.length} line${its.length === 1 ? '' : 's'}${its.length ? ' · ' + its.slice(0, 2).map(it => it.desc || it.description).join(', ') + (its.length > 2 ? ' …' : '') : ''}`,
+        text: [so.soNo, so.customer, so.ref || '', ...its.map(it => it.desc || it.description)].join(' ') }; }),
+    placeholder: 'Search by SO no., customer or item…', clearLabel: 'No sales order', empty: 'No open sales order matches.',
+    hint: '↑ ↓ to move · Enter to choose · cancelled orders hidden' });
   if (typeof openModalWithSize === 'function') openModalWithSize('sp-adv-modal'); else m.classList.add('open');
-  setTimeout(() => document.getElementById('spa-sup').focus(), 60);
+  setTimeout(() => bcPickFocus('spa-sup'), 60);
 }
 function spAdvSet(i, field, value, rerender){
   const m = spAdvEl(), l = m._st.lines[i]; if (!l) return;

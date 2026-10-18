@@ -22,7 +22,8 @@ import {
   PAYMENT_COLLECTION, PAYMENT_KINDS, paymentIdForOperation, paymentEntryIdOf, validateSupplierPayment, buildSupplierPaymentRecords,
   applyPaymentToInvoice, applyAdvanceUse, editRightOf, validateInvoiceLimitedEdit, validatePaymentLimitedEdit,
   STOCK_ALLOC_COLLECTION, allocationIdForOperation, validateAllocation,
-} from './purchase-core.mjs?v=268.4';
+  STOCK_CHANGE_COLLECTION, stockChangeIdForOperation, validateStockChange,
+} from './purchase-core.mjs?v=268.5';
 import { DeliveryError, isSafeId, eventIdForOperation, requireReason, cleanText, assertSize } from './delivery-core.mjs?v=266.0';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
@@ -65,6 +66,8 @@ export function createPurchaseService(fs, options = {}) {
     cashLine: id => doc(db, 'cashLines', id),
     payEvent: (id, ev) => doc(db, PAYMENT_COLLECTION, id, 'events', ev),
     alloc: id => doc(db, STOCK_ALLOC_COLLECTION, id),
+    change: id => doc(db, STOCK_CHANGE_COLLECTION, id),
+    product: id => doc(db, 'products', id),
   };
   /** V268.3: the advances used by payment lines (read inside the transaction). */
   async function readAdvances(tx, groups) {
@@ -633,6 +636,73 @@ export function createPurchaseService(fs, options = {}) {
       revision: (Number(cur.revision) || 0) + 1, lastAllocationId: id, lastEventId: eventId, updatedByUid: actor.uid, updatedAt: at });
   }
 
+  /* ───────── V268.5: Change Item (administrators) ───────── */
+  async function adminsOf(tx) { const a = await tx.get(refs.access()); return a.exists() && Array.isArray(a.data().adminUids) ? a.data().adminUids : []; }
+  async function changeStockItem(input = {}) {
+    const { operationId, itemKey } = input;
+    const id = stockChangeIdForOperation(operationId);
+    ensure(isSafeId(id) && isSafeId(itemKey), PURCHASE_ERR.INVALID_INPUT, 'Choose the stock item.');
+    const product = input.product || null;
+    const eventId = eventIdForOperation('chg', operationId);
+    const actor = actorOf(), at = now();
+    return transact(async tx => {
+      const [cSnap, iSnap, admins] = await Promise.all([tx.get(refs.change(id)), tx.get(refs.stock(itemKey)), adminsOf(tx)]);
+      if (cSnap.exists()) { const ex = cSnap.data(); ensure(ex.operationId === operationId, PURCHASE_ERR.ID_COLLISION, 'Change ID already used'); return { alreadyApplied: true, change: ex }; }
+      ensure(admins.includes(actor.uid), PURCHASE_ERR.NOT_ADMIN, 'Only administrators can change the item of stock.');
+      const item = iSnap.exists() ? iSnap.data() : null;
+      const v = validateStockChange(input, { item, product, today: todayLocal() });
+      if (!v.ok) fail(PURCHASE_ERR.INVALID_INPUT, v.errors.map(e => e.message).join(' '), { errors: v.errors });
+      const val = v.value;
+      const toSnap = await tx.get(refs.stock(val.toKey));
+      const to = toSnap.exists() ? toSnap.data() : { itemKey: val.toKey, productId: val.toProductId, code: val.toCode, desc: val.toDesc, uom: val.uom, qty: 0, value: 0, revision: 0 };
+      const change = { id, schemaVersion: PURCHASE_SCHEMA_VERSION, operationId, status: PURCHASE_STATUS.posted, revision: 1, lastEventId: eventId, ...val,
+        created: at, createdBy: actor.name, createdByUid: actor.uid, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid, recordedAt: stamp() };
+      tx.set(refs.change(id), change);
+      writeStockForChange(tx, item, -val.qty, -val.value, { id, eventId, actor, at });
+      writeStockForChange(tx, to, +val.qty, +val.value, { id, eventId, actor, at });
+      const mv = (suffix, key, q, value, kind, other) => { const moveId = `${id}__${suffix}`; tx.set(refs.move(moveId), { id: moveId, itemKey: key, kind, qty: q, value, changeId: id, otherKey: other.key, otherDesc: other.desc,
+        eventId, date: val.date, note: val.reason, actor: actor.name, actorUid: actor.uid, at }); };
+      mv('out', val.fromKey, -val.qty, -val.value, 'changed-to', { key: val.toKey, desc: val.toDesc });
+      mv('in', val.toKey, +val.qty, +val.value, 'changed-from', { key: val.fromKey, desc: val.fromDesc });
+      return { alreadyApplied: false, change };
+    });
+  }
+  async function cancelStockChange(input = {}) {
+    const { operationId, changeId } = input;
+    ensure(isSafeId(changeId), PURCHASE_ERR.INVALID_INPUT, 'Change reference required');
+    const reason = requireReason(input.reason);
+    const eventId = eventIdForOperation('chgvoid', operationId);
+    const actor = actorOf(), at = now();
+    return transact(async tx => {
+      const [cSnap, admins] = await Promise.all([tx.get(refs.change(changeId)), adminsOf(tx)]);
+      ensure(cSnap.exists(), PURCHASE_ERR.NOT_FOUND, 'Change not found');
+      const c = cSnap.data();
+      if (c.status === PURCHASE_STATUS.voided) { ensure(c.lastEventId === eventId, PURCHASE_ERR.INVALID_STATE, 'This change is already cancelled.'); return { alreadyApplied: true, change: c }; }
+      ensure(admins.includes(actor.uid), PURCHASE_ERR.NOT_ADMIN, 'Only administrators can cancel a change of item.');
+      const [fSnap, tSnap] = await Promise.all([tx.get(refs.stock(c.fromKey)), tx.get(refs.stock(c.toKey))]);
+      const to = tSnap.exists() ? tSnap.data() : null;
+      ensure(to && Number(to.qty) + 1e-9 >= c.qty, PURCHASE_ERR.STOCK_USED, `${c.toDesc} no longer has ${c.qty} in stock — some was allocated or used. Cancel that first.`);
+      const from = fSnap.exists() ? fSnap.data() : { itemKey: c.fromKey, desc: c.fromDesc, code: c.fromCode, uom: c.uom, qty: 0, value: 0, revision: 0 };
+      const next = { ...c, status: PURCHASE_STATUS.voided, voidReason: reason, voidedAt: at, voidedBy: actor.name, voidedByUid: actor.uid,
+        revision: c.revision + 1, lastEventId: eventId, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid };
+      tx.set(refs.change(changeId), next);
+      const back = Math.abs(c.qty - (Number(to.qty) || 0)) < 1e-9 ? r2(Number(to.value) || 0) : c.value;
+      writeStockForChange(tx, to, -c.qty, -back, { id: changeId, eventId, actor, at });
+      writeStockForChange(tx, from, +c.qty, +back, { id: changeId, eventId, actor, at });
+      const mv = (suffix, key, q, value, other) => { const moveId = `${changeId}__${suffix}`; tx.set(refs.move(moveId), { id: moveId, itemKey: key, kind: 'change-cancelled', qty: q, value, changeId, otherKey: other.key, otherDesc: other.desc,
+        eventId, date: todayLocal(), note: reason, actor: actor.name, actorUid: actor.uid, at }); };
+      mv('back-out', c.toKey, -c.qty, -back, { key: c.fromKey, desc: c.fromDesc });
+      mv('back-in', c.fromKey, +c.qty, +back, { key: c.toKey, desc: c.toDesc });
+      return { alreadyApplied: false, change: next };
+    });
+  }
+  function writeStockForChange(tx, item, dq, dv, { id, eventId, actor, at }) {
+    const qty = rq((Number(item.qty) || 0) + dq);
+    ensure(qty >= -1e-9, PURCHASE_ERR.STOCK_USED, `Not enough ${item.desc || 'stock'} in stock.`);
+    tx.set(refs.stock(item.itemKey), { ...item, qty: Math.max(0, qty), value: qty <= 1e-9 ? 0 : r2(Math.max(0, (Number(item.value) || 0) + dv)),
+      revision: (Number(item.revision) || 0) + 1, lastChangeId: id, lastEventId: eventId, updatedByUid: actor.uid, updatedAt: at });
+  }
+
   /* ───────── Administration → Purchase settings ───────── */
   async function savePurchaseSettings(input = {}) {
     const actor = actorOf();
@@ -649,5 +719,5 @@ export function createPurchaseService(fs, options = {}) {
     });
   }
 
-  return { createPurchaseInvoice, voidPurchaseInvoice, savePurchaseSettings, recordSupplierPayment, recordSupplierCashBack, voidSupplierPayment, payAdvance, editSupplierPayment, editPurchaseInvoice, allocateStock, cancelStockAllocation };
+  return { createPurchaseInvoice, voidPurchaseInvoice, savePurchaseSettings, recordSupplierPayment, recordSupplierCashBack, voidSupplierPayment, payAdvance, editSupplierPayment, editPurchaseInvoice, allocateStock, cancelStockAllocation, changeStockItem, cancelStockChange };
 }

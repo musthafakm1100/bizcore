@@ -695,6 +695,8 @@ async function saveProducts() {
 async function saveTerms() {
   try { localStorage.setItem('dtq_delivery_terms', JSON.stringify(deliveryTerms)); } catch(e) {}
   try { localStorage.setItem('dtq_payment_terms',  JSON.stringify(paymentTerms));  } catch(e) {}
+  // V268.5: terms added from a quotation were kept only in this browser until something else was saved
+  if (window.FB) { await window.FB.fbSave('deliveryTerms', deliveryTerms); await window.FB.fbSave('paymentTerms', paymentTerms); }
 }
 /* ── V260: independent Delivery Note read model ──────────────────────────────
    rawSalesOrders      Sales Orders exactly as stored (no Delivery Notes)
@@ -1159,7 +1161,7 @@ function readTaxMaster(){
   }catch(_){return [{...DEFAULT_TAX_SETTINGS}]}
 }
 function normalizeTaxRecord(t){return {id:t.id||taxMasterId(),code:String(t.code||'VAT').trim().toUpperCase(),name:String(t.name||'VAT').trim(),rate:Math.max(0,Math.min(100,Number(t.rate)||0)),effectiveFrom:t.effectiveFrom||'',effectiveTo:t.effectiveTo||'',active:t.active!==false,isDefault:t.isDefault===true||t.default===true,remarks:t.remarks||''}}
-function writeTaxMaster(rows){localStorage.setItem('bizcoreTaxMaster',JSON.stringify(rows.map(normalizeTaxRecord)))}
+function writeTaxMaster(rows){localStorage.setItem('bizcoreTaxMaster',JSON.stringify(rows.map(normalizeTaxRecord)));if(typeof bcSharedSave==='function')bcSharedSave('bizcoreTaxMaster');}   // V268.5: shared (Firebase)
 function taxIsEffective(t,dateValue){const d=dateValue||new Date().toISOString().slice(0,10);return (!t.effectiveFrom||t.effectiveFrom<=d)&&(!t.effectiveTo||t.effectiveTo>=d)}
 function activeTaxSettings(dateValue){
   const rows=readTaxMaster();
@@ -2603,48 +2605,12 @@ function showConfirm({icon='📋', title='Confirm', message='', details=null, co
   setTimeout(() => document.getElementById('confirm-ok')?.focus(), 50);
 }
 
-/* ══════════════════════════════════════════════════
-   BASIC USERS + ROLES (PROTOTYPE STORAGE)
-══════════════════════════════════════════════════ */
-const ROLE_MODULES=['Dashboard','Customers','Suppliers','Products','Quotations','Sales Orders','Delivery Notes','Reports','Setup'];
-const ROLE_ACTIONS=['view','create','edit','delete','print','approve'];
-function defaultPermissions(all=false){const out={};ROLE_MODULES.forEach(m=>{out[m]={};ROLE_ACTIONS.forEach(a=>out[m][a]=all);});return out;}
-function loadAccessSetup(){
-  try{appRoles=JSON.parse(localStorage.getItem('bizcore_roles')||'[]');}catch{appRoles=[];}
-  try{appUsers=JSON.parse(localStorage.getItem('bizcore_users')||'[]');}catch{appUsers=[];}
-  if(!appRoles.length){
-    appRoles=[
-      {id:'role-admin',name:'Administrator',permissions:defaultPermissions(true),system:true},
-      {id:'role-manager',name:'Manager',permissions:defaultPermissions(false),system:true},
-      {id:'role-sales',name:'Sales',permissions:defaultPermissions(false),system:true},
-      {id:'role-accounts',name:'Accounts',permissions:defaultPermissions(false),system:true},
-      {id:'role-store',name:'Storekeeper',permissions:defaultPermissions(false),system:true}
-    ];
-    ['role-manager','role-sales'].forEach(id=>{const r=appRoles.find(x=>x.id===id);['Dashboard','Customers','Products','Quotations','Sales Orders'].forEach(m=>['view','create','edit','print'].forEach(a=>r.permissions[m][a]=true));});
-    const ac=appRoles.find(x=>x.id==='role-accounts');['Dashboard','Customers','Quotations','Sales Orders','Reports'].forEach(m=>['view','print'].forEach(a=>ac.permissions[m][a]=true));
-    const st=appRoles.find(x=>x.id==='role-store');['Dashboard','Products','Sales Orders'].forEach(m=>['view','edit','print'].forEach(a=>st.permissions[m][a]=true));
-    saveAccessSetup();
-  }
-  if(!appUsers.length){appUsers=[{id:'user-admin',fullname:'Administrator',username:'admin',password:'',email:'',roleId:'role-admin',active:true}];saveAccessSetup();}
-  if(!selectedRoleId)selectedRoleId=appRoles[0]?.id||null;
-}
-function saveAccessSetup(){localStorage.setItem('bizcore_roles',JSON.stringify(appRoles));localStorage.setItem('bizcore_users',JSON.stringify(appUsers));}
-function populateUserRoles(){const sel=document.getElementById('u-role');if(sel)sel.innerHTML=appRoles.map(r=>`<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');}
-function openUserForm(id=null){loadAccessSetup();editingUserId=id;populateUserRoles();const card=document.getElementById('user-form-card');if(!card)return;card.style.display='block';const u=id?appUsers.find(x=>x.id===id):null;document.getElementById('user-form-title').textContent=u?'Edit user':'New user';document.getElementById('u-fullname').value=u?.fullname||'';document.getElementById('u-username').value=u?.username||'';document.getElementById('u-password').value=u?.password||'';document.getElementById('u-email').value=u?.email||'';document.getElementById('u-role').value=u?.roleId||appRoles[0]?.id||'';document.getElementById('u-active').value=String(u?.active!==false);setTimeout(()=>document.getElementById('u-fullname')?.focus(),50);}
-function closeUserForm(){editingUserId=null;const c=document.getElementById('user-form-card');if(c)c.style.display='none';}
-function saveUser(){const fullname=document.getElementById('u-fullname').value.trim(),username=document.getElementById('u-username').value.trim();if(!fullname||!username){showToast('Full name and username are required','error');return;}if(appUsers.some(u=>u.username.toLowerCase()===username.toLowerCase()&&u.id!==editingUserId)){showToast('Username already exists','error');return;}const obj={id:editingUserId||('user-'+Date.now()),fullname,username,password:document.getElementById('u-password').value,email:document.getElementById('u-email').value.trim(),roleId:document.getElementById('u-role').value,active:document.getElementById('u-active').value==='true'};if(editingUserId){const i=appUsers.findIndex(x=>x.id===editingUserId);appUsers[i]=obj;}else appUsers.push(obj);saveAccessSetup();closeUserForm();renderUsers();if(typeof window.syncTopbarUserIdentity==='function')window.syncTopbarUserIdentity();showToast('User saved','success');}
-function deleteUser(id){if(id==='user-admin'){showToast('The default administrator cannot be deleted','error');return;}showConfirm({icon:'👤',title:'Delete user?',message:'This removes the prototype login account.',confirmText:'Delete user',confirmClass:'btn-danger',onConfirm:()=>{appUsers=appUsers.filter(x=>x.id!==id);saveAccessSetup();renderUsers();showToast('User deleted');}});}
-function renderUsers(){loadAccessSetup();populateUserRoles();const body=document.getElementById('users-tbody');if(!body)return;const q=(document.getElementById('user-search')?.value||'').toLowerCase();const rows=appUsers.filter(u=>{const role=appRoles.find(r=>r.id===u.roleId)?.name||'';return [u.fullname,u.username,u.email,role].join(' ').toLowerCase().includes(q);});body.innerHTML=rows.length?rows.map(u=>{const role=appRoles.find(r=>r.id===u.roleId)?.name||'—';const initials=(u.fullname||'?').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();return `<tr><td><div style="display:flex;align-items:center;gap:9px"><div class="user-avatar">${escapeHtml(initials)}</div><div><strong>${escapeHtml(u.fullname)}</strong><div style="font-size:10px;color:var(--gray)">${escapeHtml(u.email||'No email')}</div></div></div></td><td>${escapeHtml(u.username)}</td><td>${escapeHtml(role)}</td><td><span class="status-pill ${u.active?'active':'inactive'}"><i class="ti ti-circle-filled" style="font-size:6px"></i>${u.active?'Active':'Inactive'}</span></td><td><div class="action-btns"><button class="abtn abtn-edit" onclick="openUserForm('${u.id}')"><i class="ti ti-edit"></i></button><button class="abtn abtn-del" onclick="deleteUser('${u.id}')"><i class="ti ti-trash"></i></button></div></td></tr>`;}).join(''):`<tr><td colspan="5" style="text-align:center;color:var(--gray);padding:24px">No users found.</td></tr>`;}
-function renderRoles(){loadAccessSetup();const list=document.getElementById('role-list');if(!list)return;if(!appRoles.some(r=>r.id===selectedRoleId))selectedRoleId=appRoles[0]?.id;list.innerHTML=appRoles.map(r=>`<div class="role-item ${r.id===selectedRoleId?'active':''}" onclick="selectRole('${r.id}')"><span>${escapeHtml(r.name)}</span><span style="font-size:10px;color:var(--gray)">${appUsers.filter(u=>u.roleId===r.id).length} users</span></div>`).join('');renderPermissionMatrix();}
-function selectRole(id){selectedRoleId=id;renderRoles();}
-function renderPermissionMatrix(){const role=appRoles.find(r=>r.id===selectedRoleId);const name=document.getElementById('role-editor-name'),body=document.getElementById('permission-tbody');if(!role||!body)return;if(name)name.textContent=role.name;body.innerHTML=ROLE_MODULES.map(m=>`<tr><td><strong>${m}</strong></td>${ROLE_ACTIONS.map(a=>`<td><input type="checkbox" data-module="${m}" data-action="${a}" ${role.permissions?.[m]?.[a]?'checked':''}></td>`).join('')}</tr>`).join('');}
-function saveRolePermissions(){const role=appRoles.find(r=>r.id===selectedRoleId);if(!role)return;role.permissions=role.permissions||defaultPermissions(false);document.querySelectorAll('#permission-tbody input[type=checkbox]').forEach(cb=>{role.permissions[cb.dataset.module]=role.permissions[cb.dataset.module]||{};role.permissions[cb.dataset.module][cb.dataset.action]=cb.checked;});saveAccessSetup();showToast('Role permissions saved','success');}
-function addRole(){const name=prompt('Role name');if(!name||!name.trim())return;if(appRoles.some(r=>r.name.toLowerCase()===name.trim().toLowerCase())){showToast('Role already exists','error');return;}const r={id:'role-'+Date.now(),name:name.trim(),permissions:defaultPermissions(false),system:false};appRoles.push(r);selectedRoleId=r.id;saveAccessSetup();renderRoles();populateUserRoles();showToast('Role added','success');}
-
-
+/* V268.5: the old browser-only User Management (users, roles, passwords) was removed.
+   Staff and administrators come from Firebase (accessControl). */
+function loadAccessSetup(){}
 
 /* Units of Measure Master */
-function persistUomMaster(){ localStorage.setItem('bizcore_uom_master',JSON.stringify(uomMaster)); UOM_LIST=uomMaster.filter(u=>u.active).map(u=>u.code); }
+function persistUomMaster(){ localStorage.setItem('bizcore_uom_master',JSON.stringify(uomMaster)); UOM_LIST=uomMaster.filter(u=>u.active).map(u=>u.code); if(typeof bcSharedSave==='function')bcSharedSave('bizcore_uom_master'); }   // V268.5
 function renderUomMaster(){
   const body=document.getElementById('uom-tbody'); if(!body)return;
   const q=(document.getElementById('uom-search')?.value||'').trim().toLowerCase();
@@ -2671,6 +2637,43 @@ function deleteUomMaster(id){
   const u=uomMaster.find(x=>x.id===id); if(!u)return; const used=products.some(p=>String(p.uom).toLowerCase()===u.code.toLowerCase())||quotations.some(q=>(q.items||[]).some(i=>String(i.uom).toLowerCase()===u.code.toLowerCase()));
   if(used){showToast('This UOM is already used. Mark it inactive instead of deleting it.','error');return;}
   showConfirm({icon:'📏',title:'Delete unit of measure?',message:`Delete ${u.code} — ${u.name}?`,confirmText:'Delete UOM',confirmClass:'btn-danger',onConfirm:()=>{uomMaster=uomMaster.filter(x=>x.id!==id);persistUomMaster();renderUomMaster();refreshProductUomSelect();showToast('Unit deleted','success');}});
+}
+/* V268.5: + New Unit from Add Product (approved mockup V5_3). Units are shared in Firebase (js/data-safety.js). */
+let quickUomTarget=null;
+function openQuickUom(targetSelectId){
+  quickUomTarget=targetSelectId||null;
+  let m=document.getElementById('qu-modal');
+  if(!m){m=document.createElement('div');m.className='modal-overlay bc-ds-overlay';m.id='qu-modal';}
+  document.body.appendChild(m);   // in front of Add Product
+  m.innerHTML=`<div class="modal pi-paym" role="dialog" aria-modal="true" aria-labelledby="qu-title" style="--pi-w:480px">
+    <div class="modal-header"><div><h2 id="qu-title">New Unit of Measure</h2><div class="so-create-subtitle">Saved for everyone (Firebase) · also in Master Data → Units of Measure</div></div><button class="close-btn" type="button" onclick="closeModal('qu-modal')" aria-label="Close">✕</button></div>
+    <div class="modal-body"><div class="pi-np-grid">
+      <div class="form-group"><label for="qu-code">Code *</label><input id="qu-code" maxlength="20" placeholder="e.g. Doz" oninput="quickUomCheck()"></div>
+      <div class="form-group"><label for="qu-name">Name *</label><input id="qu-name" maxlength="60" placeholder="e.g. Dozen"></div>
+      <div class="form-group"><label for="qu-dec">Decimals</label><select id="qu-dec" onchange="document.getElementById('qu-step').value=String(this.value==='0'?1:1/Math.pow(10,Number(this.value)))"><option>0</option><option>1</option><option>2</option><option>3</option></select></div>
+      <div class="form-group"><label for="qu-step">Quantity step</label><input id="qu-step" inputmode="decimal" value="1"></div>
+    </div><div id="qu-hint" class="ds-note"></div><div class="inv-error" id="qu-err" hidden></div></div>
+    <div class="modal-footer"><button class="btn btn-secondary" type="button" onclick="closeModal('qu-modal')">Cancel</button><button class="btn btn-primary" type="button" onclick="saveQuickUom()"><i class="ti ti-plus"></i>Add unit</button></div></div>`;
+  const z=Math.max(0,...[...document.querySelectorAll('.modal-overlay.open')].filter(e=>e!==m).map(e=>Number(getComputedStyle(e).zIndex)||0));m.style.zIndex=z?String(z+1):'';
+  openModalWithSize('qu-modal'); quickUomCheck(); setTimeout(()=>document.getElementById('qu-code')?.focus(),60);
+}
+function quickUomCheck(){
+  const code=(document.getElementById('qu-code')?.value||'').trim(),h=document.getElementById('qu-hint');if(!h)return;
+  if(!code){h.textContent='The code must be new.';h.style.color='';return;}
+  const used=uomMaster.find(u=>u.code.toLowerCase()===code.toLowerCase());
+  h.textContent=used?`Code ${used.code} already exists (${used.name}${used.active?'':', inactive'}).`:`Code ${code} is free. After saving it is selected here.`;h.style.color=used?'var(--red)':'#166534';
+}
+function saveQuickUom(){
+  const err=document.getElementById('qu-err');err.hidden=true;
+  const code=document.getElementById('qu-code').value.trim(),name=document.getElementById('qu-name').value.trim(),decimals=Math.max(0,Math.min(3,Number(document.getElementById('qu-dec').value)||0)),step=parseBizNumber(document.getElementById('qu-step').value);
+  const fail=t=>{err.textContent=t;err.hidden=false;};
+  if(!code||!name)return fail('Enter the code and the name.');
+  if(!(step>0))return fail('The quantity step must be more than zero.');
+  if(uomMaster.some(u=>u.code.toLowerCase()===code.toLowerCase()))return fail(`Code ${code} already exists. Choose it from the list, or use a different code.`);
+  uomMaster.push({id:'uom-'+Date.now(),code,name,decimals,step,active:true});
+  persistUomMaster(); try{renderUomMaster();}catch(e){} refreshProductUomSelect();
+  if(quickUomTarget){const sel=document.getElementById(quickUomTarget);if(sel){if(![...sel.options].some(o=>o.value===code)){const o=document.createElement('option');o.value=code;o.textContent=code+' — '+name;sel.appendChild(o);}sel.value=code;sel.dispatchEvent(new Event('change',{bubbles:true}));}}
+  closeModal('qu-modal'); showToast(`Unit ${code} — ${name} added for everyone`,'success');
 }
 function refreshProductUomSelect(){ const sel=document.getElementById('pm-uom');if(!sel)return;const current=sel.value;sel.innerHTML=uomMaster.filter(u=>u.active).map(u=>`<option value="${escapeHtml(u.code)}">${escapeHtml(u.code)} — ${escapeHtml(u.name)}</option>`).join('');if([...sel.options].some(o=>o.value===current))sel.value=current; }
 
@@ -2724,7 +2727,7 @@ function initialiseCostComponents(force=false){
   }
   updateCostComponentActionState();
 }
-function saveCostComponents(){localStorage.setItem('bizcore_cost_components',JSON.stringify(costComponents));}
+function saveCostComponents(){localStorage.setItem('bizcore_cost_components',JSON.stringify(costComponents));if(typeof bcSharedSave==='function')bcSharedSave('bizcore_cost_components');}   // V268.5
 function markCostComponentsDirty(){
   costComponentsDirty=JSON.stringify(costComponents)!==costComponentsBaseline;
   updateCostComponentActionState();
@@ -2805,7 +2808,7 @@ const DEFAULT_MARGIN_STATUSES=[
 let marginStatuses=[],marginStatusesBaseline='[]',marginStatusesDirty=false,editingMarginStatusId=null;
 function readStoredMarginStatuses(){try{const x=JSON.parse(localStorage.getItem('bizcoreMarginStatuses')||'null');const rows=Array.isArray(x)&&x.length?x:structuredClone(DEFAULT_MARGIN_STATUSES);return rows.map((v,i)=>({...v,icon:v.icon||DEFAULT_MARGIN_STATUSES.find(d=>d.id===v.id)?.icon||['⛔','⚠️','▼','●','✓','★'][i]||'●'}))}catch(_){return structuredClone(DEFAULT_MARGIN_STATUSES)}}
 function initMarginStatuses(){marginStatuses=readStoredMarginStatuses();marginStatusesBaseline=JSON.stringify(marginStatuses);marginStatusesDirty=false;renderMarginStatuses()}
-function saveMarginStatusesApplied(){localStorage.setItem('bizcoreMarginStatuses',JSON.stringify(marginStatuses))}
+function saveMarginStatusesApplied(){localStorage.setItem('bizcoreMarginStatuses',JSON.stringify(marginStatuses));if(typeof bcSharedSave==='function')bcSharedSave('bizcoreMarginStatuses');}   // V268.5
 function markMarginStatusesDirty(){marginStatusesDirty=true;updateMarginStatusChangeUI()}
 function updateMarginStatusChangeUI(){const a=document.getElementById('margin-status-apply-btn'),c=document.getElementById('margin-status-cancel-btn'),t=document.getElementById('margin-status-change-status');if(a)a.disabled=!marginStatusesDirty;if(c)c.disabled=!marginStatusesDirty;if(t){t.textContent=marginStatusesDirty?'Unsaved changes pending':'No pending changes';t.style.color=marginStatusesDirty?'#b45309':'var(--gray)'}}
 function renderMarginStatuses(){const tb=document.getElementById('margin-status-tbody');if(!tb)return;marginStatuses.sort((a,b)=>a.seq-b.seq);tb.innerHTML=marginStatuses.map(x=>`<tr><td><strong>${x.seq}</strong></td><td><strong>${escapeHtml(x.name)}</strong></td><td class="center"><span class="margin-icon-preview" title="${escapeHtml(x.name)} icon">${escapeHtml(x.icon||'●')}</span></td><td class="right">${Number(x.from).toFixed(1)}%</td><td class="right">${Number(x.to).toFixed(1)}%</td><td><span class="margin-color-preview"><span class="margin-color-dot" style="background:${x.color}"></span>${String(x.color).toUpperCase()}</span></td><td class="center"><label class="switch"><input type="checkbox" ${x.active?'checked':''} onchange="toggleMarginStatus('${x.id}',this.checked)"><span class="slider"></span></label></td><td><div class="action-btns" style="justify-content:center"><button class="abtn abtn-edit" onclick="openMarginStatusForm('${x.id}')" title="Edit"><i class="ti ti-edit"></i></button><button class="abtn abtn-del" onclick="deleteMarginStatus('${x.id}')" title="Delete"><i class="ti ti-trash"></i></button></div></td></tr>`).join('');const cnt=document.getElementById('margin-status-count');if(cnt)cnt.textContent=marginStatuses.length+' '+(marginStatuses.length===1?'status':'statuses');updateMarginStatusChangeUI()}
@@ -2847,7 +2850,7 @@ function renderPricingSettings(){const map={'pset-currency':'currency','pset-dec
 function collectPricingSettings(){return{currency:document.getElementById('pset-currency')?.value||'SAR',decimals:Number(document.getElementById('pset-decimals')?.value||2),marginMethod:document.getElementById('pset-margin-method')?.value||'markup',allowBelowCost:!!document.getElementById('pset-allow-below-cost')?.checked,warnLow:!!document.getElementById('pset-warn-low')?.checked,minMargin:Number(document.getElementById('pset-min-margin')?.value||10),managerApproval:!!document.getElementById('pset-manager-approval')?.checked,includeCosts:!!document.getElementById('pset-include-costs')?.checked,roundSelling:!!document.getElementById('pset-round-selling')?.checked,roundMethod:document.getElementById('pset-round-method')?.value||'0.01',validity:Number(document.getElementById('pset-validity')?.value||7),targetMargin:Number(document.getElementById('pset-target-margin')?.value||20)}}
 function markPricingSettingsDirty(){pricingSettings=collectPricingSettings();pricingSettingsDirty=JSON.stringify(pricingSettings)!==pricingSettingsBaseline;updatePricingSettingsChangeUI()}
 function updatePricingSettingsChangeUI(){const a=document.getElementById('pricing-settings-apply-btn'),c=document.getElementById('pricing-settings-cancel-btn'),t=document.getElementById('pricing-settings-change-status');if(a)a.disabled=!pricingSettingsDirty;if(c)c.disabled=!pricingSettingsDirty;if(t){t.textContent=pricingSettingsDirty?'Unsaved changes pending':'No pending changes';t.style.color=pricingSettingsDirty?'#b45309':'var(--gray)'}}
-function requestApplyPricingSettingsChanges(){if(!pricingSettingsDirty)return;showConfirm({icon:'✅',title:'Apply pricing settings?',message:'Save these settings as the defaults for new pricing calculations?',confirmText:'Yes, apply settings',confirmClass:'btn-primary',onConfirm:()=>{pricingSettings=collectPricingSettings();localStorage.setItem('bizcorePricingSettings',JSON.stringify(pricingSettings));pricingSettingsBaseline=JSON.stringify(pricingSettings);pricingSettingsDirty=false;renderPricingSettings();applyPricingSettingsToOpenScreens();showToast('Pricing settings applied and activated','success')}})}
+function requestApplyPricingSettingsChanges(){if(!pricingSettingsDirty)return;showConfirm({icon:'✅',title:'Apply pricing settings?',message:'Save these settings as the defaults for new pricing calculations?',confirmText:'Yes, apply settings',confirmClass:'btn-primary',onConfirm:()=>{pricingSettings=collectPricingSettings();localStorage.setItem('bizcorePricingSettings',JSON.stringify(pricingSettings));if(typeof bcSharedSave==='function')bcSharedSave('bizcorePricingSettings');pricingSettingsBaseline=JSON.stringify(pricingSettings);pricingSettingsDirty=false;renderPricingSettings();applyPricingSettingsToOpenScreens();showToast('Pricing settings applied and activated','success')}})}
 function requestCancelPricingSettingsChanges(){if(!pricingSettingsDirty)return;showConfirm({icon:'↩️',title:'Cancel pending changes?',message:'Discard all unsaved Pricing Settings changes?',confirmText:'Yes, discard changes',confirmClass:'btn-danger',onConfirm:()=>{pricingSettings=JSON.parse(pricingSettingsBaseline);pricingSettingsDirty=false;renderPricingSettings();showToast('Pending changes cancelled','success')}})}
 
 
@@ -2901,12 +2904,11 @@ function checkPricingBusinessRules(showMessages=true){
   return {ok:true,needsApproval:low&&ps.managerApproval,metrics:m};
 }
 let pricingManagerApprovedForCurrentSave=false;
-function obtainPricingManagerApproval(){
-  const entered=window.prompt('Manager approval required. Enter the System Administration PIN:');
-  if(entered===null)return false;
-  const stored=localStorage.getItem('dtq_admin_pin')||'1234';
-  if(entered!==stored){showToast('Manager approval PIN is incorrect.','error');return false;}
-  pricingManagerApprovedForCurrentSave=true;showToast('Manager approval recorded for this pricing save.','success');return true;
+/* V268.5: no shared PIN — an administrator approves from their own login (js/data-safety.js) */
+async function obtainPricingManagerApproval(){
+  if(typeof bcPricingApproval!=='function'){showToast('Manager approval is not available. Please reload.','error');return false;}
+  const r=await bcPricingApproval(); if(!r)return false;
+  pricingManagerApprovedForCurrentSave=r; return true;
 }
 function applyPricingSettingsToOpenScreens(){
   activePricingSettings(); updatePricingSettingsRuntimeUI();
@@ -2915,10 +2917,8 @@ function applyPricingSettingsToOpenScreens(){
 }
 
 /* ══════════════════════════════════════════════════
-   SETUP TABS + ADMIN PIN
+   SETUP TABS
 ══════════════════════════════════════════════════ */
-let adminUnlocked = false;
-const DEFAULT_PIN = '1234';
 
 function switchSetupTab(tab) {
   const setupPage=document.getElementById('page-setup');
@@ -2933,19 +2933,13 @@ function switchSetupTab(tab) {
   tabContent.style.display = 'block';
   const tabTitle=tabButton.querySelector('.tab-title')?.textContent;
   if(tabTitle)document.getElementById('page-title').textContent=tabTitle;
-  if (tab === 'admin') {
-    if (adminUnlocked) {
-      document.getElementById('admin-pin-gate').style.display = 'none';
-      document.getElementById('admin-content').style.display = 'block';
-      applySettings();
-    } else {
-      document.getElementById('admin-pin-gate').style.display = 'flex';
-      document.getElementById('admin-content').style.display = 'none';
-      setTimeout(() => document.getElementById('admin-pin-input').focus(), 100);
-    }
+  if (tab === 'admin') {   // V268.5: administrators (Firebase), no PIN
+    const ok=!!window.BizCorePI?.isAdministrator;
+    document.getElementById('admin-pin-gate').style.display = ok?'none':'flex';
+    document.getElementById('admin-content').style.display = ok?'block':'none';
+    if(ok)applySettings();
   }
-  if (tab === 'users') renderUsers();
-  if (tab === 'roles') renderRoles();
+  if (tab === 'data-health' && typeof bcRenderDataHealth==='function') bcRenderDataHealth();
   if (tab === 'locking' && typeof renderLockingSettings === 'function') renderLockingSettings();
   if (tab === 'billing' && typeof renderBillingSettings === 'function') renderBillingSettings();
   if (tab === 'billing' && typeof renderReceiptSettings === 'function') renderReceiptSettings();
@@ -2963,42 +2957,7 @@ function switchSetupTab(tab) {
 }
 
 
-function verifyAdminPin() {
-  const pin = document.getElementById('admin-pin-input').value;
-  const stored = localStorage.getItem('dtq_admin_pin') || DEFAULT_PIN;
-  if (pin === stored) {
-    adminUnlocked = true;
-    document.getElementById('admin-pin-error').style.display = 'none';
-    document.getElementById('admin-pin-input').value = '';
-    document.getElementById('admin-pin-gate').style.display = 'none';
-    document.getElementById('admin-content').style.display = 'block';
-    applySettings();
-  } else {
-    document.getElementById('admin-pin-error').style.display = 'block';
-    document.getElementById('admin-pin-input').value = '';
-    document.getElementById('admin-pin-input').focus();
-  }
-}
-
-function lockAdmin() {
-  adminUnlocked = false;
-  document.getElementById('admin-pin-gate').style.display = 'flex';
-  document.getElementById('admin-content').style.display = 'none';
-  switchSetupTab('branding');
-}
-
-function changeAdminPin() {
-  const cur = document.getElementById('pin-current').value;
-  const nw  = document.getElementById('pin-new').value;
-  const cf  = document.getElementById('pin-confirm').value;
-  const stored = localStorage.getItem('dtq_admin_pin') || DEFAULT_PIN;
-  if (cur !== stored) { showToast('Current PIN is incorrect','error'); return; }
-  if (nw.length < 4)  { showToast('New PIN must be at least 4 digits','error'); return; }
-  if (nw !== cf)      { showToast('New PINs do not match','error'); return; }
-  localStorage.setItem('dtq_admin_pin', nw);
-  ['pin-current','pin-new','pin-confirm'].forEach(id => document.getElementById(id).value = '');
-  showToast('Admin PIN updated successfully','success');
-}
+/* V268.5: the browser PIN was removed — Backup & Restore is for Firebase administrators. */
 
 function setPartyField(id, value='') { const el=document.getElementById(id); if(el) el.value=value ?? ''; }
 function getPartyField(id) { return document.getElementById(id)?.value?.trim() || ''; }
@@ -5125,7 +5084,7 @@ function setModalSize(modalId, size) {
 const modalNavHistory = [];
 let lastClosedModal = null;
 let lastClosedModalAt = 0;
-const modalNavExcluded = new Set(['confirm-modal','validation-dialog','template-picker-modal']);
+const modalNavExcluded = new Set(['confirm-modal','validation-dialog','template-picker-modal','ds-move-modal','ds-ask-modal','ds-dec-modal','qu-modal','pi-np-modal']);   // V268.5: small dialogs get no Back button
 /* V264.8 — Entry screens of the order workflow. Once one of them is closed (saved or cancelled) its work is
    finished, so it must never become a "Back" target: the screen opened right after it (e.g. the Sales Order
    refreshed after saving an invoice) must not record it as the screen to return to, and any return entry that
@@ -9272,7 +9231,7 @@ async function requestSavePricing() {
   if(!validatePricingHeaderFields())return false;
   if(!validatePricingPrices())return false;
   const rule=checkPricingBusinessRules(true);if(!rule.ok)return false;
-  if(rule.needsApproval&&!obtainPricingManagerApproval())return false;
+  if(rule.needsApproval&&!(await obtainPricingManagerApproval()))return false;
   const rowCount=[...document.querySelectorAll('#pricing-tbody tr')].filter(tr=>tr.querySelector('[data-role="desc"]')?.value.trim()).length;
   const ok=await new Promise(resolve=>showConfirm({icon:'💾',title:'Save pricing?',message:'Please confirm that supplier prices, selling prices and additional costs have been reviewed.',details:{'Pricing lines':rowCount,'Additional cost lines':document.querySelectorAll('#internal-costs-tbody tr').length,'Currency':pricingCurrency(),'Margin method':pricingMethodLabel(),'Overall margin':rule.metrics.pct.toFixed(1)+'%'},confirmText:'Save pricing',cancelText:'Continue editing',confirmClass:'btn-primary',onConfirm:()=>resolve(true),onCancel:()=>resolve(false)}));
   if(!ok)return false;
@@ -9294,7 +9253,7 @@ async function savePricing() {
   showBusyOverlay('pricing-modal', 'Saving pricing…');
   try {
   const items=readPricingItemsFromDOM();
-  r.pricingItems = items; r.pricingSettingsSnapshot={...activePricingSettings()}; const _ruleSnapshot=checkPricingBusinessRules(false); r.pricingApprovalRequired=!!_ruleSnapshot.needsApproval; r.pricingApproved=!_ruleSnapshot.needsApproval||pricingManagerApprovedForCurrentSave; pricingManagerApprovedForCurrentSave=false;
+  r.pricingItems = items; r.pricingSettingsSnapshot={...activePricingSettings()}; const _ruleSnapshot=checkPricingBusinessRules(false); r.pricingApprovalRequired=!!_ruleSnapshot.needsApproval; r.pricingApproved=!_ruleSnapshot.needsApproval||!!pricingManagerApprovedForCurrentSave; r.pricingApprovedBy=(_ruleSnapshot.needsApproval&&pricingManagerApprovedForCurrentSave&&pricingManagerApprovedForCurrentSave.by)||''; r.pricingApprovedAt=(_ruleSnapshot.needsApproval&&pricingManagerApprovedForCurrentSave&&pricingManagerApprovedForCurrentSave.at)||''; r.pricingApprovalId=(_ruleSnapshot.needsApproval&&pricingManagerApprovedForCurrentSave&&pricingManagerApprovedForCurrentSave.id)||''; pricingManagerApprovedForCurrentSave=false;
   r.supplierName = document.getElementById('pricing-sup-search').value.trim()||pricingSupplierName;
   const selectedPricingSupplier=findUniqueMasterByName(suppliers,r.supplierName);
   r.supplierId = document.getElementById('pricing-sup-search').dataset.supplierId || selectedPricingSupplier?.id || '';
@@ -9334,7 +9293,7 @@ async function savePricing() {
 async function convertToQuotation() {
   if(pricingConvertInProgress||pricingSaveInProgress)return;
   if(!validatePricingPrices())return;
-  const liveRule=checkPricingBusinessRules(true); if(!liveRule.ok)return; if(liveRule.needsApproval && !obtainPricingManagerApproval())return;
+  const liveRule=checkPricingBusinessRules(true); if(!liveRule.ok)return; if(liveRule.needsApproval && !(await obtainPricingManagerApproval()))return;
   pricingConvertInProgress=true;updatePricingActionButtons();
   try {
     // Transaction-safe workflow: persist the latest pricing and sortOrder before creating a quotation draft.
@@ -9638,8 +9597,8 @@ function exportAllData() {
     salesOrders: dnIndependentMode() ? salesOrders.map(so => dnCore().stripProjection(so)) : salesOrders,
     // V260: independent Delivery Notes (current state). Audit events are backed up by the admin tool.
     ...(dnIndependentMode() ? { deliveryNotes: deliveryNotesCache, _deliveryNoteStorage: 'independent' } : {}),
-    appUsers,
-    appRoles,
+    // V268.5: shared settings (units, tax, pricing, margin statuses, cost components) — kept in Firebase
+    ...(window.BizCoreShared && window.BizCoreShared.docs ? { sharedSettings: Object.fromEntries(Object.entries(window.BizCoreShared.docs).map(([k, v]) => [k, { key: v.key, json: v.json, revision: v.revision }])) } : {}),
   };
 
   const json = JSON.stringify(backup, null, 2);
@@ -9726,8 +9685,6 @@ function importAllData(event) {
     deliveryTerms = data.deliveryTerms || [];
     paymentTerms  = data.paymentTerms  || [];
     salesOrders   = data.salesOrders   || [];
-    appUsers      = data.appUsers      || appUsers;
-    appRoles      = data.appRoles      || appRoles;
     saveAccessSetup();
 
     // Persist everything to localStorage AND Firebase
@@ -12590,6 +12547,7 @@ function toggleBizCoreNotificationRead(id){
 function openBizCoreNotification(id){
  const list=loadBizCoreNotifications(),n=list.find(x=>x.id===id);if(!n)return;
  n.read=true;saveBizCoreNotifications(list);refreshTopbarNotifications();renderAllBizCoreNotifications();closeTopbarMenus();closeAllBizCoreNotifications();
+ if(n.type==='approval'&&typeof bcOpenApproval==='function'){bcOpenApproval(n.approvalId);return;}   // V268.5: pricing approval
  if(n.type==='cash'&&typeof openCashBankAccount==='function'){openCashBankAccount(n.accountId);return;}   // V267.2: a custodian queried a cash line
  if(n.type==='delivery'&&n.soId){showPage('deliverynotes');setTimeout(()=>{const so=salesOrders.find(x=>x.id===n.soId);const idx=n.dnId?(so?.deliveries||[]).findIndex(d=>d.id===n.dnId):n.deliveryIdx;if(idx>=0)viewDeliveryNote(n.soId,idx);else showToast('This Delivery Note is no longer available.','info')},80)}
 }

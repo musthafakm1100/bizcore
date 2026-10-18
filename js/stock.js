@@ -86,7 +86,9 @@ function renderStockRegister(){
 }
 
 /* ═══════════════════════════════ ITEM VIEW (mockup ST_2) ═══════════════════════════════ */
-const ST_MOVE = { purchase: ['Bought', 'in'], 'purchase-cancelled': ['Invoice cancelled', 'can'], 'purchase-edited': ['Invoice changed', 'ed'], allocated: ['Allocated to order', 'out'], 'allocation-cancelled': ['Allocation cancelled', 'can'] };
+const ST_MOVE = { purchase: ['Bought', 'in'], 'purchase-cancelled': ['Invoice cancelled', 'can'], 'purchase-edited': ['Invoice changed', 'ed'], allocated: ['Allocated to order', 'out'], 'allocation-cancelled': ['Allocation cancelled', 'can'],
+  'changed-to': ['Changed to →', 'out'], 'changed-from': ['Changed from ←', 'in'], 'change-cancelled': ['Change cancelled', 'can'] };   // V268.5
+const stChanges = () => (piLib() && piLib().changes) || [];
 function stModalEl(id){
   let m = document.getElementById(id);
   if (!m) { m = document.createElement('div'); m.className = 'modal-overlay'; m.id = id; document.body.appendChild(m); }
@@ -94,6 +96,10 @@ function stModalEl(id){
   return m;
 }
 function stMoveDoc(mv){
+  if (mv.changeId) {   // V268.5 Change Item
+    const other = mv.otherKey && stItemOf(mv.otherKey);
+    return `${other ? `<button type="button" class="sp-link" onclick="openStockItem('${piEsc(mv.otherKey)}')">${piEsc(mv.otherDesc || other.desc)}</button>` : `<span>${piEsc(mv.otherDesc || '')}</span>`}<div class="pi-sub">${mv.note ? '“' + piEsc(mv.note) + '”' : ''}</div>`;
+  }
   if (mv.allocationId) {
     const a = stAllocs().find(x => x.id === mv.allocationId);
     return `<span class="sp-link st-so">${piEsc(mv.soNo || (a && a.soNo) || '')}</span><div class="pi-sub">${piEsc((a && a.customer) || '')}${mv.note ? ' · “' + piEsc(mv.note) + '”' : ''}</div>`;
@@ -125,11 +131,13 @@ function stRenderItem(m, moves){
     let bal = 0;
     const rows = sorted.map(mv => { bal = Math.round((bal + piN(mv.qty)) * 1e6) / 1e6; const k = ST_MOVE[mv.kind] || [mv.kind, 'can'];
       const a = mv.kind === 'allocated' ? stAllocs().find(x => x.id === mv.allocationId) : null;
-      const cancel = a && a.status !== 'Voided' ? `<button type="button" class="pi-cancel-pay" onclick="stAskCancelAlloc('${piEsc(a.id)}')">Cancel</button>` : a && a.status === 'Voided' ? '<span class="pi-muted">Cancelled</span>' : '';
+      const c = (mv.kind === 'changed-to' || mv.kind === 'changed-from') ? stChanges().find(x => x.id === mv.changeId) : null;
+      const cancel = a && a.status !== 'Voided' ? `<button type="button" class="pi-cancel-pay" onclick="stAskCancelAlloc('${piEsc(a.id)}')">Cancel</button>` : a && a.status === 'Voided' ? '<span class="pi-muted">Cancelled</span>'
+        : c && c.status !== 'Voided' ? (piIsAdmin() ? `<button type="button" class="pi-cancel-pay" onclick="stAskCancelChange('${piEsc(c.id)}')">Cancel</button>` : '') : c && c.status === 'Voided' ? '<span class="pi-muted">Cancelled</span>' : '';
       return `<tr><td>${piDate(mv.date)}</td><td><span class="st-mv ${k[1]}">${k[0]}</span></td><td>${stMoveDoc(mv)}</td><td class="num ${piN(mv.qty) >= 0 ? 'st-pos' : 'st-neg'}">${piN(mv.qty) > 0 ? '+' : piN(mv.qty) < 0 ? '−' : ''}${piQ(Math.abs(piN(mv.qty)))}</td>
         <td class="num">${piN(mv.value) < 0 ? '−' : ''}${piF(Math.abs(piN(mv.value)))}</td><td class="num">${piQ(bal)}</td><td class="pi-sub">${piEsc(stMoveBy(mv))}</td><td>${cancel}</td></tr>`; }).reverse().join('');
     movesHtml = sorted.length ? `<div class="pi-lines-wrap"><table class="pi-lines pi-pv-table st-moves"><thead><tr><th>Date</th><th>What</th><th>Document</th><th class="num">Qty</th><th class="num">Value</th><th class="num">Balance</th><th>By</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-      <p class="pi-note">Every change of the quantity is a movement: bought, invoice changed or cancelled, allocated to an order. The balance can't go below zero.</p>` : '<p class="pi-muted pi-pv-none">No movements.</p>';
+      <p class="pi-note">Every change of the quantity is a movement: bought, invoice changed or cancelled, allocated to an order, changed to another item. The balance can't go below zero.</p>` : '<p class="pi-muted pi-pv-none">No movements.</p>';
   }
   const demand = r.demand.map(d => `<div class="st-dem"><i class="ti ti-shopping-cart"></i><div><b class="st-so">${piEsc(d.soNo)}</b><div class="pi-sub">${piEsc(d.customer)} · ordered ${piQ(d.ordered)} · ${piQ(d.left)} still to buy</div></div>
       ${piN(item.qty) > 0 ? `<button type="button" class="st-alloc-btn" onclick="openAllocateStock('${piEsc(item.itemKey)}','${piEsc(d.soId)}','${piEsc(d.soLineId)}')">Allocate ${piQ(Math.min(d.left, piN(item.qty)))}</button>` : ''}</div>`).join('');
@@ -144,7 +152,7 @@ function stRenderItem(m, moves){
           <p class="pi-note">Only open sales order lines for the <b>same item</b> (same product, or same code / description and unit) are listed.</p></section>
       </div>
     </div>
-    <div class="modal-footer"><button class="btn btn-secondary" type="button" style="margin-right:auto" disabled title="A stock count / adjustment comes later"><i class="ti ti-adjustments"></i>Stock Count <small class="pi-muted">· later</small></button><button class="btn btn-secondary" type="button" onclick="closeModal('st-view-modal')">Close</button></div></div>`;
+    <div class="modal-footer"><button class="btn btn-secondary" type="button" disabled title="A stock count / adjustment comes later"><i class="ti ti-adjustments"></i>Stock Count <small class="pi-muted">· later</small></button>${piIsAdmin() && inStock ? `<button class="btn btn-secondary" type="button" onclick="openChangeItem('${piEsc(item.itemKey)}')" title="The wrong item was chosen on a purchase invoice"><i class="ti ti-switch-horizontal"></i>Change Item</button>` : ''}<span style="flex:1"></span><button class="btn btn-secondary" type="button" onclick="closeModal('st-view-modal')">Close</button></div></div>`;
 }
 
 /* ═══════════════════════════════ ALLOCATE TO ORDER (mockup ST_3) ═══════════════════════════════ */
@@ -273,3 +281,83 @@ async function openStockMovements(){
   go();
 })();
 console.log('Stock V268.4 ✅ (register · movements · allocate to order)');
+
+/* ═══════════════════════════════ V268.5 CHANGE ITEM (approved mockup V5_4) ═══════════════════════════════
+   Administrators: the wrong item was chosen on a purchase invoice. Part or all of the stock moves to the correct
+   product (existing products only, same unit) at the same average cost; the purchase invoice stays as it is. */
+function openChangeItem(key){
+  const item = stItemOf(key); if (!item) return;
+  if (!piIsAdmin()) { if (typeof showToast === 'function') showToast('Only an administrator can change the item.', 'warning'); return; }
+  const uomL = String(item.uom || '').trim().toLowerCase();
+  const prods = (typeof products !== 'undefined' ? products : []).filter(p => p && p.id && String(p.uom || '').trim().toLowerCase() === uomL && piCore().itemKeyOf({ productId: p.id }) !== item.itemKey)
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  const m = stModalEl('st-chg-modal'); m._key = key; m._op = stNewOp('stch');
+  const avg = piCore().avgCostOf(item);
+  m.innerHTML = `<div class="modal pi-paym" role="dialog" aria-modal="true" aria-labelledby="stg-title" style="--pi-w:620px">
+    <div class="modal-header"><div><h2 id="stg-title">Change Item</h2><div class="so-create-subtitle">${piEsc(item.desc)} · ${stQty(item.qty, item.uom)} in stock · avg. cost ${piF(avg)} · administrators only</div></div><button class="close-btn" type="button" onclick="closeModal('st-chg-modal')" aria-label="Close">✕</button></div>
+    <div class="modal-body">
+      <div class="pi-match adv st-info" style="margin:0 0 12px"><i class="ti ti-info-circle"></i><span>Use this when the wrong item was chosen on a purchase invoice. The stock moves to the correct product at the same cost; the purchase invoice stays as it is.</span></div>
+      <div class="form-group"><label for="stg-prod">Correct product *</label><select id="stg-prod" onchange="stChgRecalc()"><option value=""></option>${prods.map(p => `<option value="${piEsc(p.id)}">${piEsc(p.name)}</option>`).join('')}</select><small>Only products with the same unit (${piEsc(item.uom || '—')}) are listed.</small></div>
+      <div class="st-alloc-grid" style="grid-template-columns:160px 1fr">
+        <div class="form-group"><label for="stg-qty">Quantity *</label><input id="stg-qty" class="pi-money" inputmode="decimal" value="${piQ(item.qty)}" oninput="stChgRecalc()"><small>At most ${piQ(item.qty)} (all)</small></div>
+        <div class="form-group"><label for="stg-why">Reason *</label><input id="stg-why" maxlength="300" placeholder="e.g. Typed wrong on PI-2607-0019 — same Pelican 7600" oninput="stChgRecalc()"></div>
+      </div>
+      <div id="stg-result"></div>
+      <p class="pi-note">Both items get a movement (“Changed to → …” / “Changed from ← …”) with the reason, who and when. It can be cancelled with a reason, like an allocation.</p>
+      <div class="inv-error" id="stg-err" hidden></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" type="button" onclick="closeModal('st-chg-modal')">Cancel</button><button class="btn btn-primary" type="button" id="stg-save" onclick="stSaveChange()" disabled><i class="ti ti-switch-horizontal"></i>Change Item</button></div></div>`;
+  bcPickEnhance('stg-prod', { placeholder: 'Search product…', empty: prods.length ? 'No product matches.' : 'No other product has the unit ' + (item.uom || '—') + '. Add it in Master Data → Products first.',
+    items: () => prods.map(p => ({ key: p.id, title: p.name, sub: [p.code, p.uom].filter(Boolean).join(' · '), text: [p.name, p.code, p.brand, p.model].join(' ') })) });
+  if (typeof openModalWithSize === 'function') openModalWithSize('st-chg-modal'); else m.classList.add('open');
+  stChgRecalc();
+  setTimeout(() => bcPickFocus('stg-prod'), 60);
+}
+function stChgInput(){
+  const m = stModalEl('st-chg-modal'), item = stItemOf(m._key);
+  const pid = document.getElementById('stg-prod').value, product = (typeof products !== 'undefined' ? products : []).find(p => p.id === pid) || null;
+  const input = { operationId: m._op, itemKey: m._key, qty: document.getElementById('stg-qty').value, reason: document.getElementById('stg-why').value, date: piToday(),
+    product: product ? { id: product.id, name: product.name || '', code: product.code || '', uom: product.uom || '' } : null };
+  return { m, item, input, v: piCore().validateStockChange(input, { item, product: input.product, today: piToday() }) };
+}
+function stChgRecalc(){
+  const c = stChgInput(), box = document.getElementById('stg-result'); if (!c.item || !box) return;
+  const v = c.v, val = v.value, to = val.toKey && stItemOf(val.toKey), toQ = to ? piN(to.qty) : 0;
+  box.innerHTML = val.toProductId && val.qty > 0 && !v.errors.some(e => e.field === 'product')
+    ? `<div class="pi-match ok"><i class="ti ti-arrows-exchange"></i><span><b>${piEsc(val.fromDesc)}</b> ${piQ(c.item.qty)} → ${piQ(Math.max(0, piN(c.item.qty) - val.qty))} · <b>${piEsc(val.toDesc)}</b> ${piQ(toQ)} → ${piQ(toQ + val.qty)} (${piF(val.value)} at ${piF(val.unitCost)}). Then an order that needs ${piEsc(val.toDesc)} shows it under <b>Open demand</b> and you can <b>Allocate</b>.</span></div>`
+    : (v.errors.find(e => e.field === 'product') && val.toProductId ? `<div class="pi-match bad"><i class="ti ti-alert-triangle"></i><span>${piEsc(v.errors.find(e => e.field === 'product').message)}</span></div>` : '');
+  document.getElementById('stg-save').disabled = !v.ok;
+}
+async function stSaveChange(){
+  const c = stChgInput(), err = document.getElementById('stg-err');
+  if (!c.v.ok) { err.hidden = false; err.textContent = c.v.errors.map(e => e.message).join(' '); return; }
+  const btn = document.getElementById('stg-save'); btn.disabled = true; err.hidden = true;
+  try {
+    const r = await bcBusy('Changing item…', () => piLib().service.changeStockItem(c.input));
+    closeModal('st-chg-modal');
+    if (typeof showToast === 'function') showToast(`${piQ(r.change.qty)} ${r.change.uom || ''} moved to ${r.change.toDesc}`, 'success');
+    openStockItem(r.change.toKey);
+  } catch (e) { err.hidden = false; err.textContent = e.code === 'permission-denied' ? 'The server refused the change. Only administrators can change an item.' : (e.message || 'Could not change the item.'); btn.disabled = false; }
+}
+function stAskCancelChange(id){
+  const c = stChanges().find(x => x.id === id); if (!c) return;
+  const m = stModalEl('st-cancel-modal'); m._id = id; m._op = stNewOp('stcv');
+  m.innerHTML = `<div class="modal pi-paym" role="dialog" aria-modal="true" aria-labelledby="stc-title" style="--pi-w:480px">
+    <div class="modal-header"><div class="modal-header-title-wrap"><h2 id="stc-title">Cancel change of item</h2></div><button class="close-btn" type="button" onclick="closeModal('st-cancel-modal')" aria-label="Close">✕</button></div>
+    <div class="modal-body"><p class="pi-note" style="margin-top:0">${piQ(c.qty)} ${piEsc(c.uom || '')} go back from ${piEsc(c.toDesc)} to ${piEsc(c.fromDesc)}. The change stays in the movements, marked Cancelled.</p>
+      <div class="form-group"><label for="stc-why">Reason *</label><input id="stc-why" maxlength="300" placeholder="e.g. Chosen by mistake"></div><div class="inv-error" id="stc-err" hidden></div></div>
+    <div class="modal-footer"><button class="btn btn-secondary" type="button" onclick="closeModal('st-cancel-modal')">Go back</button><button class="btn btn-danger" type="button" id="stc-save" onclick="stDoCancelChange()"><i class="ti ti-ban"></i>Cancel change</button></div></div>`;
+  if (typeof openModalWithSize === 'function') openModalWithSize('st-cancel-modal'); else m.classList.add('open');
+  setTimeout(() => document.getElementById('stc-why').focus(), 60);
+}
+async function stDoCancelChange(){
+  const m = stModalEl('st-cancel-modal'), why = document.getElementById('stc-why').value.trim(), err = document.getElementById('stc-err');
+  if (why.length < 5) { err.hidden = false; err.textContent = 'Enter the reason for cancelling (at least 5 characters).'; return; }
+  const btn = document.getElementById('stc-save'); btn.disabled = true;
+  try {
+    await bcBusy('Cancelling change…', () => piLib().service.cancelStockChange({ operationId: m._op, changeId: m._id, reason: why }));
+    closeModal('st-cancel-modal');
+    if (typeof showToast === 'function') showToast('Change cancelled — the stock is back on the first item', 'success');
+    const vm = document.getElementById('st-view-modal'); if (vm && vm.classList.contains('open') && vm._key) openStockItem(vm._key);
+  } catch (e) { err.hidden = false; err.textContent = e.message || 'Could not cancel.'; btn.disabled = false; }
+}

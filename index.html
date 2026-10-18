@@ -28,7 +28,7 @@
 <link href="css/shell.css?v=268.4" rel="stylesheet"/>
 <link href="css/accounts.css?v=268.2" rel="stylesheet"/>
 <link href="css/cash.css?v=268.32" rel="stylesheet"/>
-<link href="css/purchases.css?v=268.4" rel="stylesheet"/>
+<link href="css/purchases.css?v=268.5" rel="stylesheet"/>
 <link href="css/responsive.css?v=268.4" rel="stylesheet"/>
 <link href="css/theme.css?v=266.5" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=265.2" defer></script>
@@ -1010,7 +1010,6 @@ document.addEventListener('error', function(e) {
 <div class="setup-nav-group">
 <div class="setup-nav-group-title">Security</div>
 <button class="setup-tab" id="stab-users" onclick="switchSetupTab('users')"><i class="ti ti-user-cog"></i><span class="tab-copy"><span class="tab-title">Users</span></span></button>
-<button class="setup-tab" id="stab-roles" onclick="switchSetupTab('roles')"><i class="ti ti-shield-check"></i><span class="tab-copy"><span class="tab-title">Roles &amp; Permissions</span></span></button>
 <button class="setup-tab" id="stab-locking" onclick="switchSetupTab('locking')"><i class="ti ti-lock-cog"></i><span class="tab-copy"><span class="tab-title">Document Locking</span></span></button>
 <button class="setup-tab" id="stab-locks" onclick="switchSetupTab('locks')"><i class="ti ti-lock-access"></i><span class="tab-copy"><span class="tab-title">Active Locks</span></span></button>
 <button class="setup-tab" id="stab-billing" onclick="switchSetupTab('billing')"><i class="ti ti-file-invoice"></i><span class="tab-copy"><span class="tab-title">Billing Settings</span></span></button>
@@ -1034,6 +1033,7 @@ document.addEventListener('error', function(e) {
 <div class="setup-nav-group">
 <div class="setup-nav-group-title">Maintenance</div>
 <button class="setup-tab admin-tab" id="stab-admin" onclick="switchSetupTab('admin')"><i class="ti ti-database-export"></i><span class="tab-copy"><span class="tab-title">Backup &amp; Restore</span></span></button>
+<button class="setup-tab" id="stab-data-health" onclick="switchSetupTab('data-health')"><i class="ti ti-heart-rate-monitor"></i><span class="tab-copy"><span class="tab-title">Data Health</span></span></button>
 <button class="setup-tab" id="stab-audit-log" onclick="switchSetupTab('audit-log')"><i class="ti ti-history"></i><span class="tab-copy"><span class="tab-title">Audit Log</span></span></button>
 </div>
 </aside>
@@ -1188,12 +1188,9 @@ document.addEventListener('error', function(e) {
 </div>
 <!-- TAB: Users -->
 <div class="setup-tab-content" id="setup-tab-users" style="display:none">
-<div class="setup-page-head"><div><h2>Users</h2><p>Create basic login accounts and assign each user a role.</p></div><span class="phase-badge">Basic access</span></div>
-<div class="card"><div class="card-header page-command-header"><h3><i class="ti ti-users" style="margin-right:6px"></i>User accounts</h3><button class="btn btn-primary btn-sm page-primary-command" onclick="openUserForm()"><i class="ti ti-user-plus"></i>New user</button></div><div class="card-body"><div class="user-toolbar"><input class="user-search" id="user-search" oninput="renderUsers()" placeholder="Search user, username or role…"/><span style="font-size:11px;color:var(--gray)">Prototype accounts are stored in this browser.</span></div><div class="setup-card" id="user-form-card" style="display:none;margin-bottom:14px;background:#fbfdff"><h4><i class="ti ti-user-edit" style="margin-right:6px"></i><span id="user-form-title">New user</span></h4><div class="simple-form-grid"><div class="form-group"><label>Full name</label><input id="u-fullname" placeholder="Employee name"/></div><div class="form-group"><label>Username</label><input id="u-username" placeholder="Login username"/></div><div class="form-group"><label>Password</label><input id="u-password" placeholder="Temporary password" type="password"/></div><div class="form-group"><label>Role</label><select id="u-role"></select></div><div class="form-group"><label>Email</label><input id="u-email" placeholder="name@company.com" type="email"/></div><div class="form-group"><label>Status</label><select id="u-active"><option value="true">Active</option><option value="false">Inactive</option></select></div></div><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-secondary btn-sm" onclick="closeUserForm()">Cancel</button><button class="btn btn-primary btn-sm" onclick="saveUser()"><i class="ti ti-device-floppy"></i>Save user</button></div></div><div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius)"><table class="setup-data-table"><thead><tr><th>User</th><th>Username</th><th>Role</th><th>Status</th><th style="width:130px"></th></tr></thead><tbody id="users-tbody"></tbody></table></div></div></div>
+<div class="setup-page-head"><div><h2>Users</h2><p>Logins for cash custodians. Staff and administrators sign in with their Firebase login.</p></div><span class="phase-badge">Firebase logins</span></div>
 <div class="card" id="cc-card" style="margin-top:14px"><div class="card-header page-command-header"><h3><i class="ti ti-wallet" style="margin-right:6px"></i>Cash custodian logins</h3><button class="btn btn-primary btn-sm page-primary-command" id="cc-new-btn" type="button" onclick="openCustodianLoginForm()"><i class="ti ti-user-plus"></i>New cash custodian login</button></div><div class="card-body"><p class="cl-sub" style="margin:0 0 4px">A cash custodian login opens only <b>My Cash</b>: the linked cash account(s), confirm or query lines, hand over cash. The database refuses everything else. Logins are never deleted — deactivate instead.</p><div id="cc-list"></div></div></div>
 </div>
-<!-- TAB: Roles & Permissions -->
-<div class="setup-tab-content" id="setup-tab-roles" style="display:none"><div class="setup-page-head"><div><h2>Roles &amp; Permissions</h2><p>Define simple access levels now. Detailed controls can be expanded later.</p></div><span class="phase-badge">Basic permissions</span></div><div class="role-grid"><div class="role-list"><div class="role-list-head">Roles</div><div id="role-list"></div><div style="padding:10px"><button class="btn btn-secondary btn-sm" onclick="addRole()" style="width:100%;justify-content:center"><i class="ti ti-plus"></i>Add role</button></div></div><div class="setup-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px"><div><h4 style="margin:0;border:0;padding:0"><i class="ti ti-lock-access" style="margin-right:6px"></i><span id="role-editor-name">Administrator</span></h4><p style="font-size:11px;color:var(--gray);margin-top:5px">Select the basic actions allowed for this role.</p></div><button class="btn btn-primary btn-sm" onclick="saveRolePermissions()"><i class="ti ti-device-floppy"></i>Save permissions</button></div><div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius)"><table class="permission-table"><thead><tr><th>Module</th><th>View</th><th>Create</th><th>Edit</th><th>Delete</th><th>Print</th><th>Approve</th></tr></thead><tbody id="permission-tbody"></tbody></table></div></div></div></div>
 <!-- TAB: Pricing and business configuration placeholders -->
 <div class="setup-tab-content" id="setup-tab-purchase-settings" style="display:none">
 <div class="setup-page-head"><div><h2><i class="ti ti-shopping-bag" style="margin-right:7px"></i>Purchase Settings</h2><p>How purchase invoices check costs, discounts and rounding. Only administrators change these.</p></div></div>
@@ -1411,10 +1408,15 @@ document.addEventListener('error', function(e) {
 </div>
 </div>
 </div>
+<!-- TAB: Data Health (V268.5) -->
+<div class="setup-tab-content" id="setup-tab-data-health" style="display:none">
+<div class="setup-page-head"><div><h2>Data Health</h2><p>Shared settings are saved in Firebase for everyone. This shows what is left only in this browser.</p></div><span class="phase-badge"><i class="ti ti-cloud-check"></i> Firebase</span></div>
+<div id="dh-body"></div>
+</div>
 <div class="setup-tab-content" id="setup-tab-admin" style="display:none">
-<div class="setup-page-head"><div><h2>Backup &amp; Security</h2><p>Protected PIN settings, backup and data management tools.</p></div><span class="phase-badge"><i class="ti ti-lock"></i> PIN protected</span></div>
-<div id="admin-pin-gate" style="display:flex;justify-content:center;padding:30px 0"><div class="setup-card" style="width:380px;text-align:center"><div style="font-size:40px;margin-bottom:12px"><i class="ti ti-shield-lock" style="color:var(--blue)"></i></div><h4 style="justify-content:center;margin-bottom:6px">Admin access required</h4><p style="font-size:12px;color:var(--gray);margin-bottom:18px">Enter the admin PIN to access security and data management.</p><div class="form-group" style="margin-bottom:12px"><input id="admin-pin-input" maxlength="8" onkeydown="if(event.key==='Enter') verifyAdminPin()" placeholder="Enter PIN" style="text-align:center;letter-spacing:6px;font-size:18px;height:44px" type="password"/></div><button class="btn btn-primary" onclick="verifyAdminPin()" style="width:100%"><i class="ti ti-lock-open"></i>Unlock administration</button><div id="admin-pin-error" style="color:var(--red);font-size:12px;margin-top:8px;display:none">Incorrect PIN. Try again.</div><p style="font-size:11px;color:var(--gray);margin-top:14px">Default PIN: <strong>1234</strong> — change it after first login</p></div></div>
-<div id="admin-content" style="display:none"><div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn btn-secondary btn-sm" onclick="lockAdmin()"><i class="ti ti-lock"></i>Lock administration</button></div><div class="setup-grid"><div class="setup-card"><h4><i class="ti ti-key" style="margin-right:6px"></i>Change admin PIN</h4><div style="display:flex;flex-direction:column;gap:10px"><div class="form-group"><label>Current PIN</label><input id="pin-current" maxlength="8" placeholder="Current PIN" type="password"/></div><div class="form-group"><label>New PIN</label><input id="pin-new" maxlength="8" placeholder="New PIN (4–8 digits)" type="password"/></div><div class="form-group"><label>Confirm new PIN</label><input id="pin-confirm" maxlength="8" placeholder="Re-enter new PIN" type="password"/></div><button class="btn btn-primary" onclick="changeAdminPin()"><i class="ti ti-key"></i>Update PIN</button></div></div><div class="setup-card"><h4><i class="ti ti-trash" style="margin-right:6px"></i>Recycle Bin</h4><p style="font-size:12px;color:var(--gray);margin-bottom:12px">Restore or permanently remove deleted quotations, employees, and other records.</p><button class="btn btn-secondary" onclick="openRecycleBin()"><i class="ti ti-trash"></i>Open Recycle Bin</button></div><div class="setup-card" style="border-color:#f5c6cb"><h4 style="color:var(--red)"><i class="ti ti-database" style="margin-right:6px"></i>Data management</h4><p style="font-size:12px;color:var(--gray);margin-bottom:12px">Export a complete backup or restore a previous BizCore backup.</p><div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"><button class="btn btn-success" onclick="exportAllData()"><i class="ti ti-download"></i>Export all data</button><label class="btn btn-secondary" style="cursor:pointer;justify-content:center"><i class="ti ti-upload"></i>Import data<input accept=".json" id="import-file-input" onchange="importAllData(event)" style="display:none" type="file"/></label></div><div style="border-top:1px solid #f5c6cb;padding-top:12px"><p style="font-size:11px;color:var(--red);font-weight:600;margin-bottom:8px">⚠ Danger zone</p><button class="btn btn-danger" onclick="resetAndReload()"><i class="ti ti-refresh"></i>Clear stored data &amp; reload</button></div></div></div></div>
+<div class="setup-page-head"><div><h2>Backup &amp; Restore</h2><p>Backup, restore and data management tools.</p></div><span class="phase-badge"><i class="ti ti-shield-check"></i> Administrators only</span></div>
+<div id="admin-pin-gate" style="display:flex;justify-content:center;padding:30px 0"><div class="setup-card" style="width:380px;text-align:center"><div style="font-size:40px;margin-bottom:12px"><i class="ti ti-shield-lock" style="color:var(--blue)"></i></div><h4 style="justify-content:center;margin-bottom:6px">Administrators only</h4><p style="font-size:12px;color:var(--gray);margin:0">Backup and data management are open to administrators. Ask an administrator if you need a backup.</p></div></div>
+<div id="admin-content" style="display:none"><div class="setup-grid"><div class="setup-card"><h4><i class="ti ti-trash" style="margin-right:6px"></i>Recycle Bin</h4><p style="font-size:12px;color:var(--gray);margin-bottom:12px">Restore or permanently remove deleted quotations, employees, and other records.</p><button class="btn btn-secondary" onclick="openRecycleBin()"><i class="ti ti-trash"></i>Open Recycle Bin</button></div><div class="setup-card" style="border-color:#f5c6cb"><h4 style="color:var(--red)"><i class="ti ti-database" style="margin-right:6px"></i>Data management</h4><p style="font-size:12px;color:var(--gray);margin-bottom:12px">Export a complete backup or restore a previous BizCore backup.</p><div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"><button class="btn btn-success" onclick="exportAllData()"><i class="ti ti-download"></i>Export all data</button><label class="btn btn-secondary" style="cursor:pointer;justify-content:center"><i class="ti ti-upload"></i>Import data<input accept=".json" id="import-file-input" onchange="importAllData(event)" style="display:none" type="file"/></label></div><div style="border-top:1px solid #f5c6cb;padding-top:12px"><p style="font-size:11px;color:var(--red);font-weight:600;margin-bottom:8px">⚠ Danger zone</p><button class="btn btn-danger" onclick="resetAndReload()"><i class="ti ti-refresh"></i>Clear stored data &amp; reload</button></div></div></div></div>
 </div>
 </div>
 </div>
@@ -1608,7 +1610,7 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="form-group"><label>Brand</label><input id="pm-brand" placeholder="e.g. Sylvania"/></div>
 <div class="form-group"><label>Model number</label><input id="pm-model" placeholder="e.g. SYL-IKL-32W"/></div>
-<div class="form-group"><label>UOM</label>
+<div class="form-group"><label class="bc-label-row"><span>UOM</span><button class="bc-label-link" type="button" onclick="openQuickUom('pm-uom')"><i class="ti ti-plus"></i>New Unit</button></label>
 <select id="pm-uom"></select>
 </div>
 <div class="form-group"><label>Default price (SAR)</label><input id="pm-price" min="0" placeholder="0.00" step="0.01" type="number"/></div>
@@ -2247,8 +2249,8 @@ import * as AccCore from './js/account-core.mjs?v=268.2';
 import { createAccountService } from './js/account-service.mjs?v=268.2';
 import * as LedgerCore from './js/ledger-core.mjs?v=267.2';
 import { createLedgerService } from './js/ledger-service.mjs?v=267.2';
-import * as PurchaseCore from './js/purchase-core.mjs?v=268.4';
-import { createPurchaseService } from './js/purchase-service.mjs?v=268.4';
+import * as PurchaseCore from './js/purchase-core.mjs?v=268.5';
+import { createPurchaseService } from './js/purchase-service.mjs?v=268.5';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile }
@@ -2809,7 +2811,7 @@ function startDeliveryNoteModeListener() {
    security rules unless the writer holds a live order lock. Settings: Administration → Document Locking. */
 const _lockSessionId = 'ses-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 let _lockSettingsStored = null, _lockSettings = LockCore.effectiveLockSettings(null), _lockSettingsUnsub = null;
-let _isAdministrator = false, _accessUnsub = null;
+let _isAdministrator = false, _accessUnsub = null, _adminUids = [], _accessKnown = false;
 const _lockSettingsListeners = new Set();
 const _lockActor = () => {
   const u = auth.currentUser, cu = window.currentUser || {};
@@ -2827,6 +2829,9 @@ function startLockingListeners() {
   if (!_accessUnsub) _accessUnsub = onSnapshot(doc(db, 'system', 'accessControl'), snap => {
     const uid = auth.currentUser && auth.currentUser.uid;
     _isAdministrator = !!(uid && snap.exists() && Array.isArray(snap.data().adminUids) && snap.data().adminUids.includes(uid));
+    _adminUids = snap.exists() && Array.isArray(snap.data().adminUids) ? snap.data().adminUids.slice() : [];
+    _accessKnown = true;
+    if (typeof window.syncTopbarUserIdentity === 'function') { try { window.syncTopbarUserIdentity(); } catch (e) {} }
     _lockSettingsListeners.forEach(fn => { try { fn(_lockSettings, _lockSettingsStored); } catch (e) { console.error(e); } });
   }, err => console.warn('[BizCore] Access control unavailable:', err.message));
 }
@@ -3099,6 +3104,59 @@ window.BizCoreCash = {
   },
 };
 /* ═══════════════════════════════════════════════════
+   V268.5 SHARED SETTINGS / USERS / APPROVALS — everything shared lives in Firebase, not in one browser.
+   sharedSettings/{doc} { key, json, revision, updatedAt, updatedBy, updatedByUid }  (units: staff; others: administrators)
+   (administrator names come from userDirectory, written by every login — V267.2)
+   approvals/{id}       pricing approvals asked from an administrator and decided from their own login
+═══════════════════════════════════════════════════ */
+let _sharedDocs = null, _sharedUnsub = null, _approvals = [], _apprUnsub = null;
+const _sharedListeners = new Set(), _apprListeners = new Set();
+window.BizCoreShared = {
+  get docs() { return _sharedDocs; },
+  get adminUids() { return _adminUids.slice(); },
+  get profiles() { return (window.BizCoreCash && window.BizCoreCash.directory) || []; },
+  get approvals() { return _approvals; },
+  get isAdministrator() { return _isAdministrator; },
+  get accessKnown() { return _accessKnown; },
+  onChange(fn) { _sharedListeners.add(fn); if (_sharedDocs) { try { fn(_sharedDocs); } catch (e) { console.error(e); } } return () => _sharedListeners.delete(fn); },
+  onApprovals(fn) { _apprListeners.add(fn); return () => _apprListeners.delete(fn); },
+  start() {
+    if (!auth.currentUser) return;
+    if (!_sharedUnsub) _sharedUnsub = onSnapshot(collection(db, 'sharedSettings'), snap => {
+      const m = {}; snap.forEach(d => { m[d.id] = d.data(); }); _sharedDocs = m;
+      _sharedListeners.forEach(fn => { try { fn(m); } catch (e) { console.error(e); } });
+    }, err => console.warn('[BizCore] Shared settings unavailable:', err.message));
+    if (window.BizCoreCash && window.BizCoreCash.startDirectory) window.BizCoreCash.startDirectory();
+    if (!_apprUnsub) _apprUnsub = onSnapshot(collection(db, 'approvals'), snap => {
+      const out = []; snap.forEach(d => out.push(d.data())); _approvals = out;
+      _apprListeners.forEach(fn => { try { fn(out); } catch (e) { console.error(e); } });
+    }, err => console.warn('[BizCore] Approvals unavailable:', err.message));
+  },
+  /** Saves one shared setting (the JSON text as the browser keeps it). */
+  async save(docId, key, json) {
+    const u = auth.currentUser; if (!u) throw new Error('Not signed in');
+    const name = (window.currentUser && window.currentUser.name) || u.email || u.uid;
+    return runTransaction(db, async tx => {
+      const ref = doc(db, 'sharedSettings', docId), cur = await tx.get(ref);
+      const revision = (cur.exists() ? Number(cur.data().revision) || 0 : 0) + 1;
+      tx.set(ref, { id: docId, key, json: String(json), revision, updatedAt: serverTimestamp(), updatedBy: name, updatedByUid: u.uid });
+      return revision;
+    });
+  },
+  async askApproval(req) {
+    const u = auth.currentUser; if (!u) throw new Error('Not signed in');
+    const id = 'apr-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    const name = (window.currentUser && window.currentUser.name) || u.email || u.uid;
+    await setDoc(doc(db, 'approvals', id), { ...req, id, status: 'Pending', requestedBy: name, requestedByUid: u.uid, requestedAt: serverTimestamp(), decidedBy: '', decidedByUid: '', decidedAt: null, decisionNote: '' });
+    return id;
+  },
+  async decideApproval(id, status, note) {
+    const u = auth.currentUser; if (!u) throw new Error('Not signed in');
+    const name = (window.currentUser && window.currentUser.name) || u.email || u.uid;
+    await setDoc(doc(db, 'approvals', id), { status, decisionNote: String(note || '').slice(0, 300), decidedBy: name, decidedByUid: u.uid, decidedAt: serverTimestamp() }, { merge: true });
+  },
+};
+/* ═══════════════════════════════════════════════════
    V268.1 PURCHASE INVOICES — purchaseInvoices, salesOrderPurchasing, stockItems, settings/purchasing
    (js/purchase-service.mjs). Staff record; administrators change the settings.
 ═══════════════════════════════════════════════════ */
@@ -3106,7 +3164,7 @@ const purchaseService = createPurchaseService({ db, doc, runTransaction, serverT
   actor: () => { const u = auth.currentUser, cu = window.currentUser || {}; return u ? { uid: u.uid, name: cu.name || u.displayName || u.email || u.uid } : {}; },
   formatNumber: (prefix, n) => prefix + String(n).padStart(4, '0'),
 });
-let _piUnsubs = null, _piList = [], _piLedgers = new Map(), _piStock = new Map(), _piPays = [], _piAllocs = [], _piSettings = PurchaseCore.effectivePurchaseSettings(null);
+let _piUnsubs = null, _piList = [], _piLedgers = new Map(), _piStock = new Map(), _piPays = [], _piAllocs = [], _piChanges = [], _piSettings = PurchaseCore.effectivePurchaseSettings(null);
 const _piListeners = new Set();
 const _piFire = () => _piListeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } });
 window.BizCorePI = {
@@ -3117,6 +3175,7 @@ window.BizCorePI = {
   get stock() { return _piStock; },
   get payments() { return _piPays; },   // V268.2 supplierPayments
   get allocations() { return _piAllocs; },   // V268.4 stockAllocations
+  get changes() { return _piChanges; },   // V268.5 stockChanges (Change Item)
   /** V268.4: the movements of one stock item (read when its screen opens). */
   async movesOf(itemKey) { const snap = await getDocs(query(collection(db, PurchaseCore.PURCHASE_COLLECTIONS.stockMoves), where('itemKey', '==', String(itemKey)))); const out = []; snap.forEach(d => out.push(d.data())); return out; },
   get settings() { return _piSettings; },
@@ -3132,6 +3191,7 @@ window.BizCorePI = {
       onSnapshot(doc(db, ...PurchaseCore.PURCHASE_SETTINGS_PATH), snap => { _piSettings = PurchaseCore.effectivePurchaseSettings(snap.exists() ? snap.data() : null); _piFire(); }, warn('Purchase settings')),
       onSnapshot(collection(db, PurchaseCore.PAYMENT_COLLECTION), snap => { const out = []; snap.forEach(d => out.push(d.data())); _piPays = out; _piFire(); }, warn('Supplier payments')),
       onSnapshot(collection(db, PurchaseCore.STOCK_ALLOC_COLLECTION), snap => { const out = []; snap.forEach(d => out.push(d.data())); _piAllocs = out; _piFire(); }, warn('Stock allocations')),
+      onSnapshot(collection(db, PurchaseCore.STOCK_CHANGE_COLLECTION), snap => { const out = []; snap.forEach(d => out.push(d.data())); _piChanges = out; _piFire(); }, warn('Stock item changes')),
     ];
     // V268.2: the payment accounts (payment lines) and the cash ledger (custodian confirmations)
     if (window.BizCoreAcc) { window.BizCoreAcc.start(); window.BizCoreAcc.onChange(_piFire); }
@@ -3238,6 +3298,7 @@ onAuthStateChanged(auth, user => {
   startDeliveryNoteModeListener();
   startLockingListeners();
   startInvoiceModeListener();
+  setTimeout(() => { try { window.BizCoreShared.start(); } catch (e) {} }, 0);   // V268.5
   window.currentUser = {
     uid:   user.uid,
     email: user.email,
@@ -3246,53 +3307,27 @@ onAuthStateChanged(auth, user => {
   if (typeof loadUserTheme === 'function') loadUserTheme();   // V266.5: theme saved with the user
 
 
-  // Keep the topbar identity tied to the authenticated BizCore user.
-  // User Management (bizcore_users / bizcore_roles) is the primary source;
-  // Firebase display name/email are safe fallbacks when no matching profile exists.
+  // V268.5: the topbar identity comes from the login (Firebase) and the administrator flag from
+  // system/accessControl — the old browser-only User Management list is no longer used.
   function syncTopbarUserIdentity() {
-    let appUsers = [], appRoles = [];
-    try { appUsers = JSON.parse(localStorage.getItem('bizcore_users') || '[]'); } catch(e) {}
-    try { appRoles = JSON.parse(localStorage.getItem('bizcore_roles') || '[]'); } catch(e) {}
-
     const email = String(user.email || '').trim().toLowerCase();
     const emailLocal = email.split('@')[0] || '';
-    const profile = appUsers.find(u => String(u.email || '').trim().toLowerCase() === email)
-      || appUsers.find(u => String(u.username || '').trim().toLowerCase() === emailLocal);
-    const role = profile ? appRoles.find(r => r.id === profile.roleId) : null;
-    const roleName = String(role?.name || '').trim();
-    const isAdministrator = roleName.toLowerCase() === 'administrator';
-    // Format account-style names for display only: musthafa_km -> Musthafa KM.
-    // Stored usernames/full names and authentication values are never modified.
     function formatHeaderDisplayName(value) {
       const raw = String(value || '').trim();
       if (!raw) return 'User';
-      return raw
-        .replace(/[_-]+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .split(' ')
-        .map(part => {
-          if (!part) return '';
-          if (part.length <= 2) return part.toUpperCase();
-          return part.charAt(0).toUpperCase() + part.slice(1);
-        })
-        .join(' ');
+      return raw.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').split(' ')
+        .map(part => !part ? '' : part.length <= 2 ? part.toUpperCase() : part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
     }
-    const displayName = formatHeaderDisplayName(profile?.fullname || user.displayName || emailLocal || 'User');
+    const displayName = formatHeaderDisplayName(user.displayName || emailLocal || 'User');
     const initials = displayName.split(/\s+/).filter(Boolean).slice(0,2).map(part => part[0]).join('').toUpperCase() || 'U';
-
     window.currentUser.name = displayName;
-    window.currentUser.role = roleName;
-    window.currentUser.appUserId = profile?.id || null;
-
+    window.currentUser.role = _isAdministrator ? 'Administrator' : '';
     const avatar = document.getElementById('topbar-user-avatar');
     const nameEl = document.getElementById('topbar-user-name');
     const adminBadge = document.getElementById('topbar-admin-badge');
     if (avatar) avatar.textContent = initials;
     if (nameEl) nameEl.textContent = displayName;
-    if (adminBadge) {
-      adminBadge.textContent = 'Administrator';
-      adminBadge.style.display = isAdministrator ? 'inline-flex' : 'none';
-    }
+    if (adminBadge) { adminBadge.textContent = 'Administrator'; adminBadge.style.display = _isAdministrator ? 'inline-flex' : 'none'; }
   }
   syncTopbarUserIdentity();
   window.syncTopbarUserIdentity = syncTopbarUserIdentity;
@@ -3343,17 +3378,19 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=268.4';
+      s.src = 'js/app.js?v=268.5';
       // V265.5: the Deliveries screen builds on app.js
-      s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d); };
+      s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
+        // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
+        const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=268.5'; document.body.appendChild(ds); };
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js
-    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=268.32'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
+    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=268.5'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
     // V268.3: supplier-payments.js (Supplier Payments, advances, edits) after purchases.js
     // V268.4: stock.js (Purchasing → Stock) after supplier-payments.js
-    const loadStock = () => { const st = document.createElement('script'); st.id = 'bizcore-stock-script'; st.src = 'js/stock.js?v=268.4'; st.onload = start; st.onerror = () => { console.error('[BizCore] stock.js could not be loaded'); start(); }; document.body.appendChild(st); };
-    const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=268.32'; sp.onload = loadStock; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
+    const loadStock = () => { const st = document.createElement('script'); st.id = 'bizcore-stock-script'; st.src = 'js/stock.js?v=268.5'; st.onload = start; st.onerror = () => { console.error('[BizCore] stock.js could not be loaded'); start(); }; document.body.appendChild(st); };
+    const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=268.5'; sp.onload = loadStock; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
     // V267.2: cash-ui.js + cashbank.js (Cash & Bank) after accounts.js, before app.js
     const loadCash = () => { const u = document.createElement('script'); u.id = 'bizcore-cashui-script'; u.src = 'js/cash-ui.js?v=268.31'; u.onload = u.onerror = () => { const c = document.createElement('script'); c.id = 'bizcore-cashbank-script'; c.src = 'js/cashbank.js?v=268.31'; c.onload = loadPurchases; c.onerror = () => { console.error('[BizCore] cashbank.js could not be loaded'); loadPurchases(); }; document.body.appendChild(c); }; document.body.appendChild(u); };
     // V266: receipts.js (Payment Receipts) after invoicing.js, before app.js

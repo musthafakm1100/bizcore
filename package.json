@@ -1,0 +1,16 @@
+{
+  "name": "bizcore-erp",
+  "version": "260.0.0",
+  "private": true,
+  "type": "module",
+  "description": "BizCore ERP V260 — automated tests (the application itself needs no build step)",
+  "scripts": {
+    "test": "node --test tests/delivery-service.test.mjs tests/migration.test.mjs tests/lock-service.test.mjs tests/invoice-core.test.mjs tests/invoice-service.test.mjs tests/invoice-migration.test.mjs tests/sample-orders.test.mjs tests/numbering.test.mjs tests/receipt-service.test.mjs tests/account-service.test.mjs tests/ledger-service.test.mjs tests/purchase-service.test.mjs tests/supplier-payments.test.mjs tests/purchase-edit.test.mjs tests/stock.test.mjs",
+    "test:browser": "node --test --test-concurrency=1 tests/browser/dn-workflow.e2e.mjs tests/browser/offline-mode.e2e.mjs tests/browser/invoice-remaining.e2e.mjs tests/browser/embedded-images.e2e.mjs tests/browser/locking.e2e.mjs tests/browser/invoicing.e2e.mjs tests/browser/offline-numbers.e2e.mjs tests/browser/navigation.e2e.mjs tests/browser/registers.e2e.mjs tests/browser/doc-views.e2e.mjs tests/browser/delivery-compact.e2e.mjs tests/browser/deliveries.e2e.mjs tests/browser/receipts.e2e.mjs tests/browser/edits.e2e.mjs tests/browser/theme.e2e.mjs tests/browser/shell.e2e.mjs tests/browser/responsive.e2e.mjs tests/browser/accounts.e2e.mjs tests/browser/cashbank.e2e.mjs tests/browser/purchases.e2e.mjs tests/browser/supplier-payments.e2e.mjs tests/browser/purchase-edit.e2e.mjs tests/browser/stock.e2e.mjs tests/browser/data-safety.e2e.mjs",
+    "test:parity": "node --test tests/browser/legacy-parity.e2e.mjs",
+    "test:emulator": "npm --prefix tests/emulator install && npm --prefix tests/emulator test"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}
