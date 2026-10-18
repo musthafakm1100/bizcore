@@ -1184,6 +1184,7 @@ function bcPickSync(selId){
   if (it) {
     const tail = sel.disabled ? '<span class="rct-pick-lock" title="Can\'t be changed here"><i class="ti ti-lock"></i></span>'
       : `<button type="button" class="rct-pick-change" onclick="bcPickChange('${selId}')">Change</button>${c.clearLabel ? `<button type="button" class="bc-pick-x" title="${piEsc(c.clearLabel)}" aria-label="${piEsc(c.clearLabel)}" onclick="bcPickClear('${selId}')"><i class="ti ti-x"></i></button>` : ''}`;
+    chosen.title = [it.title, it.sub].filter(Boolean).join(' · ');
     chosen.innerHTML = `<span class="rct-pick-txt"><b>${piEsc(it.title)}</b>${it.sub && !c.compact ? `<small>${piEsc(it.sub)}</small>` : ''}</span>${tail}`;
     chosen.hidden = false; search.hidden = true;
     chosen.onclick = c.compact && !sel.disabled ? (e => { if (!e.target.closest('.bc-pick-x')) bcPickChange(selId); }) : null;

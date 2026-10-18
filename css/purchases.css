@@ -96,7 +96,7 @@
 .pi-kind{background:#eef0ff;color:#4338CA;font-weight:700;font-size:11.5px;border-radius:999px;padding:3px 10px;display:inline-flex;gap:5px;align-items:center;vertical-align:middle;margin-left:6px}
 .pi-entry-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;align-items:start}
 .pi-entry-side{position:sticky;top:0}
-.pi-head-grid{display:grid;grid-template-columns:2fr 1.2fr 1fr 1fr;gap:10px 12px}
+.pi-head-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr);gap:10px 12px}
 .pi-head-grid .form-group{margin:0}
 .pi-head-grid label em{font-style:normal;text-transform:none;letter-spacing:0;color:#94a3b8;font-weight:500;margin-left:4px}
 .pi-f-total input{text-align:right;font-weight:700}
@@ -340,7 +340,7 @@ tr.pi-adv-line .pi-pay-acc{background:#faf8ff}
 .sp-cards{display:none}
 .sp-card .r4{margin-top:5px;font-size:12px}
 @media (max-width:760px){ #page-supplierpayments .dn-table-scroll{display:none} .sp-cards{display:block;padding:10px} }
-.sp-adv-grid{display:grid;grid-template-columns:1.4fr 1fr 1.3fr;gap:10px 12px;margin-bottom:10px}
+.sp-adv-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.3fr);gap:10px 12px;margin-bottom:10px}
 .sp-adv-grid .form-group{margin:0}.sp-adv-grid select,.sp-adv-grid input{width:100%}
 .sp-adv-grid label em,#sp-adv-modal label em{font-style:normal;text-transform:none;letter-spacing:0;color:#94a3b8;font-weight:500;margin-left:4px}
 .sp-adv-info{margin-top:4px}
@@ -460,3 +460,16 @@ tr.pi-adv-line .pi-pay-acc{background:#faf8ff}
 .bc-lk-empty{color:#64748b;text-align:center;padding:22px!important;cursor:default}
 .bc-lk-foot{font-size:12px;color:#64748b;margin-top:9px}
 @media (max-width:760px){ .bc-lk-wrap{max-height:none} .bc-lk-table td{max-width:180px} }
+
+/* ── V268.62: pickers in a form row have the same height as the other fields (34px); the choice shows on one line ── */
+.bc-picker{min-width:0}
+.bc-picker:not(.bc-pick-compact) .rct-pick-search,.bc-picker:not(.bc-pick-compact) .rct-pick-chosen{height:34px;min-height:34px;box-sizing:border-box;border-radius:8px}
+.bc-picker:not(.bc-pick-compact) .rct-pick-search{padding:0 10px}
+.bc-picker:not(.bc-pick-compact) .rct-pick-search input{height:30px!important;font-size:13px}
+.bc-picker:not(.bc-pick-compact) .rct-pick-chosen{padding:0 4px 0 10px;gap:6px;min-width:0}
+.bc-picker:not(.bc-pick-compact) .rct-pick-chosen .rct-pick-txt{flex-direction:row;align-items:baseline;gap:6px;overflow:hidden;white-space:nowrap}
+.bc-picker:not(.bc-pick-compact) .rct-pick-chosen .rct-pick-txt b{flex:0 1 auto;min-width:0;font-size:13px}
+.bc-picker:not(.bc-pick-compact) .rct-pick-chosen .rct-pick-txt small{flex:1 1 0;min-width:0;margin:0;font-size:11.5px}
+.bc-picker:not(.bc-pick-compact) .rct-pick-chosen .rct-pick-txt small::before{content:'· '}
+.bc-picker:not(.bc-pick-compact) .rct-pick-chosen .rct-pick-change{padding:4px 6px;font-size:12.5px;flex:0 0 auto}
+.bc-picker:not(.bc-pick-compact) .rct-pick-chosen .bc-pick-x{width:24px;height:24px;flex-basis:24px}
