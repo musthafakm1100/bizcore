@@ -237,8 +237,37 @@ function bcRenderDataHealth(){
   box.innerHTML = head + `<div class="setup-card ds-card"><h4><i class="ti ti-cloud" style="margin-right:6px"></i>Shared settings</h4>
     <div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>Shared setting</th><th>Last saved</th><th>State</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="ds-note">Also in Firebase (as before): company settings, numbering, purchase, billing and receipt settings, payment accounts, document locking, customers, suppliers, products, terms and all documents.</p>
-    <p class="ds-note">Kept in the browser on purpose (per user / device): theme, font size, sidebar, rows per page, last page, drafts, notifications seen.</p></div>`;
+    <p class="ds-note">Kept in the browser on purpose (per user / device): theme, font size, sidebar, rows per page, last page, drafts, notifications seen.</p></div>`
+    + bcDataWindowCard();
+  bcFillDataWindowStats();
 }
+/* V269.1 — data plan step 2a: how much of the sales history is loaded when BizCore opens */
+function bcDataWindowCard(){
+  const m = Number(typeof settings !== 'undefined' && settings && settings.dataWindowMonths) || 12;
+  const input = isAdmin()
+    ? `<div style="display:flex;align-items:flex-end;gap:10px;margin:6px 0 10px"><div class="form-group" style="margin:0;max-width:200px"><label>Months loaded</label><input id="dh-window-months" type="number" min="1" max="120" step="1" value="${m}"/></div><button type="button" class="btn btn-secondary" onclick="bcSaveDataWindow()">Save</button></div>`
+    : `<p><b>${m}</b> months <span class="pi-sub">(changed by an administrator)</span></p>`;
+  return `<div class="setup-card ds-card"><h4><i class="ti ti-database" style="margin-right:6px"></i>Records loaded when BizCore opens</h4>
+    <p class="ds-note">RFQs, quotations, sales orders, delivery notes, invoices, credit notes and receipts: all open ones, and everything dated in the last N months:</p>
+    ${input}
+    <p class="ds-note">Older records are read only when asked: a date filter before that, "All Dates", a search for a number (press Enter), Dashboard "All time", Reports "Include older records" and Backup. A change takes effect the next time BizCore opens.</p>
+    <div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>Records</th><th>Loaded now</th><th>Of which older (read on request / linked)</th></tr></thead><tbody id="dh-window-stats"><tr><td colspan="3" class="pi-sub">…</td></tr></tbody></table></div></div>`;
+}
+async function bcFillDataWindowStats(){
+  const tb = document.getElementById('dh-window-stats'); if (!tb || !window.BCWin) return;
+  const names = { rfqs: 'RFQs', quotations: 'Quotations', salesOrders: 'Sales orders', deliveryNotes: 'Delivery notes', customerInvoices: 'Invoices', creditNotes: 'Credit notes', customerReceipts: 'Receipts', invoicePayments: 'Invoice payment records' };
+  const st = window.BCWin.stats(), c = await window.BCWin.config();
+  tb.innerHTML = Object.keys(names).filter(k => st[k]).map(k => `<tr><td><b>${esc(names[k])}</b></td><td>${st[k].total}</td><td>${st[k].extra}${st[k].olderFrom === '' ? ' · all older read' : ''}</td></tr>`).join('')
+    + `<tr><td colspan="3" class="pi-sub">Loaded period starts ${esc(c.cutoff.split('-').reverse().join('-'))} (${c.months} months).</td></tr>`;
+}
+async function bcSaveDataWindow(){
+  const v = Math.round(Number(document.getElementById('dh-window-months')?.value));
+  if (!(v >= 1 && v <= 120)) { showToast('Enter a number of months from 1 to 120.', 'error'); return; }
+  settings.dataWindowMonths = v;
+  await saveSettings();
+  showToast('Saved. BizCore loads the last ' + v + ' months from the next time it opens.', 'success');
+}
+window.bcSaveDataWindow = bcSaveDataWindow;
 window.bcRenderDataHealth = bcRenderDataHealth;
 
 /* ── 4. Pricing approval by an administrator ──────────────────────────── */

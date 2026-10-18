@@ -501,15 +501,17 @@ async function loadData() {
         window.FB.fbLoad('salesOrders'),
         window.FB.fbLoadSettings(),
       ]);
-      if (fbQ   && fbQ.length)    quotations    = fbQ;
+      // V269.1: these load only open + recent records, so an empty list is a real answer — never replaced by old copies or samples
+      window.__bcFbLoaded = { quotations: Array.isArray(fbQ), rfqs: Array.isArray(fbR), salesOrders: Array.isArray(fbSO) };
+      if (Array.isArray(fbQ)) quotations = fbQ;
       if (fbC   && fbC.length)    customers     = fbC;
       if (fbP   && fbP.length)    products      = fbP;
       if (fbDT  && fbDT.length)   deliveryTerms = fbDT;
       if (fbPT  && fbPT.length)   paymentTerms  = fbPT;
       if (fbSup && fbSup.length)  suppliers     = fbSup;
-      if (fbR   && fbR.length)    rfqs          = fbR;
+      if (Array.isArray(fbR))     rfqs          = fbR;
       if (fbE   && fbE.length)    employees     = fbE;
-      if (fbSO  && fbSO.length)   salesOrders   = fbSO;
+      if (Array.isArray(fbSO))    salesOrders   = fbSO;
       // V260: resolve the database-wide Delivery Note storage mode before anything renders or saves.
       const dnMode = window.BizCoreDN ? await window.BizCoreDN.ready : 'legacy';
       if (dnMode === 'independent') {
@@ -565,14 +567,14 @@ async function loadData() {
           // Don't interrupt if a modal is open
           const modalOpen = document.querySelector('.modal-overlay.open, .modal-overlay[style*="flex"]');
           if (modalOpen) {
-            if (!isInitialSync) showSyncBadge(label);
+            if (!isInitialSync && !window.__bcWinQuiet) showSyncBadge(label);
             return;
           }
           const active = getActivePage();
           if (active === page || active === 'dashboard') {
             renderFn();
           }
-          if (!isInitialSync) showSyncBadge(label);
+          if (!isInitialSync && !window.__bcWinQuiet) showSyncBadge(label);   // V269.1: not for records BizCore read itself
         }
 
         window.FB.fbListen('quotations', function(data) {
@@ -768,16 +770,16 @@ async function loadData() {
   if (!window.__bcDataReady) { window.__bcDataReady = true; setTimeout(() => { if (typeof bcDeliveriesRefresh === 'function') bcDeliveriesRefresh(); }, 0); }
   // ── Fall back to localStorage if Firebase load failed or returned nothing ──
   try {
-    if (!quotations.length) { const r=localStorage.getItem('dtq_quotations'); if(r) quotations=JSON.parse(r); }
+    if (!quotations.length && !(window.__bcFbLoaded && window.__bcFbLoaded.quotations)) { const r=localStorage.getItem('dtq_quotations'); if(r) quotations=JSON.parse(r); }
     if (!customers.length)  { const r=localStorage.getItem('dtq_customers');  if(r) customers=JSON.parse(r); }
     if (!settings.coname)   { const r=localStorage.getItem('dtq_settings');   if(r) settings=JSON.parse(r); }
     if (!products.length)   { const r=localStorage.getItem('dtq_products');   if(r) products=JSON.parse(r); }
     if (!deliveryTerms.length){ const r=localStorage.getItem('dtq_delivery_terms'); if(r) deliveryTerms=JSON.parse(r); }
     if (!paymentTerms.length) { const r=localStorage.getItem('dtq_payment_terms');  if(r) paymentTerms=JSON.parse(r); }
     if (!suppliers.length)  { const r=localStorage.getItem('dtq_suppliers');   if(r) suppliers=JSON.parse(r); }
-    if (!rfqs.length)       { const r=localStorage.getItem('dtq_rfqs');        if(r) rfqs=JSON.parse(r); }
+    if (!rfqs.length && !(window.__bcFbLoaded && window.__bcFbLoaded.rfqs))       { const r=localStorage.getItem('dtq_rfqs');        if(r) rfqs=JSON.parse(r); }
     if (!employees.length)  { const r=localStorage.getItem('dtq_employees');   if(r) employees=JSON.parse(r); }
-    if (!salesOrders.length){ const r=localStorage.getItem('dtq_salesorders'); if(r) salesOrders=JSON.parse(r); }
+    if (!salesOrders.length && !(window.__bcFbLoaded && window.__bcFbLoaded.salesOrders)){ const r=localStorage.getItem('dtq_salesorders'); if(r) salesOrders=JSON.parse(r); }
     // Clean up old demo seed
     const demoIds=['emp-musthafa','emp-shabeeb','emp-sajeer'];
     const untouchedDemo=employees.length===3&&demoIds.every(id=>employees.some(e=>e.id===id))&&employees.every(e=>!e.iqamaNo&&!e.passportNo&&!e.licenseNo&&!e.email&&!e.mobile);
@@ -785,7 +787,7 @@ async function loadData() {
   } catch(e) {}
 
   // Always seed from built-in data if still empty
-  if (!quotations.length) quotations = getSampleData();
+  if (!quotations.length && !(window.__bcFbLoaded && window.__bcFbLoaded.quotations)) quotations = getSampleData();
   if (!customers.length) customers = getDefaultCustomers();
   if (!settings.coname) settings = getDefaultSettings();
   ensureCurrencyDisplaySettings();
@@ -888,7 +890,7 @@ function rebuildSalesOrderView(){
   // V264: invoices / credit notes from their own documents (view only; stripped before saves)
   salesOrders = typeof projectInvoicesIntoSalesOrders === 'function' ? projectInvoicesIntoSalesOrders(r.salesOrders) : r.salesOrders;
   window.BizCoreDN.lastProjectionIssues = r.issues;
-  const serious = r.issues.filter(i => i.code !== 'EMBEDDED_DELIVERIES_PRESENT');
+  const serious = r.issues.filter(i => i.code !== 'EMBEDDED_DELIVERIES_PRESENT' && !(i.code === 'ORPHAN_DN' && window.BCWin));   // V269.1: its order is being read (linked records)
   if (serious.length) console.error('[BizCore DN read model] records excluded from view', serious);
   if (typeof refreshOpenSalesOrderView === 'function') refreshOpenSalesOrderView();
   return salesOrders;
@@ -1961,6 +1963,8 @@ async function requestMasterDelete(type, ids, sourceModalId='') {
   if (!records.length) return false;
   const blocked = records.map(record => ({record, dependencies:getMasterDependencies(type, record)})).filter(x => x.dependencies.length);
   if (blocked.length) { showMasterDeleteBlocked(type, blocked); return false; }
+  const olderBlocked = await bcOlderDependencies(type, records);   // V269.1: records that aren't loaded (older than the window)
+  if (olderBlocked.length) { showMasterDeleteBlocked(type, olderBlocked); return false; }
 
   const singular = type === 'customers' ? 'customer' : type === 'suppliers' ? 'supplier' : 'product';
   const label = records.length === 1 ? masterRecordLabel(type, records[0]) : `${records.length} ${singular}s`;
@@ -3356,7 +3360,7 @@ function setDashPeriod(preset, el) {
     document.getElementById('dash-date-from').value = dashFrom;
     document.getElementById('dash-date-to').value   = dashTo;
   }
-  renderDashboard();
+  bcEnsureOlder(['quotations','rfqs','salesOrders'], preset === 'all' ? '' : dashFrom, renderDashboard);   // V269.1: older periods are read first
 }
 
 function onDashCustomDate() {
@@ -3364,7 +3368,7 @@ function onDashCustomDate() {
   dashTo   = document.getElementById('dash-date-to').value;
   // deselect preset buttons since user picked custom
   document.querySelectorAll('.dash-period-btn').forEach(b => b.classList.remove('active'));
-  renderDashboard();
+  if (dashFrom) bcEnsureOlder(['quotations','rfqs','salesOrders'], dashFrom, renderDashboard); else renderDashboard();   // V269.1
 }
 
 
@@ -3970,6 +3974,7 @@ function renderSetupCustTable() {
 
 /* ── ANALYTICS ── */
 function renderAnalytics() {
+  if (typeof bcRenderAnalyticsWindowNote === 'function') bcRenderAnalyticsWindowNote();   // V269.1
   const won=quotations.filter(q=>q.status==='Won');
   const closed=quotations.filter(q=>q.status==='Won'||q.status==='Lost');
   const wr=closed.length?Math.round(won.length/closed.length*100):0;
@@ -9779,7 +9784,9 @@ async function resetAndReload() {
 /* ══════════════════════════════════════════════════
    EXPORT / IMPORT — full data backup & restore
 ══════════════════════════════════════════════════ */
-function exportAllData() {
+async function exportAllData() {
+  // V269.1: a backup holds every record, not only the loaded ones — read the older ones first
+  if (typeof bcEnsureOlder === 'function') await bcEnsureOlder(['quotations','rfqs','salesOrders','deliveryNotes'], '');
   const now = new Date();
   const stamp = now.getFullYear() + '-'
     + String(now.getMonth()+1).padStart(2,'0') + '-'
@@ -10422,6 +10429,7 @@ async function _saveSalesOrderCore() {
     deliveries:  [],
     invoices:    [],
     payments:    [],
+    isOpen:      existingSO ? (existingSO.isOpen ?? true) : true,   // V269.1: loaded while open (bcHealOpenOrders keeps it right)
     created:     new Date().toISOString(),
   };
 
@@ -14612,3 +14620,129 @@ function bcRefitLists(){
   window.addEventListener('resize',bcRefitLists);
   document.addEventListener('scroll',e=>{ if(e.target&&e.target.closest&&e.target.closest('.cust-dropdown,#rn-cust-list,#prod-search-dd')) return; bcRefitLists(); },true);
 })();
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════
+   V269.1 — DATA PLAN STEP 2a: only open and recent sales records are loaded (see index.html BCWin)
+   Here: the "still open" mark on Sales Orders, older records on request (date filters, number search,
+   Dashboard "All time", Reports, backup) and the server check before a master record is deleted.
+   ══════════════════════════════════════════════════════════════════════════════════════════ */
+const BC_REG_COLS = { rfq: ['rfqs'], pricing: ['rfqs'], quotation: ['quotations'], so: ['salesOrders'], dn: ['deliveryNotes'], invreg: ['customerInvoices', 'creditNotes'], rctreg: ['customerReceipts'] };
+const BC_SEARCH_COLS = { 'rfq-search': ['rfqs'], 'pricing-doc-search': ['rfqs'], 'search-input': ['quotations'], 'so-search': ['salesOrders'], 'dn-search': ['deliveryNotes'], 'dl-search': ['deliveryNotes'], 'invreg-q': ['customerInvoices', 'creditNotes'], 'rctreg-q': ['customerReceipts'] };
+function bcWinOn(){ return !!(window.BCWin && window.FB); }
+/** Reads older records of these collections (from `from`, '' = all) when they aren't here yet, then runs `then`. */
+async function bcEnsureOlder(cols, from, then){
+  if (!bcWinOn()) { if (then) then(); return 0; }
+  const need = cols.filter(c => window.BCWin.started(c) && !window.BCWin.hasOlder(c, from || ''));
+  if (!need.length) { if (then) then(); return 0; }
+  const cfg = await window.BCWin.config();
+  if (from && from >= cfg.cutoff) { if (then) then(); return 0; }
+  const t = setTimeout(() => showToast('Loading older records…', 'info'), 300);
+  let n = 0;
+  try { n = await window.BCWin.loadOlder(need, from || ''); }
+  catch (e) { showToast(navigator.onLine === false ? 'You are offline. Older records can’t be read now.' : 'Older records could not be loaded. Please try again.', 'error'); }
+  finally { clearTimeout(t); }
+  if (then) then();
+  return n;
+}
+/* registers: choosing "All Dates" or a date before the cut-off reads the older records first (ui-standard.js calls this) */
+window.bcDateFilterBeforeChoose = function(key, st){
+  const cols = BC_REG_COLS[key]; if (!cols || !bcWinOn()) return null;
+  const from = st.preset === 'all' ? '' : (st.from || '');
+  if (st.preset !== 'all' && !from) return null;
+  return bcEnsureOlder(cols, from);
+};
+/* register search: Enter looks for that number in older records too */
+document.addEventListener('keydown', async e => {
+  if (e.key !== 'Enter' || !e.target || !BC_SEARCH_COLS[e.target.id] || !bcWinOn()) return;
+  const text = String(e.target.value || '').trim(); if (text.length < 3 || !/\d/.test(text)) return;
+  let n = 0;
+  try { for (const c of BC_SEARCH_COLS[e.target.id]) if (window.BCWin.started(c)) n += await window.BCWin.findNumber(c, text); } catch (err) { return; }
+  if (n) showToast(n === 1 ? 'Found 1 older record' : 'Found ' + n + ' older records', 'success');
+  e.target.dispatchEvent(new Event('input', { bubbles: true }));
+}, true);
+/** The note under the date filter popups / on Reports: what is loaded. */
+async function bcWindowNoteText(){
+  if (!bcWinOn()) return '';
+  const c = await window.BCWin.config();
+  return 'Loaded: open records and everything since ' + fmtDate(c.cutoff) + '. Choose “All Dates” or an earlier date to read older records.';
+}
+window.bcWindowNoteText = bcWindowNoteText;
+
+/* ── Sales Orders: isOpen (true until fully delivered, fully invoiced and every invoice settled) ── */
+function soIsOpenNow(so){
+  if (!so) return true;
+  const deliveries = (so.deliveries || []).filter(d => !d.voided);
+  if (deliveries.some(d => !d.customerConfirmed)) return true;                 // out for delivery
+  const ordered = (so.items || []).reduce((s, it) => s + (parseFloat(it.qty) || 0), 0);
+  const accepted = deliveries.reduce((s, d) => s + (d.items || []).reduce((t, it) => t + deliveryAcceptedQty(d, it), 0), 0);
+  if (accepted < ordered - 0.001) return true;                                  // not all accepted (same measure as getSOStatus)
+  if (typeof invIndependentMode === 'function' && invIndependentMode() && typeof invoicesForSO === 'function') {
+    const inv = invoicesForSO(so.id).filter(i => !/cancel/i.test(String(i.status || '')));
+    if (!inv.length) return true;
+    const gross = inv.reduce((s, i) => s + (Number(i.totals && i.totals.total) || 0), 0);
+    if (gross < (Number(so.total) || 0) - 0.01) return true;                     // not fully invoiced
+    if (typeof invoiceBalanceOf === 'function' && inv.some(i => invoiceBalanceOf(i) > 0.01)) return true;   // money still due
+    return false;
+  }
+  return getSOStatus(so) !== 'Paid';
+}
+let _bcHealRunning = false;
+/** Keeps the isOpen mark of the loaded Sales Orders right (one small write when an order closes or reopens). */
+async function bcHealOpenOrders(){
+  if (_bcHealRunning || !bcWinOn() || !window.FB.fbMergeFields || !Array.isArray(salesOrders)) return 0;
+  if (dnIndependentMode() && !dnCacheLoaded) return 0;
+  if (typeof invIndependentMode === 'function' && invIndependentMode() && !(window.BCWin.started('customerInvoices') && window.BCWin.started('invoicePayments'))) return 0;
+  _bcHealRunning = true; let n = 0;
+  try {
+    await window.BCWin.idle();
+    for (const so of salesOrders.slice()) {
+      if (!so || !so.id || String(so.id).startsWith('tmp')) continue;
+      const open = soIsOpenNow(so);
+      if (so.isOpen === open) continue;
+      if (await window.FB.fbMergeFields('salesOrders', so.id, { isOpen: open })) {
+        so.isOpen = open; n++;
+        const raw = (typeof rawSalesOrders !== 'undefined' ? rawSalesOrders : []).find(x => x.id === so.id); if (raw) raw.isOpen = open;
+      }
+    }
+  } catch (e) { console.warn('[BizCore] open-order marks not updated:', e.message); }
+  finally { _bcHealRunning = false; }
+  return n;
+}
+window.bcHealOpenOrders = bcHealOpenOrders;
+(function(){ const go = () => { if (window.__bcDataReady) bcHealOpenOrders(); }; setTimeout(go, 8000); setInterval(go, 60000); })();
+
+/* ── before a customer / product / supplier is deleted: is it used by a record that isn't loaded? ── */
+async function bcOlderDependencies(type, records){
+  if (!bcWinOn() || !window.BCWin.anyWhere) return [];
+  const out = [];
+  for (const rec of records) {
+    const deps = [];
+    try {
+      const any = async (col, field, op, value) => value != null && value !== '' && window.BCWin.anyWhere(col, field, op, value);
+      if (type === 'customers') {
+        if (await any('quotations', 'custId', '==', rec.id) || await any('quotations', 'company', '==', rec.company)) deps.push('older quotations');
+        if (await any('rfqs', 'custId', '==', rec.id) || await any('rfqs', 'company', '==', rec.company)) deps.push('older RFQs');
+        if (await any('salesOrders', 'custId', '==', rec.id) || await any('salesOrders', 'customer', '==', rec.company)) deps.push('older sales orders');
+      } else if (type === 'products') {
+        const code = String(rec.code || '').trim().toLowerCase();
+        for (const [col, label] of [['quotations', 'older quotations'], ['rfqs', 'older RFQ/pricing documents'], ['salesOrders', 'older sales orders']])
+          if (await any(col, 'productIds', 'array-contains', rec.id) || (code && await any(col, 'productCodes', 'array-contains', code))) deps.push(label);
+      } else if (type === 'suppliers') {
+        if (await any('rfqs', 'supplierIds', 'array-contains', rec.id)) deps.push('older RFQ/pricing documents');
+      }
+    } catch (e) { deps.push('records that could not be checked (' + (navigator.onLine === false ? 'offline' : 'no connection') + ') — try again'); }
+    if (deps.length) out.push({ record: rec, dependencies: deps });
+  }
+  return out;
+}
+
+/* ── Reports: a note and "Include older records" ── */
+async function bcRenderAnalyticsWindowNote(){
+  const page = document.getElementById('page-analytics'); if (!page || !bcWinOn()) return;
+  let note = document.getElementById('an-window-note');
+  if (!note) { note = document.createElement('div'); note.id = 'an-window-note'; note.className = 'bc-window-note'; page.insertBefore(note, page.firstChild); }
+  const all = ['quotations', 'rfqs', 'salesOrders'].every(c => !window.BCWin.started(c) || window.BCWin.hasOlder(c, ''));
+  const c = await window.BCWin.config();
+  note.innerHTML = all ? '<i class="ti ti-database"></i><span>All records are included.</span>'
+    : '<i class="ti ti-database"></i><span>Figures include open records and everything since ' + fmtDate(c.cutoff) + '.</span> <button type="button" class="btn btn-secondary btn-sm" onclick="bcEnsureOlder([\'quotations\',\'rfqs\',\'salesOrders\'],\'\',renderAnalytics)">Include older records</button>';
+}

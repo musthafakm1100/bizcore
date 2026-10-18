@@ -123,9 +123,16 @@
     Object.keys(instances).forEach(k => k !== key && close(k));
     const inst = instances[key]; if (!inst) return;
     paint(key);   // hints follow today's date
+    windowNote(inst);
     inst.host.querySelector('.bc-date-pop').hidden = false;
     inst.host.querySelector('.bc-date-btn').setAttribute('aria-expanded', 'true');
     inst.host.classList.add('open');
+  }
+  /* V269.1: what is loaded (only on registers that load open + recent records) */
+  function windowNote(inst) {
+    const pop = inst.host.querySelector('.bc-date-pop'); if (!pop || typeof window.bcWindowNoteText !== 'function' || !['rfq', 'pricing', 'quotation', 'so', 'dn', 'invreg', 'rctreg'].includes(inst.key)) return;
+    let n = pop.querySelector('.bc-date-window'); if (!n) { n = document.createElement('div'); n.className = 'bc-date-window'; pop.appendChild(n); }
+    Promise.resolve(window.bcWindowNoteText()).then(t => { n.textContent = t || ''; n.hidden = !t; }).catch(() => { n.hidden = true; });
   }
   function close(key) {
     const inst = instances[key]; if (!inst) return;
@@ -138,7 +145,11 @@
     const inst = instances[key]; if (!inst) return;
     inst.state = { preset: st.preset || 'all', from: st.from || '', to: st.to || '' };
     paint(key); close(key);
-    if (typeof inst.handler === 'function') { try { inst.handler({ ...inst.state }); } catch (e) { console.error('[BizCore date filter]', key, e); } }
+    const run = () => { if (typeof inst.handler === 'function') { try { inst.handler({ ...inst.state }); } catch (e) { console.error('[BizCore date filter]', key, e); } } };
+    // V269.1: "All Dates" or a date before the loaded period reads the older records first (app.js)
+    const before = typeof window.bcDateFilterBeforeChoose === 'function' ? window.bcDateFilterBeforeChoose(key, { ...inst.state }) : null;
+    if (before && typeof before.then === 'function') { before.then(run, run); return; }
+    run();
   }
 
   window.BCDateFilter = {

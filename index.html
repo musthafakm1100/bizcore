@@ -25,13 +25,13 @@
 <link href="css/doc-view.css?v=266.5" rel="stylesheet"/>
 <link href="css/delivery-compact.css?v=266.5" rel="stylesheet"/>
 <link href="css/receipts.css?v=266.5" rel="stylesheet"/>
-<link href="css/shell.css?v=268.4" rel="stylesheet"/>
+<link href="css/shell.css?v=269.1" rel="stylesheet"/>
 <link href="css/accounts.css?v=268.2" rel="stylesheet"/>
 <link href="css/cash.css?v=268.32" rel="stylesheet"/>
 <link href="css/purchases.css?v=268.7" rel="stylesheet"/>
 <link href="css/responsive.css?v=268.4" rel="stylesheet"/>
 <link href="css/theme.css?v=266.5" rel="stylesheet"/>
-<script src="js/ui-standard.js?v=265.2" defer></script>
+<script src="js/ui-standard.js?v=269.1" defer></script>
 <script src="js/responsive.js?v=268.4" defer></script>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
@@ -2256,7 +2256,7 @@ import { initializeApp }
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, getDocFromServer, setDoc, onSnapshot, deleteDoc,
-         collection, getDocs, query, where, writeBatch,
+         collection, getDocs, query, where, limit, writeBatch,
          initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
          runTransaction, serverTimestamp, connectFirestoreEmulator }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -2538,6 +2538,25 @@ function _stripEmbeddedImages(node, depth = 0) {
 }
 window.BizCoreStripEmbeddedImages = _stripEmbeddedImages;
 
+/* V269.1: small lists of the products / suppliers a document uses, so "is this product / supplier used?" can be
+   asked of Firebase directly (records older than the loaded period aren't in memory). Set when a record is written. */
+const _bcIds = list => [...new Set(list.map(v => String(v == null ? '' : v).trim()).filter(Boolean))].sort();
+const _bcCodes = list => [...new Set(list.map(v => String(v == null ? '' : v).trim().toLowerCase()).filter(Boolean))].sort();
+function _bcStampLines(record, lines) {
+  record.productIds = _bcIds(lines.map(it => it && (it.prodId || it.productId || it.itemId)));
+  record.productCodes = _bcCodes(lines.map(it => it && it.code));
+}
+const _BC_REF_STAMP = {
+  quotations: r => _bcStampLines(r, r.items || []),
+  salesOrders: r => _bcStampLines(r, r.items || []),
+  rfqs: r => {
+    _bcStampLines(r, [...(r.items || []), ...(r.pricingItems || []), ...(r.pricingProductRefs || [])]);
+    const sup = [r.supplierId, ...(r.pricingItems || []).map(x => x && x.supplierId), ...(r.vendorQuotes || []).map(x => x && x.supplierId)];
+    (r.pricingIndex || []).forEach(e => { sup.push(e && e.supplierId); (e && e.supplierRefs || []).forEach(x => sup.push(x && x.supplierId)); });
+    r.supplierIds = _bcIds(sup);
+  },
+};
+
 /* opts.onlyIds: write only these records (a user action on specific documents). Without it every
    changed record is written — background writes then go one document at a time, so a document the
    rules refuse (e.g. an order locked by someone else) cannot block the others. */
@@ -2562,7 +2581,8 @@ async function fbSave(col, arr, opts = {}) {
       currentIds.add(docId);
       if (only && !only.has(String(record.id)) && !only.has(docId)) continue;
       if (skip && skip.has(String(record.id))) continue;
-      const json = JSON.stringify(record);
+      let json = JSON.stringify(record);
+      if (cache[docId] !== json && _BC_REF_STAMP[col]) { _BC_REF_STAMP[col](record); json = JSON.stringify(record); }   // V269.1
       if (cache[docId] !== json) {
         const estimatedBytes = _bizcoreEncoder.encode(json).length;
         if (estimatedBytes >= BIZCORE_RECORD_WARN_BYTES) {
@@ -2614,6 +2634,7 @@ async function fbSave(col, arr, opts = {}) {
 
 async function fbLoad(col) {
   try {
+    if (BC_WIN_SPECS[col]) return await _winLoad(col);   // V269.1: open + recent only
     await _migrateCollectionIfNeeded(col);
     const snap = await getDocs(collection(db, col));
     const cache = _lastSynced[col] || (_lastSynced[col] = {});
@@ -2636,6 +2657,7 @@ async function fbSaveRecordWith(col, record, extras = []) {
     if (!record || record.id == null) return false;
     if (_EMBEDDED_IMAGE_COLLECTIONS.has(col)) { _stripEmbeddedImages(record); extras.forEach(x => _stripEmbeddedImages(x.data)); }
     await _migrateCollectionIfNeeded(col);
+    if (_BC_REF_STAMP[col]) _BC_REF_STAMP[col](record);   // V269.1
     const docId = _docIdFor(col, record), json = JSON.stringify(record);
     const estimatedBytes = _bizcoreEncoder.encode(json).length;
     if (estimatedBytes >= BIZCORE_RECORD_WARN_BYTES) console.warn('[BizCore storage size warning]', { collection: col, recordId: docId, estimatedBytes, level: estimatedBytes >= BIZCORE_RECORD_CRITICAL_BYTES ? 'critical' : 'warning' });
@@ -2650,6 +2672,15 @@ async function fbSaveRecordWith(col, record, extras = []) {
     console.error('[BizCore storage save failed]', window.BizCoreStorageDiagnostics.lastSaveError);
     return false;
   }
+}
+/** V269.1: changes only these fields of one record (merge) and keeps the save-compare copy in step. */
+async function fbMergeFields(col, id, fields) {
+  try {
+    await setDoc(doc(db, col, _safeDocId(id)), fields, { merge: true });
+    const c = _lastSynced[col], k = _safeDocId(id);
+    if (c && c[k]) { const o = JSON.parse(c[k]); Object.assign(o, fields); c[k] = JSON.stringify(o); }
+    return true;
+  } catch (e) { console.warn('[BizCore] field update failed:', col, id, e.code || '', e.message); return false; }
 }
 /** The copy of a record as last read from / written to the server (JSON), or null. */
 function fbSyncedJSON(col, id) { const c = _lastSynced[col]; return c ? (c[_safeDocId(id)] ?? null) : null; }
@@ -2692,7 +2723,242 @@ async function fbLoadSettings() {
    rebuilding the full array here from the local snapshot is an
    in-memory operation, not a network cost, so this still gets the
    full benefit of the per-record structure above. ── */
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   V269.1 — DATA PLAN STEP 2a: the sales side loads only OPEN and RECENT records
+   ─────────────────────────────────────────────────────────────────────────────────────────────
+   For each collection below, BizCore listens to two small queries instead of the whole collection:
+     • recent: dated on or after the cut-off (today − N months, N = Administration → dataWindowMonths, default 12)
+     • open:   still in progress whatever its age (e.g. Sales Orders with isOpen == true)
+   Records linked to a loaded record are read too (by id), so every screen finds what it links to:
+   SO → quotation → RFQ, an old SO → its delivery notes / invoices / credit notes, invoice → its payment
+   record and credit notes, payment record → receipts, receipt → invoices.
+   Older records are read only when asked: BCWin.loadOlder / findNumber / loadWhere (date filters, search,
+   Dashboard "All", Reports, backup). They are kept for the session ("extra"); a later change that brings
+   them into a query simply replaces them.
+   The screens get the same full arrays as before (fbListen / listen…), so no screen code changes.
+   SAFETY: the copy BizCore compares against when saving (_lastSynced) is updated in the same step as the
+   arrays the screens receive, and a record is dropped only when it no longer exists on the server —
+   so a record leaving a query is never mistaken for a delete.
+═══════════════════════════════════════════════════════════════════════════════════════════════ */
+const BC_WIN_SPECS = {
+  rfqs:             { date: 'date',      open: [['status', 'in', ['New', 'Pricing']]],   no: 'rfqNo', skipPending: true },
+  quotations:       { date: 'date',      open: [['status', 'in', ['Draft', 'Sent']]],    no: 'qno',   skipPending: true },
+  salesOrders:      { date: 'date',      open: [['isOpen', '==', true]],                 no: 'soNo',  skipPending: true },
+  deliveryNotes:    { date: 'date',      open: [['customerConfirmed', '==', false]],     no: 'dnNo' },
+  customerInvoices: { date: 'date',      open: [],                                       no: 'invNo' },
+  creditNotes:      { date: 'date',      open: [],                                       no: 'cnNo' },
+  customerReceipts: { date: 'date',      open: [['unapplied', '>', 0.004]],              no: 'rctNo' },
+  invoicePayments:  { date: 'updatedAt', open: [],                                       no: null },
+};
+const _win = {};
+let _winCfg = null;
+function _winIsoDay(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function _winConfig() {
+  if (_winCfg) return _winCfg;
+  _winCfg = (async () => {
+    let months = 12;
+    try { const s = await getDoc(doc(db, 'settings', 'main')); const m = s.exists() ? Number((JSON.parse(s.data().data || '{}') || {}).dataWindowMonths) : NaN; if (m >= 1 && m <= 120) months = Math.round(m); } catch (e) {}
+    const t = new Date(); const c = new Date(t.getFullYear(), t.getMonth() - months, t.getDate());
+    return { months, cutoff: _winIsoDay(c) };
+  })();
+  return _winCfg;
+}
+function _winState(col) {
+  return _win[col] || (_win[col] = { col, spec: BC_WIN_SPECS[col], queries: new Map(), extra: new Map(), subs: new Set(), errSubs: new Set(),
+    started: false, ready: null, unsubs: [], olderFrom: null, tried: new Set(), children: new Set() });
+}
+function _winMerged(st) { const m = new Map(st.extra); for (const q of st.queries.values()) for (const [id, d] of q) m.set(id, d); return m; }
+function _winHas(st, id) { if (st.extra.has(id)) return true; for (const q of st.queries.values()) if (q.has(id)) return true; return false; }
+/** Delivers the merged records to the screens and refreshes the save-compare copy — in ONE synchronous step. */
+function _winNotify(st, quiet = true) {
+  const merged = _winMerged(st);
+  const cache = _lastSynced[st.col] || (_lastSynced[st.col] = {});
+  const records = [];
+  for (const [id, d] of merged) { records.push(d); cache[_safeDocId(id)] = JSON.stringify(d); }
+  st.lastCount = records.length;
+  // quiet: records read by BizCore itself (start-up, linked, older) — not "updated by another user" (app.js smartRender)
+  window.__bcWinQuiet = quiet;
+  try { st.subs.forEach(fn => { try { fn(records.slice()); } catch (e) { console.error('[BizCore window]', st.col, e); } }); }
+  finally { window.__bcWinQuiet = false; }
+  _winScheduleLinks();
+}
+function _winQueryFor(st, kind, cfg) {
+  const c = collection(db, st.col);
+  if (kind === 'recent') return query(c, where(st.spec.date, '>=', cfg.cutoff));
+  const [f, op, v] = st.spec.open[Number(kind.slice(4))];
+  return query(c, where(f, op, v));
+}
+async function _winStart(col) {
+  const st = _winState(col);
+  if (st.ready) return st.ready;
+  st.started = true;
+  st.ready = (async () => {
+    const cfg = await _winConfig();
+    await _migrateCollectionIfNeeded(col);
+    const kinds = ['recent', ...st.spec.open.map((_, i) => 'open' + i)];
+    await Promise.all(kinds.map(kind => new Promise(resolve => {
+      let first = true;
+      const unsub = onSnapshot(_winQueryFor(st, kind, cfg), snap => {
+        if (st.spec.skipPending && snap.metadata.hasPendingWrites) return;
+        const prev = st.queries.get(kind) || new Map(), next = new Map();
+        snap.forEach(d => next.set(d.id, d.data()));
+        st.queries.set(kind, next);
+        const gone = [...prev.keys()].filter(id => !next.has(id) && !_winHas(st, id));
+        if (gone.length) gone.forEach(id => st.extra.set(id, prev.get(id)));   // keep until we know it was really deleted
+        _winNotify(st, first || !st.live);
+        st.liveKinds = (st.liveKinds || 0) + (first ? 1 : 0); if (st.liveKinds >= kinds.length) st.live = true;
+        if (gone.length) _winCheckGone(st, gone);
+        if (first) { first = false; resolve(); }
+      }, err => {
+        console.warn('[BizCore window] listener error:', col, kind, err.message);
+        st.errSubs.forEach(fn => { try { fn(err); } catch (e) {} });
+        if (first) { first = false; resolve(); }
+      });
+      st.unsubs.push(unsub);
+    })));
+    return st;
+  })();
+  return st.ready;
+}
+/** A record that left every query: kept if it still exists (it only became old / closed), dropped if deleted. */
+async function _winCheckGone(st, ids) {
+  for (const id of ids) {
+    try {
+      const s = await getDoc(doc(db, st.col, _safeDocId(id)));
+      if (_winHas(st, id) && !st.extra.has(id)) continue;   // came back in a query meanwhile
+      if (s.exists()) st.extra.set(id, s.data());
+      else { st.extra.delete(id); const c = _lastSynced[st.col]; if (c) delete c[_safeDocId(id)]; }
+    } catch (e) { /* offline: keep it */ }
+  }
+  _winNotify(st);
+}
+function _winAddExtra(col, docs) {
+  const st = _winState(col); let added = 0;
+  for (const d of docs) { if (!d || d.id == null) continue; const id = String(d.id); let live = false; for (const q of st.queries.values()) if (q.has(id)) live = true; if (live) continue; st.extra.set(id, d); added++; }
+  return added;
+}
+/* ── linked records ── */
+function _winLinksOf(col, d, cutoff) {
+  const out = [], ref = (c, v) => { if (v != null && v !== '') out.push({ col: c, ref: String(v) }); }, kids = (c, f, v) => out.push({ col: c, field: f, value: String(v) });
+  if (col === 'salesOrders') {
+    ref('quotations', d.quotationId);
+    if (String(d.date || '') < cutoff) { kids('deliveryNotes', 'salesOrderId', d.id); kids('customerInvoices', 'salesOrderId', d.id); kids('creditNotes', 'salesOrderId', d.id); }
+  } else if (col === 'quotations') { ref('rfqs', d.rfqId); ref('quotations', d.revisionOf); ref('quotations', d.supersededBy); }
+  else if (col === 'rfqs') { ref('quotations', d.quotationId); (Array.isArray(d.quotationIds) ? d.quotationIds : []).forEach(v => ref('quotations', v)); }
+  else if (col === 'deliveryNotes') ref('salesOrders', d.salesOrderId);
+  else if (col === 'customerInvoices') { ref('salesOrders', d.salesOrderId); ref('invoicePayments', d.id); (d.creditNotes || []).forEach(c => ref('creditNotes', c && c.id)); }
+  else if (col === 'creditNotes') { ref('customerInvoices', d.invoiceId); ref('salesOrders', d.salesOrderId); }
+  else if (col === 'invoicePayments') { ref('customerInvoices', d.invoiceId); Object.keys(d.receipts || {}).forEach(v => ref('customerReceipts', v)); }
+  else if (col === 'customerReceipts') (Array.isArray(d.invoiceIds) ? d.invoiceIds : []).forEach(v => ref('customerInvoices', v));
+  return out;
+}
+let _winLinkTimer = null, _winBusy = 0, _winIdleWaiters = [];
+function _winScheduleLinks() { if (_winLinkTimer) return; _winLinkTimer = setTimeout(() => { _winLinkTimer = null; _winResolveLinks(); }, 30); }
+function _winIdleCheck() { if (!_winBusy && !_winLinkTimer) { const w = _winIdleWaiters; _winIdleWaiters = []; w.forEach(f => f()); } }
+async function _winResolveLinks() {
+  _winBusy++;
+  try {
+    const cfg = await _winConfig();
+    for (let round = 0; round < 6; round++) {
+      const needs = [];
+      for (const st of Object.values(_win)) {
+        if (!st.started) continue;
+        for (const d of _winMerged(st).values()) for (const n of _winLinksOf(st.col, d, cfg.cutoff)) {
+          const t = _win[n.col]; if (!t || !t.started) continue;
+          if (n.field) { const k = n.col + ':' + n.field + ':' + n.value; if (t.children.has(k)) continue; t.children.add(k); needs.push(n); continue; }
+          if (_winHas(t, n.ref)) continue;
+          if (t.spec.no) { let found = false; for (const x of _winMerged(t).values()) if (String(x[t.spec.no] || '') === n.ref) { found = true; break; } if (found) continue; }
+          if (t.tried.has(n.ref)) continue; t.tried.add(n.ref); needs.push(n);
+        }
+      }
+      if (!needs.length) break;
+      const touched = new Set();
+      await Promise.all(needs.map(async n => {
+        try {
+          let docs = [];
+          if (n.field) { const s = await getDocs(query(collection(db, n.col), where(n.field, '==', n.value))); s.forEach(x => docs.push(x.data())); }
+          else {
+            const s = await getDoc(doc(db, n.col, _safeDocId(n.ref)));
+            if (s.exists()) docs = [s.data()];
+            else if (_win[n.col].spec.no) { const q = await getDocs(query(collection(db, n.col), where(_win[n.col].spec.no, '==', n.ref))); q.forEach(x => docs.push(x.data())); }
+          }
+          if (_winAddExtra(n.col, docs)) touched.add(n.col);
+        } catch (e) { console.warn('[BizCore window] linked record not read:', n.col, n.ref || n.value, e.message); }
+      }));
+      touched.forEach(c => _winNotify(_win[c]));
+      if (_winLinkTimer) { clearTimeout(_winLinkTimer); _winLinkTimer = null; }
+    }
+  } finally { _winBusy--; _winIdleCheck(); }
+}
+/* ── public API ── */
+window.BCWin = {
+  specs: BC_WIN_SPECS,
+  async config() { return _winConfig(); },
+  isWindowed: col => !!BC_WIN_SPECS[col],
+  started: col => !!(_win[col] && _win[col].started),
+  /** { col: { live, extra, olderFrom } } — for Data Health and tests. */
+  stats() { const o = {}; for (const st of Object.values(_win)) { let live = 0; for (const q of st.queries.values()) live += q.size; o[st.col] = { live, extra: st.extra.size, olderFrom: st.olderFrom, total: st.lastCount || 0 }; } return o; },
+  /** Resolves when no linked records are still being read. */
+  idle() { return new Promise(r => { _winIdleWaiters.push(r); _winIdleCheck(); }); },
+  /** Has everything from `from` (YYYY-MM-DD; '' = all) up to the cut-off been read for this collection? */
+  hasOlder(col, from = '') { const st = _win[col]; return !st || !st.started || st.olderFrom === '' || (st.olderFrom != null && from && st.olderFrom <= from); },
+  /** Reads the records dated from `from` ('' = the beginning) up to the cut-off. → number of records read. */
+  async loadOlder(cols, from = '') {
+    const cfg = await _winConfig(); let n = 0;
+    await Promise.all([].concat(cols).map(async col => {
+      if (!BC_WIN_SPECS[col]) return;
+      const st = await _winStart(col);
+      if (window.BCWin.hasOlder(col, from)) return;
+      if (from && from >= cfg.cutoff) return;
+      const cons = [where(st.spec.date, '<', cfg.cutoff)]; if (from) cons.unshift(where(st.spec.date, '>=', from));
+      const s = await getDocs(query(collection(db, col), ...cons)); const docs = []; s.forEach(x => docs.push(x.data()));
+      n += docs.length; _winAddExtra(col, docs);
+      st.olderFrom = from && st.olderFrom != null && st.olderFrom !== '' && st.olderFrom < from ? st.olderFrom : from;
+      _winNotify(st);
+    }));
+    await window.BCWin.idle();
+    return n;
+  },
+  /** Records whose number starts with `text` (any age). → number found. */
+  async findNumber(col, text) {
+    const spec = BC_WIN_SPECS[col]; const t = String(text || '').trim(); if (!spec || !spec.no || t.length < 3) return 0;
+    const st = await _winStart(col);
+    const docs = []; for (const v of new Set([t, t.toUpperCase()])) { const s = await getDocs(query(collection(db, col), where(spec.no, '>=', v), where(spec.no, '<=', v + ''))); s.forEach(x => docs.push(x.data())); }
+    const n = _winAddExtra(col, docs); if (n) _winNotify(st);
+    await window.BCWin.idle();
+    return n;
+  },
+  /** Every record of `col` where field == value (e.g. a customer's documents, any age). */
+  async loadWhere(col, field, value) {
+    if (!BC_WIN_SPECS[col]) return 0;
+    const st = await _winStart(col);
+    const s = await getDocs(query(collection(db, col), where(field, '==', value))); const docs = []; s.forEach(x => docs.push(x.data()));
+    const n = _winAddExtra(col, docs); if (n) _winNotify(st);
+    await window.BCWin.idle();
+    return n;
+  },
+  /** Is there ANY record (loaded or not) with field <op> value? One small read. Used before deleting masters. */
+  async anyWhere(col, field, op, value) {
+    const s = await getDocs(query(collection(db, col), where(field, op, value), limit(1)));
+    return !s.empty;
+  },
+};
+function _winListen(col, onUpdate, onError) {
+  const st = _winState(col);
+  st.subs.add(onUpdate); if (onError) st.errSubs.add(onError);
+  _winStart(col).then(() => { if (st.subs.has(onUpdate)) { const r = [..._winMerged(st).values()]; try { onUpdate(r); } catch (e) { console.error(e); } } });
+  return () => { st.subs.delete(onUpdate); if (onError) st.errSubs.delete(onError); };
+}
+async function _winLoad(col) {
+  const st = await _winStart(col);
+  const records = [..._winMerged(st).values()];
+  const cache = _lastSynced[col] || (_lastSynced[col] = {});
+  records.forEach(d => { cache[_safeDocId(d.id)] = JSON.stringify(d); });
+  return records;
+}
+
 function fbListen(col, onUpdate) {
+  if (BC_WIN_SPECS[col]) return _winListen(col, onUpdate);   // V269.1: open + recent only
   const colRef = collection(db, col);
   return onSnapshot(colRef, snap => {
     if (snap.metadata.hasPendingWrites) return; // skip our own just-made writes
@@ -2936,6 +3202,7 @@ window.BizCoreDN = {
   onModeChange(fn) { _dnModeListeners.add(fn); return () => _dnModeListeners.delete(fn); },
   /** Real-time listener for ALL Delivery Notes (one collection listener, not one query per SO). */
   listenDeliveryNotes(onUpdate, onError) {
+    if (BC_WIN_SPECS[DNCore.COLLECTIONS.deliveryNotes]) return _winListen(DNCore.COLLECTIONS.deliveryNotes, onUpdate, onError);   // V269.1
     return onSnapshot(collection(db, DNCore.COLLECTIONS.deliveryNotes), snap => {
       const records = [];
       snap.forEach(d => records.push(d.data()));
@@ -2943,6 +3210,7 @@ window.BizCoreDN = {
     }, err => { console.error('[BizCore] Delivery Note listener error:', err.message); onError && onError(err); });
   },
   async loadDeliveryNotes() {
+    if (BC_WIN_SPECS[DNCore.COLLECTIONS.deliveryNotes]) return _winLoad(DNCore.COLLECTIONS.deliveryNotes);   // V269.1
     const snap = await getDocs(collection(db, DNCore.COLLECTIONS.deliveryNotes));
     return snap.docs.map(d => d.data());
   },
@@ -3005,10 +3273,12 @@ window.BizCoreInv = {
   onModeChange(fn) { _invModeListeners.add(fn); return () => _invModeListeners.delete(fn); },
   onSettingsChange(fn) { _billingListeners.add(fn); return () => _billingListeners.delete(fn); },
   listenInvoices(onUpdate, onError) {
+    if (BC_WIN_SPECS[InvCore.INVOICE_COLLECTIONS.invoices]) return _winListen(InvCore.INVOICE_COLLECTIONS.invoices, onUpdate, onError);   // V269.1
     return onSnapshot(collection(db, InvCore.INVOICE_COLLECTIONS.invoices), snap => { const out = []; snap.forEach(d => out.push(d.data())); onUpdate(out); },
       err => { console.error('[BizCore] Invoice listener error:', err.message); onError && onError(err); });
   },
   listenCreditNotes(onUpdate, onError) {
+    if (BC_WIN_SPECS[InvCore.INVOICE_COLLECTIONS.creditNotes]) return _winListen(InvCore.INVOICE_COLLECTIONS.creditNotes, onUpdate, onError);   // V269.1
     return onSnapshot(collection(db, InvCore.INVOICE_COLLECTIONS.creditNotes), snap => { const out = []; snap.forEach(d => out.push(d.data())); onUpdate(out); },
       err => { console.error('[BizCore] Credit note listener error:', err.message); onError && onError(err); });
   },
@@ -3259,10 +3529,12 @@ window.BizCoreRct = {
     }, err => console.warn('[BizCore] Receipt settings unavailable (defaults used):', err.message));
   },
   listenReceipts(onUpdate, onError) {
+    if (BC_WIN_SPECS[RctCore.RECEIPT_COLLECTIONS.receipts]) return _winListen(RctCore.RECEIPT_COLLECTIONS.receipts, onUpdate, onError);   // V269.1
     return onSnapshot(collection(db, RctCore.RECEIPT_COLLECTIONS.receipts), snap => { const out = []; snap.forEach(d => out.push(d.data())); onUpdate(out); },
       err => { console.error('[BizCore] Receipt listener error:', err.message); onError && onError(err); });
   },
   listenPayments(onUpdate, onError) {
+    if (BC_WIN_SPECS[RctCore.RECEIPT_COLLECTIONS.invoicePayments]) return _winListen(RctCore.RECEIPT_COLLECTIONS.invoicePayments, onUpdate, onError);   // V269.1
     return onSnapshot(collection(db, RctCore.RECEIPT_COLLECTIONS.invoicePayments), snap => { const out = []; snap.forEach(d => out.push(d.data())); onUpdate(out); },
       err => { console.error('[BizCore] Invoice payments listener error:', err.message); onError && onError(err); });
   },
@@ -3285,7 +3557,7 @@ window.BizCoreRct = {
   },
 };
 /* Expose to app.js */
-window.FB = { fbSave, fbLoad, fbSaveRecordWith, fbSyncedJSON, fbReadDoc, fbReadAll, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
+window.FB = { fbSave, fbLoad, fbSaveRecordWith, fbMergeFields, fbSyncedJSON, fbReadDoc, fbReadAll, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
   getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, finalizeProvisionalNumber, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
 
   /* ═══════════════════════════════════════════════════
@@ -3411,11 +3683,11 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=269';
+      s.src = 'js/app.js?v=269.1';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
-        const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=268.5'; document.body.appendChild(ds); };
+        const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.1'; document.body.appendChild(ds); };
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js
