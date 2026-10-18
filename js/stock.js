@@ -308,8 +308,7 @@ function openChangeItem(key){
     </div>
     <div class="modal-footer"><button class="btn btn-secondary" type="button" onclick="closeModal('st-chg-modal')">Cancel</button><button class="btn btn-primary" type="button" id="stg-save" onclick="stSaveChange()" disabled><i class="ti ti-switch-horizontal"></i>Change Item</button></div></div>`;
   bcPickEnhance('stg-prod', { placeholder: 'Search product…', empty: prods.length ? 'No product matches.' : 'No other product has the unit ' + (item.uom || '—') + '. Add it in Master Data → Products first.',
-    items: () => prods.map(p => ({ key: p.id, title: p.name, sub: [p.code, p.uom].filter(Boolean).join(' · '), text: [p.name, p.code, p.brand, p.model, p.category].join(' '), cells: [p.name, p.code || '', p.uom || '', p.brand || '', p.category || ''] })),
-    lookup: { title: 'Choose Product', sub: 'Products with the unit ' + (item.uom || '—') + ' · A → Z', noun: 'products', width: 860, columns: [{ label: 'Product' }, { label: 'Code' }, { label: 'Unit' }, { label: 'Brand' }, { label: 'Category' }] } });
+    items: () => prods.map(p => ({ key: p.id, title: p.name, sub: [p.code, p.uom].filter(Boolean).join(' · '), text: [p.name, p.code, p.brand, p.model, p.category].join(' '), cells: [p.name, p.code || '', p.uom || '', p.brand || '', p.category || ''] })), });
   if (typeof openModalWithSize === 'function') openModalWithSize('st-chg-modal'); else m.classList.add('open');
   stChgRecalc();
   setTimeout(() => bcPickFocus('stg-prod'), 60);

@@ -199,7 +199,7 @@ function openNewPurchaseInvoice(){
   piStartAccounts();
   const sups = (typeof suppliers !== 'undefined' ? suppliers : []).slice().sort((a, b) => String(a.company || '').localeCompare(String(b.company || '')));
   document.getElementById('pe-supplier').innerHTML = '<option value="">Choose the supplier…</option>' + sups.map(s => `<option value="${piEsc(s.id)}">${piEsc(s.company || s.name || s.id)}</option>`).join('');
-  bcPickEnhance('pe-supplier', { items: bcSupplierPickItems, lookup: BC_SUPPLIER_LOOKUP, placeholder: 'Search supplier…', empty: 'No supplier matches. Check the spelling, or add the supplier in Master Data.' });   // V268.5
+  bcPickEnhance('pe-supplier', { items: bcSupplierPickItems, placeholder: 'Search supplier…', empty: 'No supplier matches. Check the spelling, or add the supplier in Master Data.' });   // V268.5
   ['pe-invno', 'pe-zoho', 'pe-suptotal', 'pe-pay-disc'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('pe-date').value = today;
   document.getElementById('pe-due').value = piAddDays(today, 30);
@@ -1208,12 +1208,9 @@ function bcPickOpen(selId){
 }
 /* V268.51: the list floats over the window, fits the space left on screen (below, or above when there is more room) */
 function bcPickPlace(selId){
-  const c = BC_PK[selId], list = document.getElementById(selId + '-list'), box = document.getElementById(selId + '-pk'); if (!list || !box || list.hidden) return;
-  const r = (document.getElementById(selId + '-search').hidden ? document.getElementById(selId + '-chosen') : document.getElementById(selId + '-search')).getBoundingClientRect();
-  const vw = window.innerWidth, vh = window.innerHeight, w = Math.min(vw - 16, Math.max(r.width, (c && c.listWidth) || 340));
-  const below = vh - r.bottom - 10, above = r.top - 10, up = below < 220 && above > below;
-  Object.assign(list.style, { position: 'fixed', left: Math.max(8, Math.min(r.left, vw - w - 8)) + 'px', right: 'auto', width: w + 'px', zIndex: '100000',
-    top: up ? 'auto' : (r.bottom + 4) + 'px', bottom: up ? (vh - r.top + 4) + 'px' : 'auto', maxHeight: Math.max(140, Math.min(380, (up ? above : below) - 4)) + 'px', margin: '0' });
+  const list = document.getElementById(selId + '-list'), box = document.getElementById(selId + '-pk'); if (!list || !box || list.hidden) return;
+  const anchor = document.getElementById(selId + '-search').hidden ? document.getElementById(selId + '-chosen') : document.getElementById(selId + '-search');
+  if (typeof bcFitList === 'function') bcFitList(list, anchor, BC_PK[selId] && BC_PK[selId].compact ? 300 : 0);
 }
 window.addEventListener('resize', () => Object.keys(BC_PK).forEach(id => bcPickClose(id, true)));
 document.addEventListener('scroll', e => { if (e.target && e.target.closest && e.target.closest('.rct-pick-list')) return; Object.keys(BC_PK).forEach(id => { const l = document.getElementById(id + '-list'); if (l && !l.hidden) bcPickClose(id, true); }); }, true);
@@ -1329,6 +1326,7 @@ function bcSupplierPickItems(){
       return { key: s.id, title: name, sub, text: [name, s.code || '', s.contact || '', s.city || '', s.vat || '', s.phone || ''].join(' '),
         cells: [name, s.contact || s.contactPerson || '', s.phone || s.mobile || '', s.city || '', s.vat || ''] }; });
 }
+/* V268.6 lookup window (mockup V6_2) — kept for later, not used now (V6_1 chosen) */
 const BC_SUPPLIER_LOOKUP = { title: 'Choose Supplier', noun: 'suppliers', width: 860, columns: [{ label: 'Supplier' }, { label: 'Contact' }, { label: 'Phone' }, { label: 'City' }, { label: 'VAT no.' }] };
 
 /* ═══════════════════════════════ V268.5 PRODUCT ON STOCK LINES + NEW PRODUCT (approved mockup V5_2) ═══════════════════════════════ */

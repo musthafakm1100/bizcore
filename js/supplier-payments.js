@@ -197,15 +197,13 @@ function openPayAdvance(){
     <div class="modal-footer"><button class="btn btn-secondary" type="button" onclick="closeModal('sp-adv-modal')">Cancel</button><button class="btn btn-primary" type="button" id="spa-save" onclick="spSaveAdvance()" disabled><i class="ti ti-device-floppy"></i>Save advance</button></div></div>`;
   spAdvRender();
   // V268.5: type-and-search pickers (approved mockup V5_1)
-  bcPickEnhance('spa-sup', { items: bcSupplierPickItems, lookup: BC_SUPPLIER_LOOKUP, placeholder: 'Search supplier…', empty: 'No supplier matches. Check the spelling, or add the supplier in Master Data.' });
+  bcPickEnhance('spa-sup', { items: bcSupplierPickItems, placeholder: 'Search supplier…', empty: 'No supplier matches. Check the spelling, or add the supplier in Master Data.' });
   bcPickEnhance('spa-so', { items: () => sos.map(so => { const its = (so.items || []).filter(it => it && (it.desc || it.description)); const d = so.date ? (typeof fmtDate === 'function' ? fmtDate(so.date) : so.date) : '';
-      return { key: so.id, title: `${so.soNo || ''} · ${so.customer || ''}`, right: d, sub: `${its.length} line${its.length === 1 ? '' : 's'}${its.length ? ' · ' + its.slice(0, 2).map(it => it.desc || it.description).join(', ') + (its.length > 2 ? ' …' : '') : ''}`,
+      return { key: so.id, title: so.soNo || '', right: d, sub: `${so.customer || ''}${its.length ? ' · ' + (its.length > 1 ? its.length + ' lines · ' : '') + its.slice(0, 2).map(it => it.desc || it.description).join(', ') + (its.length > 2 ? ' …' : '') : ''}`,
         text: [so.soNo, so.customer, so.ref || '', ...its.map(it => it.desc || it.description)].join(' '), short: so.soNo || '',
         cells: [so.soNo || '', d, so.customer || '', `${its.length} line${its.length === 1 ? '' : 's'}${its.length ? ' · ' + its.slice(0, 2).map(it => it.desc || it.description).join(', ') + (its.length > 2 ? ' …' : '') : ''}`, piF(Number(so.total) || 0)] }; }),
-    lookup: { title: 'Choose Sales Order', noun: 'open orders', width: 900, sub: () => { const s = document.getElementById('spa-sup'); const n = s && s.value ? (s.selectedOptions[0] || {}).textContent : ''; return (n ? 'For the advance to ' + n + ' · ' : '') + 'open orders, newest first'; },
-      columns: [{ label: 'SO no.', cls: 'bc-lk-no' }, { label: 'Date' }, { label: 'Customer' }, { label: 'Items', cls: 'bc-lk-mut' }, { label: 'Value (SAR)', cls: 'num' }] },
-    placeholder: 'Search by SO no., customer or item…', clearLabel: 'No sales order', listWidth: 420, empty: 'No open sales order matches.',
-    hint: '↑ ↓ to move · Enter to choose · cancelled orders hidden' });
+    placeholder: 'Search by SO no., customer or item…', clearLabel: 'No sales order', empty: 'No open sales order matches.',
+    hint: '↑ ↓ to move · Enter to choose' });
   if (typeof openModalWithSize === 'function') openModalWithSize('sp-adv-modal'); else m.classList.add('open');
   setTimeout(() => bcPickFocus('spa-sup'), 60);
 }

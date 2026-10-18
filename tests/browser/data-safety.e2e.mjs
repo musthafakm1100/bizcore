@@ -146,8 +146,8 @@ test('V268.5 settings move to Firebase, Data Health, approvals, no PIN, New Unit
     await boss.evaluate(() => { document.querySelectorAll('.modal-overlay.open').forEach(m => m.id && closeModal(m.id)); showPage('stock'); }); await sleep(300);
     await boss.evaluate(() => openStockItem('p_p-typo')); await boss.waitForSelector('#st-view-modal.open'); await sleep(400);
     await boss.click('#st-view-modal .modal-footer button:has-text("Change Item")'); await boss.waitForSelector('#st-chg-modal.open');
-    await boss.fill('#stg-prod-q', 'pelican'); await boss.waitForSelector('#bc-lookup-modal.open'); await sleep(80);
-    const opts = await boss.textContent('#bclk-body');
+    await boss.fill('#stg-prod-q', 'pelican'); await sleep(80);
+    const opts = await boss.textContent('#stg-prod-list');
     assert.match(opts, /Pelican 7600 flashlight/); assert.doesNotMatch(opts, /Roco/); assert.doesNotMatch(opts, /flash light/);   // same unit only, not itself
     await boss.keyboard.press('Enter'); await sleep(150); await boss.fill('#stg-qty', '3'); await boss.fill('#stg-why', 'Typed wrong on the purchase invoice'); await sleep(100);
     assert.match(await boss.textContent('#stg-result'), /Pelican 7600 flash light 3 → 0 · Pelican 7600 flashlight 0 → 3 \(1,860\.00 at 620\.00\)/);
@@ -183,7 +183,7 @@ test('V268.5 + New Product on a stock line: only products, a look-alike warning,
     const docs = prefix => Object.entries(h.fs.dump(prefix)).filter(([k]) => k.split('/').length === 2).map(([, d]) => d);
     await aisha.evaluate(() => { showPage('purchaseinvoices'); openNewPurchaseInvoice(); }); await aisha.waitForSelector('#pi-new-modal.open');
     // supplier: type-and-search
-    await aisha.fill('#pe-supplier-q', 'abc'); await aisha.waitForSelector('#bc-lookup-modal.open'); await aisha.keyboard.press('Enter'); await sleep(120);
+    await aisha.fill('#pe-supplier-q', 'abc'); await sleep(80); await aisha.keyboard.press('Enter'); await sleep(120);
     assert.equal(await aisha.inputValue('#pe-supplier'), 'sup1');
     await aisha.evaluate(() => piAddStockLine()); await sleep(100);
     // typed text that matches nothing → error, can't save

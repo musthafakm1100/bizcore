@@ -14383,9 +14383,12 @@ function bcFitList(list, anchor, minWidth){
   if(!list||!anchor) return;
   const r=anchor.getBoundingClientRect(), vw=window.innerWidth, vh=window.innerHeight;
   if(!r.width&&!r.height) return;
-  const w=Math.min(vw-16,Math.max(r.width,minWidth||0)), below=vh-r.bottom-10, above=r.top-10, up=below<200&&above>below;
+  // V268.61 (mockup V6_1): as wide as the field and kept inside the open window (above the footer), upwards when there is more room above
+  const win=anchor.closest('.modal'), body=win&&(win.querySelector('.modal-body')||win), b=body?body.getBoundingClientRect():null;
+  const lo=b?Math.min(vh,b.bottom):vh, hi=b?Math.max(0,b.top):0;
+  const w=Math.min(vw-16,Math.max(r.width,minWidth||0)), below=lo-r.bottom-8, above=r.top-hi-8, up=below<160&&above>below;
   Object.assign(list.style,{position:'fixed',left:Math.max(8,Math.min(r.left,vw-w-8))+'px',right:'auto',width:w+'px',zIndex:'100000',margin:'0',
-    top:up?'auto':(r.bottom+2)+'px',bottom:up?(vh-r.top+2)+'px':'auto',maxHeight:Math.max(130,Math.min(380,(up?above:below)-4))+'px',overflowY:'auto'});
+    top:up?'auto':(r.bottom+3)+'px',bottom:up?(vh-r.top+3)+'px':'auto',maxHeight:Math.max(120,Math.min(380,(up?above:below)))+'px',overflowY:'auto'});
 }
 function bcUnfitList(list){ if(!list) return; ['position','left','right','width','zIndex','margin','top','bottom','maxHeight','overflowY'].forEach(k=>list.style[k]=''); }
 function bcListAnchor(list){
@@ -14395,7 +14398,7 @@ function bcListAnchor(list){
 }
 function bcListOpen(list){ return list.classList.contains('cust-dropdown')?list.classList.contains('open'):!list.hidden; }
 function bcRefitLists(){
-  document.querySelectorAll('.cust-dropdown.open, #rn-cust-list:not([hidden])').forEach(l=>bcFitList(l,bcListAnchor(l),l.id==='rn-cust-list'?340:260));
+  document.querySelectorAll('.cust-dropdown.open, #rn-cust-list:not([hidden])').forEach(l=>bcFitList(l,bcListAnchor(l)));
   const pd=document.getElementById('prod-search-dd'); if(pd&&pd.style.display==='block'&&pd._anchor) bcFitList(pd,pd._anchor,360);
 }
 (function(){
@@ -14403,7 +14406,7 @@ function bcRefitLists(){
   window.__bcListObserver=new MutationObserver(muts=>{
     muts.forEach(m=>{ const t=m.target; if(!(t instanceof HTMLElement)) return;
       if(!(t.classList.contains('cust-dropdown')||t.id==='rn-cust-list')) return;
-      if(bcListOpen(t)) bcFitList(t,bcListAnchor(t),t.id==='rn-cust-list'?340:260); else bcUnfitList(t); });
+      if(bcListOpen(t)) bcFitList(t,bcListAnchor(t)); else bcUnfitList(t); });
   });
   window.__bcListObserver.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','hidden']});
   window.addEventListener('resize',bcRefitLists);

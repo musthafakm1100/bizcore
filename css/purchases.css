@@ -414,7 +414,7 @@ tr.pi-adv-line .pi-pay-acc{background:#faf8ff}
 .bc-picker .rct-pick-chosen .rct-pick-change{margin-left:auto}
 .bc-picker .rct-pick-lock{margin-left:auto;color:#94a3b8;padding:0 8px}
 .bc-pick-hint{position:sticky;bottom:0;padding:7px 13px;font-size:11px;color:#8a99aa;background:#f8fafc;border-top:1px solid #eef2f6}
-.bc-pick-right{font-weight:500!important;font-size:12px!important;color:#64748b!important}
+.bc-pick-right{font-weight:500!important;font-size:12px!important;color:#64748b!important;align-self:flex-start;margin-top:2px}
 .bc-pick-compact{min-width:200px;width:220px}
 .bc-pick-compact .rct-pick-search,.bc-pick-compact .rct-pick-chosen{height:34px;min-height:34px;border:1px solid #d5dde7;border-radius:8px;padding:0 4px 0 10px;box-sizing:border-box}
 .bc-pick-compact .rct-pick-search i{font-size:14px}
