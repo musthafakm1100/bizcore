@@ -2263,8 +2263,9 @@ import * as RctCore from './js/receipt-core.mjs?v=266.4';
 import { createReceiptService } from './js/receipt-service.mjs?v=266.4';
 import * as AccCore from './js/account-core.mjs?v=268.2';
 import { createAccountService } from './js/account-service.mjs?v=268.2';
-import * as LedgerCore from './js/ledger-core.mjs?v=267.2';
-import { createLedgerService } from './js/ledger-service.mjs?v=267.2';
+import * as LedgerCore from './js/ledger-core.mjs?v=269.3';
+import { createLedgerService } from './js/ledger-service.mjs?v=269.3';
+import { wrapTransaction, rebuildBalance, BALANCE_COLLECTION, LAST_PRICE_COLLECTION } from './js/running-totals.mjs?v=269.3';
 import * as PurchaseCore from './js/purchase-core.mjs?v=268.5';
 import { createPurchaseService } from './js/purchase-service.mjs?v=268.5';
 import { initializeApp }
@@ -2274,7 +2275,7 @@ import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWi
 import { getFirestore, doc, getDoc, getDocFromServer, setDoc, onSnapshot, deleteDoc,
          collection, getDocs, query, where, limit, writeBatch,
          initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-         runTransaction, serverTimestamp, connectFirestoreEmulator }
+         runTransaction, serverTimestamp, increment, connectFirestoreEmulator }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { getStorage, ref as storageRef, uploadString, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
@@ -2765,7 +2766,15 @@ const BC_WIN_SPECS = {
   creditNotes:      { date: 'date',      open: [],                                       no: 'cnNo' },
   customerReceipts: { date: 'date',      open: [['unapplied', '>', 0.004]],              no: 'rctNo' },
   invoicePayments:  { date: 'updatedAt', open: [],                                       no: null },
+  // V269.3 (data plan 2b): purchasing, stock history and the cash ledger
+  purchaseInvoices: { date: 'date',      open: [['payStatus', 'in', ['Unpaid', 'Part paid']]], no: 'piNo' },
+  supplierPayments: { date: 'date',      open: [['advanceLeft', '>', 0.004]],            no: 'spNo' },
+  cashLines:        { date: 'date',      open: [['status', 'in', ['pending', 'queried']]], no: 'voucherNo' },
+  salesOrderPurchasing: { date: 'updatedAt', open: [],                                   no: null, idField: 'salesOrderId' },
+  stockAllocations: { date: 'date',      open: [],                                       no: null },
+  stockChanges:     { date: 'date',      open: [],                                       no: null },
 };
+const _winIdOf = (col, d) => { if (!d) return null; const f = BC_WIN_SPECS[col] && BC_WIN_SPECS[col].idField; const v = d.id != null ? d.id : (f ? d[f] : null); return v == null ? null : String(v); };
 const _win = {};
 let _winCfg = null;
 function _winIsoDay(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -2775,7 +2784,9 @@ function _winConfig() {
     let months = 12;
     try { const s = await getDoc(doc(db, 'settings', 'main')); const m = s.exists() ? Number((JSON.parse(s.data().data || '{}') || {}).dataWindowMonths) : NaN; if (m >= 1 && m <= 120) months = Math.round(m); } catch (e) {}
     const t = new Date(); const c = new Date(t.getFullYear(), t.getMonth() - months, t.getDate());
-    return { months, cutoff: _winIsoDay(c) };
+    const cfg = { months, cutoff: _winIsoDay(c) };
+    if (window.BCWin) window.BCWin.cutoff = cfg.cutoff;   // V269.3: for screens that need it at once (Cash & Bank)
+    return cfg;
   })();
   return _winCfg;
 }
@@ -2790,7 +2801,7 @@ function _winNotify(st, quiet = true) {
   const merged = _winMerged(st);
   const cache = _lastSynced[st.col] || (_lastSynced[st.col] = {});
   const records = [];
-  for (const [id, d] of merged) { records.push(d); cache[_safeDocId(id)] = JSON.stringify(d); }
+  for (const [id, d] of merged) { records.push(d); cache[_safeDocId(id)] = JSON.stringify(d); }   // (id = the document id)
   st.lastCount = records.length;
   // quiet: records read by BizCore itself (start-up, linked, older) — not "updated by another user" (app.js smartRender)
   window.__bcWinQuiet = quiet;
@@ -2850,7 +2861,7 @@ async function _winCheckGone(st, ids) {
 }
 function _winAddExtra(col, docs) {
   const st = _winState(col); let added = 0;
-  for (const d of docs) { if (!d || d.id == null) continue; const id = String(d.id); let live = false; for (const q of st.queries.values()) if (q.has(id)) live = true; if (live) continue; st.extra.set(id, d); added++; }
+  for (const d of docs) { const id = _winIdOf(col, d); if (id == null) continue; let live = false; for (const q of st.queries.values()) if (q.has(id)) live = true; if (live) continue; st.extra.set(id, d); added++; }
   return added;
 }
 /* ── linked records ── */
@@ -2858,6 +2869,7 @@ function _winLinksOf(col, d, cutoff) {
   const out = [], ref = (c, v) => { if (v != null && v !== '') out.push({ col: c, ref: String(v) }); }, kids = (c, f, v) => out.push({ col: c, field: f, value: String(v) });
   if (col === 'salesOrders') {
     ref('quotations', d.quotationId);
+    ref('salesOrderPurchasing', d.id);   // V269.3: what was bought for the order
     if (String(d.date || '') < cutoff) { kids('deliveryNotes', 'salesOrderId', d.id); kids('customerInvoices', 'salesOrderId', d.id); kids('creditNotes', 'salesOrderId', d.id); }
   } else if (col === 'quotations') { ref('rfqs', d.rfqId); ref('quotations', d.revisionOf); ref('quotations', d.supersededBy); }
   else if (col === 'rfqs') { ref('quotations', d.quotationId); (Array.isArray(d.quotationIds) ? d.quotationIds : []).forEach(v => ref('quotations', v)); }
@@ -2866,6 +2878,13 @@ function _winLinksOf(col, d, cutoff) {
   else if (col === 'creditNotes') { ref('customerInvoices', d.invoiceId); ref('salesOrders', d.salesOrderId); }
   else if (col === 'invoicePayments') { ref('customerInvoices', d.invoiceId); Object.keys(d.receipts || {}).forEach(v => ref('customerReceipts', v)); }
   else if (col === 'customerReceipts') (Array.isArray(d.invoiceIds) ? d.invoiceIds : []).forEach(v => ref('customerInvoices', v));
+  // V269.3
+  else if (col === 'purchaseInvoices') { if (String(d.date || '') < cutoff) kids('supplierPayments', 'invoiceId', d.id); }
+  else if (col === 'supplierPayments') {
+    ref('purchaseInvoices', d.invoiceId); (Array.isArray(d.advanceIds) ? d.advanceIds : []).forEach(v => ref('supplierPayments', v));
+    if (d.entryId) (d.lines || []).forEach(l => { if (l && l.accountId) ref('cashLines', d.entryId + '__' + l.accountId); if (l && l.viaAccountId) ref('cashLines', d.entryId + '__' + l.viaAccountId); });
+  }
+  else if (col === 'cashLines') { ref('purchaseInvoices', d.invoiceId); ref('supplierPayments', d.paymentId); }
   return out;
 }
 let _winLinkTimer = null, _winBusy = 0, _winIdleWaiters = [];
@@ -2916,6 +2935,8 @@ window.BCWin = {
   stats() { const o = {}; for (const st of Object.values(_win)) { let live = 0; for (const q of st.queries.values()) live += q.size; o[st.col] = { live, extra: st.extra.size, olderFrom: st.olderFrom, total: st.lastCount || 0 }; } return o; },
   /** Resolves when no linked records are still being read. */
   idle() { return new Promise(r => { _winIdleWaiters.push(r); _winIdleCheck(); }); },
+  /** V269.3: the date from which every record of the collection is loaded ('' = all of them). */
+  loadedFrom(col) { const st = _win[col]; if (!st || !st.started) return ''; if (st.olderFrom === '') return ''; return st.olderFrom || window.BCWin.cutoff || ''; },
   /** Has everything from `from` (YYYY-MM-DD; '' = all) up to the cut-off been read for this collection? */
   hasOlder(col, from = '') { const st = _win[col]; return !st || !st.started || st.olderFrom === '' || (st.olderFrom != null && from && st.olderFrom <= from); },
   /** Reads the records dated from `from` ('' = the beginning) up to the cut-off. → number of records read. */
@@ -2970,7 +2991,7 @@ async function _winLoad(col) {
   const st = await _winStart(col);
   const records = [..._winMerged(st).values()];
   const cache = _lastSynced[col] || (_lastSynced[col] = {});
-  records.forEach(d => { cache[_safeDocId(d.id)] = JSON.stringify(d); });
+  records.forEach(d => { const id = _winIdOf(col, d); if (id != null) cache[_safeDocId(id)] = JSON.stringify(d); });
   return records;
 }
 
@@ -3360,16 +3381,43 @@ window.BizCoreAcc = {
    Custodian logins (My Cash only) are created here by an administrator, with a second
    Firebase app instance so the administrator stays signed in.
 ═══════════════════════════════════════════════════ */
-const ledgerService = createLedgerService({ db, doc, getDoc, getDocs, setDoc, updateDoc: (r, d) => setDoc(r, d, { merge: true }), collection, query, where, writeBatch, runTransaction, serverTimestamp }, {
+// V269.3: cash lines and purchase invoices are saved through a transaction that also keeps the running balance per account
+// (cashBalances) and the last price per item (itemLastPrices) up to date, in the same commit — see js/running-totals.mjs.
+const runTransactionWithTotals = wrapTransaction({ db, doc, runTransaction, serverTimestamp, increment }, { uid: () => (auth.currentUser ? auth.currentUser.uid : '') });
+const ledgerService = createLedgerService({ db, doc, getDoc, getDocs, setDoc, updateDoc: (r, d) => setDoc(r, d, { merge: true }), collection, query, where, writeBatch, runTransaction: runTransactionWithTotals, serverTimestamp }, {
   actor: () => { const u = auth.currentUser, cu = window.currentUser || {}; return u ? { uid: u.uid, name: cu.name || u.displayName || u.email || u.uid, email: u.email || '' } : {}; },
 });
 let _cashLinesUnsub = null, _cashDirUnsub = null, _cashCustUnsub = null, _cashLines = [], _cashDirectory = [], _cashCustodians = [];
+let _cashBalUnsub = null, _cashBalances = new Map(), _cashBalLoaded = false, _cashRebuilding = false;   // V269.3
 const _cashListeners = new Set();
 const _cashFire = () => _cashListeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } });
 window.BizCoreCash = {
   core: LedgerCore,
   service: ledgerService,
   get lines() { return _cashLines; },
+  /** V269.3: running sums per account (cashBalances) — complete once rebuilt (rebuiltAt). */
+  get balances() { return _cashBalances; },
+  /** V269.3: the ledger of one account: from its running record + the loaded (recent and waiting) lines. */
+  ledgerOf(account, lines) {
+    const mine = (lines || _cashLines).filter(l => l.accountId === account.id);
+    const rec = _cashBalances.get(account.id), from = window.BCWin ? window.BCWin.loadedFrom('cashLines') : '';
+    return LedgerCore.buildLedger(account, mine, rec && rec.rebuiltAt && from ? { from, totals: rec } : {});
+  },
+  /** V269.3: rebuild the running records that are missing or not complete (staff; on start and from Data Health). */
+  async rebuildBalances({ all = false } = {}) {
+    if (_cashRebuilding || !auth.currentUser || !window.BizCoreAcc) return 0;
+    _cashRebuilding = true; let n = 0;
+    try {
+      for (const a of window.BizCoreAcc.accounts || []) {
+        const rec = _cashBalances.get(a.id);
+        if (!all && rec && rec.rebuiltAt) continue;
+        if (!all && !rec && !a.hasEntries) continue;
+        await rebuildBalance({ db, doc, getDocs, query, where, collection, runTransaction, serverTimestamp }, a.id, auth.currentUser.uid); n++;
+      }
+    } catch (e) { console.warn('[BizCore] Cash balances not rebuilt:', e.code || '', e.message); }
+    finally { _cashRebuilding = false; }
+    return n;
+  },
   get directory() { return _cashDirectory; },
   get custodians() { return _cashCustodians; },
   get uid() { return auth.currentUser ? auth.currentUser.uid : null; },
@@ -3377,9 +3425,13 @@ window.BizCoreCash = {
   onChange(fn) { _cashListeners.add(fn); return () => _cashListeners.delete(fn); },
   start() {
     if (window.BizCoreAcc) window.BizCoreAcc.start();
-    if (!_cashLinesUnsub) _cashLinesUnsub = onSnapshot(collection(db, LedgerCore.LEDGER_COLLECTIONS.lines), snap => {
-      const out = []; snap.forEach(d => out.push(d.data())); _cashLines = out; _cashFire();
-    }, err => console.warn('[BizCore] Cash ledger unavailable:', err.message));
+    // V269.3: waiting / queried lines and the recent ones (older on request); balances from the running records
+    if (!_cashLinesUnsub) _cashLinesUnsub = _winListen(LedgerCore.LEDGER_COLLECTIONS.lines, rows => { _cashLines = rows || []; _cashFire(); },
+      err => console.warn('[BizCore] Cash ledger unavailable:', err.message));
+    if (!_cashBalUnsub) _cashBalUnsub = onSnapshot(collection(db, BALANCE_COLLECTION), snap => {
+      const m = new Map(); snap.forEach(d => m.set(d.id, d.data())); _cashBalances = m; _cashFire();
+      if (!_cashBalLoaded) { _cashBalLoaded = true; setTimeout(() => window.BizCoreCash.rebuildBalances(), 1500); }
+    }, err => console.warn('[BizCore] Cash balances unavailable:', err.message));
   },
   startDirectory() {
     if (!_cashDirUnsub) _cashDirUnsub = onSnapshot(collection(db, LedgerCore.LEDGER_COLLECTIONS.directory), snap => {
@@ -3480,10 +3532,11 @@ window.BizCoreShared = {
    V268.1 PURCHASE INVOICES — purchaseInvoices, salesOrderPurchasing, stockItems, settings/purchasing
    (js/purchase-service.mjs). Staff record; administrators change the settings.
 ═══════════════════════════════════════════════════ */
-const purchaseService = createPurchaseService({ db, doc, runTransaction, serverTimestamp }, {
+const purchaseService = createPurchaseService({ db, doc, runTransaction: runTransactionWithTotals, serverTimestamp }, {   // V269.3
   actor: () => { const u = auth.currentUser, cu = window.currentUser || {}; return u ? { uid: u.uid, name: cu.name || u.displayName || u.email || u.uid } : {}; },
   formatNumber: (prefix, n) => prefix + String(n).padStart(4, '0'),
 });
+let _piLastPrices = new Map();   // V269.3 itemLastPrices
 let _piUnsubs = null, _piList = [], _piLedgers = new Map(), _piStock = new Map(), _piPays = [], _piAllocs = [], _piChanges = [], _piSettings = PurchaseCore.effectivePurchaseSettings(null);
 const _piListeners = new Set();
 const _piFire = () => _piListeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } });
@@ -3496,6 +3549,9 @@ window.BizCorePI = {
   get payments() { return _piPays; },   // V268.2 supplierPayments
   get allocations() { return _piAllocs; },   // V268.4 stockAllocations
   get changes() { return _piChanges; },   // V268.5 stockChanges (Change Item)
+  get lastPrices() { return _piLastPrices; },   // V269.3 itemLastPrices
+  /** V269.3: a purchase invoice that isn't loaded (older) — read it and keep it. */
+  async fetchInvoice(id) { if (!window.BCWin) return null; await window.BCWin.loadWhere(PurchaseCore.PURCHASE_COLLECTIONS.invoices, 'id', String(id)); return _piList.find(p => p.id === id) || null; },
   /** V268.4: the movements of one stock item (read when its screen opens). */
   async movesOf(itemKey) { const snap = await getDocs(query(collection(db, PurchaseCore.PURCHASE_COLLECTIONS.stockMoves), where('itemKey', '==', String(itemKey)))); const out = []; snap.forEach(d => out.push(d.data())); return out; },
   get settings() { return _piSettings; },
@@ -3505,13 +3561,15 @@ window.BizCorePI = {
     if (_piUnsubs || !auth.currentUser) return;
     const C = PurchaseCore.PURCHASE_COLLECTIONS, warn = what => err => console.warn('[BizCore] ' + what + ' unavailable:', err.message);
     _piUnsubs = [
-      onSnapshot(collection(db, C.invoices), snap => { const out = []; snap.forEach(d => out.push(d.data())); _piList = out; _piFire(); }, warn('Purchase invoices')),
-      onSnapshot(collection(db, C.soPurchasing), snap => { const m = new Map(); snap.forEach(d => m.set(d.id, d.data())); _piLedgers = m; _piFire(); }, warn('Purchased quantities')),
+      // V269.3 (data plan 2b): open + recent only (older on request); stock items and the settings stay complete
+      _winListen(C.invoices, rows => { _piList = rows || []; _piFire(); }, warn('Purchase invoices')),
+      _winListen(C.soPurchasing, rows => { const m = new Map(); (rows || []).forEach(d => m.set(String(d.salesOrderId), d)); _piLedgers = m; _piFire(); }, warn('Purchased quantities')),
       onSnapshot(collection(db, C.stockItems), snap => { const m = new Map(); snap.forEach(d => m.set(d.id, d.data())); _piStock = m; _piFire(); }, warn('Stock')),
       onSnapshot(doc(db, ...PurchaseCore.PURCHASE_SETTINGS_PATH), snap => { _piSettings = PurchaseCore.effectivePurchaseSettings(snap.exists() ? snap.data() : null); _piFire(); }, warn('Purchase settings')),
-      onSnapshot(collection(db, PurchaseCore.PAYMENT_COLLECTION), snap => { const out = []; snap.forEach(d => out.push(d.data())); _piPays = out; _piFire(); }, warn('Supplier payments')),
-      onSnapshot(collection(db, PurchaseCore.STOCK_ALLOC_COLLECTION), snap => { const out = []; snap.forEach(d => out.push(d.data())); _piAllocs = out; _piFire(); }, warn('Stock allocations')),
-      onSnapshot(collection(db, PurchaseCore.STOCK_CHANGE_COLLECTION), snap => { const out = []; snap.forEach(d => out.push(d.data())); _piChanges = out; _piFire(); }, warn('Stock item changes')),
+      _winListen(PurchaseCore.PAYMENT_COLLECTION, rows => { _piPays = rows || []; _piFire(); }, warn('Supplier payments')),
+      _winListen(PurchaseCore.STOCK_ALLOC_COLLECTION, rows => { _piAllocs = rows || []; _piFire(); }, warn('Stock allocations')),
+      _winListen(PurchaseCore.STOCK_CHANGE_COLLECTION, rows => { _piChanges = rows || []; _piFire(); }, warn('Stock item changes')),
+      onSnapshot(collection(db, LAST_PRICE_COLLECTION), snap => { const m = new Map(); snap.forEach(d => m.set(d.id, d.data())); _piLastPrices = m; _piFire(); }, warn('Last prices')),
     ];
     // V268.2: the payment accounts (payment lines) and the cash ledger (custodian confirmations)
     if (window.BizCoreAcc) { window.BizCoreAcc.start(); window.BizCoreAcc.onChange(_piFire); }
@@ -3704,17 +3762,17 @@ onAuthStateChanged(auth, user => {
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
-        const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.1'; document.body.appendChild(ds); };
+        const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.3'; document.body.appendChild(ds); };
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js
-    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=269'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
+    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=269.3'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
     // V268.3: supplier-payments.js (Supplier Payments, advances, edits) after purchases.js
     // V268.4: stock.js (Purchasing → Stock) after supplier-payments.js
     const loadStock = () => { const st = document.createElement('script'); st.id = 'bizcore-stock-script'; st.src = 'js/stock.js?v=268.61'; st.onload = start; st.onerror = () => { console.error('[BizCore] stock.js could not be loaded'); start(); }; document.body.appendChild(st); };
-    const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=268.7'; sp.onload = loadStock; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
+    const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=269.3'; sp.onload = loadStock; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
     // V267.2: cash-ui.js + cashbank.js (Cash & Bank) after accounts.js, before app.js
-    const loadCash = () => { const u = document.createElement('script'); u.id = 'bizcore-cashui-script'; u.src = 'js/cash-ui.js?v=268.31'; u.onload = u.onerror = () => { const c = document.createElement('script'); c.id = 'bizcore-cashbank-script'; c.src = 'js/cashbank.js?v=268.51'; c.onload = loadPurchases; c.onerror = () => { console.error('[BizCore] cashbank.js could not be loaded'); loadPurchases(); }; document.body.appendChild(c); }; document.body.appendChild(u); };
+    const loadCash = () => { const u = document.createElement('script'); u.id = 'bizcore-cashui-script'; u.src = 'js/cash-ui.js?v=269.3'; u.onload = u.onerror = () => { const c = document.createElement('script'); c.id = 'bizcore-cashbank-script'; c.src = 'js/cashbank.js?v=269.3'; c.onload = loadPurchases; c.onerror = () => { console.error('[BizCore] cashbank.js could not be loaded'); loadPurchases(); }; document.body.appendChild(c); }; document.body.appendChild(u); };
     // V266: receipts.js (Payment Receipts) after invoicing.js, before app.js
     inv.onload = () => { const r = document.createElement('script'); r.id = 'bizcore-receipts-script'; r.src = 'js/receipts.js?v=266.61'; r.onload = () => { const pa = document.createElement('script'); pa.id = 'bizcore-accounts-script'; pa.src = 'js/accounts.js?v=268.51'; pa.onload = loadCash; pa.onerror = () => { console.error('[BizCore] accounts.js could not be loaded'); loadCash(); }; document.body.appendChild(pa); }; r.onerror = () => { console.error('[BizCore] receipts.js could not be loaded'); start(); }; document.body.appendChild(r); };
     inv.onerror = () => { console.error('[BizCore] invoicing.js could not be loaded'); start(); };

@@ -63,7 +63,7 @@
   /** Desktop / tablet ledger table, newest first. opts: { mode:'custodian'|'staff', filter, canConfirm, custodianName, onRowAttrs } */
   function tableHtml(ledger, opts = {}) {
     const f = opts.filter || 'all';
-    const rows = ledger.rows.slice().reverse().filter(r => f === 'all' || (f === 'waiting' ? r.status === 'pending' && !r.void : f === 'queried' ? r.status === 'queried' && !r.void : true));
+    const rows = ledger.rows.slice().reverse().filter(r => f === 'all' ? !r.older : (f === 'waiting' ? r.status === 'pending' && !r.void : f === 'queried' ? r.status === 'queried' && !r.void : true));
     const stRight = opts.mode === 'custodian';
     const body = rows.map(r => {
       const d = describe(r);
@@ -80,7 +80,11 @@
         <td class="cl-stc${stRight ? ' r' : ''}">${statusHtml(r, opts)}</td></tr>`;
     }).join('');
     const showOpening = f === 'all';
-    const open = showOpening ? `<tr><td class="cl-date">${dShort(ledger.opening.date)}</td><td class="cl-v">OPEN</td><td class="cl-det">Opening balance<span class="cl-sub">${ledger.opening.setBy ? 'Set by ' + esc(ledger.opening.setBy) : 'Set by the office'}</span></td>
+    const bf = !!ledger.opening.broughtForward;   // V269.3: older lines not loaded
+    const open = showOpening && bf ? `<tr class="cl-bf"><td class="cl-date">${dShort(ledger.opening.date)}</td><td class="cl-v">B/F</td><td class="cl-det">Brought forward<span class="cl-sub">Balance before ${dFull(ledger.opening.date)}</span></td>
+      <td class="n cl-in"></td><td class="n cl-out"></td><td class="n cl-bal">${money(ledger.opening.amount)}</td>
+      <td class="cl-stc${stRight ? ' r' : ''}"><button type="button" class="cl-btn" data-act="older"><i class="ti ti-history"></i>Show older lines</button></td></tr>`
+    : showOpening ? `<tr><td class="cl-date">${dShort(ledger.opening.date)}</td><td class="cl-v">OPEN</td><td class="cl-det">Opening balance<span class="cl-sub">${ledger.opening.setBy ? 'Set by ' + esc(ledger.opening.setBy) : 'Set by the office'}</span></td>
       <td class="n cl-in">${ledger.opening.amount >= 0 ? money(ledger.opening.amount) : ''}</td><td class="n cl-out">${ledger.opening.amount < 0 ? money(-ledger.opening.amount) : ''}</td><td class="n cl-bal">${money(ledger.opening.amount)}</td>
       <td class="cl-stc${stRight ? ' r' : ''}"><span class="cl-st cl-c"><i class="ti ti-check"></i>Opening</span><span class="cl-sub">As of ${dFull(ledger.opening.date)}</span></td></tr>` : '';
     const empty = !rows.length && !showOpening ? `<tr><td colspan="7" class="cl-empty">Nothing here.</td></tr>` : '';
@@ -90,7 +94,7 @@
   /** Phone cards (≤760px), newest first. */
   function cardsHtml(ledger, opts = {}) {
     const f = opts.filter || 'all';
-    const rows = ledger.rows.slice().reverse().filter(r => f === 'all' || (f === 'waiting' ? r.status === 'pending' && !r.void : f === 'queried' ? r.status === 'queried' && !r.void : true));
+    const rows = ledger.rows.slice().reverse().filter(r => f === 'all' ? !r.older : (f === 'waiting' ? r.status === 'pending' && !r.void : f === 'queried' ? r.status === 'queried' && !r.void : true));
     const pill = r => r.void ? '<span class="cl-st cl-void">Cancelled</span>' : r.status === 'pending' ? '<span class="cl-st cl-w">⏳ Waiting</span>' : r.status === 'none' ? `<span class="cl-st cl-none">${isSupplier(r) ? (r.memoOut ? 'From the bank' : 'No confirmation') : 'Receiver confirms'}</span>` : r.status === 'confirmed' ? '<span class="cl-st cl-c">Confirmed</span>' : '<span class="cl-st cl-qq">⚠ Queried</span>';
     const out = rows.map(r => {
       const d = describe(r), mine = !r.void && opts.canConfirm && opts.canConfirm(r);
@@ -100,7 +104,8 @@
       return `<div class="cl-pc${r.void ? ' cl-voided' : ''}" data-line="${esc(r.id)}"><div class="cl-r1"><span class="cl-v">${esc(r.voucherNo)}</span>${pill(r)}</div>
         <div class="cl-pc-t">${esc(d.title)}</div><div class="cl-r1"><span class="cl-sub">${dShort(r.date)} · ${esc(d.sub)}</span>${amt}</div>${extra}${acts}</div>`;
     }).join('');
-    const open = f === 'all' ? `<div class="cl-pc"><div class="cl-r1"><span class="cl-v">OPEN</span><span class="cl-st cl-c">Opening</span></div><div class="cl-pc-t">Opening balance</div><div class="cl-r1"><span class="cl-sub">${dShort(ledger.opening.date)} · ${ledger.opening.setBy ? 'set by ' + esc(ledger.opening.setBy) : ''}</span><span class="cl-amt">${money(ledger.opening.amount)}</span></div></div>` : '';
+    const open = f === 'all' && ledger.opening.broughtForward ? `<div class="cl-pc cl-bf"><div class="cl-r1"><span class="cl-v">B/F</span><button type="button" class="cl-btn" data-act="older"><i class="ti ti-history"></i>Show older</button></div><div class="cl-pc-t">Brought forward</div><div class="cl-r1"><span class="cl-sub">Balance before ${dShort(ledger.opening.date)}</span><span class="cl-amt">${money(ledger.opening.amount)}</span></div></div>`
+      : f === 'all' ? `<div class="cl-pc"><div class="cl-r1"><span class="cl-v">OPEN</span><span class="cl-st cl-c">Opening</span></div><div class="cl-pc-t">Opening balance</div><div class="cl-r1"><span class="cl-sub">${dShort(ledger.opening.date)} · ${ledger.opening.setBy ? 'set by ' + esc(ledger.opening.setBy) : ''}</span><span class="cl-amt">${money(ledger.opening.amount)}</span></div></div>` : '';
     return `<div class="cl-cards">${out}${open}${!out && !open ? '<div class="cl-empty">Nothing here.</div>' : ''}</div>`;
   }
 
@@ -116,7 +121,7 @@
   /** Printable statement (staff). */
   function statementHtml(account, ledger, { from = '', to = '', company = 'Downtown Trading Est.', printedBy = '' } = {}) {
     let bal = ledger.opening.amount;
-    const rows = ledger.rows.filter(r => !r.void);
+    const rows = ledger.rows.filter(r => !r.void && !r.older);
     const before = rows.filter(r => from && r.date < from);
     before.forEach(r => { bal += (Number(r.amountIn) || 0) - (Number(r.amountOut) || 0); });
     const inRange = rows.filter(r => (!from || r.date >= from) && (!to || r.date <= to));

@@ -20,7 +20,13 @@ const cbWho = () => ({ uid: cbLib() && cbLib().uid, isAdmin: !!(cbLib() && cbLib
 const cbCanConfirm = r => !!(cbLib() && cbLib().core.confirmRight(r, cbWho()));
 const CB_ICON = { cash: 'ti-cash', card: 'ti-credit-card', bank: 'ti-building-bank' };
 
-function cbLedgerOf(a) { return cbLib().core.buildLedger(a, cbLib().lines.filter(l => l.accountId === a.id)); }
+// V269.3: from the account's running balance + the loaded (recent and waiting) lines; older lines on request
+function cbLedgerOf(a) { const lib = cbLib(); return lib.ledgerOf ? lib.ledgerOf(a) : lib.core.buildLedger(a, lib.lines.filter(l => l.accountId === a.id)); }
+async function cbLoadOlder(from) {
+  if (!window.BCWin) return;
+  try { await bcBusy('Reading older lines…', () => window.BCWin.loadOlder('cashLines', from || '')); }
+  catch (e) { cbToast('Older lines could not be read: ' + e.message, 'error'); }
+}
 
 function renderCashBank() {
   const lib = cbLib(), root = document.getElementById('cashbank-root');
@@ -80,6 +86,7 @@ document.addEventListener('click', async e => {
   else if (act === 'open-pi') { if (typeof openPurchaseInvoiceView === 'function') { if (window.BizCorePI) window.BizCorePI.start(); openPurchaseInvoiceView(b.dataset.pi); } }   // V268.2
   else if (act === 'open-sp') { if (typeof openSupplierPaymentView === 'function') { if (window.BizCorePI) window.BizCorePI.start(); openSupplierPaymentView(b.dataset.sp); } }   // V268.3 advance
   else if (act === 'statement') cbOpenStatement();
+  else if (act === 'older') { await cbLoadOlder(''); renderCashBank(); }   // V269.3
 });
 
 /* ── a small modal in the app's style ── */
@@ -175,10 +182,14 @@ function cbOpenStatement() {
     <div><label for="cb-st-to">To</label><input id="cb-st-to" type="date" value="${cbToday()}"></div>`,
     `<button class="btn btn-secondary" type="button" onclick="closeModal('cb-st')">Close</button><button class="btn btn-primary" type="button" onclick="cbPrintStatement()"><i class="ti ti-printer"></i>Print</button>`, 460);
 }
-function cbPrintStatement() {
+async function cbPrintStatement() {
   const a = cbAcc().find(x => x.id === cbAccountId); if (!a) return;
-  const html = cbUI().statementHtml(a, cbLedgerOf(a), { from: document.getElementById('cb-st-from').value, to: document.getElementById('cb-st-to').value, printedBy: (window.currentUser || {}).name || '' });
-  const w = window.open('', '_blank');
+  const from = document.getElementById('cb-st-from').value, to = document.getElementById('cb-st-to').value;
+  const w = window.open('', '_blank');   // opened first (pop-up blockers), filled when the lines are in
+  // V269.3: a period before the loaded lines → read the older lines first
+  const loaded = window.BCWin ? window.BCWin.loadedFrom('cashLines') : '';
+  if (loaded && (!from || from < loaded)) await cbLoadOlder(from && from > (a.openingDate || '') ? from : '');
+  const html = cbUI().statementHtml(a, cbLedgerOf(a), { from, to, printedBy: (window.currentUser || {}).name || '' });
   if (!w) { cbToast('Allow pop-ups to print the statement.', 'error'); return; }
   w.document.open(); w.document.write(html); w.document.close();
   closeModal('cb-st');

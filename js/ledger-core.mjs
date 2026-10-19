@@ -137,23 +137,44 @@ const ms = v => (v && typeof v === 'object' && typeof v.toMillis === 'function')
  * The ledger of one account: opening row + its postings oldest → newest with a running balance.
  * Void lines are listed (struck through) but don't count.
  */
-export function buildLedger(account, lines) {
+/**
+ * opts (V269.3): { from, totals } — only the lines dated from `from` are loaded (older ones aren't read when BizCore
+ * opens); `totals` is the account's running record (cashBalances: balance / confirmedBalance of ALL its lines).
+ * The ledger then starts with "brought forward" = opening + every line before `from`, worked out from the record.
+ * Waiting / queried counts always use every loaded line (all waiting and queried lines are loaded, whatever their age).
+ */
+export function buildLedger(account, lines, opts = {}) {
   const opening = r2(account?.openingBalance || 0);
   const mine = (lines || []).filter(l => l.accountId === account?.id)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)) || ms(a.recordedAt) - ms(b.recordedAt) || String(a.id).localeCompare(String(b.id)));
+  const eff = l => { if (l.void) return { net: 0, conf: 0 }; const net = r2((Number(l.amountIn) || 0) - (Number(l.amountOut) || 0)); return { net, conf: l.status === LINE_STATUS.CONFIRMED || l.status === LINE_STATUS.NONE ? net : 0 }; };
+  const from = opts.from || '', tot = opts.totals;
+  const partial = !!(from && tot && Number.isFinite(Number(tot.balance)));
+  const shown = partial ? mine.filter(l => String(l.date || '') >= from) : mine;
   let bal = opening, confirmed = opening;
+  if (partial) {
+    const s = shown.reduce((a, l) => { const e = eff(l); return { net: a.net + e.net, conf: a.conf + e.conf }; }, { net: 0, conf: 0 });
+    bal = r2(opening + Number(tot.balance) - s.net);
+    confirmed = r2(opening + (Number(tot.confirmedBalance) || 0) - s.conf);
+  }
+  const start = bal;
   const t = { waiting: 0, waitingIn: 0, waitingOut: 0, queried: 0, queriedAmount: 0 };
-  const rows = mine.map(l => {
-    if (l.void) return { ...l, balance: null };
-    const net = r2((Number(l.amountIn) || 0) - (Number(l.amountOut) || 0));
-    bal = r2(bal + net);
-    if (l.status === LINE_STATUS.CONFIRMED || l.status === LINE_STATUS.NONE) confirmed = r2(confirmed + net);
+  mine.forEach(l => {
+    if (l.void) return;
     if (l.status === LINE_STATUS.PENDING) { t.waiting++; t.waitingIn = r2(t.waitingIn + (Number(l.amountIn) || 0)); t.waitingOut = r2(t.waitingOut + (Number(l.amountOut) || 0)); }
-    if (l.status === LINE_STATUS.QUERIED) { t.queried++; t.queriedAmount = r2(t.queriedAmount + Math.abs(net)); }
-    return { ...l, balance: bal };
+    if (l.status === LINE_STATUS.QUERIED) { t.queried++; t.queriedAmount = r2(t.queriedAmount + Math.abs(eff(l).net)); }
   });
+  // V269.3: in a partial ledger, waiting / queried lines older than `from` come first without a running balance
+  // (older: true) — the Waiting / Queried filters show them; "All" starts at the brought-forward balance
+  const olderOpen = partial ? mine.filter(l => String(l.date || '') < from && !l.void && (l.status === LINE_STATUS.PENDING || l.status === LINE_STATUS.QUERIED)).map(l => ({ ...l, balance: null, older: true })) : [];
+  const rows = olderOpen.concat(shown.map(l => {
+    if (l.void) return { ...l, balance: null };
+    const e = eff(l);
+    bal = r2(bal + e.net); confirmed = r2(confirmed + e.conf);
+    return { ...l, balance: bal };
+  }));
   return {
-    opening: { date: account?.openingDate || '', amount: opening, setBy: account?.createdByName || '' },
+    opening: partial ? { date: from, amount: start, setBy: '', broughtForward: true } : { date: account?.openingDate || '', amount: opening, setBy: account?.createdByName || '' },
     rows, balance: bal, confirmedBalance: confirmed, ...t,
   };
 }

@@ -40,14 +40,15 @@
 </div>
 <div id="mc-modal-host"></div>
 
-<script src="js/cash-ui.js?v=268.32"></script>
+<script src="js/cash-ui.js?v=269.3"></script>
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, onAuthStateChanged, signOut, updatePassword, connectAuthEmulator } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, initializeFirestore, persistentLocalCache, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, where, runTransaction, serverTimestamp, connectFirestoreEmulator }
+import { getFirestore, initializeFirestore, persistentLocalCache, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, where, runTransaction, serverTimestamp, increment, connectFirestoreEmulator }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import * as LC from './js/ledger-core.mjs?v=267.2';
-import { createLedgerService } from './js/ledger-service.mjs?v=267.2';
+import * as LC from './js/ledger-core.mjs?v=269.3';
+import { createLedgerService } from './js/ledger-service.mjs?v=269.3';
+import { wrapTransaction } from './js/running-totals.mjs?v=269.3';
 
 const cfg = {
   apiKey:            'AIzaSyCsgVVIU_AZpWgTrZo_jrlCQVgZusCI_zY',
@@ -74,7 +75,9 @@ if (BIZCORE_EMULATOR) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { dis
 
 const UI = window.BizCashUI, esc = UI.esc, money = UI.money;
 const S = { user: null, me: null, accounts: [], cashAccounts: [], lines: [], accountId: null, filter: 'all', unsub: [] };
-const service = createLedgerService({ db, doc, runTransaction, serverTimestamp, setDoc, updateDoc }, {
+// V269.3: the running balance of each account (cashBalances) moves in the same commit as the line
+const runTransactionWithTotals = wrapTransaction({ db, doc, runTransaction, serverTimestamp, increment }, { uid: () => (S.user ? S.user.uid : ''), prices: false });
+const service = createLedgerService({ db, doc, runTransaction: runTransactionWithTotals, serverTimestamp, setDoc, updateDoc }, {
   actor: () => S.user ? { uid: S.user.uid, name: (S.me && S.me.name) || S.user.displayName || S.user.email, email: S.user.email } : {},
 });
 const $ = id => document.getElementById(id);

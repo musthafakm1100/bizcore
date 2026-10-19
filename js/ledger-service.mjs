@@ -14,7 +14,7 @@
 import {
   LEDGER_COLLECTIONS as C, LEDGER_SCHEMA_VERSION, LINE_STATUS, validateHandover, buildHandover,
   handoverNumbering, formatVoucher, confirmRight, validateQueryNote, directoryEntry, lineIdOf, r2,
-} from './ledger-core.mjs?v=267.2';
+} from './ledger-core.mjs?v=269.3';
 import { DeliveryError, ERR, isSafeId, operationKey } from './delivery-core.mjs?v=266.0';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };

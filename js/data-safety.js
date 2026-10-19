@@ -238,7 +238,9 @@ function bcRenderDataHealth(){
     <div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>Shared setting</th><th>Last saved</th><th>State</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="ds-note">Also in Firebase (as before): company settings, numbering, purchase, billing and receipt settings, payment accounts, document locking, customers, suppliers, products, terms and all documents.</p>
     <p class="ds-note">Kept in the browser on purpose (per user / device): theme, font size, sidebar, rows per page, last page, drafts, notifications seen.</p></div>`
-    + bcDataWindowCard();
+    + bcDataWindowCard() + bcBalancesCard();
+  if (window.BizCoreCash) { window.BizCoreCash.start(); if (!bcRenderDataHealth._hooked && window.BizCoreCash.onChange) { bcRenderDataHealth._hooked = true; window.BizCoreCash.onChange(() => { if (document.getElementById('dh-bal-stats')) bcFillBalanceStats(); }); } }
+  if (window.BizCorePI) window.BizCorePI.start();
   bcFillDataWindowStats();
 }
 /* V269.1 — data plan step 2a: how much of the sales history is loaded when BizCore opens */
@@ -248,18 +250,44 @@ function bcDataWindowCard(){
     ? `<div style="display:flex;align-items:flex-end;gap:10px;margin:6px 0 10px"><div class="form-group" style="margin:0;max-width:200px"><label>Months loaded</label><input id="dh-window-months" type="number" min="1" max="120" step="1" value="${m}"/></div><button type="button" class="btn btn-secondary" onclick="bcSaveDataWindow()">Save</button></div>`
     : `<p><b>${m}</b> months <span class="pi-sub">(changed by an administrator)</span></p>`;
   return `<div class="setup-card ds-card"><h4><i class="ti ti-database" style="margin-right:6px"></i>Records loaded when BizCore opens</h4>
-    <p class="ds-note">RFQs, quotations, sales orders, delivery notes, invoices, credit notes and receipts: all open ones, and everything dated in the last N months:</p>
+    <p class="ds-note">RFQs, quotations, sales orders, delivery notes, invoices, credit notes, receipts, purchase invoices, supplier payments, cash lines and stock movements: all open ones, and everything dated in the last N months:</p>
     ${input}
     <p class="ds-note">Older records are read only when asked: a date filter before that, "All Dates", a search for a number (press Enter), Dashboard "All time", Reports "Include older records" and Backup. A change takes effect the next time BizCore opens.</p>
     <div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>Records</th><th>Loaded now</th><th>Of which older (read on request / linked)</th></tr></thead><tbody id="dh-window-stats"><tr><td colspan="3" class="pi-sub">…</td></tr></tbody></table></div></div>`;
 }
 async function bcFillDataWindowStats(){
   const tb = document.getElementById('dh-window-stats'); if (!tb || !window.BCWin) return;
-  const names = { rfqs: 'RFQs', quotations: 'Quotations', salesOrders: 'Sales orders', deliveryNotes: 'Delivery notes', customerInvoices: 'Invoices', creditNotes: 'Credit notes', customerReceipts: 'Receipts', invoicePayments: 'Invoice payment records' };
+  const names = { rfqs: 'RFQs', quotations: 'Quotations', salesOrders: 'Sales orders', deliveryNotes: 'Delivery notes', customerInvoices: 'Invoices', creditNotes: 'Credit notes', customerReceipts: 'Receipts', invoicePayments: 'Invoice payment records',
+    purchaseInvoices: 'Purchase invoices', supplierPayments: 'Supplier payments', salesOrderPurchasing: 'Purchased quantities per order', cashLines: 'Cash & bank lines', stockAllocations: 'Stock allocations', stockChanges: 'Stock item changes' };   // V269.3
   const st = window.BCWin.stats(), c = await window.BCWin.config();
   tb.innerHTML = Object.keys(names).filter(k => st[k]).map(k => `<tr><td><b>${esc(names[k])}</b></td><td>${st[k].total}</td><td>${st[k].extra}${st[k].olderFrom === '' ? ' · all older read' : ''}</td></tr>`).join('')
     + `<tr><td colspan="3" class="pi-sub">Loaded period starts ${esc(c.cutoff.split('-').reverse().join('-'))} (${c.months} months).</td></tr>`;
+  bcFillBalanceStats();
 }
+/* V269.3 — data plan step 2b: running balances of the cash & bank accounts, last price per item */
+function bcBalancesCard(){
+  return `<div class="setup-card ds-card"><h4><i class="ti ti-scale" style="margin-right:6px"></i>Running balances and last prices</h4>
+    <p class="ds-note">Each cash / bank account keeps its balance up to date with every line (so Cash &amp; Bank needs only the recent lines), and each item keeps the last price paid. "Rebuild" adds up all the lines of every account again — only needed if a balance looks wrong.</p>
+    <div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>Account</th><th>Balance</th><th>Lines</th><th>State</th></tr></thead><tbody id="dh-bal-stats"><tr><td colspan="4" class="pi-sub">…</td></tr></tbody></table></div>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:8px"><button type="button" class="btn btn-secondary btn-sm" onclick="bcRebuildBalances()"><i class="ti ti-refresh"></i>Rebuild balances</button><span class="pi-sub" id="dh-lp-count"></span></div></div>`;
+}
+function bcFillBalanceStats(){
+  const tb = document.getElementById('dh-bal-stats'), cash = window.BizCoreCash; if (!tb || !cash || !cash.balances) return;
+  const accs = (window.BizCoreAcc && window.BizCoreAcc.accounts) || [];
+  const money = n => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  tb.innerHTML = accs.map(a => { const r = cash.balances.get(a.id);
+    const st = !r ? (a.hasEntries ? '<span class="ds-chip warn">To rebuild</span>' : '<span class="ds-chip">No lines yet</span>') : r.rebuiltAt ? '<span class="ds-chip ok">Up to date</span>' : '<span class="ds-chip warn">To rebuild</span>';
+    return `<tr><td><b>${esc(a.name || a.id)}</b></td><td>${r ? money((Number(a.openingBalance) || 0) + (Number(r.balance) || 0)) : '—'}</td><td>${r ? Number(r.lineCount) || 0 : '—'}</td><td>${st}</td></tr>`; }).join('') || '<tr><td colspan="4" class="pi-sub">No payment accounts.</td></tr>';
+  const lp = document.getElementById('dh-lp-count'); if (lp && window.BizCorePI && window.BizCorePI.lastPrices) { const k = window.BizCorePI.lastPrices.size; lp.textContent = k + (k === 1 ? ' item' : ' items') + ' with a last price'; }
+}
+async function bcRebuildBalances(){
+  const cash = window.BizCoreCash; if (!cash || !cash.rebuildBalances) return;
+  const run = () => cash.rebuildBalances({ all: true });
+  const n = typeof bcBusy === 'function' ? await bcBusy('Rebuilding balances…', run) : await run();
+  showToast(n ? `Rebuilt ${n} account balance${n === 1 ? '' : 's'}.` : 'Nothing rebuilt.', n ? 'success' : 'info');
+  bcFillBalanceStats();
+}
+window.bcRebuildBalances = bcRebuildBalances;
 async function bcSaveDataWindow(){
   const v = Math.round(Number(document.getElementById('dh-window-months')?.value));
   if (!(v >= 1 && v <= 120)) { showToast('Enter a number of months from 1 to 120.', 'error'); return; }

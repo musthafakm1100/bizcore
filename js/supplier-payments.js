@@ -124,8 +124,9 @@ function renderSupplierPayments(){
 }
 
 /* ═══════════════════════════════ PAYMENT VIEW ═══════════════════════════════ */
-function openSupplierPaymentView(id){
-  const p = spOf(id); if (!p) return;
+function openSupplierPaymentView(id, retried){
+  const p = spOf(id);
+  if (!p) { if (!retried && window.BCWin) window.BCWin.loadWhere('supplierPayments', 'id', String(id)).then(n => { if (n) openSupplierPaymentView(id, true); }).catch(() => {}); return; }   // V269.3: an older payment
   piStartAccounts();
   let m = document.getElementById('sp-view-modal');
   if (!m) { m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'sp-view-modal'; document.body.appendChild(m); }

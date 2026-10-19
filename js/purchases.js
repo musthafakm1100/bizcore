@@ -59,10 +59,20 @@ function piEstimateFor(so, soLine){
     return buy > 0 ? { unit: buy, source: 'pricing', refNo: r.rfqNo ? 'PR-' + String(r.rfqNo).replace(/^RFQ-?/i, '') + '-V' + (v ? v.version : 1) : '', refDate: '' } : null;
   } catch (e) { return null; }
 }
+/** V269.3: the last price paid — the loaded invoices and the item's last-price record (any age), the newer of the two. */
+function piLastPaid(itemKey){
+  const C = piCore(); if (!C) return null;
+  const a = C.lastPaidOf(piInvoices(), itemKey);
+  const rec = window.BizCorePI && window.BizCorePI.lastPrices ? window.BizCorePI.lastPrices.get(itemKey) : null;
+  if (!rec || rec.stale || !(Number(rec.unitCost) > 0)) return a;
+  const b = { unit: Number(rec.unitCost), source: 'lastPaid', refNo: rec.piNo || '', refDate: rec.date || '', supplier: rec.supplierName || '' };
+  if (!a) return b;
+  return (String(b.refDate) + '|' + String(b.refNo)) > (String(a.refDate) + '|' + String(a.refNo)) ? b : a;
+}
 function piReferenceFor(line){
   if (line.kind === 'order') { const so = piSOs().find(s => s.id === line.soId); const sl = so && (so.items || []).find(x => x.lineId === line.soLineId); const est = so && sl ? piEstimateFor(so, sl) : null; if (est) return est; }
   const C = piCore(); if (!C) return null;
-  return C.lastPaidOf(piInvoices(), C.itemKeyOf(line));
+  return piLastPaid(C.itemKeyOf(line));
 }
 /** Open Sales Order lines with something still to buy. */
 function piOpenOrderLines(){
@@ -704,7 +714,11 @@ async function savePurchaseInvoice(){
 /* ═══════════════════════════════ VIEW + CANCEL ═══════════════════════════════ */
 function openPurchaseInvoiceView(id, retried){
   const pi = piInvoices().find(p => p.id === id);
-  if (!pi) { if (!retried && piLib()) { piLib().start(); setTimeout(() => openPurchaseInvoiceView(id, true), 800); } return; }
+  if (!pi) {
+    if (!retried && piLib()) { piLib().start(); setTimeout(() => openPurchaseInvoiceView(id, true), 800); }
+    else if (retried === true && piLib() && piLib().fetchInvoice) piLib().fetchInvoice(id).then(x => { if (x) openPurchaseInvoiceView(id, 2); }).catch(() => {});   // V269.3: an older invoice
+    return;
+  }
   piStartAccounts();
   let m = document.getElementById('pi-view-modal');
   if (!m) { m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'pi-view-modal'; document.body.appendChild(m); }
@@ -799,6 +813,9 @@ function piConfirmHtml(p, l){
     const who = String((piAccOf(l.accountId) || {}).custodianName || 'custodian').split(/\s+/)[0];
     if (line && line.status === 'confirmed') return `<span class="pi-ok"><i class="ti ti-check"></i> Confirmed by ${piEsc(String(line.statusByName || who).split(/\s+/)[0])}</span>`;
     if (line && line.status === 'queried') return `<span class="pi-qry"><i class="ti ti-alert-triangle"></i> Queried: “${piEsc(line.statusNote)}”</span>`;
+    // V269.3: waiting / queried lines are always loaded — an older line that isn't loaded was confirmed
+    const from = !line && window.BCWin ? window.BCWin.loadedFrom('cashLines') : '';
+    if (!line && from && String(p.date || '') < from) return `<span class="pi-ok"><i class="ti ti-check"></i> Confirmed</span>`;
     return `<span class="pi-wait">⏳ ${piEsc(who)} confirms</span>`;
   }
   if (l.accountType === 'card') return `<span class="pi-sub">Card — from the bank</span>`;
@@ -1426,7 +1443,7 @@ function piProdOpen(i, input){
   const all = bcSortBy(piProducts().filter(p => { const h = [p.name, p.code, p.brand, p.model, p.category].join(' ').toLowerCase(); return words.every(w => h.includes(w)); }), p => p.name);
   PI_PP.shown = all.slice(0, 40); if (PI_PP.idx >= PI_PP.shown.length + 1) PI_PP.idx = 0;
   const C = piCore();
-  const opt = (p, k) => { let last = ''; try { const ref = C ? C.lastPaidOf(piInvoices(), C.itemKeyOf({ kind: 'stock', productId: p.id, code: p.code, desc: p.name, uom: p.uom })) : null; if (ref && ref.unit > 0) last = ` · last paid ${piF(ref.unit)}${ref.refNo ? ' (' + ref.refNo + ')' : ''}`; } catch (e) {}
+  const opt = (p, k) => { let last = ''; try { const ref = C ? piLastPaid(C.itemKeyOf({ kind: 'stock', productId: p.id, code: p.code, desc: p.name, uom: p.uom })) : null; if (ref && ref.unit > 0) last = ` · last paid ${piF(ref.unit)}${ref.refNo ? ' (' + ref.refNo + ')' : ''}`; } catch (e) {}
     return `<div class="rct-pick-opt${k === PI_PP.idx ? ' on' : ''}" role="option" data-k="${k}"><span class="rct-pick-txt"><b>${piEsc(p.name)}</b><small>${piEsc([p.code, p.uom].filter(Boolean).join(' · '))} · Product${piEsc(last)}</small></span></div>`; };
   const typed = input.value.trim(), canAdd = piCanAddProduct();
   el.innerHTML = (PI_PP.shown.length ? PI_PP.shown.map(opt).join('') : `<div class="rct-pick-empty">No product matches${typed ? ' “' + piEsc(typed) + '”' : ''}.</div>`)
