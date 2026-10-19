@@ -14825,6 +14825,15 @@ function soIsOpenNow(so){
   return getSOStatus(so) !== 'Paid';
 }
 let _bcHealRunning = false;
+const _bcHealRefused = new Set();   // V269.2.1: orders whose mark the rules refused — not tried again this session
+/** V269.2.1: an old order that still has deliveries / invoices inside it (from before they got their own records)
+ *  can't be changed in independent mode (the rules refuse it) — don't try to mark it. */
+function bcHealBlocked(so){
+  if (_bcHealRefused.has(String(so.id))) return true;
+  try { const j = window.FB.fbSyncedJSON ? window.FB.fbSyncedJSON('salesOrders', so.id) : null; if (!j) return false;
+    const d = JSON.parse(j); return (Array.isArray(d.deliveries) && d.deliveries.length > 0) || (Array.isArray(d.invoices) && d.invoices.length > 0);
+  } catch (e) { return false; }
+}
 /** Keeps the isOpen mark of the loaded Sales Orders right (one small write when an order closes or reopens). */
 async function bcHealOpenOrders(){
   if (_bcHealRunning || !bcWinOn() || !window.FB.fbMergeFields || !Array.isArray(salesOrders)) return 0;
@@ -14836,8 +14845,10 @@ async function bcHealOpenOrders(){
     for (const so of salesOrders.slice()) {
       if (!so || !so.id || String(so.id).startsWith('tmp')) continue;
       const open = soIsOpenNow(so);
-      if (so.isOpen === open) continue;
-      if (await window.FB.fbMergeFields('salesOrders', so.id, { isOpen: open })) {
+      if (so.isOpen === open || bcHealBlocked(so)) continue;
+      const ok = await window.FB.fbMergeFields('salesOrders', so.id, { isOpen: open });
+      if (!ok) { _bcHealRefused.add(String(so.id)); continue; }
+      {
         so.isOpen = open; n++;
         const raw = (typeof rawSalesOrders !== 'undefined' ? rawSalesOrders : []).find(x => x.id === so.id); if (raw) raw.isOpen = open;
       }
