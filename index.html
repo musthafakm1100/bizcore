@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
 <title>BizCore — Downtown Trading Est.</title>
 <meta content="#ffffff" name="theme-color"/>
 <link rel="manifest" href="manifest.json"/>
@@ -31,6 +31,8 @@
 <link href="css/purchases.css?v=268.7" rel="stylesheet"/>
 <link href="css/responsive.css?v=268.4" rel="stylesheet"/>
 <link href="css/theme.css?v=266.5" rel="stylesheet"/>
+<link href="css/so-register.css?v=269.2" rel="stylesheet"/>
+<link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
 <script src="js/responsive.js?v=268.4" defer></script>
 <style id="bizcore-typography-standard">
@@ -447,43 +449,56 @@ document.addEventListener('error', function(e) {
     <div id="so-kpi-filter-summary"><span id="so-kpi-filter-title"></span><span id="so-kpi-filter-meta"></span></div>
   </div>
 
-  <div class="salesorders-main-workspace module-main-workspace" id="salesorders-main-workspace" data-module-monitor="salesorders">
-    <aside class="dn-overview-panel module-monitor bc-monitor salesorders-main-monitor" aria-label="Sales Order Monitor">
-      <div class="dn-overview-head module-monitor-head"><div><strong>Sales Order Monitor</strong><span>Fulfilment, billing &amp; payment</span></div><button class="module-monitor-collapse" type="button" onclick="toggleModuleMonitor('salesorders')" aria-label="Collapse Sales Order Monitor" title="Collapse Sales Order Monitor"><i class="ti ti-chevron-left"></i></button></div>
-      <div class="dn-overview-body module-monitor-body">
-        <button type="button" class="dn-overview-total active" data-kpi-filter="all" data-overview-key="all" onclick="filterSOKPI('all',this)"><span>Total Orders</span><strong id="so-k-total">0</strong></button>
-        <div class="dn-overview-section-label">Status</div>
-        <button type="button" class="dn-overview-row" data-kpi-filter="status-confirmed" data-overview-key="status-confirmed" onclick="filterSOKPI('status-confirmed',this)"><span><i class="dn-dot bc-dot-blue"></i>Confirmed</span><strong id="so-k-confirmed">0</strong></button>
-        <button type="button" class="dn-overview-row" data-kpi-filter="status-ofd" data-overview-key="status-ofd" onclick="filterSOKPI('status-ofd',this)"><span><i class="dn-dot bc-dot-amber"></i>Out for Delivery</span><strong id="so-k-ofd">0</strong></button>
-        <button type="button" class="dn-overview-row" data-kpi-filter="status-partdel" data-overview-key="status-partdel" onclick="filterSOKPI('status-partdel',this)"><span><i class="dn-dot bc-dot-purple"></i>Partially Delivered</span><strong id="so-k-partial-delivery">0</strong></button>
-        <button type="button" class="dn-overview-row" data-kpi-filter="status-delivered" data-overview-key="status-delivered" onclick="filterSOKPI('status-delivered',this)"><span><i class="dn-dot bc-dot-green"></i>Delivered</span><strong id="so-k-delivered">0</strong></button>
-        <button type="button" class="dn-overview-row" data-kpi-filter="status-invoiced" data-overview-key="status-invoiced" onclick="filterSOKPI('status-invoiced',this)"><span><i class="dn-dot bc-dot-orange"></i>Invoiced</span><strong id="so-k-invoiced">0</strong></button>
-        <button type="button" class="dn-overview-row" data-kpi-filter="status-partpaid" data-overview-key="status-partpaid" onclick="filterSOKPI('status-partpaid',this)"><span><i class="dn-dot bc-dot-yellow"></i>Partially Paid</span><strong id="so-k-partpaid">0</strong></button>
-        <button type="button" class="dn-overview-row" data-kpi-filter="status-paid" data-overview-key="status-paid" onclick="filterSOKPI('status-paid',this)"><span><i class="dn-dot bc-dot-teal"></i>Paid</span><strong id="so-k-paid">0</strong></button>
-        <div class="dn-overview-section-label">Attention</div>
-        <button type="button" class="dn-overview-row" data-kpi-filter="open" data-overview-key="open" onclick="filterSOKPI('open',this)"><span><i class="dn-dot bc-dot-slate"></i>Open Orders</span><strong id="so-k-open">0</strong></button>
-        <button type="button" class="dn-overview-row" data-kpi-filter="pending-invoice" data-overview-key="pending-invoice" onclick="filterSOKPI('pending-invoice',this)"><span><i class="dn-dot bc-dot-red"></i>Pending Invoice</span><strong id="so-k-invoice">0</strong></button>
-        <div class="dn-overview-section-label">Performance</div>
-        <div class="dn-overview-row bc-monitor-metric"><span>Total Order Value</span><strong id="so-k-value">0.00</strong></div>
-        <div class="dn-overview-row bc-monitor-metric"><span>Outstanding Receivables</span><strong id="so-k-receivables">0.00</strong></div>
+  <!-- V269.2: work-queue tiles (approved mockup E, 19 Oct 2026) instead of the Sales Order Monitor column.
+       Delivery and invoicing only — payment is followed in Invoices / Payment Receipts. -->
+  <div class="salesorders-workspace" id="salesorders-workspace">
+    <div class="so-tiles" id="so-tiles" role="group" aria-label="Sales order work queues">
+      <button type="button" class="so-tile so-tile-lead" data-kpi-filter="to-deliver" onclick="soTileClick('to-deliver')" aria-pressed="false">
+        <small>To deliver</small><b id="so-t-deliver-n">0</b><span class="so-tile-val" id="so-t-deliver-v">SAR 0.00</span><span class="so-tile-l2" id="so-t-deliver-l2">0 open · 0 orders</span>
+      </button>
+      <div class="so-tile-grid">
+        <button type="button" class="so-tile" data-kpi-filter="status-confirmed" data-tone="blue" onclick="soTileClick('status-confirmed')" aria-pressed="false">
+          <span class="so-tile-t"><span>Confirmed</span><b id="so-t-conf-n">0</b></span><span class="so-tile-val" id="so-t-conf-v">SAR 0.00</span><span class="so-tile-s">Nothing delivered yet</span><span class="so-tile-bar"><i id="so-t-conf-bar"></i></span>
+        </button>
+        <button type="button" class="so-tile" data-kpi-filter="status-ofd" data-tone="amber" onclick="soTileClick('status-ofd')" aria-pressed="false">
+          <span class="so-tile-t"><span>Out for delivery</span><b id="so-t-ofd-n">0</b></span><span class="so-tile-val" id="so-t-ofd-v">SAR 0.00</span><span class="so-tile-s">On the road now</span><span class="so-tile-bar"><i id="so-t-ofd-bar"></i></span>
+        </button>
+        <button type="button" class="so-tile" data-kpi-filter="status-partdel" data-tone="purple" onclick="soTileClick('status-partdel')" aria-pressed="false">
+          <span class="so-tile-t"><span>Partially delivered</span><b id="so-t-part-n">0</b></span><span class="so-tile-val" id="so-t-part-v">SAR 0.00</span><span class="so-tile-s">Balance to deliver</span><span class="so-tile-bar"><i id="so-t-part-bar"></i></span>
+        </button>
+        <button type="button" class="so-tile so-tile-hot" data-kpi-filter="pending-invoice" data-tone="orange" onclick="soTileClick('pending-invoice')" aria-pressed="false">
+          <span class="so-tile-t"><span>To invoice</span><b id="so-t-inv-n">0</b></span><span class="so-tile-val" id="so-t-inv-v">SAR 0.00</span><span class="so-tile-s">Delivered, not billed</span><span class="so-tile-bar"><i id="so-t-inv-bar"></i></span>
+        </button>
       </div>
-    </aside>
-
-    <button class="module-monitor-rail" type="button" onclick="toggleModuleMonitor('salesorders')" aria-label="Expand Sales Order Monitor" title="Expand Sales Order Monitor">
-      <i class="ti ti-layout-sidebar-left-expand"></i><span>Sales Orders</span>
-    </button>
+    </div>
+    <div class="so-tiles-note" id="so-tiles-note"></div>
+    <!-- phone: slim bar that stays at the top while the orders scroll -->
+    <div class="so-minibar" id="so-minibar" aria-hidden="true">
+      <button type="button" class="so-mini-lead" data-kpi-filter="to-deliver" onclick="soTileClick('to-deliver')" tabindex="-1"><b id="so-m-deliver">0</b>To deliver</button>
+      <button type="button" class="so-mini" data-kpi-filter="status-confirmed" onclick="soTileClick('status-confirmed')" tabindex="-1"><b id="so-m-conf">0</b>Confirmed</button>
+      <button type="button" class="so-mini" data-kpi-filter="status-ofd" onclick="soTileClick('status-ofd')" tabindex="-1"><b id="so-m-ofd">0</b>Out</button>
+      <button type="button" class="so-mini" data-kpi-filter="status-partdel" onclick="soTileClick('status-partdel')" tabindex="-1"><b id="so-m-part">0</b>Partial</button>
+      <button type="button" class="so-mini so-mini-hot" data-kpi-filter="pending-invoice" onclick="soTileClick('pending-invoice')" tabindex="-1"><b id="so-m-inv">0</b>Invoice</button>
+    </div>
 
     <div class="salesorders-register-area module-register-area">
     <div class="so-register-toolbar page-toolbar page-toolbar--sticky page-control-bar bc-filterbar" role="toolbar" aria-label="Sales Order filters">
 <div class="so-toolbar-left bc-filterbar-left"><select id="so-sort" class="bc-filter bc-filter-sort" onchange="soPage=1;renderSOPage()" aria-label="Sort Sales Orders"><option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option><option value="amount-desc">Highest amount</option><option value="amount-asc">Lowest amount</option></select><span id="so-register-count" class="so-toolbar-count bc-filter-count"></span></div>
 <div class="so-toolbar-right bc-filterbar-right">
 <select id="so-customer-filter" class="bc-filter bc-filter-customer" onchange="soPage=1;renderSOPage()" aria-label="Filter Sales Orders by customer"><option value="">All customers</option></select>
-<select id="so-status-filter" class="bc-filter bc-filter-status" onchange="filterSOKPI(this.value||'all',document.querySelector('#page-salesorders [data-kpi-filter=&quot;'+(this.value||'all')+'&quot;]'))" aria-label="Filter Sales Orders by status"><option value="">All statuses</option><option value="status-confirmed">Confirmed</option><option value="status-ofd">Out for Delivery</option><option value="status-partdel">Partially Delivered</option><option value="status-delivered">Delivered</option><option value="status-invoiced">Invoiced</option><option value="status-partpaid">Partially Paid</option><option value="status-paid">Paid</option><option value="open">Open Orders</option><option value="pending-invoice">Pending Invoice</option></select>
+<select id="so-status-filter" class="bc-filter bc-filter-status" onchange="filterSOKPI(this.value||'all',document.querySelector('#page-salesorders [data-kpi-filter=&quot;'+(this.value||'all')+'&quot;]'))" aria-label="Filter Sales Orders by status"><option value="">All statuses</option><option value="status-confirmed">Confirmed</option><option value="status-ofd">Out for Delivery</option><option value="status-partdel">Partially Delivered</option><option value="status-delivered">Delivered</option><option value="status-invoiced">Invoiced</option><option value="to-deliver">To deliver</option><option value="pending-invoice">To invoice</option><option value="open">Open orders</option></select>
 <div class="bc-date" data-bc-date="so" data-bc-date-title="Sales Order date"></div>
 <input id="so-search" class="bc-filter bc-filter-search" type="text" oninput="soPage=1;renderSOPage()" placeholder="Search SO No, customer, PO No…" aria-label="Search Sales Orders"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="so-clear-filters-btn" onclick="clearAllSOFilters()" type="button" title="Clear all Sales Order filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
 
-<button class="btn bc-filter-new btn-primary" onclick="showPage('quotations')" type="button" title="Sales Orders are created from approved quotations">         <i class="ti ti-file-arrow-right"></i><span>Create from Quotation</span>       </button>
+<div class="bc-split bc-filter-new" id="so-new-split">
+  <button class="btn btn-primary bc-split-main" type="button" onclick="soNewFromQuotation()" title="New Sales Order from a won quotation"><i class="ti ti-plus"></i><span>New Order</span></button>
+  <button class="btn btn-primary bc-split-caret" type="button" onclick="soToggleNewMenu(event)" aria-haspopup="menu" aria-expanded="false" aria-label="More ways to create an order" title="More ways to create an order"><i class="ti ti-chevron-down"></i></button>
+  <div class="bc-split-menu" id="so-new-menu" role="menu" hidden>
+    <button type="button" role="menuitem" onclick="soNewFromQuotation()"><b>From quotation…</b><small>Choose a won quotation</small></button>
+    <button type="button" role="menuitem" disabled aria-disabled="true"><b>Direct order</b><small>Without a quotation — later, if wanted</small></button>
+  </div>
+</div>
 </div>
 </div>
 
@@ -510,6 +525,7 @@ document.addEventListener('error', function(e) {
       </div>
     </div>
   </div>
+  <button class="so-fab" id="so-fab" type="button" onclick="soOpenNewSheet()" aria-label="New Order" title="New Order"><i class="ti ti-plus"></i></button>
 </div>
 <!-- V265.5 DELIVERIES (delivery staff: out for delivery → confirm) -->
 <div class="page" id="page-deliveries">
@@ -2946,7 +2962,8 @@ window.BCWin = {
 function _winListen(col, onUpdate, onError) {
   const st = _winState(col);
   st.subs.add(onUpdate); if (onError) st.errSubs.add(onError);
-  _winStart(col).then(() => { if (st.subs.has(onUpdate)) { const r = [..._winMerged(st).values()]; try { onUpdate(r); } catch (e) { console.error(e); } } });
+  // V269.2: this first delivery is BizCore's own start-up read — never "updated by another user"
+  _winStart(col).then(() => { if (st.subs.has(onUpdate)) { const r = [..._winMerged(st).values()]; window.__bcWinQuiet = true; try { onUpdate(r); } catch (e) { console.error(e); } finally { window.__bcWinQuiet = false; } } });
   return () => { st.subs.delete(onUpdate); if (onError) st.errSubs.delete(onError); };
 }
 async function _winLoad(col) {
@@ -3683,7 +3700,7 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=269.1';
+      s.src = 'js/app.js?v=269.2';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)

@@ -4343,21 +4343,11 @@ function updateQuotationOverviewTint(){
   };
   applyOverviewTint('#page-quotations [data-overview-key]',key,styles);
 }
-function updateSOOverviewTint(){
-  const key=soKpiFilter==='none'?'all':soKpiFilter;
-  const styles={
-    all:{bg:'#eef6ff',accent:'#2e75b6'},
-    'status-confirmed':{bg:'#eef6ff',accent:'#3b82c4'},
-    'status-ofd':{bg:'#eef6ff',accent:'#3b82f6'},
-    'status-partdel':{bg:'#fff8e5',accent:'#d7a323'},
-    'status-delivered':{bg:'#eef9f2',accent:'#43a66b'},
-    'status-invoiced':{bg:'#fff4e8',accent:'#d9822b'},
-    'status-partpaid':{bg:'#fff8e5',accent:'#d7a323'},
-    'status-paid':{bg:'#eef9f2',accent:'#43a66b'},
-    open:{bg:'#fff8e5',accent:'#d7a323'},
-    'pending-invoice':{bg:'#eef6ff',accent:'#3b82c4'}
-  };
-  applyOverviewTint('#page-salesorders [data-kpi-filter]',key,styles);
+function updateSOOverviewTint(){   // V269.2: the tiles (and the phone bar) show which work queue is chosen
+  document.querySelectorAll('#page-salesorders [data-kpi-filter]').forEach(el=>{
+    const on=soKpiFilter!=='none' && el.dataset.kpiFilter===soKpiFilter;
+    el.classList.toggle('active',on); el.setAttribute('aria-pressed',on?'true':'false');
+  });
 }
 
 function filterPricingDocuments(filter,btn){
@@ -10042,14 +10032,7 @@ function filterSOKPI(filter, card) {
   { const sel=document.getElementById('so-status-filter'); if(sel) sel.value = soKpiFilter==='none' ? '' : soKpiFilter; }
   soFilter = 'all';
   soPage = 1;
-  document.querySelectorAll('#page-salesorders [data-kpi-filter]').forEach(el=>{
-    const key=el.dataset.kpiFilter||'';
-    const active=(soKpiFilter==='none'&&key==='all') || key===soKpiFilter;
-    el.classList.toggle('active',active);
-    el.setAttribute('aria-pressed',active?'true':'false');
-  });
   renderSOPage();
-  updateSOOverviewTint();
 }
 
 function clearSOKPIFilter() {
@@ -10149,7 +10132,7 @@ function renderSOPage() {
   const customerFilter=document.getElementById('so-customer-filter')?.value||'';
   const sortValue=document.getElementById('so-sort')?.value||'date-desc';
 
-  let all=salesOrders.map(so=>({...so,_status:getSOStatus(so)}));
+  let all=salesOrders.map(so=>({...so,_status:soOrderStatus(so),_toInvoice:soHasInvoiceableQty(so)}));   // V269.2: no payment in the order status
 
   // Customer filter options, preserving current selection.
   const customerSelect=document.getElementById('so-customer-filter');
@@ -10172,32 +10155,8 @@ function renderSOPage() {
     return true;
   });
 
-  const statusCounts={};
-  scope.forEach(s=>statusCounts[s._status]=(statusCounts[s._status]||0)+1);
   const open=scope.filter(s=>['Confirmed','Out for Delivery','Partially Delivered'].includes(s._status));
-  const ready=scope.filter(s=>s._status==='Confirmed');
-  const partial=scope.filter(s=>s._status==='Partially Delivered');
-  const pendingInvoice=scope.filter(s=>soHasInvoiceableQty(s));
-  const totalOrderValue=scope.reduce((sum,s)=>sum+(parseFloat(s.total)||0),0);
-  const outstandingReceivables=scope.reduce((sum,s)=>{
-    if(!(s.invoices||[]).length)return sum;
-    const paid=soPaidTotal(s);
-    return sum+Math.max((parseFloat(s.total)||0)-paid,0);
-  },0);
-
-  const setText=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val};
-  setText('so-k-total',scope.length);
-  setText('so-k-confirmed',statusCounts['Confirmed']||0);
-  setText('so-k-ofd',statusCounts['Out for Delivery']||0);
-  setText('so-k-partial-delivery',statusCounts['Partially Delivered']||0);
-  setText('so-k-delivered',statusCounts['Delivered']||0);
-  setText('so-k-invoiced',statusCounts['Invoiced']||0);
-  setText('so-k-partpaid',statusCounts['Partially Paid']||0);
-  setText('so-k-paid',statusCounts['Paid']||0);
-  setText('so-k-open',open.length);
-  setText('so-k-invoice',pendingInvoice.length);
-  setText('so-k-value',formatNumber(totalOrderValue,2));
-  setText('so-k-receivables',formatNumber(outstandingReceivables,2));
+  soRenderTiles(scope,open);   // V269.2: work-queue tiles (react to Customer / Date / Search, not to the chosen tile)
 
   const badge=document.getElementById('so-badge');
   if(badge){
@@ -10212,7 +10171,8 @@ function renderSOPage() {
   if(soFilter==='pending') list=list.filter(s=>s._status!=='Paid');
   else if(soFilter!=='all') list=list.filter(s=>s._status===soFilter);
 
-  if(soKpiFilter==='status-confirmed') list=list.filter(s=>s._status==='Confirmed');
+  if(soKpiFilter==='to-deliver') list=list.filter(s=>['Confirmed','Partially Delivered'].includes(s._status));
+  else if(soKpiFilter==='status-confirmed') list=list.filter(s=>s._status==='Confirmed');
   else if(soKpiFilter==='status-ofd') list=list.filter(s=>s._status==='Out for Delivery');
   else if(soKpiFilter==='status-partdel') list=list.filter(s=>s._status==='Partially Delivered');
   else if(soKpiFilter==='status-delivered') list=list.filter(s=>s._status==='Delivered');
@@ -10220,7 +10180,7 @@ function renderSOPage() {
   else if(soKpiFilter==='status-partpaid') list=list.filter(s=>s._status==='Partially Paid');
   else if(soKpiFilter==='status-paid') list=list.filter(s=>s._status==='Paid');
   else if(soKpiFilter==='open') list=list.filter(s=>['Confirmed','Out for Delivery','Partially Delivered'].includes(s._status));
-  else if(soKpiFilter==='pending-invoice') list=list.filter(s=>soHasInvoiceableQty(s));
+  else if(soKpiFilter==='pending-invoice') list=list.filter(s=>s._toInvoice);
   else if(soKpiFilter==='receivables') list=list.filter(s=>{
     if(!(s.invoices||[]).length)return false;
     const paid=soPaidTotal(s);
@@ -10231,19 +10191,13 @@ function renderSOPage() {
   else if(sortValue==='amount-desc') list.sort((a,b)=>(parseFloat(b.total)||0)-(parseFloat(a.total)||0));
   else if(sortValue==='amount-asc') list.sort((a,b)=>(parseFloat(a.total)||0)-(parseFloat(b.total)||0));
   else list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  list=sortRegisterRows(list,'so',{no:s=>s.soNo,date:s=>s.date,customer:s=>s.customer,po:s=>s.poNo,quotation:s=>quotations.find(q=>q.id===s.quotationId)?.qno||'',items:s=>(s.items||[]).length,amount:s=>parseFloat(s.total)||0,status:s=>s._status||getSOStatus(s)});
+  list=sortRegisterRows(list,'so',{no:s=>s.soNo,date:s=>s.date,customer:s=>s.customer,po:s=>s.poNo,quotation:s=>quotations.find(q=>q.id===s.quotationId)?.qno||'',items:s=>(s.items||[]).length,amount:s=>parseFloat(s.total)||0,status:s=>s._status||soOrderStatus(s)});
 
   const countEl=document.getElementById('so-register-count');
   if(countEl)countEl.textContent=`${list.length} order${list.length===1?'':'s'}`;
 
-  // Active filter highlighting.
-  document.querySelectorAll('#page-salesorders [data-kpi-filter]').forEach(el=>{
-    const key=el.dataset.kpiFilter||'';
-    const active=(soKpiFilter==='none'&&key==='all') || (soKpiFilter===key);
-    el.classList.toggle('active',active);
-    el.setAttribute('aria-pressed',active?'true':'false');
-  });
   updateSOOverviewTint();
+  soRenderTilesNote(list.length,scope.length);
   const clearBtn=document.getElementById('so-clear-filters-btn');
   const hasFilters=!!(customerFilter||search||soDateFilter.mode!=='all'||sortValue!=='date-desc'||soKpiFilter!=='none'||soFilter!=='all');
   if(clearBtn){
@@ -10259,7 +10213,7 @@ function renderSOPage() {
   if(tbody){
     tbody.innerHTML=slice.length?slice.map(so=>{
       const q=quotations.find(x=>x.id===so.quotationId);
-      const status=getSOStatus(so);
+      const status=so._status||soOrderStatus(so);
       const rowStyle='font-size:14px!important;font-weight:400!important;color:#111827!important;line-height:1.35!important';
       return `<tr class="so-register-row" tabindex="0" role="button" onclick="viewSO('${so.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewSO('${so.id}')}">
         <td style="${rowStyle}">${escapeHtml(so.soNo||'—')}</td>
@@ -10269,7 +10223,7 @@ function renderSOPage() {
         <td style="${rowStyle}">${q?escapeHtml(q.qno):'—'}</td>
         <td class="center" style="${rowStyle}">${(so.items||[]).length}</td>
         <td class="right" style="${rowStyle}">${formatNumber(parseFloat(so.total)||0,2)}</td>
-        <td style="${rowStyle}"><span class="badge ${getSOBadgeClass(status)}">${status}</span></td>
+        <td style="${rowStyle}"><span class="badge ${getSOBadgeClass(status)}">${status}</span>${so._toInvoice?' <span class="so-to-invoice">· to invoice</span>':''}</td>
       </tr>`;
     }).join(''):`<tr><td colspan="8"><div class="empty-state"><i class="ti ti-shopping-cart"></i><strong>No sales orders found</strong><p>Adjust the filters or create a Sales Order from an approved quotation.</p></div></td></tr>`;
   }
@@ -10279,6 +10233,190 @@ function renderSOPage() {
   if(sop)sop.innerHTML=buildPaginationHTML(soPage,soPages,'goSOPage');
 }
 function goSOPage(p){soPage=p;renderSOPage();}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════
+   V269.2 — Sales Orders register: work-queue tiles, order status without payment, New Order
+   (approved mockups E / phone / button style 1, 19 Oct 2026)
+   ══════════════════════════════════════════════════════════════════════════════════════════ */
+/** Delivery facts of an order (same measures as getSOStatus). */
+function soDeliveryFacts(so){
+  const deliveries=(so.deliveries||[]).filter(d=>!d.voided);
+  const ordered=(so.items||[]).reduce((s,it)=>s+(parseFloat(it.qty)||0),0);
+  const accepted=deliveries.filter(d=>d.customerConfirmed).reduce((s,d)=>s+(d.items||[]).reduce((t,it)=>t+deliveryAcceptedQty(d,it),0),0);
+  const allDelivered=ordered>0 && accepted>=ordered-0.001;
+  return { anyDispatched:deliveries.some(d=>!d.customerConfirmed), allDelivered, partDelivered:accepted>0 && !allDelivered };
+}
+/** Every ordered quantity is on an invoice (advance invoices don't count; credited quantities are taken off). */
+function soFullyInvoiced(so){
+  const inv=invoicePreviouslyInvoicedQtyMap(so);
+  return (so.items||[]).length>0 && (so.items||[]).every((it,i)=>(inv[i]||0)>=(Number(it.qty)||0)-0.001);
+}
+/** The order's status in the register: delivery first; "Invoiced" once fully delivered and fully invoiced.
+ *  Payment is not part of it (Invoices / Payment Receipts show it). */
+function soOrderStatus(so){
+  if(!so) return 'Confirmed';
+  const f=soDeliveryFacts(so);
+  if(f.allDelivered && !f.anyDispatched) return soFullyInvoiced(so)?'Invoiced':'Delivered';
+  if(f.partDelivered) return 'Partially Delivered';
+  if(f.anyDispatched) return 'Out for Delivery';
+  return 'Confirmed';
+}
+/** Value (incl. VAT, as the Net Amount column) of the given quantity per line — a share of the order total. */
+function soShareValue(so,qtyByIdx){
+  const items=so.items||[];
+  const vals=items.map(it=>{const a=Number(it.amount);return Number.isFinite(a)&&a>0?a:(Number(it.qty)||0)*(Number(it.up)||0);});
+  const whole=vals.reduce((s,v)=>s+v,0); if(!(whole>0)) return 0;
+  let part=0; items.forEach((it,i)=>{const q=Number(it.qty)||0; if(q>0) part+=vals[i]*Math.min(1,Math.max(0,(Number(qtyByIdx[i])||0)/q));});
+  return (Number(so.total)||0)*part/whole;
+}
+function soToDeliverValue(so){ const acc=invoiceAcceptedQtyMap(so), rem={}; (so.items||[]).forEach((it,i)=>{rem[i]=Math.max(0,(Number(it.qty)||0)-(acc[i]||0));}); return soShareValue(so,rem); }
+function soToInvoiceValue(so){ const m={}; invoiceAvailableLines(so).forEach(x=>{m[x.origIdx]=x.availableQty;}); return soShareValue(so,m); }
+const SO_TILE_LABELS={'to-deliver':'To deliver','status-confirmed':'Confirmed','status-ofd':'Out for delivery','status-partdel':'Partially delivered','pending-invoice':'To invoice',
+  'status-delivered':'Delivered','status-invoiced':'Invoiced','open':'Open orders'};
+function soRenderTiles(scope,open){
+  const set=(id,v)=>{const e=document.getElementById(id); if(e && e.textContent!==String(v)) e.textContent=v;};
+  const money=v=>'SAR '+formatNumber(v,2);
+  const by=st=>scope.filter(s=>s._status===st);
+  const conf=by('Confirmed'), ofd=by('Out for Delivery'), part=by('Partially Delivered'), inv=scope.filter(s=>s._toInvoice);
+  const sum=(list,fn)=>list.reduce((t,s)=>t+fn(s),0);
+  const v={ conf:sum(conf,soToDeliverValue), ofd:sum(ofd,soToDeliverValue), part:sum(part,soToDeliverValue), inv:sum(inv,soToInvoiceValue) };
+  set('so-t-deliver-n',conf.length+part.length); set('so-t-deliver-v',money(v.conf+v.part));
+  set('so-t-deliver-l2',`${open.length} open · ${scope.length} order${scope.length===1?'':'s'}`);
+  set('so-t-conf-n',conf.length); set('so-t-conf-v',money(v.conf));
+  set('so-t-ofd-n',ofd.length); set('so-t-ofd-v',money(v.ofd));
+  set('so-t-part-n',part.length); set('so-t-part-v',money(v.part));
+  set('so-t-inv-n',inv.length); set('so-t-inv-v',money(v.inv));
+  const max=Math.max(v.conf,v.ofd,v.part,v.inv,0.01);
+  [['so-t-conf-bar',v.conf],['so-t-ofd-bar',v.ofd],['so-t-part-bar',v.part],['so-t-inv-bar',v.inv]].forEach(([id,x])=>{const e=document.getElementById(id); if(e) e.style.width=(x>0?Math.max(4,Math.round(x/max*100)):0)+'%';});
+  set('so-m-deliver',conf.length+part.length); set('so-m-conf',conf.length); set('so-m-ofd',ofd.length); set('so-m-part',part.length); set('so-m-inv',inv.length);
+  document.querySelector('#page-salesorders .so-tile-hot')?.classList.toggle('so-tile-zero',!inv.length);
+}
+function soRenderTilesNote(shown,inScope){
+  const n=document.getElementById('so-tiles-note'); if(!n) return;
+  const label=SO_TILE_LABELS[soKpiFilter];
+  n.innerHTML=label
+    ? `Showing: <b>${escapeHtml(label)}</b> (${shown}) · click the tile again for all orders`
+    : `${inScope} order${inScope===1?'':'s'} · click a tile to show only those orders, click it again for all`;
+}
+function soTileClick(key){ filterSOKPI(soKpiFilter===key?'all':key); }
+
+/* ── + New Order (split button; phone: round + button and a menu from the bottom) ── */
+function soCloseNewMenu(){ const m=document.getElementById('so-new-menu'); if(m&&!m.hidden){ m.hidden=true; document.querySelector('#so-new-split .bc-split-caret')?.setAttribute('aria-expanded','false'); } }
+function soToggleNewMenu(e){
+  if(e) e.stopPropagation();
+  const m=document.getElementById('so-new-menu'); if(!m) return;
+  if(!m.hidden) return soCloseNewMenu();
+  m.hidden=false; document.querySelector('#so-new-split .bc-split-caret')?.setAttribute('aria-expanded','true');
+  m.querySelector('button:not([disabled])')?.focus();
+}
+document.addEventListener('click',e=>{ if(!e.target.closest||!e.target.closest('#so-new-split')) soCloseNewMenu(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') soCloseNewMenu(); });
+function soOpenNewSheet(){
+  let s=document.getElementById('so-new-sheet');
+  if(!s){
+    s=document.createElement('div'); s.id='so-new-sheet'; s.className='bcr-sheet'; s.hidden=true;
+    s.innerHTML=`<div class="bcr-sheet-dim"></div><div class="bcr-sheet-panel" role="dialog" aria-modal="true" aria-label="New Order"><div class="bcr-sheet-handle"></div><div class="bcr-sheet-body">
+      <div class="bcr-sheet-head"><h3>New Order</h3></div>
+      <button type="button" class="so-sheet-item" data-act="quote"><i class="ti ti-file-invoice"></i><span><b>From quotation…</b><small>Choose a won quotation</small></span></button>
+      <button type="button" class="so-sheet-item" disabled><i class="ti ti-file-plus"></i><span><b>Direct order</b><small>Without a quotation — later, if wanted</small></span></button></div></div>`;
+    const close=()=>{ s.classList.remove('open'); document.body.classList.remove('bcr-sheet-lock'); setTimeout(()=>{s.hidden=true;},180); };
+    s.querySelector('.bcr-sheet-dim').addEventListener('click',close);
+    s.querySelector('[data-act="quote"]').addEventListener('click',()=>{ close(); setTimeout(soNewFromQuotation,190); });
+    document.body.appendChild(s);
+  }
+  s.hidden=false; requestAnimationFrame(()=>s.classList.add('open')); document.body.classList.add('bcr-sheet-lock');
+}
+/* "Choose a quotation": won quotations with quantity still to order; sent ones are shown to open and mark as won. */
+function soEnsurePickModal(){
+  let m=document.getElementById('so-pick-modal'); if(m) return m;
+  m=document.createElement('div'); m.className='modal-overlay'; m.id='so-pick-modal';
+  m.innerHTML=`<div class="modal so-pick" role="dialog" aria-modal="true" aria-labelledby="so-pick-title">
+    <div class="modal-header"><h2 id="so-pick-title">New Order — choose a quotation</h2><button class="close-btn" type="button" onclick="closeModal('so-pick-modal')" aria-label="Close">✕</button></div>
+    <div class="modal-body">
+      <div class="so-pick-searchrow"><i class="ti ti-search" aria-hidden="true"></i><input id="so-pick-q" type="search" autocomplete="off" placeholder="Search quotation no. or customer" aria-label="Search quotations"/></div>
+      <div id="so-pick-list" class="so-pick-list" role="listbox" aria-label="Quotations"></div>
+      <p class="so-pick-foot">Press Enter to look for an older quotation by its number.</p>
+    </div></div>`;
+  document.body.appendChild(m);
+  const q=m.querySelector('#so-pick-q');
+  q.addEventListener('input',()=>soRenderPick());
+  q.addEventListener('keydown',async e=>{
+    const items=[...m.querySelectorAll('.so-pick-item')];
+    let i=items.findIndex(x=>x.classList.contains('kb'));
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); if(!items.length) return; i=e.key==='ArrowDown'?Math.min(items.length-1,i+1):Math.max(0,i-1); items.forEach((x,k)=>x.classList.toggle('kb',k===i)); items[i].scrollIntoView({block:'nearest'}); return; }
+    if(e.key!=='Enter') return;
+    e.preventDefault();
+    if(i>=0){ items[i].click(); return; }
+    const won=m.querySelectorAll('.so-pick-item[data-kind="won"]'); if(won.length===1){ won[0].click(); return; }
+    const t=q.value.trim();
+    if(t.length>=3 && /\d/.test(t) && window.BCWin && window.BCWin.started('quotations')){ try{ const n=await window.BCWin.findNumber('quotations',t); if(n) showToast(n===1?'Found 1 older quotation':'Found '+n+' older quotations','success'); }catch(err){} soRenderPick(); }
+  });
+  m.querySelector('#so-pick-list').addEventListener('click',e=>{
+    const b=e.target.closest('.so-pick-item'); if(!b) return;
+    const id=b.dataset.id;
+    if(b.dataset.kind==='won'){
+      runScreenTransition({message:'Preparing sales order…',action:()=>openCreateSO(id),ready:()=>isModalOpen('so-create-modal'),sourceModal:'so-pick-modal',closeSource:true,errorMessage:'Could not prepare the Sales Order. Please try again.'}).catch(()=>{});
+    } else { closeModal('so-pick-modal'); viewQuotation(id); }
+  });
+  return m;
+}
+function soPickCandidates(){
+  const won=[], sent=[];
+  (quotations||[]).forEach(q=>{
+    if(!q||!q.id) return;
+    if(q.status==='Won'){ const p=getQuotationSOProgress(q.id); if(!p.complete) won.push({q,p}); }
+    else if(q.status==='Sent') sent.push({q});
+  });
+  const byDate=(a,b)=>String(b.q.date||'').localeCompare(String(a.q.date||''))||String(b.q.qno||'').localeCompare(String(a.q.qno||''));
+  return {won:won.sort(byDate),sent:sent.sort(byDate)};
+}
+function soRenderPick(){
+  const list=document.getElementById('so-pick-list'); if(!list) return;
+  const t=(document.getElementById('so-pick-q')?.value||'').trim().toLowerCase();
+  const hit=q=>!t||`${q.qno||''} ${q.company||''} ${q.ref||''}`.toLowerCase().includes(t);
+  const {won,sent}=soPickCandidates();
+  const W=won.filter(x=>hit(x.q)), S=sent.filter(x=>hit(x.q));
+  const val=q=>{try{return 'SAR '+formatNumber(calcQuote(q).net,2);}catch(e){return '';}};
+  const row=(x,kind)=>{
+    const q=x.q, n=(q.items||[]).length;
+    const sub=kind==='won'?(x.p.linked.length?`${x.p.remaining.length} of ${n} line${n===1?'':'s'} still to order`:'First order'):'Open it and mark it Won';
+    return `<button type="button" class="so-pick-item" role="option" data-kind="${kind}" data-id="${escapeHtml(q.id)}">
+      <span class="so-pick-main"><b>${escapeHtml(q.qno||'—')}</b><span>${escapeHtml(q.company||'—')}</span></span>
+      <span class="so-pick-side"><b>${escapeHtml(val(q))}</b><small>${escapeHtml(fmtDate(q.date)||'')} · ${escapeHtml(sub)}</small></span></button>`;
+  };
+  list.innerHTML=
+    `<div class="so-pick-grp">Won — ready to order <b>${W.length}</b></div>`+
+    (W.length?W.map(x=>row(x,'won')).join(''):`<div class="so-pick-empty">${t?'No won quotation matches.':'No won quotation is waiting for an order. Open a quotation and mark it Won first.'}</div>`)+
+    (S.length?`<div class="so-pick-grp muted">Sent — waiting for the customer <b>${S.length}</b></div>`+S.map(x=>row(x,'sent')).join(''):'');
+}
+function soNewFromQuotation(){
+  soCloseNewMenu();
+  const m=soEnsurePickModal();
+  const q=m.querySelector('#so-pick-q'); q.value='';
+  soRenderPick();
+  openModalWithSize('so-pick-modal');
+  setTimeout(()=>q.focus(),60);
+}
+
+/* ── phone: when the tiles scroll away, a slim bar with the counts stays at the top ── */
+(function(){
+  let io=null;
+  function setup(){
+    const tiles=document.getElementById('so-tiles'), page=document.getElementById('page-salesorders'), bar=document.getElementById('so-minibar');
+    if(!tiles||!page||!bar||io||!('IntersectionObserver' in window)) return;
+    const phone=()=>window.matchMedia('(max-width: 760px)').matches;
+    const topbar=()=>{const t=document.getElementById('app-topbar'); return t?Math.max(0,t.getBoundingClientRect().bottom):0;};
+    io=new IntersectionObserver(entries=>{
+      const e=entries[entries.length-1];
+      const on=phone() && page.classList.contains('active') && e.boundingClientRect.top<topbar()+4 && (!e.isIntersecting || e.intersectionRatio<0.45);
+      if(on) bar.style.setProperty('--so-mini-top',(topbar()+6)+'px');
+      page.classList.toggle('so-mini-on',on); bar.setAttribute('aria-hidden',on?'false':'true');
+      bar.querySelectorAll('button').forEach(b=>b.tabIndex=on?0:-1);
+    },{threshold:[0,0.1,0.2,0.3,0.45,0.6,0.8,1]});
+    io.observe(tiles);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',setup); else setup();
+})();
 
 /* ── Open Create SO modal ── */
 function getQuotationSOProgress(quotationId, excludeSOId='') {

@@ -1,0 +1,154 @@
+/* BizCore V269.2 — Sales Orders register (approved 19 Oct 2026: mockup E, phone mockups, button style 1).
+   Work-queue tiles instead of the Sales Order Monitor column; "+ New Order" split button; phone: 2 × 2 tiles,
+   a slim bar while the orders scroll, a round + button with a menu from the bottom.
+   Colours: the dark tile follows the application theme (--c-173a5e, like the monitor heads); the bars use the
+   fixed status colours. */
+
+/* ───────── layout: the strip sits above the register, the table gets the full width ───────── */
+html body #page-salesorders .salesorders-workspace{display:block;container-type:inline-size;container-name:sotiles;min-width:0}
+html body #page-salesorders .salesorders-register-area{min-width:0}
+
+/* ───────── tiles ───────── */
+#page-salesorders .so-tiles{display:flex;align-items:stretch;background:#fff;border:1px solid #dfe5ec;border-radius:10px;overflow:hidden;margin:0 0 6px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+#page-salesorders .so-tile{appearance:none;border:0;margin:0;background:#fff;text-align:left;font:inherit;color:#1f2937;cursor:pointer;position:relative;
+  display:flex;flex-direction:column;justify-content:flex-start;gap:1px;padding:12px 16px 12px;min-width:0;transition:background .15s}
+#page-salesorders .so-tile:focus-visible{outline:2px solid var(--c-2e75b6,#2e75b6);outline-offset:-3px}
+#page-salesorders .so-tile-grid{flex:1 1 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));min-width:0}
+#page-salesorders .so-tile-grid .so-tile{border-left:1px solid #edf1f5}
+#page-salesorders .so-tile:hover{background:#f6f9fc}
+#page-salesorders .so-tile.active{background:#eef4fb;box-shadow:inset 0 -3px 0 var(--c-173a5e)}
+#page-salesorders .so-tile-t{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-weight:600;font-size:12.5px;color:#334155}
+#page-salesorders .so-tile-t>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#page-salesorders .so-tile-t b{font-size:22px;line-height:1.1;font-weight:700;color:#0f172a}
+#page-salesorders .so-tile .so-tile-val{font-size:12.5px;font-weight:650;color:#0f172a;margin-top:2px;white-space:nowrap}
+#page-salesorders .so-tile .so-tile-s{font-size:11.5px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#page-salesorders .so-tile-bar{display:block;height:5px;border-radius:3px;background:#eef2f6;margin-top:8px;overflow:hidden}
+#page-salesorders .so-tile-bar i{display:block;height:100%;width:0;border-radius:3px;transition:width .3s}
+#page-salesorders .so-tile[data-tone="blue"] .so-tile-bar i{background:#3b82f6}
+#page-salesorders .so-tile[data-tone="amber"] .so-tile-bar i{background:#f59e0b}
+#page-salesorders .so-tile[data-tone="purple"] .so-tile-bar i{background:#8b5cf6}
+#page-salesorders .so-tile[data-tone="orange"] .so-tile-bar i{background:#f97316}
+#page-salesorders .so-tile-hot .so-tile-t,#page-salesorders .so-tile-hot .so-tile-t b{color:#c2410c}
+#page-salesorders .so-tile-hot.so-tile-zero .so-tile-t,#page-salesorders .so-tile-hot.so-tile-zero .so-tile-t b{color:#334155}
+/* the dark tile: To deliver */
+#page-salesorders .so-tile-lead{flex:0 0 200px;background:var(--c-173a5e);color:#fff;justify-content:center;padding:12px 18px}
+#page-salesorders .so-tile-lead:hover{background:var(--c-173a5e);filter:brightness(1.08)}
+#page-salesorders .so-tile-lead.active{background:var(--c-173a5e);box-shadow:inset 0 -4px 0 rgba(255,255,255,.75)}
+#page-salesorders .so-tile-lead small{font-size:11px;letter-spacing:.05em;text-transform:uppercase;opacity:.8;font-weight:600}
+#page-salesorders .so-tile-lead b{font-size:26px;line-height:1.15;font-weight:700}
+#page-salesorders .so-tile-lead .so-tile-val{color:#fff;font-weight:600}
+#page-salesorders .so-tile-lead .so-tile-l2{font-size:11.5px;opacity:.75;margin-top:3px;white-space:nowrap}
+#page-salesorders .so-tiles-note{font-size:11.5px;color:#64748b;margin:0 2px 10px;min-height:16px}
+#page-salesorders .so-tiles-note b{color:#334155}
+/* the "· to invoice" mark in the Status column */
+.so-to-invoice{margin-left:2px;font-size:11.5px;font-weight:600;color:#c2410c;white-space:nowrap}
+
+/* narrower content (laptop with the menu open, tablets): the dark tile becomes a slim bar on top */
+@container sotiles (max-width: 900px){
+  #page-salesorders .so-tiles{flex-direction:column}
+  #page-salesorders .so-tile-lead{flex:0 0 auto;flex-direction:row;align-items:center;gap:12px;padding:9px 16px}
+  #page-salesorders .so-tile-lead b{font-size:21px}
+  #page-salesorders .so-tile-lead .so-tile-l2{margin:0 0 0 auto}
+  #page-salesorders .so-tile-grid .so-tile:first-child{border-left:0}
+  #page-salesorders .so-tile{padding:10px 13px}
+  #page-salesorders .so-tile-t b{font-size:19px}
+}
+
+/* ───────── + New Order: split button ───────── */
+html body #page-salesorders .bc-filterbar-right>.bc-split.bc-filter-new{display:inline-flex!important;align-items:stretch;flex:0 0 auto!important;width:auto!important;height:34px!important;padding:0!important;position:relative;background:none!important;border:0!important;box-shadow:none!important;gap:0}
+#page-salesorders .bc-split>.btn{height:34px!important;min-height:34px!important;margin:0!important;box-shadow:none!important;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+#page-salesorders .bc-split-main{border-radius:8px 0 0 8px!important;padding:0 14px!important;font-weight:650!important}
+#page-salesorders .bc-split-caret{border-radius:0 8px 8px 0!important;padding:0!important;width:32px;justify-content:center;border-left:1px solid rgba(255,255,255,.35)!important}
+#page-salesorders .bc-split-caret i,#page-salesorders .bc-split-main i{margin:0!important}
+#page-salesorders .bc-split-caret[aria-expanded="true"] i{transform:rotate(180deg)}
+#page-salesorders .bc-split-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:80;width:270px;background:#fff;border:1px solid #dfe5ec;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.16);padding:6px}
+#page-salesorders .bc-split-menu[hidden]{display:none}
+#page-salesorders .bc-split-menu button{display:flex;flex-direction:column;align-items:flex-start;width:100%;border:0;background:none;text-align:left;padding:9px 11px;border-radius:7px;cursor:pointer;font:inherit;color:#0f172a}
+#page-salesorders .bc-split-menu button:hover:not([disabled]),#page-salesorders .bc-split-menu button:focus-visible{background:#eef4fb;outline:none}
+#page-salesorders .bc-split-menu button b{font-size:12.5px;font-weight:650}
+#page-salesorders .bc-split-menu button small{font-size:11px;color:#64748b;margin-top:1px}
+#page-salesorders .bc-split-menu button[disabled]{opacity:.45;cursor:default}
+/* narrow toolbar: "+" and the arrow only (as the other registers' main buttons) */
+@container bcbar (max-width: 800px){
+  #page-salesorders .bc-split-main{width:34px;padding:0!important;justify-content:center}
+  #page-salesorders .bc-split-main span{display:none}
+}
+
+/* ───────── "New Order — choose a quotation" ───────── */
+#so-pick-modal .so-pick{width:min(620px,96vw)}
+#so-pick-modal .modal-body{padding:14px 16px 12px}
+#so-pick-modal .so-pick-searchrow{display:flex;align-items:center;gap:8px;border:1px solid #d5dde6;border-radius:8px;padding:0 10px;height:38px;margin-bottom:10px;background:#fff}
+#so-pick-modal .so-pick-searchrow i{color:#94a3b8;font-size:16px}
+#so-pick-modal .so-pick-searchrow input{flex:1;border:0;outline:none;font:inherit;font-size:13px;height:36px;background:transparent;min-width:0}
+#so-pick-modal .so-pick-searchrow:focus-within{border-color:var(--c-2e75b6,#2e75b6);box-shadow:0 0 0 3px rgba(46,117,182,.12)}
+#so-pick-modal .so-pick-list{max-height:min(56vh,460px);overflow:auto;border:1px solid #e3e9f0;border-radius:9px}
+#so-pick-modal .so-pick-grp{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;padding:8px 12px 5px;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#1f4f84;background:#f5f8fb;border-bottom:1px solid #e9eef4}
+#so-pick-modal .so-pick-grp.muted{color:#8a99aa}
+#so-pick-modal .so-pick-item{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;border:0;border-bottom:1px solid #f0f3f7;background:#fff;padding:10px 12px;text-align:left;cursor:pointer;font:inherit;color:#0f172a}
+#so-pick-modal .so-pick-item:hover,#so-pick-modal .so-pick-item.kb{background:#eef4fb}
+#so-pick-modal .so-pick-item[data-kind="sent"]{color:#475569}
+#so-pick-modal .so-pick-main{display:flex;flex-direction:column;min-width:0}
+#so-pick-modal .so-pick-main b{font-size:13px}
+#so-pick-modal .so-pick-main span{font-size:12px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#so-pick-modal .so-pick-side{display:flex;flex-direction:column;align-items:flex-end;flex:none;text-align:right}
+#so-pick-modal .so-pick-side b{font-size:12.5px}
+#so-pick-modal .so-pick-side small{font-size:11px;color:#64748b;white-space:nowrap}
+#so-pick-modal .so-pick-empty{padding:14px 12px;font-size:12.5px;color:#64748b}
+#so-pick-modal .so-pick-foot{margin:8px 2px 0;font-size:11px;color:#94a3b8}
+
+/* ───────── phone ───────── */
+#page-salesorders .so-minibar{display:none}
+.so-fab{display:none}
+.so-sheet-item{display:flex;align-items:center;gap:12px;width:100%;border:0;border-bottom:1px solid #eef2f6;background:none;text-align:left;padding:13px 4px;font:inherit;color:#0f172a;cursor:pointer}
+.so-sheet-item:last-child{border-bottom:0}
+.so-sheet-item i{font-size:22px;color:var(--c-173a5e)}
+.so-sheet-item span{display:flex;flex-direction:column}
+.so-sheet-item b{font-size:14.5px;font-weight:650}
+.so-sheet-item small{font-size:12px;color:#64748b;margin-top:2px}
+.so-sheet-item[disabled]{opacity:.45;cursor:default}
+@media (max-width: 760px){
+  #page-salesorders .so-tiles{flex-direction:column;border-radius:12px;margin:2px 0 10px}
+  #page-salesorders .so-tile-lead{flex-direction:row;flex-wrap:wrap;align-items:baseline;gap:2px 10px;padding:11px 14px}
+  #page-salesorders .so-tile-lead small{width:100%}
+  #page-salesorders .so-tile-lead b{font-size:24px}
+  #page-salesorders .so-tile-lead .so-tile-l2{margin:0 0 0 auto}
+  #page-salesorders .so-tile-grid{grid-template-columns:1fr 1fr}
+  #page-salesorders .so-tile-grid .so-tile{border-left:0;border-top:1px solid #edf1f5;padding:10px 13px}
+  #page-salesorders .so-tile-grid .so-tile:nth-child(2n){border-left:1px solid #edf1f5}
+  #page-salesorders .so-tile-t b{font-size:20px}
+  #page-salesorders .so-tile-bar{display:none}
+  #page-salesorders .so-tiles-note{display:none}
+  /* the slim bar: shown (by app.js) once the tiles have scrolled away */
+  #page-salesorders .so-minibar{display:flex;position:fixed;z-index:70;left:calc(10px + var(--sa-left,0px));right:calc(10px + var(--sa-right,0px));top:var(--so-mini-top,64px);
+    gap:4px;align-items:center;padding:6px;border-radius:12px;background:var(--c-173a5e);color:#fff;box-shadow:0 6px 18px rgba(15,23,42,.22);
+    opacity:0;transform:translateY(-8px);pointer-events:none;transition:opacity .18s ease,transform .18s ease}
+  #page-salesorders.so-mini-on .so-minibar{opacity:1;transform:none;pointer-events:auto}
+  #page-salesorders .so-minibar button{appearance:none;border:0;font:inherit;color:#fff;cursor:pointer}
+  #page-salesorders .so-mini-lead{flex:0 0 auto;background:none;font-size:10px;font-weight:600;line-height:1.15;text-align:center;white-space:nowrap;padding:4px 6px;border-radius:8px;opacity:.95}
+  #page-salesorders .so-mini-lead b{display:block;font-size:16px}
+  #page-salesorders .so-mini{flex:1 1 auto;min-width:0;background:rgba(255,255,255,.13);border-radius:8px;padding:4px 5px;font-size:10.5px;line-height:1.15;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #page-salesorders .so-mini b{display:block;font-size:15px}
+  #page-salesorders .so-mini-hot b{color:#ffc29e}
+  #page-salesorders .so-minibar .active{background:#fff;color:var(--c-173a5e)}
+  #page-salesorders .so-minibar .so-mini-lead.active{background:#fff;border-radius:8px;padding:4px 6px}
+  #page-salesorders .so-minibar .so-mini-hot.active b{color:#c2410c}
+  /* the toolbar keeps its place under the slim bar */
+  #page-salesorders.so-mini-on .page-toolbar--sticky{top:58px!important}
+  /* + New Order: the round button (the split button stays for larger screens) */
+  html body #page-salesorders .bc-filterbar-right>.bc-split.bc-filter-new{display:none!important}
+  html body #page-salesorders.active .so-fab{display:flex;align-items:center;justify-content:center;position:fixed;z-index:60;right:calc(16px + var(--sa-right,0px));bottom:calc(16px + var(--sa-bottom,0px));
+    width:56px;height:56px;border:0;border-radius:50%;background:var(--c-173a5e);color:#fff;font-size:26px;box-shadow:0 8px 20px rgba(15,23,42,.28);cursor:pointer}
+  html body #page-salesorders .so-fab i{margin:0}
+  /* room at the end of the list so the round button never covers the last order */
+  html body #page-salesorders .so-register-card{padding-bottom:calc(72px + var(--sa-bottom,0px))!important}
+  #so-pick-modal .so-pick-list{max-height:none}
+  #so-pick-modal .so-pick-item{padding:12px}
+}
+
+/* the picker is a small window on larger screens (full screen on a phone, like every window) */
+@media (min-width: 761px){
+  html body #so-pick-modal .modal.so-pick{width:min(640px,94vw)!important;max-width:94vw!important;height:auto!important;min-height:0!important;max-height:min(84vh,680px)!important;display:flex;flex-direction:column}
+  html body #so-pick-modal .modal.so-pick .modal-body{overflow:auto}
+}
+/* a little air between the top bar and the tiles */
+html body #page-salesorders .so-tiles{margin-top:8px}

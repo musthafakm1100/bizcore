@@ -1,0 +1,57 @@
+/* BizCore V269.2 — iPhone / iPad screen edges (rounded corners, notch, home bar).
+   index.html and mycash.html now use viewport-fit=cover, so the page may reach under the notch and the home bar.
+   These rules keep every bar, button and the last line of a list inside the safe area. On screens without such
+   edges the insets are 0 and nothing moves. The --sa-* variables let tests show what an iPhone would look like. */
+:root{
+  --sa-top:env(safe-area-inset-top,0px);
+  --sa-right:env(safe-area-inset-right,0px);
+  --sa-bottom:env(safe-area-inset-bottom,0px);
+  --sa-left:env(safe-area-inset-left,0px);
+}
+
+/* ── BizCore (index.html) ── */
+/* the whole app stays below the status bar / notch and away from the side notch in landscape */
+html body .app{padding:var(--sa-top) var(--sa-right) 0 var(--sa-left);box-sizing:border-box}
+/* the last lines of every page scroll clear of the home bar */
+html body .content{scroll-padding-bottom:var(--sa-bottom)}
+html body .content::after{content:"";display:block;height:var(--sa-bottom)}
+/* the phone menu slides over the page: keep its top and bottom inside the safe area */
+@media (max-width: 860px){
+  html body .sidebar{padding-top:var(--sa-top);padding-bottom:var(--sa-bottom);box-sizing:border-box}
+}
+/* full-screen windows on a phone */
+@media (max-width: 760px){
+  html body .modal:not(.dn-mobile-confirm){padding-left:var(--sa-left);padding-right:var(--sa-right);box-sizing:border-box}
+  html body .modal:not(.dn-mobile-confirm) .modal-header{padding-top:calc(10px + var(--sa-top))!important}
+  html body .dn-mobile-confirm{padding-top:var(--sa-top);box-sizing:border-box}
+  /* bars fixed to the bottom of a window or page */
+  html body .modal-footer{padding-bottom:max(9px,var(--sa-bottom))!important}
+  html body .setup-actions-bar,html body .employee-profile-form .employee-form-actions{padding-bottom:calc(10px + var(--sa-bottom))!important}
+  html body .bc-date .bc-date-pop{bottom:calc(12px + var(--sa-bottom))!important}
+  html body .dn-action-message{bottom:calc(84px + var(--sa-bottom))}
+  html body .toast{top:calc(12px + var(--sa-top))}
+}
+/* the "updated by another user" note */
+html body #rt-sync-badge{bottom:calc(16px + var(--sa-bottom))!important}
+
+/* ── My Cash (mycash.html) ── */
+html body.mc-body .mc-shell{padding-left:var(--sa-left);padding-right:var(--sa-right);box-sizing:border-box}
+html body.mc-body .mc-top{padding-top:var(--sa-top);height:calc(56px + var(--sa-top));box-sizing:border-box}
+html body.mc-body .mc-sb{padding-top:var(--sa-top);padding-bottom:var(--sa-bottom);box-sizing:border-box}
+html body.mc-body .mc-main{padding-bottom:var(--sa-bottom)}
+html body.mc-body .mc-modal-wrap{padding:calc(12px + var(--sa-top)) calc(12px + var(--sa-right)) calc(12px + var(--sa-bottom)) calc(12px + var(--sa-left))}
+html body.mc-body .mc-toast{bottom:calc(22px + var(--sa-bottom))}
+
+/* the area above the top bar (status bar of an app on the home screen) has the top bar's colour */
+html body .app{background:var(--blue-pale,#fff)}
+/* bars that already kept clear of the home bar — now through the same variables */
+html body .bcr-sheet-panel{padding-bottom:calc(16px + var(--sa-bottom))}
+html body .bc-sheet{padding-bottom:calc(10px + var(--sa-bottom))}
+@media (max-width: 760px){
+  html body #page-receipts .rct-fab{bottom:calc(18px + var(--sa-bottom))}
+  html body #rct-new-modal .rct-footer{padding-bottom:max(12px,var(--sa-bottom))!important}
+  html body #dn-confirm-modal .dn-confirm-footer{padding-bottom:calc(8px + var(--sa-bottom))!important}
+}
+@media (max-width: 700px){
+  html body #inv-view-modal .dn-view-actionbar,html body #dn-print-modal .dn-view-actionbar{padding-bottom:max(8px,var(--sa-bottom))!important}
+}
