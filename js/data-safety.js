@@ -238,10 +238,11 @@ function bcRenderDataHealth(){
     <div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>Shared setting</th><th>Last saved</th><th>State</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="ds-note">Also in Firebase (as before): company settings, numbering, purchase, billing and receipt settings, payment accounts, document locking, customers, suppliers, products, terms and all documents.</p>
     <p class="ds-note">Kept in the browser on purpose (per user / device): theme, font size, sidebar, rows per page, last page, drafts, notifications seen.</p></div>`
-    + bcDataWindowCard() + bcBalancesCard();
+    + bcDataWindowCard() + bcBalancesCard() + bcSizesCard();
   if (window.BizCoreCash) { window.BizCoreCash.start(); if (!bcRenderDataHealth._hooked && window.BizCoreCash.onChange) { bcRenderDataHealth._hooked = true; window.BizCoreCash.onChange(() => { if (document.getElementById('dh-bal-stats')) bcFillBalanceStats(); }); } }
   if (window.BizCorePI) window.BizCorePI.start();
   bcFillDataWindowStats();
+  bcFillSizes(false);
 }
 /* V269.1 — data plan step 2a: how much of the sales history is loaded when BizCore opens */
 function bcDataWindowCard(){
@@ -265,6 +266,40 @@ async function bcFillDataWindowStats(){
     + bcReadsRow();
   bcFillBalanceStats();
 }
+/* V269.6 — data plan step 5: records per collection (counted by Firebase) and the largest records */
+const BC_COUNT_COLS = [['quotations', 'Quotations'], ['rfqs', 'RFQs'], ['salesOrders', 'Sales orders'], ['deliveryNotes', 'Delivery notes'], ['customerInvoices', 'Invoices'],
+  ['creditNotes', 'Credit notes'], ['customerReceipts', 'Receipts'], ['purchaseInvoices', 'Purchase invoices'], ['supplierPayments', 'Supplier payments'], ['cashLines', 'Cash & bank lines'],
+  ['stockItems', 'Stock items'], ['customers', 'Customers'], ['suppliers', 'Suppliers'], ['products', 'Products'], ['employees', 'Employees'], ['operationalEvents', 'Delivery notification log']];
+let _bcCounts = null, _bcCountedAt = 0;
+function bcSizesCard(){
+  return `<div class="setup-card ds-card"><h4><i class="ti ti-chart-bar" style="margin-right:6px"></i>Records in Firebase and the largest records</h4>
+    <p class="ds-note">Counted by Firebase when this page opens (about one read per 1,000 records). A record can be at most 1 MB; BizCore warns above 500 KB and refuses a save above 900 KB.</p>
+    <div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>Records</th><th>In Firebase</th></tr></thead><tbody id="dh-counts"><tr><td colspan="2" class="pi-sub">Counting…</td></tr></tbody></table></div>
+    <div style="margin:8px 0 14px"><button type="button" class="btn btn-secondary btn-sm" onclick="bcFillSizes(true)"><i class="ti ti-refresh"></i>Count again</button> <span class="pi-sub" id="dh-counted-at"></span></div>
+    <div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>Largest records loaded now</th><th>Size</th><th></th></tr></thead><tbody id="dh-largest"><tr><td colspan="3" class="pi-sub">…</td></tr></tbody></table></div></div>`;
+}
+async function bcFillSizes(force){
+  const tb = document.getElementById('dh-counts'); if (!tb || !window.FB || !window.FB.fbCount) return;
+  const kb = n => Math.max(1, Math.round(n / 1024)).toLocaleString('en-US') + ' KB';
+  const lg = document.getElementById('dh-largest');
+  if (lg && window.FB.fbLargest) {
+    const list = window.FB.fbLargest(10);
+    lg.innerHTML = list.map(x => `<tr><td><b>${esc(x.label)}</b><div class="pi-sub">${esc(x.col)}${x.deleted ? ' · in the Recycle Bin' : ''}</div></td><td>${kb(x.bytes)}</td><td>${x.bytes > 900 * 1024 ? '<span class="ds-chip bad">Over the limit</span>' : x.bytes > 500 * 1024 ? '<span class="ds-chip warn">Large</span>' : '<span class="ds-chip ok">OK</span>'}</td></tr>`).join('') || '<tr><td colspan="3" class="pi-sub">Nothing loaded yet.</td></tr>';
+  }
+  if (!_bcCounts || force) {
+    tb.innerHTML = '<tr><td colspan="2" class="pi-sub">Counting…</td></tr>';
+    const out = {};
+    await Promise.all(BC_COUNT_COLS.map(async ([c]) => { try { out[c] = await window.FB.fbCount(c); } catch (e) { out[c] = null; } }));
+    _bcCounts = out; _bcCountedAt = Date.now();
+  }
+  const t = document.getElementById('dh-counts'); if (!t) return;
+  const total = Object.values(_bcCounts).reduce((a, v) => a + (v || 0), 0);
+  t.innerHTML = BC_COUNT_COLS.map(([c, label]) => `<tr><td>${esc(label)}</td><td>${_bcCounts[c] == null ? '<span class="pi-sub">not counted</span>' : Number(_bcCounts[c]).toLocaleString('en-US')}</td></tr>`).join('')
+    + `<tr><td><b>Total</b></td><td><b>${total.toLocaleString('en-US')}</b></td></tr>`;
+  const at = document.getElementById('dh-counted-at'); if (at) at.textContent = 'Counted ' + new Date(_bcCountedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+window.bcFillSizes = bcFillSizes;
+
 /* V269.4 — data plan step 2c: how many records were read from Firebase (start-up = the first minute) */
 function bcReadsRow(){
   const r = window.BCReads; if (!r) return '';

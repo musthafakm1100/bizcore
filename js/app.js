@@ -6240,6 +6240,14 @@ async function loadRecycleBin() {
   }
   recycleBin = out;
 }
+/* V269.6: a save refused (e.g. a record too large) — one dialog, not on top of another */
+window.bcShowSaveProblem = function (title, message) {
+  setTimeout(() => {
+    const d = document.getElementById('validation-dialog');
+    if (d && d.classList.contains('open')) return;
+    showValidationDialog(title, message, '', '');
+  }, 300);
+};
 /* V269.5: a save refused because someone else saved the record meanwhile */
 window.bcSaveConflict = function (col, conflicts, message) {
   const quiet = !!window.__bcQuietConflict;

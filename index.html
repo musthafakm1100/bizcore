@@ -2275,7 +2275,7 @@ import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWi
 import { getFirestore, doc, getDoc as _fsGetDoc, getDocFromServer, setDoc, onSnapshot as _fsOnSnapshot, deleteDoc,
          collection, getDocs as _fsGetDocs, query, where, limit, writeBatch,
          initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-         runTransaction, serverTimestamp, increment, deleteField, connectFirestoreEmulator }
+         runTransaction, serverTimestamp, increment, deleteField, getCountFromServer, connectFirestoreEmulator }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 /* V269.4 (data plan 2c): count the records read from Firebase (Data Health → "records read").
    Firebase charges a read for each record that comes from the server (not from the browser's own cache), and at least
@@ -2559,6 +2559,27 @@ async function _guardSalesOrderPersistence(arr) {
 const BIZCORE_RECORD_WARN_BYTES = 512 * 1024;
 const BIZCORE_RECORD_CRITICAL_BYTES = 768 * 1024;
 const _bizcoreEncoder = new TextEncoder();
+/* V269.6 (data plan step 4): size guard on every save — a warning above 500 KB, refused above 900 KB (Firestore's limit
+   is 1 MB a record, and a refused write would otherwise fail without a clear reason). */
+const BC_SAVE_WARN_BYTES = 500 * 1024, BC_SAVE_LIMIT_BYTES = 900 * 1024;
+const _bcWarnedBig = new Set();
+function _bcLabelOf(col, rec) { return String((rec && (rec.qno || rec.rfqNo || rec.soNo || rec.piNo || rec.dnNo || rec.invNo || rec.code || rec.company || rec.name)) || (rec && rec.id) || col); }
+const _bcKB = n => Math.round(n / 1024).toLocaleString('en-US') + ' KB';
+function _bcSizeCheck(col, rec, json) {
+  const bytes = _bizcoreEncoder.encode(json).length, label = _bcLabelOf(col, rec);
+  if (bytes > BC_SAVE_LIMIT_BYTES) {
+    const e = new Error(label + ' is too large to save (' + _bcKB(bytes) + '; the limit is ' + _bcKB(BC_SAVE_LIMIT_BYTES) + '). Remove large pictures or very long text from it, or split it, then save again.');
+    e.code = 'too-large';
+    if (typeof window.bcShowSaveProblem === 'function') { try { window.bcShowSaveProblem('Not saved — too large', e.message); } catch (x) {} }
+    throw e;
+  }
+  if (bytes > BC_SAVE_WARN_BYTES) {
+    const k = col + '/' + ((rec && rec.id) || label);
+    console.warn('[BizCore storage size warning]', { collection: col, record: label, bytes });
+    if (!_bcWarnedBig.has(k) && typeof window.showToast === 'function') { _bcWarnedBig.add(k); window.showToast(label + ' is getting large (' + _bcKB(bytes) + ' of ' + _bcKB(BC_SAVE_LIMIT_BYTES) + ').', 'warning'); }
+  }
+  return bytes;
+}
 window.BizCoreStorageDiagnostics = {
   lastSaveError: null,
   estimateBytes: record => _bizcoreEncoder.encode(JSON.stringify(record)).length,
@@ -2665,6 +2686,7 @@ async function fbSave(col, arr, opts = {}) {
     const cache = _lastSynced[col] || (_lastSynced[col] = {});
     const currentIds = new Set();
     const writes = []; // {docId, data, json}
+    const tooLarge = [];   // V269.6
     const only = Array.isArray(opts.onlyIds) ? new Set(opts.onlyIds.map(String)) : null;
     const skip = Array.isArray(opts.skipIds) ? new Set(opts.skipIds.map(String)) : null;   // V269: records whose own save failed — not written, not deleted
     for (const record of (arr || [])) {
@@ -2684,6 +2706,7 @@ async function fbSave(col, arr, opts = {}) {
             note: 'Estimated JSON bytes; Firestore size differs. Migrate large nested records.'
           });
         }
+        try { _bcSizeCheck(col, record, json); } catch (e) { tooLarge.push(e); continue; }   // V269.6: refused above 900 KB — the others are saved
         writes.push({ docId, data: record, json });
       }
     }
@@ -2691,7 +2714,7 @@ async function fbSave(col, arr, opts = {}) {
     const marked = _bcExplicitDeletes[col] || new Set();
     const deletes = Object.keys(cache).filter(id => !currentIds.has(id) && (!only || only.has(id)) && marked.has(id));
     deletes.forEach(id => marked.delete(id));
-    if (!writes.length && !deletes.length) return true; // nothing changed — skip the network entirely
+    if (!writes.length && !deletes.length) { if (tooLarge.length) throw tooLarge[0]; return true; } // nothing changed — skip the network entirely
 
     if (_BC_REV_COLS.has(col)) {
       // V269.5: each record on its own, with the revision check
@@ -2707,6 +2730,7 @@ async function fbSave(col, arr, opts = {}) {
       for (const id of deletes) { try { await deleteDoc(doc(db, col, id)); delete cache[id]; } catch (e) { failed.push({ docId: id, code: e.code || 'unknown', message: e.message }); } }
       if (conflicts.length) throw _bcConflictError(col, conflicts);
       if (failed.length) { const e = new Error('Not saved: ' + failed.map(f => f.docId + ' (' + f.code + ')').join(', ')); e.code = failed[0].code; throw e; }
+      if (tooLarge.length) throw tooLarge[0];
       return true;
     }
     const ops = [
@@ -2732,6 +2756,7 @@ async function fbSave(col, arr, opts = {}) {
     }
     writes.forEach(w => cache[w.docId] = w.json);
     deletes.forEach(id => delete cache[id]);
+    if (tooLarge.length) throw tooLarge[0];
     return true;
   } catch(e) {
     window.BizCoreStorageDiagnostics.lastSaveError = {
@@ -2770,6 +2795,7 @@ async function fbSaveRecordWith(col, record, extras = []) {
     await _migrateCollectionIfNeeded(col);
     if (_BC_REF_STAMP[col]) _BC_REF_STAMP[col](record);   // V269.1
     const docId = _docIdFor(col, record), json = JSON.stringify(record);
+    _bcSizeCheck(col, record, json); extras.forEach(x => _bcSizeCheck(x.path.slice(0, -1).join('/'), x.data, JSON.stringify(x.data)));   // V269.6
     const estimatedBytes = _bizcoreEncoder.encode(json).length;
     if (estimatedBytes >= BIZCORE_RECORD_WARN_BYTES) console.warn('[BizCore storage size warning]', { collection: col, recordId: docId, estimatedBytes, level: estimatedBytes >= BIZCORE_RECORD_CRITICAL_BYTES ? 'critical' : 'warning' });
     if (_BC_REV_COLS.has(col)) {   // V269.5: revision check
@@ -2830,6 +2856,18 @@ async function fbPurgeRecord(col, id) {
   const c = _lastSynced[col]; if (c) delete c[_safeDocId(id)];
   return true;
 }
+/* V269.6 (data plan step 5): Data Health — records per collection (Firebase counts them: one read per 1,000) and the
+   largest records among those loaded on this screen (measured here, no reads). */
+async function fbCount(col) {
+  if (typeof getCountFromServer === 'function') { const s = await getCountFromServer(collection(db, col)); return s.data().count; }
+  const s = await getDocs(collection(db, col)); return s.size;
+}
+function fbLargest(n = 10) {
+  const all = [];
+  for (const [col, c] of Object.entries(_lastSynced)) for (const [id, json] of Object.entries(c || {})) if (typeof json === 'string') all.push({ col, id, bytes: _bizcoreEncoder.encode(json).length, json });
+  all.sort((a, b) => b.bytes - a.bytes);
+  return all.slice(0, n).map(x => { let rec = null; try { rec = JSON.parse(x.json); } catch (e) {} return { col: x.col, id: x.id, bytes: x.bytes, label: _bcLabelOf(x.col, rec || { id: x.id }), deleted: !!(rec && rec._deletedAt) }; });
+}
 /** The copy of a record as last read from / written to the server (JSON), or null. */
 function fbSyncedJSON(col, id) { const c = _lastSynced[col]; return c ? (c[_safeDocId(id)] ?? null) : null; }
 /** One document by path segments → data | null. Throws when the server can't be reached. */
@@ -2837,13 +2875,45 @@ async function fbReadDoc(...path) { const s = await getDoc(doc(db, ...path.map(S
 /** Every document of a (sub)collection by path segments → [data]. */
 async function fbReadAll(...path) { const s = await getDocs(collection(db, ...path.map(String))); const out = []; s.forEach(d => out.push(d.data())); return out; }
 
+/* V269.6 (data plan step 4): the company pictures (logo, stamp, signature) are kept in their own records
+   (settings/img_logo, img_stamp, img_signature) — the main settings record stays small. Old settings with the pictures
+   inside are read as before and moved out on the next save. */
+const _BC_SETTING_IMAGES = ['logo', 'stamp', 'signature'];
+const _bcImgSaved = {}, _bcImgCache = {};
 async function fbSaveSettings(obj) {
   try {
-    await setDoc(doc(db, 'settings', 'main'), {
-      data: JSON.stringify(obj), updatedAt: Date.now()
+    const main = { ...(obj || {}) }, imgs = {};
+    _BC_SETTING_IMAGES.forEach(k => { imgs[k] = typeof main[k] === 'string' ? main[k] : ''; delete main[k]; });
+    main._imagesSplit = true;
+    const mainJson = JSON.stringify(main);
+    _bcSizeCheck('settings', { id: 'main', name: 'Company settings' }, mainJson);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'settings', 'main'), { data: mainJson, updatedAt: Date.now() });
+    const changed = _BC_SETTING_IMAGES.filter(k => imgs[k] !== _bcImgSaved[k]);
+    changed.forEach(k => {
+      _bcSizeCheck('settings', { id: 'img_' + k, name: 'The company ' + k }, imgs[k]);
+      batch.set(doc(db, 'settings', 'img_' + k), { data: imgs[k], updatedAt: Date.now() });
     });
+    await batch.commit();
+    changed.forEach(k => { _bcImgSaved[k] = imgs[k]; _bcImgCache[k] = imgs[k]; });
     return true;
-  } catch(e) { console.warn('FB settings save failed:', e.message); return false; }
+  } catch(e) {
+    window.BizCoreStorageDiagnostics.lastSaveError = { collection: 'settings', code: e?.code || 'unknown', message: String(e?.message || e), timestamp: new Date().toISOString() };
+    console.warn('FB settings save failed:', e.message); return false;
+  }
+}
+async function _bcLoadSettingImages() {
+  await Promise.all(_BC_SETTING_IMAGES.map(async k => {
+    const s = await getDoc(doc(db, 'settings', 'img_' + k));
+    const v = s.exists() ? String(s.data().data || '') : '';
+    _bcImgSaved[k] = v; _bcImgCache[k] = v;
+  }));
+}
+function _bcWithImages(main) {
+  const o = { ...main };
+  if (main._imagesSplit) _BC_SETTING_IMAGES.forEach(k => { o[k] = _bcImgCache[k] || ''; });
+  delete o._imagesSplit;
+  return o;
 }
 
 /* V266.5: per-user screen preferences (application theme) — settings/uiPrefs_<uid>, so the theme follows the user
@@ -2860,7 +2930,10 @@ async function fbLoadSettings() {
   try {
     const snap = await getDoc(doc(db, 'settings', 'main'));
     if (!snap.exists()) return null;
-    return JSON.parse(snap.data().data || 'null');
+    const main = JSON.parse(snap.data().data || 'null');
+    if (!main) return null;
+    if (main._imagesSplit) await _bcLoadSettingImages();   // V269.6
+    return _bcWithImages(main);
   } catch(e) { console.warn('FB settings load failed:', e.message); return null; }
 }
 
@@ -3168,14 +3241,25 @@ function fbListenOperationalEvents(onUpdate) {
 
 function fbListenSettings(onUpdate) {
   const ref = doc(db, 'settings', 'main');
-  return onSnapshot(ref, snap => {
+  let lastMain = null;
+  const emit = () => { if (lastMain) { try { onUpdate(_bcWithImages(lastMain)); } catch (e) {} } };
+  // V269.6: the pictures have their own records — a change to one of them refreshes the settings too
+  const imgUnsubs = _BC_SETTING_IMAGES.map(k => onSnapshot(doc(db, 'settings', 'img_' + k), s => {
+    if (s.metadata && s.metadata.hasPendingWrites) return;
+    const v = s.exists() ? String(s.data().data || '') : '';
+    if (_bcImgCache[k] === v) return;
+    _bcImgCache[k] = v; _bcImgSaved[k] = v;
+    if (lastMain && lastMain._imagesSplit) emit();
+  }, () => {}));
+  const unsub = onSnapshot(ref, snap => {
     if (!snap.exists()) return;
     try {
       const obj = JSON.parse(snap.data().data || '{}');
       if (snap.metadata.hasPendingWrites) return;
-      onUpdate(obj);
+      lastMain = obj; emit();
     } catch(e) {}
   });
+  return () => { unsub(); imgUnsubs.forEach(u => u()); };
 }
 
 /* ═══════════════════════════════════════════════════
@@ -3765,7 +3849,7 @@ window.BizCoreRct = {
   },
 };
 /* Expose to app.js */
-window.FB = { fbSave, fbLoad, fbSaveRecordWith, fbMergeFields, fbMarkDeleted, fbSoftDelete, fbDeletedRecords, fbRestoreRecord, fbPurgeRecord, fbSyncedJSON, fbReadDoc, fbReadAll, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
+window.FB = { fbSave, fbLoad, fbSaveRecordWith, fbMergeFields, fbCount, fbLargest, fbMarkDeleted, fbSoftDelete, fbDeletedRecords, fbRestoreRecord, fbPurgeRecord, fbSyncedJSON, fbReadDoc, fbReadAll, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
   getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, finalizeProvisionalNumber, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
 
   /* ═══════════════════════════════════════════════════
@@ -3891,11 +3975,11 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=269.5';
+      s.src = 'js/app.js?v=269.6';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
-        const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.4'; document.body.appendChild(ds); };
+        const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.6'; document.body.appendChild(ds); };
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js
