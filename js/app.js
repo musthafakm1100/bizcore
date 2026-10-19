@@ -202,6 +202,7 @@ function pvSnapshot(r) { const s = {}; PV_WORKING_KEYS.forEach(k => { s[k] = Obj
 function pvRestore(r, s) { PV_WORKING_KEYS.forEach(k => { if (s[k] === undefined) delete r[k]; else r[k] = s[k]; }); }
 function rfqSaveFailedMessage() {
   const err = window.BizCoreStorageDiagnostics && window.BizCoreStorageDiagnostics.lastSaveError;
+  if (err && err.code === 'conflict') return err.message;   // V269.5
   if (!navigator.onLine) return 'You are offline. Nothing was saved — reconnect and try again.';
   if (err && err.code === 'permission-denied') return 'The database refused the change. Nothing was saved — reload BizCore and try again.';
   return 'The database did not confirm the change' + (err && err.message ? ' (' + err.message + ')' : '') + '. Nothing was saved — please try again.';
@@ -805,6 +806,8 @@ async function loadData() {
   if (!salesOrders.length) salesOrders = [];
   // v102: harden Customer/Supplier relationships. Existing test records are upgraded
   // only when a single unambiguous master match exists; no name guess is made.
+  window.__bcQuietConflict = true;   // V269.5: start-up upkeep — another user doing the same at the same time is fine
+  try {
   const relationshipIdsMigrated=migrateMasterRelationshipIds();
   if(relationshipIdsMigrated.quotations) await saveQuotations();
   if(relationshipIdsMigrated.rfqs) await saveRFQs();
@@ -814,6 +817,7 @@ async function loadData() {
   // can affect their label, totals, preview, print, or register values.
   const vatSnapshotsMigrated=migrateQuotationVatSnapshots();
   if(vatSnapshotsMigrated) await saveQuotations();
+  } finally { window.__bcQuietConflict = false; }
   // One-time cleanup: fix quantities saved with floating-point/decimal drift (e.g. 9.01, 49.999999994)
   salesOrders.forEach(so => {
     (so.items||[]).forEach(it => { if (it.qty != null) it.qty = roundQtyForUom(it.qty, it.uom); });
@@ -955,6 +959,7 @@ function requireOnlineForDeliveryNotes(){
 }
 function salesOrderSaveFailureMessage(){
   const err = window.BizCoreStorageDiagnostics && window.BizCoreStorageDiagnostics.lastSaveError;
+  if (err && err.code === 'conflict') return err.message;   // V269.5: saved by someone else meanwhile
   if (err && err.code === 'permission-denied') return 'The database refused the change. Your editing lock on this Sales Order may have expired or been released, or another user is working on it. Nothing was saved — please open it again.';
   if (!navigator.onLine) return 'You are offline. Nothing was saved — reconnect and try again.';
   return 'The database did not confirm the change' + (err && err.message ? ' (' + err.message + ')' : '') + '. Nothing was saved — please try again.';
@@ -975,7 +980,12 @@ async function saveSalesOrders(opts = {}) {
     const persisted = salesOrders.map(so => dnCore().stripProjection(so));
     rawSalesOrders = persisted;
     cacheSalesOrdersLocally();
-    if (window.FB) return await window.FB.fbSave('salesOrders', persisted, opts);
+    if (window.FB) {
+      const ok = await window.FB.fbSave('salesOrders', persisted, opts);
+      // V269.5: the revision stamps of the saved orders go back to the screen's copies
+      persisted.forEach(p => { if (p && p._rev != null) { const so = salesOrders.find(x => x.id === p.id); if (so) { so._rev = p._rev; so._savedBy = p._savedBy; so._savedAt = p._savedAt; } } });
+      return ok;
+    }
     return true;
   }
   try { void 0 /* V269.4: no browser copy of salesorders */; } catch(e) {}
@@ -1784,6 +1794,7 @@ async function setDefaultTerm(type, id) {
 }
 
 async function deleteTerm(type, id) {
+  if (window.FB && window.FB.fbMarkDeleted) window.FB.fbMarkDeleted(type === 'delivery' ? 'deliveryTerms' : 'paymentTerms', id);   // V269.5: deleted on purpose
   if (type === 'delivery') deliveryTerms = deliveryTerms.filter(t=>t.id!==id);
   else paymentTerms = paymentTerms.filter(t=>t.id!==id);
   await saveTerms();
@@ -1987,17 +1998,16 @@ async function requestMasterDelete(type, ids, sourceModalId='') {
   });
   if (!second) return false;
 
-  const now = new Date().toISOString();
-  const deletedBy = (window.currentUser && (window.currentUser.email || window.currentUser.name)) || 'unknown';
-  records.forEach(record => recycleBin.push({...record, deletedAt:now, deletedBy, originalCollection:type}));
+  // V269.5: the records stay in Firebase with a Recycle Bin mark (restored from the Recycle Bin)
+  if (!(await bcSoftDeleteRecords(type, records))) return false;
   const idsSet = new Set(records.map(r=>r.id));
   if (type === 'customers') customers = customers.filter(r=>!idsSet.has(r.id));
   else if (type === 'suppliers') suppliers = suppliers.filter(r=>!idsSet.has(r.id));
   else if (type === 'products') products = products.filter(r=>!idsSet.has(r.id));
   records.forEach(r => masterSelection[type].delete(r.id));
 
-  const saveFn = type === 'customers' ? saveCustomers : type === 'suppliers' ? saveSuppliers : saveProducts;
-  await Promise.all([saveFn(), saveRecycleBin()]);
+  if (!window.FB) { const saveFn = type === 'customers' ? saveCustomers : type === 'suppliers' ? saveSuppliers : saveProducts; await saveFn(); }
+  else { try { localStorage.setItem('dtq_' + type, JSON.stringify(type === 'customers' ? customers : type === 'suppliers' ? suppliers : products)); } catch (e) {} }
   if (sourceModalId) { clearDirty(); closeModal(sourceModalId); }
   if (type === 'customers') { renderCustomers(); renderSetupCustTable(); }
   else if (type === 'suppliers') renderSuppliers();
@@ -6089,14 +6099,8 @@ async function deleteQuotation(id) {
     linkedRFQ.status      = 'Pricing';
   }
 
-  // Move to recycle bin instead of deleting outright
-  const binEntry = {
-    ...JSON.parse(JSON.stringify(q)),
-    deletedAt: new Date().toISOString(),
-    deletedBy: (window.currentUser && window.currentUser.email) || 'unknown',
-    originalCollection: 'quotations'
-  };
-  recycleBin.push(binEntry);
+  // V269.5: move to the Recycle Bin = a mark on the quotation itself (it stays in Firebase)
+  if (!(await bcSoftDeleteRecords('quotations', [q]))) { if (linkedRFQ) linkedRFQ.quotationId = id; return; }
 
   // Remove from active quotations — but the number is NEVER reused,
   // since nextQNoSafe() always pulls from the atomic Firestore counter,
@@ -6107,7 +6111,6 @@ async function deleteQuotation(id) {
   // them together in one round trip each instead of one after another.
   await Promise.all([
     linkedRFQ ? saveRFQs() : Promise.resolve(),
-    saveRecycleBin(),
     saveQuotations()
   ]);
 
@@ -6212,26 +6215,41 @@ function showReasonPrompt(opts) {
   });
 }
 
-/* ── RECYCLE BIN ── */
+/* ── RECYCLE BIN ── V269.5 (data plan step 4): a mark on the record itself (_deletedAt / _deletedBy).
+   The record stays in its own collection; every list leaves it out; the Recycle Bin reads the marked records from
+   Firebase when it is opened. Restore removes the mark; administrators purge (single, or all older than 90 days). */
 let recycleBin = [];
-
-async function saveRecycleBin() {
-  try { localStorage.setItem('dtq_recycle_bin', JSON.stringify(recycleBin)); } catch(e) {}
-  if (window.FB) await window.FB.fbSave('recycleBin', recycleBin);
-}
-
-async function loadRecycleBin() {
-  if (window.FB) {
-    try {
-      const fbBin = await window.FB.fbLoad('recycleBin');
-      if (fbBin) { recycleBin = fbBin; return; }
-    } catch(e) {}
+const BC_BIN_KEEP_DAYS = 90;
+async function bcSoftDeleteRecords(col, records) {
+  if (!window.FB || !window.FB.fbSoftDelete) return true;   // local-only mode: removed from the list as before
+  for (const r of records) {
+    if (!(await window.FB.fbSoftDelete(col, r.id))) {
+      showValidationDialog('Not moved to the Recycle Bin', (navigator.onLine === false ? 'You are offline. ' : 'The database did not confirm the change. ') + 'Nothing was deleted — please try again.', '', '');
+      return false;
+    }
   }
-  try {
-    const r = localStorage.getItem('dtq_recycle_bin');
-    if (r) recycleBin = JSON.parse(r);
-  } catch(e) {}
+  return true;
 }
+async function saveRecycleBin() { return true; }   // V269.5: nothing to save — the mark is on the record
+async function loadRecycleBin() {
+  if (!window.FB || !window.FB.fbDeletedRecords) return;
+  const out = [];
+  for (const col of Object.keys(RECYCLE_BIN_TYPES)) {
+    try { (await window.FB.fbDeletedRecords(col)).forEach(d => out.push({ ...d, deletedAt: d._deletedAt, deletedBy: d._deletedBy || '', originalCollection: col })); }
+    catch (e) { console.warn('[BizCore] Recycle Bin: ' + col + ' not read:', e.message); }
+  }
+  recycleBin = out;
+}
+/* V269.5: a save refused because someone else saved the record meanwhile */
+window.bcSaveConflict = function (col, conflicts, message) {
+  const quiet = !!window.__bcQuietConflict;
+  setTimeout(() => {
+    const d = document.getElementById('validation-dialog');
+    if (d && d.classList.contains('open')) return;   // the screen already says so
+    if (quiet) return;
+    showValidationDialog('Not saved — changed by someone else', message, '', '');
+  }, 300);
+};
 
 const RECYCLE_BIN_TYPES = {
   quotations: {
@@ -6277,11 +6295,15 @@ const RECYCLE_BIN_TYPES = {
 };
 let recycleBinFilter = 'all';
 
-function openRecycleBin() {
+async function openRecycleBin() {
   recycleBinFilter = 'all';
-  renderRecycleBin();
+  recycleBin = [];
+  const list = document.getElementById('recycle-bin-list'); if (list) list.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--gray)">Loading…</div>';
   openModalWithSize('recycle-bin-modal');
+  await loadRecycleBin();   // V269.5: read from Firebase when opened
+  renderRecycleBin();
 }
+function bcIsAdmin() { return !!((window.BizCorePI && window.BizCorePI.isAdministrator) || (window.currentUser && window.currentUser.isAdmin)); }
 
 function switchRecycleBinFilter(type) {
   recycleBinFilter = type;
@@ -6302,6 +6324,8 @@ function renderRecycleBin() {
     }).join('');
   }
 
+  if (tabs) tabs.insertAdjacentHTML('beforeend', '<span style="flex:1"></span><span class="pi-sub" style="align-self:center;font-size:11px;color:var(--gray)">Kept until an administrator empties it' + (bcIsAdmin() ? '' : '') + '</span>'
+    + (bcIsAdmin() ? '<button type="button" class="btn btn-sm btn-secondary" onclick="purgeOldFromBin()"><i class="ti ti-trash-x"></i> Empty older than ' + BC_BIN_KEEP_DAYS + ' days</button>' : ''));
   const items = recycleBin
     .filter(x => recycleBinFilter === 'all' || x.originalCollection === recycleBinFilter)
     .sort((a,b) => new Date(b.deletedAt) - new Date(a.deletedAt));
@@ -6329,7 +6353,7 @@ function renderRecycleBin() {
       + '</div></div>'
       + '<div style="display:flex;gap:6px">'
       + '<button class="btn btn-secondary btn-sm" onclick="restoreFromBin(\'' + item.id + '\')"><i class="ti ti-restore"></i> Restore</button>'
-      + '<button class="btn btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA" onclick="purgeFromBin(\'' + item.id + '\')"><i class="ti ti-trash-x"></i> Purge</button>'
+      + (bcIsAdmin() ? '<button class="btn btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA" onclick="purgeFromBin(\'' + item.id + '\')"><i class="ti ti-trash-x"></i> Purge</button>' : '')
       + '</div></div>';
   }).join('');
 }
@@ -6354,10 +6378,13 @@ async function restoreFromBin(id) {
   delete restored.deletedAt;
   delete restored.deletedBy;
   delete restored.originalCollection;
-  cfg.restoreArray().push(restored);
+  delete restored._deletedAt; delete restored._deletedBy;
+  if (window.FB && window.FB.fbRestoreRecord) {
+    try { await window.FB.fbRestoreRecord(restoredType, item.id); }
+    catch (e) { showToast('Not restored: ' + e.message, 'error'); return; }
+    const arr = cfg.restoreArray(); if (!arr.some(x => x.id === restored.id)) arr.push(restored);
+  } else { cfg.restoreArray().push(restored); await cfg.restoreSave(); }
   recycleBin.splice(idx, 1);
-
-  await Promise.all([cfg.restoreSave(), saveRecycleBin()]);
   renderAll();
   if(restoredType==='suppliers') renderSuppliers();
   renderRecycleBin();
@@ -6365,6 +6392,7 @@ async function restoreFromBin(id) {
 }
 
 async function purgeFromBin(id) {
+  if (!bcIsAdmin()) { showToast('Only administrators can permanently delete.', 'error'); return; }
   const idx = recycleBin.findIndex(x => x.id === id);
   if (idx === -1) return;
   const item = recycleBin[idx];
@@ -6379,10 +6407,26 @@ async function purgeFromBin(id) {
   });
   if (!confirmed) return;
 
+  if (window.FB && window.FB.fbPurgeRecord) {
+    try { await window.FB.fbPurgeRecord(item.originalCollection, item.id); }
+    catch (e) { showToast('Not deleted: ' + e.message, 'error'); return; }
+  }
   recycleBin.splice(idx, 1);
-  await saveRecycleBin();
   renderRecycleBin();
   showToast(title + ' permanently deleted', 'success');
+}
+/** V269.5: administrators — permanently delete everything in the Recycle Bin for more than 90 days. */
+async function purgeOldFromBin() {
+  if (!bcIsAdmin()) { showToast('Only administrators can empty the Recycle Bin.', 'error'); return; }
+  const cutoff = Date.now() - BC_BIN_KEEP_DAYS * 86400000;
+  const old = recycleBin.filter(x => new Date(x.deletedAt).getTime() < cutoff);
+  if (!old.length) { showToast('Nothing in the Recycle Bin is older than ' + BC_BIN_KEEP_DAYS + ' days.', 'info'); return; }
+  const ok = await showConfirmAsync({ icon: '⚠️', title: 'Permanently delete ' + old.length + ' record' + (old.length === 1 ? '' : 's') + '?', message: 'Everything in the Recycle Bin for more than ' + BC_BIN_KEEP_DAYS + ' days is removed for good. This cannot be undone.', confirmText: 'Permanently Delete' });
+  if (!ok) return;
+  let n = 0;
+  for (const x of old) { try { await window.FB.fbPurgeRecord(x.originalCollection, x.id); recycleBin = recycleBin.filter(y => y !== x); n++; } catch (e) { console.warn('[BizCore] purge failed:', x.id, e.message); } }
+  renderRecycleBin();
+  showToast(n + ' record' + (n === 1 ? '' : 's') + ' permanently deleted', n === old.length ? 'success' : 'warning');
 }
 
 /* ── PRINT ── */
@@ -6954,7 +6998,7 @@ async function reopenRFQ(id) {
 function deleteRFQRecord(id) {
   const r=rfqs.find(x=>x.id===id); if(!r)return;
   if((r.pricingItems&&r.pricingItems.length)||ensurePricingVersions(r).length||r.quotationId){showValidationDialog('RFQ cannot be deleted','This RFQ already has pricing or a quotation. Close it as No Bid instead.');return;}
-  showConfirm({icon:'🗑️',title:'Delete RFQ permanently?',message:'Use Delete only for an RFQ entered by mistake. This action cannot be undone.',details:{'RFQ':r.rfqNo,'Customer':r.company},confirmText:'Delete RFQ',confirmClass:'btn-danger',onConfirm:async()=>{rfqs=rfqs.filter(x=>x.id!==id);await saveRFQs();closeModal('rfq-view-modal');renderRFQPage();showToast('RFQ deleted','success');}});
+  showConfirm({icon:'🗑️',title:'Delete RFQ permanently?',message:'Use Delete only for an RFQ entered by mistake. This action cannot be undone.',details:{'RFQ':r.rfqNo,'Customer':r.company},confirmText:'Delete RFQ',confirmClass:'btn-danger',onConfirm:async()=>{if(window.FB&&window.FB.fbMarkDeleted)window.FB.fbMarkDeleted('rfqs',id);rfqs=rfqs.filter(x=>x.id!==id);await saveRFQs();closeModal('rfq-view-modal');renderRFQPage();showToast('RFQ deleted','success');}});
 }
 
 function backToQuoteFromPricing() {
@@ -7768,16 +7812,9 @@ async function deleteEmployee(id) {
   });
   if (!confirmed) return;
 
-  const binEntry = {
-    ...JSON.parse(JSON.stringify(e)),
-    deletedAt: new Date().toISOString(),
-    deletedBy: (window.currentUser && window.currentUser.email) || 'unknown',
-    originalCollection: 'employees'
-  };
-  recycleBin.push(binEntry);
+  if (!(await bcSoftDeleteRecords('employees', [e]))) return;   // V269.5: Recycle Bin mark
   employees = employees.filter(x => x.id !== id);
-
-  await Promise.all([saveEmployees(), saveRecycleBin()]);
+  await saveEmployees();
   closeEmployeeView();
   renderEmployees();
   populateRFQAssignees();
@@ -10697,6 +10734,7 @@ async function deleteSalesOrder(soId){
         return;
       }
       const before = salesOrders;
+      if (window.FB && window.FB.fbMarkDeleted) window.FB.fbMarkDeleted('salesOrders', soId);   // V269.5: deleted on purpose
       salesOrders=salesOrders.filter(x=>x.id!==soId);
       if (dnIndependentMode()) rawSalesOrders = rawSalesOrders.filter(x=>x.id!==soId);
       const saved = await saveSalesOrders({ onlyIds: [soId] });
@@ -12998,7 +13036,7 @@ console.log('Screens V266.6 ✅ (no page header · one-line toolbar · top bar �
 console.log('Purchase Invoices V268.2 ✅ (supplier payments) · Cash ledger V267.2 ✅ · Phone & tablet V266.7 ✅ (chips · filter panel · cards · Document/Details tabs · tablet rail · monitor scroll)' + (window.BizCoreResponsive ? '' : ' — responsive.js NOT loaded'));
 initPremiumSidebar();
 initPremiumTopbar();
-loadRecycleBin();
+// V269.5: the Recycle Bin is read from Firebase only when it is opened
 loadData().then(function() {
   // Deep links are authoritative. Never let normal last-page restoration
   // (for example Pricing) override a Delivery Note QR destination.

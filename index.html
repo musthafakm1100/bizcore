@@ -2275,7 +2275,7 @@ import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWi
 import { getFirestore, doc, getDoc as _fsGetDoc, getDocFromServer, setDoc, onSnapshot as _fsOnSnapshot, deleteDoc,
          collection, getDocs as _fsGetDocs, query, where, limit, writeBatch,
          initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-         runTransaction, serverTimestamp, increment, connectFirestoreEmulator }
+         runTransaction, serverTimestamp, increment, deleteField, connectFirestoreEmulator }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 /* V269.4 (data plan 2c): count the records read from Firebase (Data Health → "records read").
    Firebase charges a read for each record that comes from the server (not from the browser's own cache), and at least
@@ -2609,9 +2609,52 @@ const _BC_REF_STAMP = {
 /* opts.onlyIds: write only these records (a user action on specific documents). Without it every
    changed record is written — background writes then go one document at a time, so a document the
    rules refuse (e.g. an order locked by someone else) cannot block the others. */
+/* ── V269.5 (data plan step 3): one record per save, no implicit deletes, a revision check ──
+   • A record is deleted from Firebase only when the app says so (fbMarkDeleted) — never because it is missing from a list.
+   • Quotations, RFQs and Sales Orders carry _rev / _savedBy / _savedAt. A save reads the record first: if it was saved
+     by someone else after the copy this browser last saw (_rev moved), the save is refused and the user is told who
+     changed it. Offline: saved without the check (queued by Firebase), as before. Masters: the last save wins. */
+const _BC_REV_COLS = new Set(['quotations', 'rfqs', 'salesOrders']);
+const _BC_NO_FIELD = { quotations: 'qno', rfqs: 'rfqNo', salesOrders: 'soNo' };
+const _bcExplicitDeletes = {};
+function fbMarkDeleted(col, id) { (_bcExplicitDeletes[col] || (_bcExplicitDeletes[col] = new Set())).add(_safeDocId(id)); }
+function _bcWho() { const u = window.currentUser || {}; return String(u.name || u.email || (auth.currentUser && (auth.currentUser.displayName || auth.currentUser.email)) || ''); }
+function _bcRevOf(json) { try { const o = json ? JSON.parse(json) : null; return o ? Number(o._rev) || 0 : null; } catch (e) { return null; } }
+function _bcStamp(data, rev) { data._rev = rev; data._savedBy = _bcWho(); data._savedAt = new Date().toISOString(); }
+/** Writes one record with the revision check. → { ok } | { conflict: { no, by, at } }. extras: more writes in the same commit. */
+async function _bcCheckedSet(col, docId, data, cacheJson, extras = []) {
+  const ref = doc(db, col, docId);
+  const base = cacheJson != null ? (_bcRevOf(cacheJson) || 0) : (Number(data._rev) || 0);
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    _bcStamp(data, base + 1);
+    const b = writeBatch(db); b.set(ref, data); extras.forEach(x => x.merge ? b.set(doc(db, ...x.path.map(String)), x.data, { merge: true }) : b.set(doc(db, ...x.path.map(String)), x.data));
+    b.commit().catch(e => console.warn('[BizCore] offline save failed later:', col, docId, e.code || '', e.message));
+    return { ok: true };
+  }
+  return runTransaction(db, async tx => {
+    const snap = await tx.get(ref);
+    const cur = snap.exists() ? snap.data() : null;
+    const rev = cur ? Number(cur._rev) || 0 : 0;
+    if (cur && rev !== base) return { conflict: { no: String(cur[_BC_NO_FIELD[col]] || data[_BC_NO_FIELD[col]] || docId), by: cur._savedBy || 'another user', at: cur._savedAt || '' } };
+    _bcStamp(data, rev + 1);
+    tx.set(ref, data);
+    extras.forEach(x => x.merge ? tx.set(doc(db, ...x.path.map(String)), x.data, { merge: true }) : tx.set(doc(db, ...x.path.map(String)), x.data));
+    return { ok: true };
+  });
+}
+function _bcConflictError(col, conflicts) {
+  const when = at => { try { const d = new Date(at); return isNaN(d) ? '' : ' on ' + d.toLocaleString('en-GB', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+  const list = conflicts.map(c => c.no + ' was changed by ' + c.by + when(c.at)).join('; ');
+  const e = new Error(list + ' after this screen read it. Your change was not saved — reload to see the latest version, then make your change again.');
+  e.code = 'conflict'; e.conflicts = conflicts;
+  if (col !== 'salesOrders' && typeof window.bcSaveConflict === 'function') { try { window.bcSaveConflict(col, conflicts, e.message); } catch (x) {} }
+  return e;
+}
+
 async function fbSave(col, arr, opts = {}) {
   try {
     window.BizCoreStorageDiagnostics.lastSaveError = null;
+    const origById = new Map(); (arr || []).forEach(r => { if (r && r.id != null) origById.set(String(r.id), r); });   // V269.5: stamps go back to the caller's records
     if (col === 'salesOrders') arr = await _guardSalesOrderPersistence(arr);
     if (_EMBEDDED_IMAGE_COLLECTIONS.has(col)) {
       let stripped = 0;
@@ -2644,9 +2687,28 @@ async function fbSave(col, arr, opts = {}) {
         writes.push({ docId, data: record, json });
       }
     }
-    const deletes = Object.keys(cache).filter(id => !currentIds.has(id) && (!only || only.has(id)));
+    // V269.5: only records the app deleted on purpose (fbMarkDeleted) — never because they are missing from the list
+    const marked = _bcExplicitDeletes[col] || new Set();
+    const deletes = Object.keys(cache).filter(id => !currentIds.has(id) && (!only || only.has(id)) && marked.has(id));
+    deletes.forEach(id => marked.delete(id));
     if (!writes.length && !deletes.length) return true; // nothing changed — skip the network entirely
 
+    if (_BC_REV_COLS.has(col)) {
+      // V269.5: each record on its own, with the revision check
+      const conflicts = [], failed = [];
+      for (const w of writes) {
+        try {
+          const r = await _bcCheckedSet(col, w.docId, w.data, cache[w.docId]);
+          if (r.conflict) { conflicts.push(r.conflict); continue; }
+          cache[w.docId] = JSON.stringify(w.data);
+          const o = origById.get(String(w.data.id)); if (o && o !== w.data) { o._rev = w.data._rev; o._savedBy = w.data._savedBy; o._savedAt = w.data._savedAt; }
+        } catch (e) { failed.push({ docId: w.docId, code: e.code || 'unknown', message: e.message }); }
+      }
+      for (const id of deletes) { try { await deleteDoc(doc(db, col, id)); delete cache[id]; } catch (e) { failed.push({ docId: id, code: e.code || 'unknown', message: e.message }); } }
+      if (conflicts.length) throw _bcConflictError(col, conflicts);
+      if (failed.length) { const e = new Error('Not saved: ' + failed.map(f => f.docId + ' (' + f.code + ')').join(', ')); e.code = failed[0].code; throw e; }
+      return true;
+    }
     const ops = [
       ...writes.map(w => ({ op: 'set', docId: w.docId, data: w.data })),
       ...deletes.map(docId => ({ op: 'delete', docId }))
@@ -2690,7 +2752,7 @@ async function fbLoad(col) {
     const records = [];
     snap.forEach(docSnap => {
       const data = docSnap.data();
-      records.push(data);
+      if (!data._deletedAt) records.push(data);   // V269.5: in the Recycle Bin
       cache[docSnap.id] = JSON.stringify(data);
     });
     return records;
@@ -2710,6 +2772,12 @@ async function fbSaveRecordWith(col, record, extras = []) {
     const docId = _docIdFor(col, record), json = JSON.stringify(record);
     const estimatedBytes = _bizcoreEncoder.encode(json).length;
     if (estimatedBytes >= BIZCORE_RECORD_WARN_BYTES) console.warn('[BizCore storage size warning]', { collection: col, recordId: docId, estimatedBytes, level: estimatedBytes >= BIZCORE_RECORD_CRITICAL_BYTES ? 'critical' : 'warning' });
+    if (_BC_REV_COLS.has(col)) {   // V269.5: revision check
+      const r = await _bcCheckedSet(col, docId, record, (_lastSynced[col] || {})[docId], extras);
+      if (r.conflict) throw _bcConflictError(col, [r.conflict]);
+      (_lastSynced[col] || (_lastSynced[col] = {}))[docId] = JSON.stringify(record);
+      return true;
+    }
     const batch = writeBatch(db);
     batch.set(doc(db, col, docId), record);
     extras.forEach(x => x.merge ? batch.set(doc(db, ...x.path.map(String)), x.data, { merge: true }) : batch.set(doc(db, ...x.path.map(String)), x.data));
@@ -2730,6 +2798,37 @@ async function fbMergeFields(col, id, fields) {
     if (c && c[k]) { const o = JSON.parse(c[k]); Object.assign(o, fields); c[k] = JSON.stringify(o); }
     return true;
   } catch (e) { console.warn('[BizCore] field update failed:', col, id, e.code || '', e.message); return false; }
+}
+/* ── V269.5 (data plan step 4): Recycle Bin = a mark on the record itself (_deletedAt / _deletedBy) ──
+   The record stays in its collection; every list leaves it out; the Recycle Bin asks Firebase for the marked ones. */
+async function fbSoftDelete(col, id) {
+  const fields = { _deletedAt: new Date().toISOString(), _deletedBy: _bcWho() };
+  try {
+    await setDoc(doc(db, col, _safeDocId(id)), fields, { merge: true });
+    const c = _lastSynced[col], k = _safeDocId(id);
+    if (c && c[k]) { const o = JSON.parse(c[k]); Object.assign(o, fields); c[k] = JSON.stringify(o); }
+    return true;
+  } catch (e) {
+    window.BizCoreStorageDiagnostics.lastSaveError = { collection: col, code: e?.code || 'unknown', message: String(e?.message || e), timestamp: new Date().toISOString() };
+    console.warn('[BizCore] move to Recycle Bin failed:', col, id, e.code || '', e.message); return false;
+  }
+}
+/** The records of `col` in the Recycle Bin (read only when the bin is opened). */
+async function fbDeletedRecords(col) {
+  const s = await getDocs(query(collection(db, col), where('_deletedAt', '>', '')));
+  const out = []; s.forEach(d => out.push(d.data())); return out;
+}
+async function fbRestoreRecord(col, id) {
+  await setDoc(doc(db, col, _safeDocId(id)), { _deletedAt: deleteField(), _deletedBy: deleteField() }, { merge: true });
+  const c = _lastSynced[col], k = _safeDocId(id);
+  if (c && c[k]) { const o = JSON.parse(c[k]); delete o._deletedAt; delete o._deletedBy; c[k] = JSON.stringify(o); }
+  const st = _win[col]; if (st && st.extra.has(String(id))) { const d = { ...st.extra.get(String(id)) }; delete d._deletedAt; delete d._deletedBy; st.extra.set(String(id), d); }
+  return true;
+}
+async function fbPurgeRecord(col, id) {
+  await deleteDoc(doc(db, col, _safeDocId(id)));
+  const c = _lastSynced[col]; if (c) delete c[_safeDocId(id)];
+  return true;
 }
 /** The copy of a record as last read from / written to the server (JSON), or null. */
 function fbSyncedJSON(col, id) { const c = _lastSynced[col]; return c ? (c[_safeDocId(id)] ?? null) : null; }
@@ -2833,7 +2932,7 @@ function _winNotify(st, quiet = true) {
   const merged = _winMerged(st);
   const cache = _lastSynced[st.col] || (_lastSynced[st.col] = {});
   const records = [];
-  for (const [id, d] of merged) { records.push(d); cache[_safeDocId(id)] = JSON.stringify(d); }   // (id = the document id)
+  for (const [id, d] of merged) { if (!d._deletedAt) records.push(d); cache[_safeDocId(id)] = JSON.stringify(d); }   // (id = the document id; V269.5: not the Recycle Bin)
   st.lastCount = records.length;
   // quiet: records read by BizCore itself (start-up, linked, older) — not "updated by another user" (app.js smartRender)
   window.__bcWinQuiet = quiet;
@@ -3021,9 +3120,9 @@ function _winListen(col, onUpdate, onError) {
 }
 async function _winLoad(col) {
   const st = await _winStart(col);
-  const records = [..._winMerged(st).values()];
+  const all = [..._winMerged(st).values()], records = all.filter(d => !d._deletedAt);   // V269.5
   const cache = _lastSynced[col] || (_lastSynced[col] = {});
-  records.forEach(d => { const id = _winIdOf(col, d); if (id != null) cache[_safeDocId(id)] = JSON.stringify(d); });
+  all.forEach(d => { const id = _winIdOf(col, d); if (id != null) cache[_safeDocId(id)] = JSON.stringify(d); });
   return records;
 }
 
@@ -3036,7 +3135,7 @@ function fbListen(col, onUpdate) {
     const records = [];
     snap.forEach(docSnap => {
       const data = docSnap.data();
-      records.push(data);
+      if (!data._deletedAt) records.push(data);   // V269.5: in the Recycle Bin
       cache[docSnap.id] = JSON.stringify(data);
     });
     onUpdate(records);
@@ -3666,7 +3765,7 @@ window.BizCoreRct = {
   },
 };
 /* Expose to app.js */
-window.FB = { fbSave, fbLoad, fbSaveRecordWith, fbMergeFields, fbSyncedJSON, fbReadDoc, fbReadAll, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
+window.FB = { fbSave, fbLoad, fbSaveRecordWith, fbMergeFields, fbMarkDeleted, fbSoftDelete, fbDeletedRecords, fbRestoreRecord, fbPurgeRecord, fbSyncedJSON, fbReadDoc, fbReadAll, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
   getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, finalizeProvisionalNumber, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
 
   /* ═══════════════════════════════════════════════════
@@ -3792,7 +3891,7 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=269.4';
+      s.src = 'js/app.js?v=269.5';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
