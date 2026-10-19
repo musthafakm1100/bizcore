@@ -579,7 +579,7 @@ async function loadData() {
 
         window.FB.fbListen('quotations', function(data) {
           quotations = data;
-          try { localStorage.setItem('dtq_quotations', JSON.stringify(quotations)); } catch(e) {}
+          try { void 0 /* V269.4: no browser copy of quotations */; } catch(e) {}
           smartRender('quotations', function() {
             renderTable();
             renderDashboard();
@@ -620,7 +620,7 @@ async function loadData() {
 
         window.FB.fbListen('rfqs', function(data) {
           rfqs = data;
-          try { localStorage.setItem('dtq_rfqs', JSON.stringify(rfqs)); } catch(e) {}
+          try { void 0 /* V269.4: no browser copy of rfqs */; } catch(e) {}
           smartRender('rfq', function() {
             if (typeof renderRFQPage === 'function') renderRFQPage();
             renderDashboard();
@@ -722,7 +722,7 @@ async function loadData() {
         // event document after the Sales Order write succeeds. Every other
         // session receives it, force-refreshes SO/DN data from Firestore, updates
         // the open register/view, and creates the office notification.
-        if (window.FB.fbListenOperationalEvents) {
+        if (window.FB.fbListenOperationalEvents) {   // V269.4: last 7 days only (see index.html)
           let opsInitial = true;
           window.FB.fbListenOperationalEvents(async function(events) {
             if (opsInitial) { opsInitial = false; return; }
@@ -764,10 +764,14 @@ async function loadData() {
       }
     } catch(e) {
       console.warn('Firebase load error, falling back to localStorage:', e.message);
+      window.__bcFbLoadFailed = true;   // V269.4: no sample quotations over a failed Firebase load
     }
   }
 
   if (!window.__bcDataReady) { window.__bcDataReady = true; setTimeout(() => { if (typeof bcDeliveriesRefresh === 'function') bcDeliveriesRefresh(); }, 0); }
+  // V269.4 (data plan 2c): business lists are no longer copied into the browser (Firebase's own offline cache keeps
+  // what was loaded) — the old copies are removed
+  ['dtq_quotations', 'dtq_rfqs', 'dtq_salesorders'].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
   // ── Fall back to localStorage if Firebase load failed or returned nothing ──
   try {
     if (!quotations.length && !(window.__bcFbLoaded && window.__bcFbLoaded.quotations)) { const r=localStorage.getItem('dtq_quotations'); if(r) quotations=JSON.parse(r); }
@@ -787,7 +791,7 @@ async function loadData() {
   } catch(e) {}
 
   // Always seed from built-in data if still empty
-  if (!quotations.length && !(window.__bcFbLoaded && window.__bcFbLoaded.quotations)) quotations = getSampleData();
+  if (!quotations.length && !(window.__bcFbLoaded && window.__bcFbLoaded.quotations) && !window.__bcFbLoadFailed) quotations = getSampleData();
   if (!customers.length) customers = getDefaultCustomers();
   if (!settings.coname) settings = getDefaultSettings();
   ensureCurrencyDisplaySettings();
@@ -823,16 +827,16 @@ async function loadData() {
   });
 
   // Persist to localStorage
-  try { localStorage.setItem('dtq_quotations', JSON.stringify(quotations)); } catch(e) {}
+  try { void 0 /* V269.4: no browser copy of quotations */; } catch(e) {}
   try { localStorage.setItem('dtq_customers', JSON.stringify(customers)); } catch(e) {}
   try { localStorage.setItem('dtq_settings', JSON.stringify(settings)); } catch(e) {}
   try { localStorage.setItem('dtq_products', JSON.stringify(products)); } catch(e) {}
   try { localStorage.setItem('dtq_delivery_terms', JSON.stringify(deliveryTerms)); } catch(e) {}
   try { localStorage.setItem('dtq_payment_terms', JSON.stringify(paymentTerms)); } catch(e) {}
   try { localStorage.setItem('dtq_suppliers', JSON.stringify(suppliers)); } catch(e) {}
-  try { localStorage.setItem('dtq_rfqs', JSON.stringify(rfqs)); } catch(e) {}
+  try { void 0 /* V269.4: no browser copy of rfqs */; } catch(e) {}
   try { localStorage.setItem('dtq_employees', JSON.stringify(employees)); } catch(e) {}
-  try { localStorage.setItem('dtq_salesorders', JSON.stringify(salesOrders)); } catch(e) {}
+  try { void 0 /* V269.4: no browser copy of salesorders */; } catch(e) {}
   repairIncompleteQuotationDates();
   applySettings();
   loadAccessSetup();
@@ -841,7 +845,7 @@ async function loadData() {
 }
 
 async function saveQuotations() {
-  try { localStorage.setItem('dtq_quotations', JSON.stringify(quotations)); } catch(e) {}
+  try { void 0 /* V269.4: no browser copy of quotations */; } catch(e) {}
   if (window.FB) await window.FB.fbSave('quotations', quotations);
 }
 async function saveCustomers() {
@@ -861,7 +865,7 @@ async function saveProducts() {
   try { localStorage.setItem('dtq_delivery_terms', JSON.stringify(deliveryTerms)); } catch(e) {}
   try { localStorage.setItem('dtq_payment_terms', JSON.stringify(paymentTerms)); } catch(e) {}
   try { localStorage.setItem('dtq_suppliers', JSON.stringify(suppliers)); } catch(e) {}
-  try { localStorage.setItem('dtq_rfqs', JSON.stringify(rfqs)); } catch(e) {}
+  try { void 0 /* V269.4: no browser copy of rfqs */; } catch(e) {}
   if (window.FB) {
     await window.FB.fbSave('products', products);
     await window.FB.fbSave('deliveryTerms', deliveryTerms);
@@ -905,7 +909,7 @@ function upsertDeliveryNoteCache(dn){
 }
 function cacheSalesOrdersLocally(){
   const data = dnIndependentMode() ? salesOrders.map(so => dnCore().stripProjection(so)) : salesOrders;
-  try { localStorage.setItem('dtq_salesorders', JSON.stringify(data)); } catch(e) {}
+  try { void 0 /* V269.4: no browser copy of salesorders */; } catch(e) {}
 }
 /** Resolves the DN a modal is working on by its stable ID (never only by list position). */
 function dnForModal(m){
@@ -974,7 +978,7 @@ async function saveSalesOrders(opts = {}) {
     if (window.FB) return await window.FB.fbSave('salesOrders', persisted, opts);
     return true;
   }
-  try { localStorage.setItem('dtq_salesorders', JSON.stringify(salesOrders)); } catch(e) {}
+  try { void 0 /* V269.4: no browser copy of salesorders */; } catch(e) {}
   if (window.FB) return await window.FB.fbSave('salesOrders', salesOrders, opts);
   return true;
 }
@@ -1379,7 +1383,7 @@ function repairIncompleteQuotationDates(){
     }
   });
   if(changed){
-    try{localStorage.setItem('dtq_quotations',JSON.stringify(quotations));}catch(e){}
+    try{void 0 /* V269.4: no browser copy of quotations */;}catch(e){}
   }
   return changed;
 }
@@ -1597,7 +1601,7 @@ async function finalizeProvisionalNumbers(){
       }
     }
     if (done.length || problems.length) {
-      try { localStorage.setItem('dtq_quotations', JSON.stringify(quotations)); localStorage.setItem('dtq_rfqs', JSON.stringify(rfqs)); } catch (e) {}
+      try { void 0 /* V269.4: no browser copy of quotations */; void 0 /* V269.4: no browser copy of rfqs */; } catch (e) {}
       if (typeof cacheSalesOrdersLocally === 'function') cacheSalesOrdersLocally();
     }
   } catch (e) { console.error('[BizCore] Final numbering failed', e); }
@@ -7045,7 +7049,7 @@ async function saveSuppliers() {
 /* V269: an RFQ whose pricing changed is saved on its own, together with its pricing version documents, in one batch.
    The other changed RFQs are saved as before. Returns false when something was not saved. */
 async function saveRFQs() {
-  try { localStorage.setItem('dtq_rfqs', JSON.stringify(rfqs)); } catch(e) {}
+  try { void 0 /* V269.4: no browser copy of rfqs */; } catch(e) {}
   if (!window.FB) return true;
   let ok = true; const failed = [];
   if (window.FB.fbSaveRecordWith) for (const r of rfqs) {
@@ -9889,15 +9893,15 @@ function importAllData(event) {
     saveAccessSetup();
 
     // Persist everything to localStorage AND Firebase
-    try { localStorage.setItem('dtq_quotations',     JSON.stringify(quotations));    } catch(e) {}
+    try { void 0 /* V269.4: no browser copy of quotations */;    } catch(e) {}
     try { localStorage.setItem('dtq_customers',      JSON.stringify(customers));     } catch(e) {}
     try { localStorage.setItem('dtq_suppliers',      JSON.stringify(suppliers));     } catch(e) {}
     try { localStorage.setItem('dtq_products',       JSON.stringify(products));      } catch(e) {}
-    try { localStorage.setItem('dtq_rfqs',           JSON.stringify(rfqs));          } catch(e) {}
+    try { void 0 /* V269.4: no browser copy of rfqs */;          } catch(e) {}
     try { localStorage.setItem('dtq_settings',       JSON.stringify(settings));      } catch(e) {}
     try { localStorage.setItem('dtq_delivery_terms', JSON.stringify(deliveryTerms)); } catch(e) {}
     try { localStorage.setItem('dtq_payment_terms',  JSON.stringify(paymentTerms));  } catch(e) {}
-    try { localStorage.setItem('dtq_salesorders',    JSON.stringify(salesOrders));   } catch(e) {}
+    try { void 0 /* V269.4: no browser copy of salesorders */;   } catch(e) {}
 
     // Sync restored data to Firebase so all devices see it
     if (window.FB) {
@@ -11392,7 +11396,8 @@ async function _saveDeliveryAcceptanceCore(operationId){
 
  // Publish only after the business transaction has been persisted so OTHER
  // logged-in sessions/devices receive the same operational update.
- if(window.FB?.fbPublishOperationalEvent){
+ // V269.4: in independent mode the Delivery Note listener already brings this to every session — no log entry
+ if(window.FB?.fbPublishOperationalEvent&&!dnIndependentMode()){
    try{await window.FB.fbPublishOperationalEvent({id:`dn-confirmed-${d.id}-${operationId.replace(/[^a-zA-Z0-9_-]/g,'')}`,type:'dn-confirmed',dnId:d.id,dnNo:d.dnNo,soId:so.id,status:d.status,actor:deliveryActor(),sourceSession:getBizCoreSessionId(),createdAt:new Date().toISOString(),acceptanceMode:mode})}catch(e){console.warn('Delivery saved; operational notification publish failed',e)}
  }
  const backToList=m._returnTo==='deliveries';closeModal('dn-confirm-modal');renderSOPage();renderDNPage();if(backToList&&typeof bcDeliveriesAfterConfirm==='function')bcDeliveriesAfterConfirm(d);else viewDeliveryNote(so.id,m._deliveryIdx);showToast(mode==='confirm'?`${d.dnNo} confirmed — ${d.status}`:`${d.dnNo} ${mode==='correction'?'correction saved':'acceptance revised'}`,'success');return d;
@@ -11678,7 +11683,7 @@ async function saveDNDispatchAction(){
   console.error('[BizCore DN dispatch save]',{dnNo:d.dnNo,mode,error:e});
   Object.keys(d).forEach(k=>delete d[k]);Object.assign(d,previous);
   // Restore only local draft cache; do not start a second slow network write on failure.
-  try{localStorage.setItem('dtq_salesorders',JSON.stringify(salesOrders));}catch(_e){}
+  try{void 0 /* V269.4: no browser copy of salesorders */;}catch(_e){}
   showToast('Dispatch change was not saved. Please check your connection and try again.','error');
  }finally{
   modal._saving=false;
@@ -14876,8 +14881,15 @@ async function bcOlderDependencies(type, records){
         const code = String(rec.code || '').trim().toLowerCase();
         for (const [col, label] of [['quotations', 'older quotations'], ['rfqs', 'older RFQ/pricing documents'], ['salesOrders', 'older sales orders']])
           if (await any(col, 'productIds', 'array-contains', rec.id) || (code && await any(col, 'productCodes', 'array-contains', code))) deps.push(label);
+        // V269.4 (data plan 2c): purchasing and stock — any age, one small question each
+        const C = window.BizCorePI && window.BizCorePI.core;
+        const key = C ? C.itemKeyOf({ productId: rec.id }) : 'p_' + String(rec.id).replace(/[^A-Za-z0-9_-]/g, '-');
+        if (await any('purchaseInvoices', 'itemKeys', 'array-contains', key)) deps.push('purchase invoices');
+        if (await any('stockItems', 'itemKey', '==', key)) deps.push('stock');
       } else if (type === 'suppliers') {
         if (await any('rfqs', 'supplierIds', 'array-contains', rec.id)) deps.push('older RFQ/pricing documents');
+        if (await any('purchaseInvoices', 'supplierId', '==', rec.id)) deps.push('purchase invoices');   // V269.4
+        if (await any('supplierPayments', 'supplierId', '==', rec.id)) deps.push('supplier payments');
       }
     } catch (e) { deps.push('records that could not be checked (' + (navigator.onLine === false ? 'offline' : 'no connection') + ') — try again'); }
     if (deps.length) out.push({ record: rec, dependencies: deps });

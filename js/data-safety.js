@@ -261,8 +261,15 @@ async function bcFillDataWindowStats(){
     purchaseInvoices: 'Purchase invoices', supplierPayments: 'Supplier payments', salesOrderPurchasing: 'Purchased quantities per order', cashLines: 'Cash & bank lines', stockAllocations: 'Stock allocations', stockChanges: 'Stock item changes' };   // V269.3
   const st = window.BCWin.stats(), c = await window.BCWin.config();
   tb.innerHTML = Object.keys(names).filter(k => st[k]).map(k => `<tr><td><b>${esc(names[k])}</b></td><td>${st[k].total}</td><td>${st[k].extra}${st[k].olderFrom === '' ? ' · all older read' : ''}</td></tr>`).join('')
-    + `<tr><td colspan="3" class="pi-sub">Loaded period starts ${esc(c.cutoff.split('-').reverse().join('-'))} (${c.months} months).</td></tr>`;
+    + `<tr><td colspan="3" class="pi-sub">Loaded period starts ${esc(c.cutoff.split('-').reverse().join('-'))} (${c.months} months).</td></tr>`
+    + bcReadsRow();
   bcFillBalanceStats();
+}
+/* V269.4 — data plan step 2c: how many records were read from Firebase (start-up = the first minute) */
+function bcReadsRow(){
+  const r = window.BCReads; if (!r) return '';
+  const top = Object.entries(r.byCol).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => esc(k) + ' ' + v).join(' · ');
+  return `<tr><td><b>Records read from Firebase</b><div class="pi-sub">Free allowance: 50,000 a day for everyone together</div></td><td>${r.startup} when BizCore opened</td><td>${r.total} since then${top ? '<div class="pi-sub">Most: ' + top + '</div>' : ''}</td></tr>`;
 }
 /* V269.3 — data plan step 2b: running balances of the cash & bank accounts, last price per item */
 function bcBalancesCard(){
