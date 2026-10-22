@@ -149,6 +149,16 @@
 #so-view-modal .sov-flagged td{background:#fff7f7}
 #so-view-modal .sov-voided{opacity:.55}
 #so-view-modal .sov-icards{display:none}
+#so-view-modal .sov-rcards{display:none}
+#so-view-modal .sov-rcard{display:flex;flex-wrap:wrap;gap:8px 12px;border:1px solid var(--sov-line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#fff}
+#so-view-modal .sov-rcard-total{background:#f4f7fa;font-weight:700}
+#so-view-modal .sov-rcard.sov-flagged{background:#fff7f7}
+#so-view-modal .sov-rc{flex:1 1 calc(50% - 12px);min-width:0;font-size:13px;line-height:1.4;overflow-wrap:anywhere;word-break:break-word}
+#so-view-modal .sov-rc-wide{flex-basis:100%}
+#so-view-modal .sov-rc-l{display:block;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#94a3b8;margin-bottom:1px}
+#so-view-modal .sov-rc-v small{display:block;font-size:11.5px;color:var(--sov-muted)}
+#so-view-modal .sov-rc.sov-red .sov-rc-v{color:var(--sov-red)}
+#so-view-modal .sov-rc.sov-done .sov-rc-v{color:var(--sov-green)}
 
 /* figures row (Finance, Profit) */
 #so-view-modal .sov-minis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:16px}
@@ -276,18 +286,9 @@
   #so-view-modal .sov-g4>.d{background:var(--sov-blue-bg);color:var(--sov-blue)}
   #so-view-modal .sov-g4>.i{background:var(--sov-orange-bg);color:#c2570a}
   #so-view-modal .sov-icard-docs{margin-top:10px;border-top:1px solid #eef2f6;padding-top:6px}
-  /* other tables: one card per row with the column names */
-  #so-view-modal .sov-cardable thead{display:none}
-  #so-view-modal .sov-cardable,#so-view-modal .sov-cardable tbody{display:block}
-  #so-view-modal .sov-cardable tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;border:1px solid var(--sov-line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
-  #so-view-modal .sov-cardable td{display:block;border:0;padding:0;text-align:left!important;font-size:13px;min-width:0;overflow-wrap:anywhere;white-space:normal!important}
-  #so-view-modal .sov-cardable td *{white-space:normal!important}
-  #so-view-modal .sov-cardable td[data-label]::before{content:attr(data-label);display:block;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#94a3b8}
-  #so-view-modal .sov-cardable td:empty{display:none}
-  #so-view-modal .sov-cardable td[data-label="Item"],#so-view-modal .sov-cardable td[data-label="Note"]{grid-column:1 / -1}
-  #so-view-modal .sov-cardable .sov-total-row{background:#f4f7fa}
-  #so-view-modal .sov-cardable .sov-total-row td{background:none}
-  #so-view-modal .sov-tablewrap{overflow:visible}
+  /* other tables (V269.7.2): the table is hidden, the cards built from it are shown (plain blocks — Safari safe) */
+  #so-view-modal table.sov-cardable{display:none}
+  #so-view-modal .sov-rcards{display:block}
   /* footer: ⋯ More + the next step */
   #so-view-modal .sov-footer{display:flex!important;flex-wrap:nowrap!important;gap:10px!important;padding:10px 14px calc(10px + var(--sa-bottom, 0px))!important}
   #so-view-modal .sov-footer>.btn{display:none!important}

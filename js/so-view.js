@@ -666,6 +666,7 @@ function sovRender(soId, opts = {}){
       ${canProfit ? panel('profit', safe(() => sovProfit(m, modal._sovPView), 'profit')) : ''}
       ${panel('activity', safe(() => sovActivity(m), 'activity'))}
     </div>`;
+  sovBuildRowCards(body);
   sovWireBody(body, so);
 
   // footer
@@ -698,6 +699,32 @@ function sovRender(soId, opts = {}){
   sovPopClose();
   openModalWithSize('so-view-modal');
   const sc = body; if (sc && !same) sc.scrollTop = 0;
+}
+
+/** V269.7.2: on a phone the tables are shown as cards built from plain blocks (Safari doesn't reliably turn table rows
+ *  into cards: cells kept their table height and long names were cut off). Same content, from the same cells. */
+const SOV_WIDE_LABELS = new Set(['Item', 'Supplier', 'Note', 'Invoices', 'Reason', 'Estimate · Supplier / Unit', 'Actual · Supplier / Unit']);
+function sovBuildRowCards(root){
+  root.querySelectorAll('table.sov-cardable').forEach(tbl => {
+    const wrap = document.createElement('div'); wrap.className = 'sov-rcards';
+    tbl.querySelectorAll('tbody > tr').forEach(tr => {
+      const card = document.createElement('div');
+      card.className = 'sov-rcard' + (tr.classList.contains('sov-total-row') ? ' sov-rcard-total' : '') + (tr.classList.contains('sov-voided') ? ' sov-voided' : '') + (tr.classList.contains('sov-flagged') ? ' sov-flagged' : '');
+      let lineNo = '';
+      card.innerHTML = [...tr.children].map(td => {
+        const label = td.getAttribute('data-label') || '';
+        let html = td.innerHTML.trim();
+        if (label === '#') { lineNo = td.textContent.trim(); return ''; }   // shown before the item name
+        if (label === 'Item' && lineNo) html = `<span class="sov-muted">${sovEsc(lineNo)} · </span>` + html;
+        if (!html) return '';
+        if (!label) return `<div class="sov-rc sov-rc-wide ${td.className || ''}">${html}</div>`;
+        return `<div class="sov-rc${SOV_WIDE_LABELS.has(label) ? ' sov-rc-wide' : ''} ${td.className || ''}"><span class="sov-rc-l">${sovEsc(label)}</span><div class="sov-rc-v">${html}</div></div>`;
+      }).join('');
+      wrap.appendChild(card);
+    });
+    const host = tbl.closest('.sov-tablewrap') || tbl;
+    host.after(wrap);
+  });
 }
 
 /** Edit + More in the window header (PC / tablet). */
