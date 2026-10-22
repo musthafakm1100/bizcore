@@ -32,9 +32,10 @@
 <link href="css/responsive.css?v=268.4" rel="stylesheet"/>
 <link href="css/theme.css?v=266.5" rel="stylesheet"/>
 <link href="css/so-register.css?v=269.2" rel="stylesheet"/>
+<link href="css/so-view.css?v=269.7" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
-<script src="js/responsive.js?v=268.4" defer></script>
+<script src="js/responsive.js?v=269.7" defer></script>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
 .quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
@@ -2266,8 +2267,8 @@ import { createAccountService } from './js/account-service.mjs?v=268.2';
 import * as LedgerCore from './js/ledger-core.mjs?v=269.3';
 import { createLedgerService } from './js/ledger-service.mjs?v=269.3';
 import { wrapTransaction, rebuildBalance, BALANCE_COLLECTION, LAST_PRICE_COLLECTION } from './js/running-totals.mjs?v=269.3';
-import * as PurchaseCore from './js/purchase-core.mjs?v=268.5';
-import { createPurchaseService } from './js/purchase-service.mjs?v=268.5';
+import * as PurchaseCore from './js/purchase-core.mjs?v=269.7';
+import { createPurchaseService } from './js/purchase-service.mjs?v=269.7';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile }
@@ -3178,6 +3179,15 @@ window.BCWin = {
     await window.BCWin.idle();
     return n;
   },
+  /** V269.7: records whose array field contains the value (e.g. purchase invoices of an older Sales Order: soIds). */
+  async loadContains(col, field, value) {
+    if (!BC_WIN_SPECS[col]) return 0;
+    const st = await _winStart(col);
+    const s = await getDocs(query(collection(db, col), where(field, 'array-contains', value))); const docs = []; s.forEach(x => docs.push(x.data()));
+    const n = _winAddExtra(col, docs); if (n) _winNotify(st);
+    await window.BCWin.idle();
+    return n;
+  },
   /** Is there ANY record (loaded or not) with field <op> value? One small read. Used before deleting masters. */
   async anyWhere(col, field, op, value) {
     const s = await getDocs(query(collection(db, col), where(field, op, value), limit(1)));
@@ -3975,15 +3985,17 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=269.6';
+      s.src = 'js/app.js?v=269.7';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
+        // V269.7: the Sales Order view (tabs, rings, document lists, profit)
+        const sv = document.createElement('script'); sv.id = 'bizcore-so-view-script'; sv.src = 'js/so-view.js?v=269.7'; document.body.appendChild(sv);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.6'; document.body.appendChild(ds); };
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js
-    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=269.3'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
+    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=269.7'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
     // V268.3: supplier-payments.js (Supplier Payments, advances, edits) after purchases.js
     // V268.4: stock.js (Purchasing → Stock) after supplier-payments.js
     const loadStock = () => { const st = document.createElement('script'); st.id = 'bizcore-stock-script'; st.src = 'js/stock.js?v=268.61'; st.onload = start; st.onerror = () => { console.error('[BizCore] stock.js could not be loaded'); start(); }; document.body.appendChild(st); };

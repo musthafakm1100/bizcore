@@ -1132,6 +1132,7 @@ function renderPurchaseSettings(){
     <div class="form-group"><label for="ps-edit">Edit purchase invoices &amp; supplier payments</label><select id="ps-edit"${dis}>${[['off', 'Off — cancel and enter again'], ['limited', 'Limited for everyone'], ['limited-admin', 'Limited for staff, full for administrators'], ['full', 'Full for everyone']].map(([v, t]) => `<option value="${v}"${s.editMode === v ? ' selected' : ''}>${t}</option>`).join('')}</select><small>Limited: numbers, dates, references and reasons. Full: lines, amounts and accounts.</small></div>
     <div class="form-group"><label for="ps-edit-days">Edit time limit (days)</label><input id="ps-edit-days" inputmode="numeric" value="${s.editDays}"${dis}><small>After that only administrators edit; others cancel and enter again.</small></div>
     <div class="form-group"><label for="ps-newprod">+ New Product on a purchase invoice</label><select id="ps-newprod"${dis}>${[['everyone', 'Everyone'], ['admins', 'Administrators only']].map(([v, t]) => `<option value="${v}"${s.newProductRight === v ? ' selected' : ''}>${t}</option>`).join('')}</select><small>An item for stock must be a product. This decides who may add a missing one from the invoice.</small></div>
+    <div class="form-group"><label for="ps-est-flag">Sales Order profit: flag cost above estimate by (%)</label><input id="ps-est-flag" inputmode="decimal" value="${s.estimateFlagPct}"${dis}><small>Sales Order → Profit → Estimate vs Actual marks a line whose cost is more than this above its Pricing estimate.</small></div>
     <div class="form-group"><label for="ps-edit-paid">Full edit of an invoice with payments</label><select id="ps-edit-paid" disabled><option>Not allowed — cancel the payments first</option></select></div>
   </div><div class="inv-error" id="ps-error" hidden></div>
   <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">${admin ? '<button class="btn btn-primary" type="button" id="ps-save" onclick="savePurchaseSettingsForm()"><i class="ti ti-device-floppy"></i>Save settings</button>' : '<span class="pi-muted">Only administrators can change these settings.</span>'}</div>`;
@@ -1140,7 +1141,7 @@ async function savePurchaseSettingsForm(){
   const g = id => document.getElementById(id).value;
   const btn = document.getElementById('ps-save'), err = document.getElementById('ps-error'); btn.disabled = true; err.hidden = true;
   try {
-    await bcBusy('Saving settings…', () => piLib().service.savePurchaseSettings({ costLimitPct: g('ps-limit'), costLimitAction: g('ps-action'), discountMode: g('ps-disc'), roundingLimit: g('ps-round'), vatRate: g('ps-vat'), profitVisibility: g('ps-profit'), editMode: g('ps-edit'), editDays: g('ps-edit-days'), newProductRight: g('ps-newprod') }));
+    await bcBusy('Saving settings…', () => piLib().service.savePurchaseSettings({ costLimitPct: g('ps-limit'), costLimitAction: g('ps-action'), discountMode: g('ps-disc'), roundingLimit: g('ps-round'), vatRate: g('ps-vat'), profitVisibility: g('ps-profit'), editMode: g('ps-edit'), editDays: g('ps-edit-days'), newProductRight: g('ps-newprod'), estimateFlagPct: g('ps-est-flag') }));
     if (typeof showToast === 'function') showToast('Purchase settings saved', 'success');
   } catch (e) { err.hidden = false; err.textContent = e.message || 'Could not save.'; }
   finally { btn.disabled = false; }

@@ -10618,6 +10618,9 @@ async function _saveSalesOrderCore() {
     payments:    [],
     isOpen:      existingSO ? (existingSO.isOpen ?? true) : true,   // V269.1: loaded while open (bcHealOpenOrders keeps it right)
     created:     new Date().toISOString(),
+    // V269.7: who created the order (shown as Salesperson on the view until a salesperson field is added)
+    createdBy:   existingSO ? (existingSO.createdBy || '') : ((window.currentUser && (window.currentUser.name || window.currentUser.email)) || ''),
+    createdByUid:existingSO ? (existingSO.createdByUid || '') : ((window.currentUser && window.currentUser.uid) || ''),
   };
 
   let previousSO=null;
@@ -10755,6 +10758,9 @@ async function deleteSalesOrder(soId){
 
 /* ── View Sales Order ── */
 function viewSO(soId, opts = {}) {
+  // V269.7: the redesigned view (js/so-view.js, approved mockups SV_1 – SV_9). The code below stays only as a
+  // fallback in case that file could not be loaded.
+  if (typeof sovRender === 'function') return sovRender(soId, opts);
   const so = salesOrders.find(x=>x.id===soId); if (!so) return;
   currentSOId = soId;
   const soViewModal = document.getElementById('so-view-modal'); if (soViewModal) soViewModal._soId = soId;

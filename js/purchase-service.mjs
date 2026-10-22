@@ -23,7 +23,7 @@ import {
   applyPaymentToInvoice, applyAdvanceUse, editRightOf, validateInvoiceLimitedEdit, validatePaymentLimitedEdit,
   STOCK_ALLOC_COLLECTION, allocationIdForOperation, validateAllocation,
   STOCK_CHANGE_COLLECTION, stockChangeIdForOperation, validateStockChange,
-} from './purchase-core.mjs?v=268.5';
+} from './purchase-core.mjs?v=269.7';
 import { DeliveryError, isSafeId, eventIdForOperation, requireReason, cleanText, assertSize } from './delivery-core.mjs?v=266.0';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };

@@ -38,6 +38,7 @@ export const DEFAULT_PURCHASE_SETTINGS = Object.freeze({
   costLimitPct: 5, costLimitAction: 'reason', discountMode: 'invoice', roundingLimit: 1, vatRate: 15, profitVisibility: 'admins',
   editMode: 'limited-admin', editDays: 7,   // V268.3
   newProductRight: 'everyone',               // V268.5: who may add a product with + New Product
+  estimateFlagPct: 5,                        // V269.7: Sales Order → Profit: flag a line whose cost is more than this % above its estimate
 });
 export const LIMITS = Object.freeze({ lines: 300, costs: 20, text: 300, reason: 300, invNo: 60 });
 
@@ -64,6 +65,7 @@ export function effectivePurchaseSettings(stored) {
     editMode: EDIT_MODES.includes(s.editMode) ? s.editMode : 'limited-admin',
     editDays: Number.isInteger(Number(s.editDays)) && Number(s.editDays) >= 0 && Number(s.editDays) <= 365 ? Number(s.editDays) : 7,
     newProductRight: NEW_PRODUCT_RIGHTS.includes(s.newProductRight) ? s.newProductRight : 'everyone',
+    estimateFlagPct: n(s.estimateFlagPct, 5, 0, 100),
   };
 }
 export function validatePurchaseSettings(input = {}) {
@@ -75,6 +77,7 @@ export function validatePurchaseSettings(input = {}) {
     vatRate: n(input.vatRate), profitVisibility: String(input.profitVisibility || ''),
     editMode: String(input.editMode || 'limited-admin'), editDays: n(input.editDays == null || input.editDays === '' ? 7 : input.editDays),
     newProductRight: String(input.newProductRight || 'everyone'),
+    estimateFlagPct: n(input.estimateFlagPct == null || input.estimateFlagPct === '' ? 5 : input.estimateFlagPct),
   };
   if (!Number.isFinite(v.costLimitPct) || v.costLimitPct < 0 || v.costLimitPct > 1000) errors.push({ field: 'costLimitPct', message: 'Cost limit: 0 to 1000 %.' });
   if (!COST_ACTIONS.includes(v.costLimitAction)) errors.push({ field: 'costLimitAction', message: 'Choose what happens above the limit.' });
@@ -85,7 +88,8 @@ export function validatePurchaseSettings(input = {}) {
   if (!EDIT_MODES.includes(v.editMode)) errors.push({ field: 'editMode', message: 'Choose who may edit.' });
   if (!Number.isInteger(v.editDays) || v.editDays < 0 || v.editDays > 365) errors.push({ field: 'editDays', message: 'Edit time limit: 0 to 365 whole days.' });
   if (!NEW_PRODUCT_RIGHTS.includes(v.newProductRight)) errors.push({ field: 'newProductRight', message: 'Choose who may add a new product.' });
-  v.costLimitPct = r2(v.costLimitPct); v.roundingLimit = r2(v.roundingLimit); v.vatRate = r2(v.vatRate);
+  if (!Number.isFinite(v.estimateFlagPct) || v.estimateFlagPct < 0 || v.estimateFlagPct > 100) errors.push({ field: 'estimateFlagPct', message: 'Flag above the estimate: 0 to 100 %.' });
+  v.costLimitPct = r2(v.costLimitPct); v.estimateFlagPct = r2(v.estimateFlagPct); v.roundingLimit = r2(v.roundingLimit); v.vatRate = r2(v.vatRate);
   return { ok: errors.length === 0, value: v, errors };
 }
 

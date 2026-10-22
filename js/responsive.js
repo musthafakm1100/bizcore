@@ -279,6 +279,7 @@
   function enhanceFooter(f) {
     if (!f || f._bcBusy) return;
     if (f.querySelector('.dn-m-more')) return;   // the Delivery Note view has its own phone action bar (V265.5)
+    if (f.querySelector('.sov-more-btn')) return;   // V269.7: the Sales Order view has its own (⋯ More + next step)
     f._bcBusy = true;
     try {
       let more = f.querySelector(':scope > .bc-more-wrap');
