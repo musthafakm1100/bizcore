@@ -478,7 +478,7 @@ function sovFinance(m){
   const rRows = m.rcts.map(r => `<tr class="${r.voided ? 'sov-voided' : ''}"><td data-label="Receipt">${r.id ? `<button type="button" class="sov-ref" data-open="rct" data-id="${sovEsc(r.id)}">${sovEsc(r.no)}</button>` : sovEsc(r.no)}</td><td data-label="Date">${fmtDate(r.date)}</td><td data-label="Method">${sovEsc(r.method || '—')}</td><td data-label="Amount">${sovMoney(r.amount)}</td><td data-label="Invoices">${sovEsc(r.invNos.join(', ') || '—')}</td><td data-label="Status">${r.voided ? sovPill('Voided', 'neutral') : sovPill('Received', 'green')}</td></tr>`).join('');
   const notInvoiced = Math.max(0, sovR2(m.total - m.billed));
   const fig = (t, v, cls, s) => `<div class="sov-mini"><span>${t}</span><b class="${cls || ''}">${v}</b>${s ? `<small>${s}</small>` : ''}</div>`;
-  return `<div class="sov-minis">${fig('Order Total', sovSAR(m.total))}${fig('Invoiced (Net)', sovSAR(m.billed), '', `${Math.round(m.invoicedPct)}% Of The Order`)}${fig('Received', sovSAR(m.received), 'sov-done')}${fig('Outstanding', sovSAR(m.outstanding), m.outstanding > 0.005 ? 'sov-red' : '', m.overdueDays > 0 ? `Overdue ${sovPlural(m.overdueDays, 'Day')}` : (m.nextDue && m.outstanding > 0.005 ? `Next Due ${fmtDate(m.nextDue)}` : ''))}${fig('Not Yet Invoiced', sovSAR(notInvoiced))}</div>
+  return `<div class="sov-minis">${fig('Order Total', sovSAR(m.total))}${fig('Invoiced (Net)', sovSAR(m.billed), '', `${Math.round(m.invoicedPct)}% Of The Order`)}${fig('Received', sovSAR(m.received), m.received > 0.005 ? 'sov-done' : '')}${fig('Outstanding', sovSAR(m.outstanding), m.outstanding > 0.005 ? 'sov-red' : '', m.overdueDays > 0 ? `Overdue ${sovPlural(m.overdueDays, 'Day')}` : (m.nextDue && m.outstanding > 0.005 ? `Next Due ${fmtDate(m.nextDue)}` : ''))}${fig('Not Yet Invoiced', sovSAR(notInvoiced), notInvoiced > 0.005 ? 'sov-orange' : '')}</div>
     <section class="sov-box"><h3>Invoices</h3>${invRows ? `<div class="sov-tablewrap"><table class="sov-table sov-cardable"><thead><tr><th>Invoice</th><th>Date</th><th>Type</th><th>Amount</th><th>Credited</th><th>Received</th><th>Balance</th><th>Due</th><th>Status</th></tr></thead><tbody>${invRows}</tbody></table></div>` : '<div class="sov-empty">No invoice created yet.</div>'}</section>
     ${sovBillingBox(m)}
     ${cnRows ? `<section class="sov-box"><h3>Credit Notes</h3><div class="sov-tablewrap"><table class="sov-table sov-cardable"><thead><tr><th>Credit Note</th><th>Date</th><th>Invoice</th><th>Amount</th><th>Reason</th></tr></thead><tbody>${cnRows}</tbody></table></div></section>` : ''}
@@ -498,7 +498,9 @@ function sovProfitModel(m){
     const finalCost = piCost + saCost, restCost = restQty * estUnit;
     const cost = sovR2(finalCost + restCost), estCost = sovR2((e ? e.unit : estUnit) * l.qty);
     const selling = sovR2(l.amount), profit = sovR2(selling - cost);
-    const source = restQty <= SOV_EPS ? ['Final', 'green'] : knownQty > SOV_EPS ? ['Part Est.', 'amber'] : [e ? 'Estimate' : lp ? 'Last Paid' : 'No Cost', 'neutral'];
+    // V269.7.1: part of the line has no cost at all (not bought, no estimate, no last price) → no profit is shown for it
+    const incomplete = restQty > SOV_EPS && !(estUnit > 0);
+    const source = incomplete ? [knownQty > SOV_EPS ? 'Part Cost' : 'No Cost', 'neutral'] : restQty <= SOV_EPS ? ['Final', 'green'] : knownQty > SOV_EPS ? ['Part Est.', 'amber'] : [e ? 'Estimate' : 'Last Paid', 'neutral'];
     const suppliers = [...new Set((P.pis || []).map(x => x.supplier).filter(Boolean))];
     const parts = [];
     if (P.pis && P.pis.length) {
@@ -510,11 +512,14 @@ function sovProfitModel(m){
     if (restQty > SOV_EPS) parts.push(knownQty > SOV_EPS ? `${sovQ(restQty, l.uom)} Still To Buy (Est. ${sovMoney(estUnit)})` : (e ? `Not Bought Yet — Pricing Estimate${e.supplier ? ` (${sovEsc(e.supplier)} ${sovMoney(e.buy)})` : ''}` : lp ? `Not Bought Yet — Last Paid ${sovMoney(lp.unitCost)}` : 'Not Bought Yet — No Estimate'));
     const actualUnit = knownQty > SOV_EPS ? finalCost / knownQty : null;
     const supplierChanged = e && e.supplier && suppliers.length && !suppliers.some(s => s.trim().toLowerCase() === e.supplier.trim().toLowerCase());
-    return { l, e, lp, estUnit, estCost, cost, finalCost: sovR2(finalCost), restCost: sovR2(restCost), knownQty, restQty, piQty, saQty, saCost, selling, profit, source, src: parts.join(' · '), actualUnit, suppliers, supplierChanged };
+    return { l, e, lp, estUnit, estCost, cost, incomplete, finalCost: sovR2(finalCost), restCost: sovR2(restCost), knownQty, restQty, piQty, saQty, saCost, selling, profit, source, src: parts.join(' · '), actualUnit, suppliers, supplierChanged };
   });
-  const sum = k => sovR2(rows.reduce((s, r) => s + r[k], 0));
+  // totals only over lines with a cost; lines without one are left out (and counted)
+  const counted = rows.filter(r => !r.incomplete);
+  const sum = k => sovR2(counted.reduce((s, r) => s + r[k], 0));
   const t = { selling: sum('selling'), cost: sum('cost'), estCost: sum('estCost'), finalCost: sum('finalCost'), restCost: sum('restCost') };
   t.profit = sovR2(t.selling - t.cost); t.estProfit = sovR2(t.selling - t.estCost);
+  t.revenueAll = sovR2(rows.reduce((s, r) => s + r.selling, 0)); t.excluded = rows.length - counted.length; t.counted = counted.length;
   return { est, rows, t, hasEstimate: rows.some(r => r.e) };
 }
 const sovMarkup = (p, c) => (c > 0.005 ? p / c * 100 : NaN);
@@ -533,17 +538,18 @@ function sovProfit(m, view){
   const switcher = `<div class="sov-seg" role="tablist"><button type="button" role="tab" data-pview="summary" aria-selected="${view !== 'eva'}" class="${view !== 'eva' ? 'on' : ''}">Summary</button><button type="button" role="tab" data-pview="eva" aria-selected="${view === 'eva'}" class="${view === 'eva' ? 'on' : ''}">Estimate vs Actual</button></div>`;
   const estText = est.status === 'ok' ? `Estimate = Pricing <b>${sovEsc(est.r.rfqNo || '')} V${est.n}</b> (converted to ${sovEsc(est.q.qno)}${est.q.date ? ' on ' + sovDayMonth(est.q.date) : ''} — fixed)` : est.status === 'loading' ? 'Reading the pricing version…' : 'No pricing estimate is linked to this order (direct order or older data) — the last price paid is used where known.';
   if (view !== 'eva') {
-    const rows = P.rows.map(r => `<tr><td data-label="#">${r.l.no}</td><td data-label="Item" class="sov-item-name"><b>${sovEsc(r.l.desc)}</b><small>${r.src || '—'}</small></td><td data-label="Qty">${sovQ(r.l.qty, r.l.uom)}</td><td data-label="Selling">${sovMoney(r.selling)}</td><td data-label="Cost">${sovMoney(r.cost)}</td><td data-label="Profit"><b class="${r.profit < 0 ? 'sov-red' : 'sov-done'}">${sovMoney(r.profit)}</b></td><td data-label="${mainName} %" class="sov-pct">${pctCell(r.profit, r.cost, r.selling)}</td><td data-label="Cost">${sovPill(r.source[0], r.source[1])}</td></tr>`).join('');
+    const rows = P.rows.map(r => `<tr><td data-label="#">${r.l.no}</td><td data-label="Item" class="sov-item-name"><b>${sovEsc(r.l.desc)}</b><small>${r.src || '—'}</small></td><td data-label="Qty">${sovQ(r.l.qty, r.l.uom)}</td><td data-label="Selling">${sovMoney(r.selling)}</td><td data-label="Cost">${r.incomplete ? '—' : sovMoney(r.cost)}</td><td data-label="Profit">${r.incomplete ? '—' : `<b class="${r.profit < 0 ? 'sov-red' : 'sov-done'}">${sovMoney(r.profit)}</b>`}</td><td data-label="${mainName} %" class="sov-pct">${r.incomplete ? '—' : pctCell(r.profit, r.cost, r.selling)}</td><td data-label="Cost">${sovPill(r.source[0], r.source[1])}</td></tr>`).join('');
+    const none = t.counted === 0, exNote = t.excluded ? `${sovPlural(t.excluded, 'Line')} Without A Cost Left Out` : '';
     const atPricing = P.hasEstimate ? `At Pricing: ${sovSAR(t.estProfit)} (${t.profit - t.estProfit >= 0 ? '+' : '−'}${sovMoney(Math.abs(t.profit - t.estProfit))})` : 'No Pricing Estimate';
     return `<div class="sov-ptop">${switcher}<span class="sov-ptext">% Method Follows Administration → Pricing Settings: <b>${mainName}</b></span></div>
       <div class="sov-minis sov-minis4">
-        <div class="sov-mini"><span>Revenue (Ex-VAT)</span><b>${sovSAR(t.selling)}</b><small>${sovPlural(m.lines.length, 'Order Line')}</small></div>
-        <div class="sov-mini"><span>Cost</span><b>${sovSAR(t.cost)}</b><small>${sovMoney(t.finalCost)} Final · ${sovMoney(t.restCost)} Still Estimated</small></div>
-        <div class="sov-mini"><span>Gross Profit</span><b class="${t.profit < 0 ? 'sov-red' : 'sov-done'}">${sovSAR(t.profit)}</b><small>${atPricing}</small></div>
-        <div class="sov-mini"><span>${mainName}</span><b class="${t.profit < 0 ? 'sov-red' : 'sov-done'}">${sovPct(mainPct)}</b><small>${otherName} ${sovPct(other(t.profit, t.cost, t.selling))} · Target ${formatNumber(target, 0)}% ${targetPill}</small></div>
+        <div class="sov-mini"><span>Revenue (Ex-VAT)</span><b>${sovSAR(t.revenueAll)}</b><small>${sovPlural(m.lines.length, 'Order Line')}${t.excluded && !none ? ` · Profit On ${sovSAR(t.selling)}` : ''}</small></div>
+        <div class="sov-mini"><span>Cost</span>${none ? '<b class="sov-na">—</b><small>No Line Has A Cost Yet</small>' : `<b>${sovSAR(t.cost)}</b><small>${sovMoney(t.finalCost)} Final · ${sovMoney(t.restCost)} Still Estimated${exNote ? ' · ' + exNote : ''}</small>`}</div>
+        <div class="sov-mini"><span>Gross Profit</span>${none ? '<b class="sov-na">Not Available Yet</b><small>Buy the items or price them to see the profit</small>' : `<b class="${t.profit < 0 ? 'sov-red' : 'sov-done'}">${sovSAR(t.profit)}</b><small>${atPricing}</small>`}</div>
+        <div class="sov-mini"><span>${mainName}</span>${none ? `<b class="sov-na">—</b><small>Target ${formatNumber(target, 0)}%</small>` : `<b class="${t.profit < 0 ? 'sov-red' : 'sov-done'}">${sovPct(mainPct)}</b><small>${otherName} ${sovPct(other(t.profit, t.cost, t.selling))} · Target ${formatNumber(target, 0)}% ${targetPill}</small>`}</div>
       </div>
       <div class="sov-tablewrap"><table class="sov-table sov-cardable sov-profit-table"><thead><tr><th>#</th><th>Item · Cost Source</th><th>Qty</th><th>Selling</th><th>Cost</th><th>Profit</th><th>${mainName} %</th><th></th></tr></thead><tbody>${rows}
-        <tr class="sov-total-row"><td></td><td><b>Total</b></td><td></td><td>${sovMoney(t.selling)}</td><td>${sovMoney(t.cost)}</td><td><b class="${t.profit < 0 ? 'sov-red' : 'sov-done'}">${sovMoney(t.profit)}</b></td><td class="sov-pct">${pctCell(t.profit, t.cost, t.selling)}</td><td></td></tr></tbody></table></div>
+        <tr class="sov-total-row"><td></td><td><b>Total</b>${exNote ? `<small>Excl. ${exNote.replace(' Left Out', '')}</small>` : ''}</td><td></td><td>${none ? '—' : sovMoney(t.selling)}</td><td>${none ? '—' : sovMoney(t.cost)}</td><td>${none ? '—' : `<b class="${t.profit < 0 ? 'sov-red' : 'sov-done'}">${sovMoney(t.profit)}</b>`}</td><td class="sov-pct">${none ? '—' : pctCell(t.profit, t.cost, t.selling)}</td><td></td></tr></tbody></table></div>
       <div class="sov-two">
         <section class="sov-box"><h3>Markup Or Margin?</h3><div class="sov-kv"><span>Markup = Profit ÷ Cost</span><b>${sovMoney(t.profit)} ÷ ${sovMoney(t.cost)} = ${sovPct(sovMarkup(t.profit, t.cost))}</b></div><div class="sov-kv"><span>Margin = Profit ÷ Selling</span><b>${sovMoney(t.profit)} ÷ ${sovMoney(t.selling)} = ${sovPct(sovMargin(t.profit, t.selling))}</b></div><div class="sov-small">The main % follows the Pricing Settings method; the other is shown small — like the Pricing screen.</div></section>
         <section class="sov-box"><h3>Who Sees This Tab</h3><div class="sov-kv"><span>Setting</span><b>Purchase Settings → Profit Visibility</b></div><div class="sov-kv"><span>Now</span><b>${window.BizCorePI && window.BizCorePI.settings.profitVisibility === 'everyone' ? 'Everyone' : 'Administrators'}</b></div><div class="sov-small">Later: role permission "Can see cost &amp; profit" (Users &amp; Roles).</div></section>
@@ -572,10 +578,10 @@ function sovProfit(m, view){
     const subTxt = [r.piQty > SOV_EPS ? 'Landed' + (r.l.P.pis.some(x => sovN(x.line.costShare) > 0.005) ? ' (Delivery Charge Shared)' : '') : '', r.piQty > SOV_EPS && r.saQty > SOV_EPS ? `Stock ${sovMoney(r.saCost / r.saQty)} × ${sovQ(r.saQty, l.uom)}` : '', r.restQty > SOV_EPS ? `${sovQ(r.restQty, l.uom)} To Buy (Est. ${sovMoney(r.estUnit)})` : ''].filter(Boolean).join(' · ');
     const actualTxt = open ? '<span class="sov-muted">Not Bought Yet</span>' : `<b>${mainTxt}</b><small>${subTxt}</small>`;
     const vCls = variance > 0.005 ? 'sov-red' : variance < -0.005 ? 'sov-done' : '';
-    return `<tr${varPct > flag + 1e-9 && !open ? ' class="sov-flagged"' : ''}><td data-label="#">${l.no}</td><td data-label="Item"><b>${sovEsc(l.desc)}</b></td><td data-label="Qty">${sovQ(l.qty, l.uom)}</td>
+    return `<tr${varPct > flag + 1e-9 && !open ? ' class="sov-flagged"' : ''}><td data-label="#">${l.no}</td><td data-label="Item" class="sov-item-name"><span class="sov-item-text">${sovEsc(l.desc)}</span></td><td data-label="Qty">${sovQ(l.qty, l.uom)}</td>
       <td data-label="Estimate · Supplier / Unit" class="sov-left">${e ? `<b>${sovEsc(e.supplier || '—')} · ${sovMoney(e.unit)}</b>${est.factor > 0.00005 ? `<small>Buy ${sovMoney(e.buy)} + Costs Share</small>` : ''}` : '<span class="sov-muted">—</span>'}</td>
       <td data-label="Actual · Supplier / Unit" class="sov-left">${actualTxt}</td>
-      <td data-label="Est. Cost">${e ? sovMoney(r.estCost) : '—'}</td><td data-label="Actual Cost">${sovMoney(r.cost)}</td>
+      <td data-label="Est. Cost">${e ? sovMoney(r.estCost) : '—'}</td><td data-label="Actual Cost">${r.incomplete ? '—' : sovMoney(r.cost)}</td>
       <td data-label="Variance" class="${vCls}">${e && !open ? sign(variance) + sovMoney(Math.abs(variance)) : '—'}</td><td data-label="Var %" class="${vCls}">${e && !open && varPct != null ? sign(variance) + sovPct(Math.abs(varPct)) : '—'}</td><td data-label="Note">${note}</td></tr>`;
   }).join('');
   const dPctAll = t.estCost > 0.005 ? dCost / t.estCost * 100 : 0;
@@ -583,7 +589,7 @@ function sovProfit(m, view){
     <div class="sov-minis sov-minis3">
       <div class="sov-mini"><span>Cost</span><b>${sovSAR(t.estCost)} → ${sovMoney(t.cost)}</b><small class="${dCost > 0.005 ? 'sov-red' : 'sov-done'}">${sign(dCost)}${sovMoney(Math.abs(dCost))} (${sign(dCost)}${sovPct(Math.abs(dPctAll))}) · ${dCost > 0.005 ? 'Higher Than Estimated' : dCost < -0.005 ? 'Lower Than Estimated' : 'As Estimated'}</small></div>
       <div class="sov-mini"><span>Gross Profit</span><b>${sovSAR(t.estProfit)} → <span class="${t.profit < 0 ? 'sov-red' : 'sov-done'}">${sovMoney(t.profit)}</span></b><small class="${dProfit < -0.005 ? 'sov-red' : 'sov-done'}">${sign(dProfit)}${sovMoney(Math.abs(dProfit))} ${dProfit >= -0.005 ? 'Better' : 'Worse'} Than Estimated</small></div>
-      <div class="sov-mini"><span>${mainName} (${otherName})</span><b>${sovPct(estPct)} (${sovPct(estOther)}) → <span class="sov-done">${sovPct(actPct)} (${sovPct(actOther)})</span></b><small>${sovMoney(t.restCost)} Of The Cost Is Still An Estimate</small></div>
+      <div class="sov-mini"><span>${mainName} (${otherName})</span><b>${sovPct(estPct)} (${sovPct(estOther)}) → <span class="sov-done">${sovPct(actPct)} (${sovPct(actOther)})</span></b><small>${sovMoney(t.restCost)} Of The Cost Is Still An Estimate${t.excluded ? ` · ${sovPlural(t.excluded, 'Line')} Without A Cost Left Out` : ''}</small></div>
     </div>
     <div class="sov-tablewrap"><table class="sov-table sov-cardable sov-eva-table"><thead><tr><th>#</th><th>Item</th><th>Qty</th><th class="sov-left">Estimate · Supplier / Unit</th><th class="sov-left">Actual · Supplier / Unit</th><th>Est. Cost</th><th>Actual Cost</th><th>Variance</th><th>Var %</th><th>Note</th></tr></thead><tbody>${rows}
       <tr class="sov-total-row"><td></td><td><b>Total</b></td><td></td><td></td><td></td><td>${sovMoney(t.estCost)}</td><td>${sovMoney(t.cost)}</td><td class="${dCost > 0.005 ? 'sov-red' : 'sov-done'}">${sign(dCost)}${sovMoney(Math.abs(dCost))}</td><td class="${dCost > 0.005 ? 'sov-red' : 'sov-done'}">${sign(dCost)}${sovPct(Math.abs(dPctAll))}</td><td></td></tr></tbody></table></div>
@@ -929,7 +935,7 @@ function sovPrint(soId){
   m.dns.forEach(x => { dnRows += '<tr><td>' + e(x.d.dnNo) + '</td><td>' + fmtDate(x.d.date) + '</td><td>' + e((SOV_DN_TONE[x.status] || [x.status])[0]) + '</td><td>' + (x.d.items || []).map(it => e(it.desc) + ' ' + sovQ(it.qty, it.uom) + ' ' + e(it.uom || '')).join(', ') + '</td></tr>'; });
   let invRows = '';
   m.invs.forEach(x => { invRows += '<tr><td>' + e(x.inv.invNo) + '</td><td>' + fmtDate(x.inv.date) + '</td><td class="n">' + sovMoney(x.pay.net) + '</td><td class="n">' + sovMoney(x.pay.paid) + '</td><td>' + e((SOV_PAY_TONE[x.pay.status] || [x.pay.status])[0]) + '</td></tr>'; });
-  const css = '*{box-sizing:border-box}body{font-family:Inter,Arial,sans-serif;color:#1f2937;margin:24px;font-size:12px}h1{font-size:18px;margin:0}h2{font-size:13px;margin:18px 0 6px;color:#173a5e;text-transform:uppercase;letter-spacing:.05em}'
+  const css = '*{box-sizing:border-box}body{font-family:Inter,"Segoe UI Variable","Segoe UI",Arial,sans-serif;color:#1f2937;margin:24px;font-size:12px}h1{font-size:18px;margin:0}h2{font-size:13px;margin:18px 0 6px;color:#173a5e;text-transform:uppercase;letter-spacing:.05em}'
     + '.sub{color:#64748b;margin-top:4px}.figs{display:flex;gap:10px;margin-top:14px}.fig{flex:1;border:1px solid #d5dde7;border-radius:8px;padding:8px 10px}.fig span{display:block;color:#64748b;font-size:11px}.fig b{font-size:14px}'
     + 'table{width:100%;border-collapse:collapse}th{text-align:left;font-size:10.5px;text-transform:uppercase;color:#475569;border-bottom:1.5px solid #cbd5e1;padding:6px}td{padding:6px;border-bottom:1px solid #e8edf2}.n{text-align:right}.b{color:#1d63d8;font-weight:700}.o{color:#c2570a;font-weight:700}'
     + '.foot{margin-top:18px;color:#94a3b8;font-size:10.5px}@page{size:A4;margin:12mm}';
