@@ -312,7 +312,7 @@
         closePop();
         const inp = tr.querySelector(`[data-role="${kind}"]`); if (!inp) return;
         inp.value = formatNumber(x.price, dec());
-        if (kind === 'buy') calcPricingRow(inp); else calcFromSell(inp);
+        if (kind === 'buy') calcFromBuy(inp); else calcFromSell(inp);
         markPricingDirty(); syncCards();
         if (!isPhone()) inp.focus({ preventScroll: true });
       },
@@ -363,7 +363,7 @@
     const t = proxyTarget(inp); if (!t) return;
     t.value = inp.value;
     const role = inp.dataset.proxy;
-    if (role === 'buy') calcPricingRow(t); else if (role === 'markup') calcFromMarkup(t); else calcFromSell(t);
+    if (role === 'buy') calcFromBuy(t); else if (role === 'markup') calcFromMarkup(t); else calcFromSell(t);
   });
   document.addEventListener('focusin', e => { const inp = e.target.closest?.('#pr-cards [data-proxy]'); if (inp) { inp.value = String(inp.value || '').replace(/,/g, ''); try { inp.select(); } catch (_) {} } });
   document.addEventListener('focusout', e => {

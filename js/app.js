@@ -8481,7 +8481,7 @@ function addPricingRow(item={}) {
       <div class="pr-meta"><input data-role="code" class="pr-code" placeholder="Code" value="${esc(item.code)}" aria-label="Item code"><span class="pr-sep">·</span><select data-role="supplier" class="pr-sup" aria-label="Line supplier" title="Line supplier">${pricingSupplierOptionsHtml()}</select><span class="pr-lref"></span></div>
       <input type="hidden" data-role="supref" value="${esc(rowSupRef)}"></td>
     <td class="pr-qtyc"><div class="pr-qu"><input data-role="qty" type="text" inputmode="decimal" value="${formatQuantity(item.qty||1)}" onfocus="beginQuantityEdit(this)" oninput="calcPricingRow(this)" onblur="endQuantityEdit(this)" aria-label="Quantity"><input data-role="uom" placeholder="Pcs" value="${esc(item.uom||'Pcs')}" aria-label="Unit"></div></td>
-    <td class="pr-buyc"><input data-role="buy" class="pr-inp" type="text" inputmode="decimal" value="${item.buy!==undefined&&item.buy!==''?formatNumber(item.buy,dec):''}" onfocus="beginPriceEdit(this)" oninput="calcPricingRow(this)" onblur="endPriceEdit(this)" placeholder="${(0).toFixed(dec)}" aria-label="Buy price"><button type="button" class="pr-ref" data-ref="buy" tabindex="-1" onclick="prOpenRef(this)"></button></td>
+    <td class="pr-buyc"><input data-role="buy" class="pr-inp" type="text" inputmode="decimal" value="${item.buy!==undefined&&item.buy!==''?formatNumber(item.buy,dec):''}" onfocus="beginPriceEdit(this)" oninput="calcFromBuy(this)" onblur="endPriceEdit(this)" placeholder="${(0).toFixed(dec)}" aria-label="Buy price"><button type="button" class="pr-ref" data-ref="buy" tabindex="-1" onclick="prOpenRef(this)"></button></td>
     <td class="pr-mkc"><input data-role="markup" class="pr-inp" type="text" inputmode="decimal" value="${esc(markupValue)}" oninput="calcFromMarkup(this)" placeholder="%" aria-label="Markup on buy %"></td>
     <td class="pr-sellc"><div class="pricing-sell-lock-wrap pr-sellwrap"><input data-role="sell" class="pr-inp ${item.sellLocked?'is-price-locked':''}" type="text" inputmode="decimal" value="${item.sell!==undefined&&item.sell!==''?formatNumber(item.sell,dec):''}" onfocus="beginPriceEdit(this)" oninput="calcFromSell(this)" onblur="endPriceEdit(this)" placeholder="${(0).toFixed(dec)}" aria-label="Sell price"><button type="button" data-role="sell-lock" tabindex="-1" class="pr-lock ${item.sellLocked?'is-locked':''}" aria-pressed="${item.sellLocked?'true':'false'}" onclick="togglePricingSellLock(this)" title="${item.sellLocked?'Unlock selling price — margin gauge will adjust this line':'Lock selling price — margin gauge will leave this line unchanged'}"><svg viewBox="0 0 20 20" width="12" height="12" aria-hidden="true"><rect x="4.5" y="9" width="11" height="8" rx="1.6" fill="currentColor"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9" fill="none" stroke="currentColor" stroke-width="1.7"/></svg></button></div><button type="button" class="pr-ref" data-ref="sell" tabindex="-1" onclick="prOpenRef(this)"></button></td>
     <td class="pr-r pr-lt pr-val" data-pr="lt">—</td>
@@ -8496,7 +8496,7 @@ function addPricingRow(item={}) {
   const supSel = tr.querySelector('[data-role="supplier"]');
   if (rowSupplier && ![...supSel.options].some(o=>o.value===rowSupplier)) supSel.insertAdjacentHTML('beforeend',`<option value="${esc(rowSupplier)}">${esc(rowSupplier)} (not in Supplier Master)</option>`);
   supSel.value = rowSupplier || '';
-  if (item.buy || item.sell) calcPricingRow(tr.querySelector('[data-role="qty"]'));
+  { const b=parsePricingNumber(item.buy), se=parsePricingNumber(item.sell); if (b>0 && se>0) pricingSetMarkupFrom(tr,b,se); else if (b>0 && !(se>0)) calcFromBuy(tr.querySelector('[data-role="buy"]')); }
   ensurePricingQuickAddRow();
   renumberPricingRows();
   if (typeof prRefreshRefs === 'function') prRefreshRefs(tr);
@@ -8955,8 +8955,8 @@ function beginPriceEdit(input) {
 }
 function endPriceEdit(input) {
   const value = parsePricingNumber(input.value);
-  input.value = value || value === 0 ? formatNumber(value,2) : '';
-  if (input.dataset.role === 'sell') calcFromSell(input); else calcPricingRow(input);
+  input.value = value || value === 0 ? formatNumber(value,pricingDecimals()) : '';
+  if (input.dataset.role === 'sell') calcFromSell(input); else calcPricingSummary();   // V270.1.2: leaving Buy doesn't recalculate the sell
 }
 
 function getRowNums(input) {
@@ -8970,34 +8970,56 @@ function getRowNums(input) {
   };
 }
 
-/* V270.1: the % typed on a line is always Markup On Buy = (Sell − Buy) ÷ Buy. Profit, Markup % and Margin % of the line
-   (with its share of the additional costs) are worked out in calcPricingSummary. */
-function calcPricingRow(input) {
+/* V270.1.2 — one direction per field, no reverse calculation while typing (docs/V270_1_PRICING.md):
+     Buy Price typed   → Sell = Buy × (1 + Markup On Buy %)   (a locked sell stays; then the % follows)
+     Markup % typed    → Sell = Buy × (1 + %)
+     Sell Price typed  → Markup On Buy % = (Sell − Buy) ÷ Buy
+     Qty / unit / supplier, or leaving a field → prices stay as they are; only the figures are worked out again.
+   The field being typed in is never rewritten. The exact % behind the shown one-decimal % is kept (data-exact), so a
+   later Buy change doesn't drift the sell price. Profit, Markup % and Margin % (with the line's share of the additional
+   costs) and the summary come from calcPricingSummary. */
+function pricingMarkupOf(tr){
+  const el=tr.querySelector('[data-role="markup"]'); if(!el) return 0;
+  const shown=parseFloat(String(el.value||'').replace(/,/g,''))||0;
+  const ex=Number(el.dataset.exact);
+  return el.dataset.exact!==undefined && el.dataset.exact!=='' && Number.isFinite(ex) && ex.toFixed(1)===shown.toFixed(1) ? ex : shown;
+}
+function pricingSetMarkupFrom(tr,buy,sell){
+  const el=tr.querySelector('[data-role="markup"]'); if(!el||!buy) return;
+  const pct=(sell-buy)/buy*100;
+  if(document.activeElement!==el) el.value=pct.toFixed(1);
+  el.dataset.exact=String(pct);
+}
+/** Buy Price typed: the sell price follows the line's Markup On Buy %. */
+function calcFromBuy(input) {
   const {tr,buy,sell}=getRowNums(input);
-  const pctInput=tr.querySelector('[data-role="markup"]');
-  const sellInput=tr.querySelector('[data-role="sell"]');
-  if(!buy&&!sell){calcPricingSummary();return;}
-  if(buy && !sell && pctInput){
-    if(pctInput.value==='') pctInput.value=pricingDefaultMarkupOnBuy().toFixed(1);
-    const pct=parseFloat(String(pctInput.value).replace(/,/g,''))||0;
-    if(sellInput) sellInput.value=formatNumber(pricingRound(buy*(1+pct/100)),pricingDecimals());
+  const pctInput=tr.querySelector('[data-role="markup"]'), sellInput=tr.querySelector('[data-role="sell"]');
+  const locked=tr.querySelector('[data-role="sell-lock"]')?.classList.contains('is-locked');
+  if(buy>0){
+    if(pctInput && String(pctInput.value).trim()===''){ pctInput.value=pricingDefaultMarkupOnBuy().toFixed(1); delete pctInput.dataset.exact; }
+    if(locked && sell) pricingSetMarkupFrom(tr,buy,sell);
+    else if(sellInput && document.activeElement!==sellInput) sellInput.value=formatNumber(pricingRound(buy*(1+pricingMarkupOf(tr)/100)),pricingDecimals());
   }
-  const currentSell=parsePricingNumber(sellInput?.value);
-  if(pctInput && currentSell && buy) pctInput.value=((currentSell-buy)/buy*100).toFixed(1);
+  calcPricingSummary();
+}
+/** Quantity, unit or another non-price change: prices stay; the figures are worked out again. */
+function calcPricingRow(input) {
   calcPricingSummary();
 }
 
 function calcFromMarkup(input) {
-  const {tr,buy,markup}=getRowNums(input); if(!buy){calcPricingSummary();return;}
-  const sell=pricingRound(buy*(1+markup/100)), sellInput=tr.querySelector('[data-role="sell"]');
-  if(sellInput)sellInput.value=formatNumber(sell,pricingDecimals());
+  const {tr,buy}=getRowNums(input);
+  delete input.dataset.exact;   // the person typed the % — it is the exact value now
+  if(buy>0){
+    const sellInput=tr.querySelector('[data-role="sell"]');
+    if(sellInput)sellInput.value=formatNumber(pricingRound(buy*(1+pricingMarkupOf(tr)/100)),pricingDecimals());
+  }
   calcPricingSummary();
 }
 
 function calcFromSell(input) {
-  const {tr,buy,sell}=getRowNums(input); if(!buy||!sell){calcPricingRow(input);return;}
-  const pctInput=tr.querySelector('[data-role="markup"]');
-  if(pctInput)pctInput.value=((sell-buy)/buy*100).toFixed(1);
+  const {tr,buy,sell}=getRowNums(input);
+  if(buy>0 && sell>0) pricingSetMarkupFrom(tr,buy,sell);
   calcPricingSummary();
 }
 
@@ -9153,7 +9175,7 @@ function setTargetPricingMargin(targetPct) {
     if(!buy||!qty)return;
     const sell=pricingRound(buy*factor),si=tr.querySelector('[data-role="sell"]'),pi=tr.querySelector('[data-role="markup"]');
     if(si)si.value=formatNumber(sell,pricingDecimals());
-    if(pi)pi.value=(buy?(sell-buy)/buy*100:0).toFixed(1);   // V270.1: Markup On Buy %
+    if(pi)pricingSetMarkupFrom(tr,buy,sell);   // V270.1: Markup On Buy %
     calcPricingRow(si||tr);
   });
   markPricingDirty();calcPricingSummary();
