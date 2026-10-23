@@ -115,6 +115,7 @@
   let cal = null;
   const isPhone = () => window.matchMedia && window.matchMedia('(max-width:760px)').matches;
   function openCal(api) {
+    if (api.input.readOnly || api.input.disabled) return;   // V270.1.3: a read-only date (e.g. Pricing in View) has no calendar
     closeCal();
     const sel = parse(api.input.value) || '';
     const focus = sel || (bound(api.opts.max) && today() > bound(api.opts.max) ? bound(api.opts.max) : today());

@@ -144,6 +144,7 @@
   /* ── line ⋮ menu ── */
   const hostRow = btn => btn.closest('tr') || rowById(btn.closest('[data-line]')?.dataset.line);
   function prRowMenu(btn) {
+    if ((typeof pricingViewMode !== 'undefined' && pricingViewMode)) return;
     const tr = hostRow(btn); if (!tr) return;
     if (pop && pop.anchor === btn) { closePop(); return; }
     const rows = rowsAll(), i = rows.indexOf(tr), locked = tr.querySelector('[data-role="sell-lock"]')?.classList.contains('is-locked');
@@ -223,13 +224,42 @@
     if (it.supplierName && ![...sel.options].some(o => o.value === it.supplierName)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(it.supplierName)}">${esc(it.supplierName)} (not in Supplier Master)</option>`);
     sel.value = it.supplierName || '';
   }
+  /* V270.1.3: the line's supplier quote ref. is edited in place — click "Ref 123" (or "+ Ref"); Enter / leaving keeps it,
+     Esc cancels. Line Details (⋮) still edits it together with qty, supplier and note. */
   function prShowLineRef(tr) {
     const el = tr?.querySelector('.pr-lref'); if (!el) return;
-    const ref = val(tr, 'supref'), note = tr.dataset.supNote || '';
-    el.innerHTML = [ref ? 'Ref ' + esc(ref) : '', note ? '<span class="pr-notei" aria-label="Supplier note">✎ Note</span>' : ''].filter(Boolean).join(' · ');
-    el.title = [ref && 'Supplier quote ref. ' + ref, note && 'Note: ' + note].filter(Boolean).join('\n');
-    el.hidden = !ref && !note;
+    const ref = val(tr, 'supref'), note = tr.dataset.supNote || '', view = (typeof pricingViewMode !== 'undefined' && pricingViewMode);
+    const refHtml = ref ? `<button type="button" class="pr-lref-ref" title="${view ? 'Supplier quote ref.' : 'Edit the supplier quote ref. of this line'}"${view ? ' disabled' : ''}>Ref ${esc(ref)}</button>`
+      : (view ? '' : '<button type="button" class="pr-lref-ref pr-lref-add" title="Add the supplier quote ref. of this line">+ Ref</button>');
+    el.innerHTML = [refHtml, note ? `<span class="pr-notei" title="${esc('Note: ' + note)}">✎ Note</span>` : ''].filter(Boolean).join('<span class="pr-sep"> · </span>');
+    el.hidden = !refHtml && !note;
   }
+  function editLineRef(tr) {
+    if ((typeof pricingViewMode !== 'undefined' && pricingViewMode)) return;
+    const el = tr.querySelector('.pr-lref'), hidden = tr.querySelector('[data-role="supref"]'); if (!el || !hidden) return;
+    if (isPhone()) {
+      dialog({ title: `Line ${rowsAll().indexOf(tr) + 1} · Supplier Quote Ref.`, html: `<div class="pr-form"><label class="pr-wide">Supplier Quote Ref.<input id="prd-ref1" class="pr-fi" value="${esc(hidden.value)}" placeholder="Quote no. for this line"></label></div>`,
+        buttons: [{ text: 'Cancel' }, { text: 'Apply', cls: 'pr-pri', action: v => { setLineRef(tr, v['prd-ref1']); } }] });
+      return;
+    }
+    const old = hidden.value;
+    el.innerHTML = `<input class="pr-lref-in" value="${esc(old)}" placeholder="Quote ref." aria-label="Supplier quote ref. of this line" maxlength="60">`;
+    const inp = el.querySelector('input'); inp.focus(); inp.select();
+    let done = false;
+    const finish = keep => { if (done) return; done = true; if (keep) setLineRef(tr, inp.value); else prShowLineRef(tr); };
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); finish(true); tr.querySelector('[data-role="buy"]')?.focus(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); } });
+    inp.addEventListener('blur', () => finish(inp.dataset.cancel !== '1'));
+  }
+  function setLineRef(tr, v) {
+    const hidden = tr.querySelector('[data-role="supref"]'); if (!hidden) return;
+    const nv = String(v || '').trim();
+    if (nv !== hidden.value) { hidden.value = nv; markPricingDirty(); }
+    prShowLineRef(tr); syncCards();
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest?.('#pricing-tbody .pr-lref-ref'); if (b && !b.disabled) { e.preventDefault(); editLineRef(b.closest('tr')); return; }
+    const c = e.target.closest?.('#pr-cards [data-c="ref"]'); if (c) { const card = c.closest('[data-line]'); const tr = card && rowById(card.dataset.line); if (tr) editLineRef(tr); }
+  });
 
   /* ── toast with Undo ── */
   let toastTimer = null;
@@ -303,10 +333,13 @@
       ? `<div class="pr-rf"><div class="pr-rf-m"><b>${esc(fmt(x.price))}</b><span>${esc(x.no || 'Last price')} · ${esc(dmy(x.date))}</span><small>${esc(x.supplier || '')}</small></div><button type="button" class="pr-btn pr-use" data-act="use" data-i="${i}">Use</button></div>`
       : `<div class="pr-rf"><div class="pr-rf-m"><b>${esc(fmt(x.price))}</b><span>${esc(x.qno)} · ${esc(dmy(x.date))} <em class="pr-st pr-st-${esc(low(x.status))}">${esc(x.status)}</em></span><small>${esc(x.customer)}${x.same ? '' : ' <i class="pr-oc">Other Customer</i>'}</small></div><button type="button" class="pr-btn pr-use" data-act="use" data-i="${i}">Use</button></div>`).join('');
     const head = `<div class="pr-rf-h">${kind === 'buy' ? 'Last Paid' : 'Last Quoted'} — ${esc(desc.length > 34 ? desc.slice(0, 34) + '…' : desc)}</div>`;
-    const foot = `<div class="pr-rf-f">${kind === 'buy' ? 'From posted purchase invoices, newest first.' : 'This customer first, then others · Draft, revised and cancelled quotations are not counted.'}</div>`;
+    const foot = `<div class="pr-rf-f">${kind === 'buy' ? 'From posted purchase invoices, newest first.' : 'This customer first, then others · Draft, revised and cancelled quotations are not counted.'}</div>`
+      + `<div class="pr-rf-more"><button type="button" class="pr-lnk" data-act="hist">View Price History ›</button></div>`;
+    if ((typeof pricingViewMode !== 'undefined' && pricingViewMode)) html = html.replace(/<button type="button" class="pr-btn pr-use"[^>]*>Use<\/button>/g, '');
     openPop(btn, head + html + foot, {
       width: 320, title: kind === 'buy' ? 'Last Paid' : 'Last Quoted',
       onClick: (act, b) => {
+        if (act === 'hist') { closePop(); prOpenHistory(tr, kind); return; }
         if (act !== 'use') return;
         const x = list[Number(b.dataset.i)]; if (!x) return;
         closePop();
@@ -336,6 +369,7 @@
     if (!isPhone()) { if (box.childElementCount) box.innerHTML = ''; return; }
     const rows = rowsAll();
     box.innerHTML = rows.length ? rows.map(cardHtml).join('') : '<div class="pr-empty">No lines yet — add an item below.</div>';
+    if ((typeof pricingViewMode !== 'undefined' && pricingViewMode)) box.querySelectorAll('[data-proxy]').forEach(i => { i.readOnly = true; i.tabIndex = -1; });
     syncCards();
   }
   function syncCards() {
@@ -345,7 +379,9 @@
       const tr = rowById(card.dataset.line); if (!tr) return;
       card.querySelectorAll('[data-proxy]').forEach(inp => { if (document.activeElement !== inp) inp.value = val(tr, inp.dataset.proxy); });
       const sup = val(tr, 'supplier'), code = val(tr, 'code');
-      card.querySelector('[data-c="sub"]').textContent = [`${val(tr, 'qty')} ${val(tr, 'uom')}`, sup || 'No supplier', code].filter(Boolean).join(' · ');
+      const ref = val(tr, 'supref'), view = (typeof pricingViewMode !== 'undefined' && pricingViewMode);
+      card.querySelector('[data-c="sub"]').innerHTML = esc([`${val(tr, 'qty')} ${val(tr, 'uom')}`, sup || 'No supplier', code].filter(Boolean).join(' · '))
+        + (ref ? ` · <span data-c="ref" class="pr-cref">Ref ${esc(ref)}</span>` : (view ? '' : ' · <span data-c="ref" class="pr-cref pr-lref-add">+ Ref</span>'));
       const d = refCache.get(tr.dataset.lineId) || { paid: [], quoted: [] }, t = refTexts(d);
       const rb = card.querySelector('.pr-ref[data-ref="buy"]'), rs = card.querySelector('.pr-ref[data-ref="sell"]');
       if (rb) { rb.innerHTML = '<span>' + t.buyShort + '</span>'; rb.classList.toggle('none', !d.paid.length); }
@@ -439,6 +475,7 @@
       + `<div class="pr-pc pr-cadd-m"><select class="pr-fi pr-cpick-m" onchange="prAddCostFromPick(this)" aria-label="Add cost from Cost Master"></select><button type="button" class="pr-btn" onclick="prAddDefaultCosts()">+ Add All Default Costs</button></div>
          <div class="pr-pc pr-ctotal"><div class="pr-pc-t"><div class="pr-pc-d pr-b">Total Additional Costs<small id="pr-ctot-sub"></small></div><b id="pr-ctot-amt"></b></div></div>`;
     fillCostPick(); syncCostCards();
+    if ((typeof pricingViewMode !== 'undefined' && pricingViewMode)) box.querySelectorAll('[data-cproxy]').forEach(i => { i.disabled = true; });
   }
   function syncCostCards() {
     const box = $('pr-ccards'); if (!box || !isPhone() || !box.childElementCount) return;
@@ -481,7 +518,7 @@
   }
   function prVendorQuoteMenu(btn, i) {
     const q = pricingVendorQuotes[i]; if (!q) return; const href = q.url || q.data || '';
-    openPop(btn, `<a class="pr-mi" href="${esc(href)}" target="_blank" rel="noopener">View</a><a class="pr-mi" href="${esc(href)}" download="${esc(q.name || 'attachment')}">Download</a><div class="pr-sepm"></div>` + mi('del', '🗑 Remove', { cls: 'pr-mi-del' }), {
+    openPop(btn, `<a class="pr-mi" href="${esc(href)}" target="_blank" rel="noopener">View</a><a class="pr-mi" href="${esc(href)}" download="${esc(q.name || 'attachment')}">Download</a>` + ((typeof pricingViewMode !== 'undefined' && pricingViewMode) ? '' : '<div class="pr-sepm"></div>' + mi('del', '🗑 Remove', { cls: 'pr-mi-del' })), {
       width: 190, title: esc(q.name || 'Attachment'), onClick: act => { closePop(); if (act === 'del') prRemoveVendorQuote(i); },
     });
   }
@@ -546,6 +583,7 @@
   window.addEventListener('keydown', e => {
     if (!modalOpen()) return;
     if (e.key === 'Escape') {
+      if (e.target && e.target.classList && e.target.classList.contains('pr-lref-in')) { e.preventDefault(); e.stopImmediatePropagation(); e.target.dataset.cancel = '1'; e.target.blur(); return; }
       if (dlg) { e.preventDefault(); e.stopImmediatePropagation(); dlg.cancel(); return; }
       if (pop) { e.preventDefault(); e.stopImmediatePropagation(); const a = pop.anchor; closePop(); a?.focus?.(); return; }
       return;
@@ -558,6 +596,7 @@
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+      if ((typeof pricingViewMode !== 'undefined' && pricingViewMode)) return;
       const tr = el?.closest?.('#pricing-tbody tr:not(.pricing-quick-add-row)'); if (tr) { e.preventDefault(); e.stopImmediatePropagation(); confirmDelete(tr); }
       return;
     }
@@ -567,10 +606,157 @@
   const onMq = () => { if (modalOpen()) { closePop(); renderCards(); renderCostCards(); } };
   if (mq.addEventListener) mq.addEventListener('change', onMq); else if (mq.addListener) mq.addListener(onMq);
 
+  /* ═════ V270.1.3 — View mode: the same window, read only ═════ */
+  const VSTATUS = { 'Revision Draft': 'Revision Draft', Saved: 'Saved', Converted: 'Converted', Superseded: 'Superseded', Cancelled: 'Cancelled' };
+  function prApplyMode(view, r, version) {
+    const m = $('pricing-modal'); if (!m) return;
+    m.classList.toggle('pr-view', view);
+    m.querySelectorAll('.pr-win input, .pr-win textarea').forEach(el => {
+      if (el.type === 'file' || el.type === 'hidden') return;
+      if (view) { if (!el.readOnly) { el.readOnly = true; el.dataset.prro = '1'; } }
+      else if (el.dataset.prro) { el.readOnly = false; delete el.dataset.prro; }
+    });
+    m.querySelectorAll('.pr-win select').forEach(el => {
+      if (view) { if (!el.disabled) { el.disabled = true; el.dataset.prro = '1'; } }
+      else if (el.dataset.prro) { el.disabled = false; delete el.dataset.prro; }
+    });
+    const vp = $('pr-view-pill'); if (vp) vp.hidden = !view;
+    const ft = m.querySelector('.pr-ft'); ft.querySelectorAll('.pr-va').forEach(b => b.remove());
+    ['pricing-save-btn', 'pricing-convert-btn'].forEach(id => { const b = $(id); if (b) b.hidden = view; });
+    const sp = $('pr-status-pill');
+    if (!view) { if (sp) sp.classList.remove('pr-pill-conv'); return; }
+    const st = version?.status || (r.quotationId ? 'Converted' : 'Saved');
+    if (sp) { sp.textContent = VSTATUS[st] || st; sp.classList.toggle('pr-pill-conv', st === 'Converted'); }
+    const qid = version?.quotationId || (st === 'Converted' ? r.quotationId : null), q = qid ? quotations.find(x => x.id === qid) : null;
+    const when = dmy(String(version?.convertedDate || version?.updated || '').slice(0, 10));
+    const note = $('pricing-save-note');
+    if (note) { note.className = 'pricing-save-note pr-h'; note.innerHTML = st === 'Converted' ? `Converted to ${q ? `<button type="button" class="pr-lnk pr-va-q">${esc(q.qno)}</button>` : 'a quotation'}${when !== '—' ? ' · ' + esc(when) : ''}` : `${esc(VSTATUS[st] || st)}${when !== '—' ? ' · ' + esc(when) : ''}`; note.querySelector('.pr-va-q')?.addEventListener('click', () => viewQuote(qid)); }
+    const older = typeof pvViewing !== 'undefined' && pvViewing && pvViewing.rfqId === String(r.id);
+    const locked = older || ['Converted', 'Superseded'].includes(st) || (typeof isPricingVersionLocked === 'function' && isPricingVersionLocked(r));
+    const close = ft.querySelector('.pr-cl');
+    const add = (html, before) => { const t = document.createElement('template'); t.innerHTML = html.trim(); const b = t.content.firstChild; ft.insertBefore(b, before); return b; };
+    add('<button type="button" class="btn btn-secondary btn-sm pr-va pr-cl">View RFQ</button>', close).addEventListener('click', viewRfq);
+    if (qid) add('<button type="button" class="btn btn-secondary btn-sm pr-va pr-cl">View Quotation</button>', close).addEventListener('click', () => viewQuote(qid));
+    add('<button type="button" class="btn btn-secondary btn-sm pr-va pr-more-m" aria-label="More actions">⋯</button>', close).addEventListener('click', e => moreMenu(e.currentTarget, qid));
+    const ed = add(`<button type="button" class="btn btn-primary btn-sm pr-va pr-va-edit" id="pr-edit-btn">${locked ? 'Revise Pricing' : '✎ Edit'}</button>`, null);
+    ed.title = locked ? 'Start a new pricing version from this one (the converted version stays as it is)' : 'Edit this pricing';
+    ed.addEventListener('click', prEditFromView);
+  }
+  function leaveTo(fn) { if (typeof window.bizcorePerformClose === 'function') window.bizcorePerformClose('pricing-modal', true); else closeModal('pricing-modal'); fn(); }
+  function viewRfq() { const rid = pricingRFQId; leaveTo(() => rid && viewRFQ(rid)); }
+  function viewQuote(qid) { leaveTo(() => viewQuotation(qid)); }
+  function moreMenu(btn, qid) {
+    openPop(btn, mi('rfq', 'View RFQ') + (qid ? mi('q', 'View Quotation') : '') + mi('close', 'Close'), { width: 200, title: 'Pricing', onClick: act => { closePop(); if (act === 'rfq') viewRfq(); else if (act === 'q') viewQuote(qid); else requestClosePricingEntry('close'); } });
+  }
+  function prEditFromView() {
+    const rid = pricingRFQId, r = rfqs.find(x => x.id === rid); if (!r) return;
+    const older = typeof pvViewing !== 'undefined' && pvViewing && pvViewing.rfqId === String(rid) && pvViewing.version !== Number(r.currentPricingVersion);
+    if (older || isPricingVersionLocked(r)) { revisePricingFromRO({ getAttribute: () => rid }); return; }
+    openPricingSheet(rid, { closeSource: false });
+  }
+
+  /* ═════ V270.1.3 — Price History: 5 at a time, on demand, from Firebase (indexed queries, firestore.indexes.json) ═════
+     Buying: purchase invoices whose itemKeys contain the item (voided ones skipped). Selling: quotations Sent / Won /
+     Lost / Expired. Pages are kept for the session (same item + filters → no second read); a document opened from the
+     list joins the loaded records, so opening it reads nothing more. Nothing is written. */
+  const histCache = new Map(), PAGE = 5;
+  const QSTAT = ['Sent', 'Won', 'Lost', 'Expired'];
+  function itemKeyOfRow(tr) { const lib = window.BizCorePI; try { return lib && lib.core ? lib.core.itemKeyOf({ productId: tr.dataset.productId, code: val(tr, 'code'), desc: val(tr, 'desc'), uom: val(tr, 'uom') }) : ''; } catch (_) { return ''; } }
+  function periodFrom(p) { if (p === 'all') return ''; const d = new Date(); d.setHours(12, 0, 0, 0); d.setMonth(d.getMonth() - Number(p)); return d.toISOString().slice(0, 10); }
+  function histQuery(st) {
+    const from = periodFrom(st.period), f = [['itemKeys', 'array-contains', st.key]];
+    if (st.kind === 'buy') { if (st.supplierId) f.push(['supplierId', '==', st.supplierId]); }
+    else { if (st.cust === 'this' && st.custId) f.push(['custId', '==', st.custId]); f.push(['status', 'in', st.status === 'all' ? QSTAT : [st.status]]); }
+    if (from) f.push(['date', '>=', from]);
+    return { col: st.kind === 'buy' ? 'purchaseInvoices' : 'quotations', filters: f };
+  }
+  function rowsOf(st, docs) {
+    const out = [];
+    docs.forEach(d => {
+      if (st.kind === 'buy') {
+        if (d.status === 'Voided') return;
+        (d.lines || []).forEach(l => { if (l.itemKey === st.key && Number(l.unitCost) > 0) out.push({ id: d.id, date: d.date, no: d.piNo || d.id, party: d.supplierName || '', qty: l.qty, uom: l.uom || '', price: Number(l.unitCost), status: d.payStatus || 'Posted' }); });
+      } else {
+        (d.items || []).forEach(it => {
+          if (it.lineType && it.lineType !== 'item') return;
+          let k = ''; try { k = window.BizCorePI.core.itemKeyOf({ productId: it.prodId, code: it.code, desc: it.desc, uom: it.uom }); } catch (_) {}
+          if (k === st.key && Number(it.up) > 0) out.push({ id: d.id, date: d.date, no: d.qno || d.id, party: d.company || '', qty: it.qty, uom: it.uom || '', price: Number(it.up), status: d.status, same: st.custId && d.custId === st.custId });
+        });
+      }
+    });
+    return out;
+  }
+  async function loadPage(st) {
+    const q = histQuery(st), ck = st.kind + '|' + JSON.stringify(q);
+    let c = histCache.get(ck); if (!c) { c = { docs: [], cursor: null, done: false }; histCache.set(ck, c); }
+    st.cache = c;
+    if (c.done || (c.docs.length && !st.more)) return;
+    if (!window.BCWin || typeof window.BCWin.page !== 'function') { c.error = 'Price history is not available in this version of the page — reload it.'; return; }
+    st.busy = true; paintHist(st);
+    try { const res = await window.BCWin.page(q.col, q.filters, 'date', PAGE, c.cursor); c.docs.push(...res.rows); c.cursor = res.cursor; c.done = res.done; c.error = ''; }
+    catch (e) { c.error = /index/i.test(String(e && e.message)) || e?.code === 'failed-precondition' ? 'Price history needs the Firebase indexes to be set up (docs/FIRESTORE_INDEXES.md). Until then only the quick “last 3” list is available.' : 'Could not load the price history — check the connection and try again.'; console.warn('[BizCore] price history', e); }
+    finally { st.busy = false; st.more = false; }
+  }
+  function histHtml(st) {
+    const r = rfqs.find(x => x.id === pricingRFQId) || {};
+    const sups = bcSortBy(suppliers.filter(x => x && x.id), x => x.company).map(x => `<option value="${esc(x.id)}"${st.supplierId === x.id ? ' selected' : ''}>${esc(x.company)}</option>`).join('');
+    const per = [['3', 'Last 3 Months'], ['6', 'Last 6 Months'], ['12', 'Last 12 Months'], ['all', 'All Time']].map(([v, t]) => `<option value="${v}"${st.period === v ? ' selected' : ''}>${t}</option>`).join('');
+    const filt = st.kind === 'buy'
+      ? `<select class="pr-hf" data-h="supplierId" aria-label="Supplier"><option value="">All Suppliers</option>${sups}</select>`
+      : `<select class="pr-hf" data-h="cust" aria-label="Customer"><option value="all">All Customers</option>${st.custId ? `<option value="this"${st.cust === 'this' ? ' selected' : ''}>This Customer — ${esc(r.company || '')}</option>` : ''}</select>
+         <select class="pr-hf" data-h="status" aria-label="Status"><option value="all">All Statuses</option>${QSTAT.map(x => `<option${st.status === x ? ' selected' : ''}>${x}</option>`).join('')}</select>`;
+    return `<h3>${st.kind === 'buy' ? 'Buying' : 'Selling'} Price History — ${esc(st.desc.length > 60 ? st.desc.slice(0, 60) + '…' : st.desc)}${st.code ? ` <span class="pr-muted">(${esc(st.code)})</span>` : ''}</h3>
+      <div class="pr-hbar"><div class="pr-htabs"><button type="button" class="pr-btn${st.kind === 'buy' ? ' pr-pri' : ''}" data-hk="buy">Buying</button><button type="button" class="pr-btn${st.kind === 'sell' ? ' pr-pri' : ''}" data-hk="sell">Selling</button></div><span class="pr-sp2"></span>${filt}<select class="pr-hf" data-h="period" aria-label="Period">${per}</select></div>
+      <div class="pr-hwrap" id="pr-hbody"></div>
+      <div class="pr-hfoot"><span class="pr-muted pr-small" id="pr-hinfo"></span><button type="button" class="pr-btn" id="pr-hmore">Load 5 More</button></div>
+      <div class="pr-cf-bt"><button type="button" class="pr-btn" id="pr-hclose">Close</button></div>`;
+  }
+  function paintHist(st) {
+    const body = $('pr-hbody'); if (!body) return;
+    const c = st.cache || { docs: [] }, rows = rowsOf(st, c.docs), docT = st.kind === 'buy' ? 'Purchase Invoice' : 'Quotation', party = st.kind === 'buy' ? 'Supplier' : 'Customer';
+    const pill = s => `<span class="pr-st pr-st-${esc(low(s).replace(/\s+/g, '-'))}">${esc(s)}</span>`;
+    body.innerHTML = c.error ? `<div class="pr-rf-empty">${esc(c.error)}</div>`
+      : rows.length ? `<div class="pr-hgrid"><div class="pr-hrow pr-hh"><div>Date</div><div>${docT}</div><div>${party}</div><div class="pr-r">Qty</div><div class="pr-r">Unit Price</div><div>Status</div></div>${rows.map(x => `<div class="pr-hrow"><div class="pr-hd-date">${esc(dmy(x.date))}</div><div class="pr-hd-no"><button type="button" class="pr-lnk pr-hdoc" data-id="${esc(x.id)}">${esc(x.no)}</button></div><div class="pr-hd-party">${esc(x.party)}${st.kind === 'sell' && st.cust !== 'this' && x.same ? ' <span class="pr-muted pr-small">(This Customer)</span>' : ''}</div><div class="pr-r pr-hd-qty">${esc(formatQuantity(Number(x.qty) || 0))} ${esc(x.uom)}</div><div class="pr-r pr-num pr-hd-price">${esc(fmt(x.price))}</div><div class="pr-hd-st">${pill(x.status)}</div></div>`).join('')}</div>`
+      : `<div class="pr-rf-empty">${st.busy ? 'Loading…' : c.done ? 'No ' + (st.kind === 'buy' ? 'purchases' : 'quotations') + ' of this item for these filters.' : 'Loading…'}</div>`;
+    const more = $('pr-hmore'); if (more) { more.hidden = !!(c.done || c.error); more.disabled = !!st.busy; more.textContent = st.busy ? 'Loading…' : 'Load 5 More'; }
+    const info = $('pr-hinfo'); if (info) info.textContent = c.error ? '' : `${c.docs.length} ${c.docs.length === 1 ? 'document' : 'documents'} · newest first${c.done ? ' · that is all' : ''} · click a number to open it`;
+  }
+  async function prOpenHistory(tr, kind) {
+    const r = rfqs.find(x => x.id === pricingRFQId) || {};
+    const st = { kind, key: itemKeyOfRow(tr), desc: val(tr, 'desc') || 'Item', code: val(tr, 'code'), supplierId: '', cust: 'all', custId: r.custId || '', status: 'all', period: '12' };
+    if (!st.key) { toast('Price history needs the item (choose it from the Item Master).'); return; }
+    closeDialog(); closePop();
+    const dim = document.createElement('div'); dim.className = 'pr-dim';
+    const box = document.createElement('div'); box.className = 'pr-cf pr-cf-xl'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', 'Price History');
+    document.body.append(dim, box);
+    dlg = { dim, box, returnFocus: document.activeElement, cancel: () => closeDialog() };
+    dim.addEventListener('mousedown', () => closeDialog());
+    const render = async () => { box.innerHTML = histHtml(st); paintHist(st); await loadPage(st); paintHist(st); };
+    box.addEventListener('click', async e => {
+      const k = e.target.closest('[data-hk]'); if (k && k.dataset.hk !== st.kind) { st.kind = k.dataset.hk; await render(); return; }
+      if (e.target.closest('#pr-hclose')) { closeDialog(); return; }
+      if (e.target.closest('#pr-hmore')) { st.more = true; await loadPage(st); paintHist(st); return; }
+      const d = e.target.closest('.pr-hdoc'); if (d) openHistDoc(st, d.dataset.id);
+    });
+    box.addEventListener('change', async e => { const f = e.target.closest('[data-h]'); if (!f) return; st[f.dataset.h] = f.value; box.querySelector('#pr-hbody').innerHTML = ''; await loadPage(st); paintHist(st); });
+    await render();
+    setTimeout(() => box.querySelector('[data-hk].pr-pri')?.focus(), 0);
+  }
+  function openHistDoc(st, id) {
+    const col = st.kind === 'buy' ? 'purchaseInvoices' : 'quotations', doc = (st.cache?.docs || []).find(d => d.id === id);
+    const listed = st.kind === 'buy' ? (window.BizCorePI?.invoices || []).some(p => p.id === id) : quotations.some(q => q.id === id);
+    if (!listed && doc && window.BCWin?.addDocs) window.BCWin.addDocs(col, [doc]);   // already read: no second read to open it
+    closeDialog();
+    const lift = mid => setTimeout(() => { const el = $(mid); if (el && el.classList.contains('open')) el.style.zIndex = '10030'; }, 60);
+    if (st.kind === 'buy') { if (typeof openPurchaseInvoiceView === 'function') { openPurchaseInvoiceView(id); lift('pi-view-modal'); } }
+    else { setTimeout(() => { viewQuotation(id); lift('view-modal'); }, quotations.some(q => q.id === id) ? 0 : 120); }
+  }
+
   Object.assign(window, {
     prShowTab, prUpdateNoteMarks, prConfirmLeave, prRequestBack, prRowMenu, prOpenRef, prRefreshRefs, prShowLineRef, prAfterCalc,
     prAfterRowsChange, prAfterCostsChange, prAddCostFromPick, prAddDefaultCosts, prCostMenu, prRemoveVendorQuote, prVendorQuoteMenu,
-    prCheckPrimarySupplier, prRefreshSupplierOptions, prApplyMenu, prOnOpen, prAfterOpen,
+    prCheckPrimarySupplier, prRefreshSupplierOptions, prApplyMenu, prOnOpen, prAfterOpen, prApplyMode, prEditFromView, prOpenHistory,
+    prHistCache: histCache,
     prDebug: { paidHistory, quoteHistory, rowItem, confirmDelete, deleteLine, insertAbove, duplicate, move, saveNow, closePop, closeDialog, isOpen: () => ({ pop: !!pop, dlg: !!dlg }) },
   });
 })();

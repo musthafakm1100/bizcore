@@ -31,6 +31,7 @@ let pricingSupplierName = '';
 let pricingDirty = false;
 let pricingSaved = false;
 let pricingChangedSinceOpen = false, pricingCostRowSeq = 0, pricingLastLines = [];   // V270.1
+let pricingViewMode = false;   // V270.1.3: the Pricing window shows a saved pricing read only
 let pricingInternalCosts = [];
 let pricingDragRow = null;
 let pricingDragFocus = null;
@@ -849,6 +850,14 @@ async function loadData() {
   renderAll();
 }
 
+/** V270.1.3: the item keys of a quotation's lines (same key as purchase invoices: product id, else code / description + unit).
+ *  Stored with the quotation in the same write, so Selling Price History can ask Firebase for one item's quotations. */
+function quotationItemKeysField(items){
+  const core=window.BizCorePI&&window.BizCorePI.core; if(!core||typeof core.itemKeyOf!=='function') return {};
+  const keys=new Set();
+  (items||[]).forEach(it=>{ if(it&&(!it.lineType||it.lineType==='item')&&(it.prodId||it.code||it.desc)){ try{ keys.add(core.itemKeyOf({productId:it.prodId,code:it.code,desc:it.desc,uom:it.uom})); }catch(_){} } });
+  return {itemKeys:[...keys].slice(0,200)};
+}
 async function saveQuotations() {
   try { void 0 /* V269.4: no browser copy of quotations */; } catch(e) {}
   if (window.FB) await window.FB.fbSave('quotations', quotations);
@@ -2612,118 +2621,11 @@ function pricingViewAttachmentHtml(file, index){
     +'</span><i class="ti ti-download"></i></a>';
 }
 
-function viewPricingReadOnly(rfqId) {
+/* V270.1.3: the saved pricing in the same window as Pricing entry, read only (js/pricing-ui.js prApplyMode). */
+function viewPricingReadOnly(rfqId,{viewVersion=null}={}) {
   const r = rfqs.find(x=>x.id===rfqId); if (!r) return;
   pvViewing = null;
-  ensurePricingVersions(r);
-  const activeVersion=getCurrentPricingVersion(r);
-  if(activeVersion) syncRFQFromPricingVersion(r,activeVersion);
-  const items=(r.pricingItems||[]).slice().sort((a,b)=>(Number(a.sortOrder)||0)-(Number(b.sortOrder)||0));
-  const versionNo=Number(r.currentPricingVersion)||1;
-  const pricingNo='PRC-'+(r.rfqNo||'RFQ')+'-V'+versionNo;
-  const linkedQuotationId=activeVersion?.quotationId || r.quotationId || null;
-  const linkedQuotation=linkedQuotationId ? quotations.find(q=>q.id===linkedQuotationId) : null;
-  const status=activeVersion?.status || (linkedQuotationId?'Converted':'Saved');
-  const statusLabel=linkedQuotationId?'Converted to quotation':status;
-  const statusClass=/converted|superseded/i.test(status)?'converted':/revision/i.test(status)?'revision':'saved';
-  document.getElementById('pricing-ro-title').textContent = pricingNo+' — '+(r.company||'Pricing');
-
-  let materialCost=0,totalSell=0;
-  items.forEach(it=>{ materialCost+=(Number(it.buy)||0)*(Number(it.qty)||0); totalSell+=(Number(it.sell)||0)*(Number(it.qty)||0); });
-  const additionalCosts=Array.isArray(r.internalCosts)?r.internalCosts.filter(c=>c&&typeof c==='object'):[];
-  const additionalTotal=additionalCosts.reduce((sum,c)=>sum+(Number(c.amount)||0),0);
-  const totalCost=materialCost+additionalTotal;
-  const profit=totalSell-totalCost;
-  const marginPct=totalSell ? profit/totalSell*100 : 0;
-  const markupPct=totalCost ? profit/totalCost*100 : 0;
-  const vatAmt=Math.round(totalSell*vatRate()*100)/100;
-
-  const itemRows=items.length?items.map((it,i)=>{
-    const qty=Number(it.qty)||0,buy=Number(it.buy)||0,sell=Number(it.sell)||0;
-    const lineCost=buy*qty,lineSell=sell*qty,lineProfit=lineSell-lineCost;
-    const lineMargin=lineSell?lineProfit/lineSell*100:0;
-    return '<tr>'
-      +'<td class="pv-line-no">'+String(i+1).padStart(3,'0')+'</td>'
-      +'<td><div class="pv-item-main"><strong>'+escapeHtml(it.desc||'—')+'</strong>'
-      +'<span>'+escapeHtml(it.code||'No item code')+'</span></div></td>'
-      +'<td><div class="pv-supplier-main"><strong>'+escapeHtml(it.supplierName||r.supplierName||'—')+'</strong>'
-      +'<span>'+escapeHtml(it.supRef||r.supRef||'No quotation reference')+'</span></div></td>'
-      +'<td class="num">'+formatQuantity(qty)+'</td><td>'+escapeHtml(it.uom||'—')+'</td>'
-      +'<td class="num">'+documentMoney('pricing','unitPrice',buy)+'</td><td class="num">'+documentMoney('pricing','unitPrice',sell)+'</td>'
-      +'<td class="num">'+documentMoney('pricing','lineAmount',lineProfit)+'</td><td class="num">'+lineMargin.toFixed(1)+'%</td>'
-      +'</tr>';
-  }).join(''):'<tr><td colspan="9" class="pv-empty">No pricing line items available</td></tr>';
-
-  const methodLabel={fixed:'Fixed amount',material_pct:'% of material cost',total_cost_pct:'% of total cost',sales_pct:'% of total selling'};
-  const costRows=additionalCosts.length?additionalCosts.map(c=>{
-    const value=Number(c.value)||0, amount=Number(c.amount)||0;
-    const calcText=c.method==='fixed'?pricingFmt(value):(value.toFixed(2).replace(/\.00$/,'')+'% · '+(methodLabel[c.method]||'Calculated cost'));
-    return '<div class="pv-cost-row"><div class="pv-cost-info"><strong>'+escapeHtml(c.name||'Additional cost')+'</strong><span>'+escapeHtml(calcText)+'</span></div><strong>'+pricingFmt(amount)+'</strong></div>';
-  }).join(''):'<div class="pv-empty-card">No additional costs</div>';
-  const attachments=(Array.isArray(r.vendorQuotes)&&r.vendorQuotes.length?r.vendorQuotes:(r.pricingAttachment?[r.pricingAttachment]:[]));
-  const attachmentHtml=attachments.length?attachments.map(pricingViewAttachmentHtml).join(''):'<div class="pv-empty-card">No attachments added</div>';
-  const quoteDate=linkedQuotation?.date||activeVersion?.convertedDate||'';
-  const updatedDate=activeVersion?.updated||r.updated||r.created||'';
-  const internalNotes=activeVersion?.internalNotes ?? r.internalNotes ?? '';
-
-  document.getElementById('pricing-ro-body').innerHTML =
-    '<div class="pricing-view-document">'
-    +'<div class="pricing-view-topbar">'
-      +'<div class="pricing-view-identity"><div class="pricing-view-kicker">Pricing document</div><h3>'+escapeHtml(pricingNo)+'</h3><div>'+escapeHtml(r.company||'—')+'</div></div>'
-      +'<span class="pricing-view-status '+statusClass+'">'+escapeHtml(statusLabel)+'</span>'
-    +'</div>'
-    +'<div class="pricing-view-meta-grid">'
-      +'<div class="pv-meta"><span>Primary supplier</span><strong>'+escapeHtml(r.supplierName||'—')+'</strong></div>'
-      +'<div class="pv-meta"><span>Quotation reference</span><strong>'+escapeHtml(r.supRef||'—')+'</strong></div>'
-      +'<div class="pv-meta"><span>Quotation date</span><strong>'+(r.supDate?fmtDate(r.supDate):'—')+'</strong></div>'
-      +'<div class="pv-meta"><span>Pricing version</span><strong>V'+versionNo+'</strong></div>'
-      +'<div class="pv-meta"><span>Last updated</span><strong>'+(updatedDate?fmtDate(updatedDate):'—')+'</strong></div>'
-      +'<div class="pv-meta pv-reference"><span>Document references</span><div>'
-        +'<button type="button" onclick="openPricingViewRFQ(\''+rfqId+'\')"><i class="ti ti-clipboard-list"></i>'+escapeHtml(r.rfqNo||'RFQ')+'</button>'
-        +(linkedQuotation?'<button type="button" onclick="openPricingViewQuotation(\''+linkedQuotation.id+'\')"><i class="ti ti-file-invoice"></i>'+escapeHtml(linkedQuotation.qno||'Quotation')+'</button>':'')
-      +'</div></div>'
-    +'</div>'
-    +'<div class="pricing-view-workspace">'
-      +'<main class="pricing-view-main">'
-        +'<section class="pricing-view-section"><div class="pv-section-head"><div><span>Line items</span><strong>'+items.length+' item'+(items.length===1?'':'s')+'</strong></div></div>'
-          +'<div class="pricing-view-table-wrap"><table class="pricing-view-table"><thead><tr><th>#</th><th>Item / Description</th><th>Supplier / Quote Ref.</th><th class="num">Qty</th><th>UOM</th><th class="num">Buy Price</th><th class="num">Sell Price</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead><tbody>'+itemRows+'</tbody></table></div>'
-        +'</section>'
-        +'<div class="pricing-view-notes-costs-row">'
-          +'<section class="pricing-view-section pricing-view-notes"><div class="pv-section-head"><div><span>Internal notes</span><strong>Internal use only</strong></div></div><div class="pv-note-content">'+(internalNotes?escapeHtml(internalNotes).replace(/\n/g,'<br>'):'<span class="pv-note-empty">No internal notes added</span>')+'</div></section>'
-          +'<details class="pricing-view-section pricing-view-additional-costs" open><summary class="pv-section-head pv-collapsible-head"><div><span>Additional costs</span><strong>'+additionalCosts.length+' · '+pricingFmt(additionalTotal)+'</strong></div><i class="ti ti-chevron-down"></i></summary><div class="pv-collapsible-body">'+costRows+'</div></details>'
-        +'</div>'
-        +'<section class="pricing-view-section"><div class="pv-section-head"><div><span>Attachments</span><strong>'+attachments.length+' file'+(attachments.length===1?'':'s')+'</strong></div></div><div class="pricing-view-attachments">'+attachmentHtml+'</div></section>'
-      +'</main>'
-      +'<aside class="pricing-view-side">'
-        +'<div class="pricing-summary-panel pricing-view-summary"><div class="pricing-summary-title"><i class="ti ti-chart-bar"></i><span class="pricing-summary-title-text">Pricing summary</span></div>'
-          +'<div class="pricing-summary">'
-            +'<div class="pricing-summary-section">Cost</div>'
-            +'<div class="ps-item"><div class="ps-label">Material Cost</div><div class="ps-val">'+documentMoney('pricing','summary',materialCost)+'</div></div>'
-            +'<div class="ps-item"><div class="ps-label">Additional Cost</div><div class="ps-val">'+documentMoney('pricing','summary',additionalTotal)+'</div></div>'
-            +'<div class="ps-item"><div class="ps-label">Total Cost</div><div class="ps-val">'+documentMoney('pricing','summary',totalCost)+'</div></div>'
-            +'<div class="pricing-summary-section">Selling</div>'
-            +'<div class="ps-item"><div class="ps-label">Selling Value</div><div class="ps-val">'+documentMoney('pricing','summary',totalSell)+'</div></div>'
-            +'<div class="ps-item"><div class="ps-label">VAT ('+(settings.vatrate||15)+'%)</div><div class="ps-val">'+documentMoney('pricing','summary',vatAmt)+'</div></div>'
-            +'<div class="ps-item"><div class="ps-label">Net Amount</div><div class="ps-val">'+documentMoney('pricing','grandTotal',totalSell+vatAmt)+'</div></div>'
-            +'<div class="pricing-summary-section">Profitability</div>'
-            +'<div class="ps-item ps-highlight"><div class="ps-label">Profit</div><div class="ps-val '+(profit>=0?'green':'')+'">'+documentMoney('pricing','summary',profit)+'</div></div>'
-            +'<div class="ps-item ps-highlight"><div class="ps-label">Margin %</div><div class="ps-val '+(marginPct>=0?'green':'')+'">'+marginPct.toFixed(1)+'%</div></div>'
-            +'<div class="ps-item"><div class="ps-label">Markup %</div><div class="ps-val">'+markupPct.toFixed(1)+'%</div></div>'
-          +'</div></div>'
-        +(linkedQuotation?'<div class="pricing-view-conversion"><i class="ti ti-circle-check"></i><div><strong>Converted to quotation</strong><button onclick="openPricingViewQuotation(\''+linkedQuotation.id+'\')">'+escapeHtml(linkedQuotation.qno||'Open quotation')+'</button>'+(quoteDate?'<small>'+fmtDate(quoteDate)+'</small>':'')+'</div></div>':'')
-      +'</aside>'
-    +'</div></div>';
-
-  const roFBtns=[];
-  if(navFromQuoteId) roFBtns.push('<button class="btn btn-secondary" onclick="backToQuoteFromRO()"><i class="ti ti-arrow-left"></i>Back to quotation</button>');
-  // V266.73: one Close only (the one at the end of the bar)
-  roFBtns.push('<button class="btn btn-secondary" data-rid="'+rfqId+'" onclick="backToRFQFromRO(this)"><i class="ti ti-clipboard-list"></i>View RFQ</button>');
-  if(linkedQuotation) roFBtns.push('<button class="btn btn-secondary" onclick="openPricingViewQuotation(\''+linkedQuotation.id+'\')"><i class="ti ti-file-invoice"></i>View quotation</button>');
-  if(isPricingVersionLocked(r)) roFBtns.push('<button class="btn btn-primary" data-rid="'+rfqId+'" onclick="revisePricingFromRO(this)"><i class="ti ti-git-branch"></i>Revise pricing</button>');
-  else roFBtns.push('<button class="btn btn-primary" data-rid="'+rfqId+'" onclick="editPricingFromRO(this)"><i class="ti ti-edit"></i>Edit pricing</button>');
-  roFBtns.push('<button class="btn btn-secondary pricing-ro-close-action" type="button" onclick="requestClosePricingDetail()"><i class="ti ti-x"></i>Close</button>');
-  document.getElementById('pricing-ro-footer').innerHTML=roFBtns.join('');
-  openModalWithSize('pricing-ro-modal');
+  openPricingSheet(rfqId,{closeSource:false,mode:'view',viewVersion});
 }
 
 
@@ -4392,7 +4294,7 @@ async function openPricingDocument(rfqId,version){
   // shown read-only; the RFQ keeps its current version (Revise pricing from this view starts from the version shown)
   const keep=pvSnapshot(r);
   syncRFQFromPricingVersion(r,v);
-  try{viewPricingReadOnly(rfqId);}finally{pvRestore(r,keep);}
+  try{viewPricingReadOnly(rfqId,{viewVersion:v});}finally{pvRestore(r,keep);}
   pvViewing={rfqId:String(rfqId),version:Number(version)};
 }
 function openPricingLinkedQuotation(id){
@@ -5565,7 +5467,7 @@ async function saveQuotation(mode='save') {
     taxEffectiveFrom: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.taxEffectiveFrom||activeTaxSettings().effectiveFrom) : activeTaxSettings(document.getElementById('f-date')?.value).effectiveFrom,
     vatRate: Number(currentQuoteVatRate??getQuoteVatPercent()),
     vatSource: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.vatSource||'Document Snapshot') : 'Tax Master Snapshot',
-    items, custId:selectedCustId,
+    items, custId:selectedCustId, ...quotationItemKeysField(items),   // V270.1.3: itemKeys for Selling Price History
     rfqId: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.rfqId||null) : (capturedRFQId||null),
     pricingVersion: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.pricingVersion||1) : (document._pendingPricingVersion||1),
     revisionNo: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.revisionNo||0) : (resolvedRevision?.revisionNo||0),
@@ -8335,7 +8237,7 @@ function editRFQ(id) {
    PRICING SHEET
 ══════════════════════════════════════════════════ */
 // Supplier dropdown in pricing
-function openPricingSupDD() { filterPricingSupDD(); }
+function openPricingSupDD() { if(pricingViewMode) return; filterPricingSupDD(); }
 function closePricingSupDD() { document.getElementById('pricing-sup-dd').classList.remove('open'); }
 function filterPricingSupDD() {
   const q = document.getElementById('pricing-sup-search').value.toLowerCase();
@@ -8496,7 +8398,7 @@ function addPricingRow(item={}) {
   const supSel = tr.querySelector('[data-role="supplier"]');
   if (rowSupplier && ![...supSel.options].some(o=>o.value===rowSupplier)) supSel.insertAdjacentHTML('beforeend',`<option value="${esc(rowSupplier)}">${esc(rowSupplier)} (not in Supplier Master)</option>`);
   supSel.value = rowSupplier || '';
-  { const b=parsePricingNumber(item.buy), se=parsePricingNumber(item.sell); if (b>0 && se>0) pricingSetMarkupFrom(tr,b,se); else if (b>0 && !(se>0)) calcFromBuy(tr.querySelector('[data-role="buy"]')); }
+  { const b=parsePricingNumber(item.buy), se=parsePricingNumber(item.sell); if (b>0 && se>0) pricingSetMarkupFrom(tr,b,se); else if (b>0 && !(se>0) && !pricingViewMode) calcFromBuy(tr.querySelector('[data-role="buy"]')); }
   ensurePricingQuickAddRow();
   renumberPricingRows();
   if (typeof prRefreshRefs === 'function') prRefreshRefs(tr);
@@ -8637,6 +8539,7 @@ function completePricingReorder(row,focusState,wasDirtyBeforeReorder) {
 }
 
 function handlePricingRowKeyboardMove(event) {
+  if(pricingViewMode) return;
   if(!event.altKey || (event.key!=='ArrowUp' && event.key!=='ArrowDown')) return;
   const row=event.currentTarget;
   const rows=[...document.querySelectorAll('#pricing-tbody tr:not(.pricing-quick-add-row)')];
@@ -8734,6 +8637,7 @@ function positionPricingLineItemSearch(input) {
 }
 
 function openPricingLineItemSearch(input) {
+  if (pricingViewMode) return;
   pricingLineItemSearchInput = input;
   pricingLineItemSearchIndex = -1;
   // V270.1: a line that already has its item opens the list only when the description is changed (typing)
@@ -9059,6 +8963,7 @@ function updatePricingActionButtons() {
 }
 
 function markPricingDirty() {
+  if (pricingViewMode) return;
   pricingDirty = true;
   pricingSaved = false;
   pricingChangedSinceOpen = true;
@@ -9142,6 +9047,7 @@ function readInternalCosts(materialCost,totalSell) {
 }
 
 function setTargetPricingMargin(targetPct) {
+  if(pricingViewMode) return;
   targetPct=Number.isFinite(Number(targetPct))?Number(targetPct):Number(activePricingSettings().targetMargin||0);
   const rows=[...document.querySelectorAll('#pricing-tbody tr:not(.pricing-quick-add-row)')];
   let materialCost=0,lockedSellTotal=0,unlockedMaterialCost=0,unlockedCount=0;
@@ -9394,7 +9300,9 @@ function validatePricingSupplierDate({silentEmpty=false}={}) {
   return false;
 }
 
-async function openPricingSheet(rfqId,{closeSource=true}={}) {
+/* V270.1.3: one Pricing window, two modes — 'edit' (entry) and 'view' (the same screen, read only; replaces the old
+   pricing-ro-modal). `viewVersion` shows an older version (openPricingDocument swaps the RFQ's working copy around it). */
+async function openPricingSheet(rfqId,{closeSource=true,mode='edit',viewVersion=null}={}) {
   clearTimeout(pricingDraftSaveTimer);
   pricingDraftSaveTimer=null;
   pricingReorderHadPriorDirty=false;
@@ -9407,18 +9315,21 @@ async function openPricingSheet(rfqId,{closeSource=true}={}) {
   pricingInternalCosts = [];
   const r = rfqs.find(x=>x.id===rfqId); if (!r) return;
   ensurePricingVersions(r);
-  const activeVersion=getCurrentPricingVersion(r);
-  if (activeVersion) syncRFQFromPricingVersion(r,activeVersion);
-  if (isPricingVersionLocked(r)) {
+  const view = mode==='view';
+  const activeVersion=viewVersion||getCurrentPricingVersion(r);
+  if (activeVersion && !viewVersion) syncRFQFromPricingVersion(r,activeVersion);
+  if (!view && isPricingVersionLocked(r)) {
     viewPricingReadOnly(rfqId);
     showToast('Converted pricing is locked. Use Revise Pricing to create a new version.','info');
     return;
   }
+  pricingViewMode = view;
+  document.getElementById('pricing-modal')?.classList.toggle('pr-view', view);
   // Opening Pricing is navigation only. RFQ advances to Pricing only after a successful Pricing save.
   // This prevents Start Pricing -> Cancel/Close from changing the RFQ workflow status.
   const esc=v=>escapeHtml(String(v??''));
   const ps=activePricingSettings();
-  document.getElementById('pricing-modal-title').textContent = 'Pricing V'+(r.currentPricingVersion||1)+' — '+r.rfqNo;
+  document.getElementById('pricing-modal-title').textContent = 'Pricing V'+(Number(activeVersion?.version)||r.currentPricingVersion||1)+' — '+r.rfqNo;
   // V270.1 subtitle: customer · Ref · Due · Target
   const due=r.due?pricingISOToDisplay(String(r.due).slice(0,10)):'';
   document.getElementById('pricing-rfq-info').innerHTML = `<span class="pr-cust">${esc(r.company||'')}</span><span class="pr-x2">${r.ref?' · Ref '+esc(r.ref):''}${due?' · Due '+esc(due):''} · Target ${ps.marginMethod==='gross_margin'?'Margin':'Markup'} ${Number(ps.minMargin||0)}–${Number(ps.targetMargin||0)}%</span>`;
@@ -9432,7 +9343,7 @@ async function openPricingSheet(rfqId,{closeSource=true}={}) {
   pricingSupplierName = r.supplierName||'';
   document.getElementById('pricing-sup-ref').value = r.supRef||'';
   document.getElementById('pricing-sup-date').value = pricingISOToDisplay(r.supDate||'');
-  applyPricingSupplierDateRules({defaultToday:!r.supDate});
+  applyPricingSupplierDateRules({defaultToday:!r.supDate && !view});
   const pricingNotesEl=document.getElementById('pricing-internal-notes');
   if(pricingNotesEl){ pricingNotesEl.value=r.internalNotes||''; const count=document.getElementById('pricing-internal-notes-count'); if(count) count.textContent=pricingNotesEl.value.length+' / 2000'; }
   const noteLast=document.getElementById('pr-note-last'); if(noteLast) noteLast.textContent=r.internalNotes&&activeVersion?.updated?'Last saved '+pricingISOToDisplay(String(activeVersion.updated).slice(0,10)):'';
@@ -9445,7 +9356,8 @@ async function openPricingSheet(rfqId,{closeSource=true}={}) {
   // Items
   document.getElementById('pricing-tbody').innerHTML='';
   document.getElementById('internal-costs-tbody').innerHTML='';
-  ensureDefaultAdditionalCosts(r.internalCosts||[]);
+  if (view) (r.internalCosts||[]).slice().sort((a,b)=>(Number(a.seq)||999)-(Number(b.seq)||999)).forEach(c=>addAdditionalCostRow(c));   // view: only what was saved
+  else ensureDefaultAdditionalCosts(r.internalCosts||[]);
   [...(r.pricingItems||[])]
     .map((it,index)=>({...it,sortOrder:Number.isFinite(Number(it.sortOrder))?Number(it.sortOrder):index+1}))
     .sort((a,b)=>a.sortOrder-b.sortOrder)
@@ -9463,6 +9375,7 @@ async function openPricingSheet(rfqId,{closeSource=true}={}) {
     backBtnEl.title=label+' (Alt+←)'; backBtnEl.setAttribute('aria-label',label);
   }
   if (typeof prOnOpen === 'function') prOnOpen(r);
+  if (typeof prApplyMode === 'function') prApplyMode(view, r, activeVersion);
   delete modalSizes['pricing-modal'];
   openModalWithSize('pricing-modal');
   pricingChangedSinceOpen=false;
@@ -13577,6 +13490,7 @@ document.addEventListener('DOMContentLoaded',initialiseWorkspaceControls);
     // Ctrl/Cmd + S: save pricing from anywhere in the pricing screen.
     if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){
       e.preventDefault();
+      if(pricingViewMode) return;   // V270.1.3: nothing to save in View
       if(typeof savePricing==='function') savePricing();
       return;
     }

@@ -34,11 +34,11 @@
 <link href="css/so-register.css?v=269.2" rel="stylesheet"/>
 <link href="css/so-view.css?v=269.72" rel="stylesheet"/>
 <link href="css/bc-date.css?v=270.1" rel="stylesheet"/>
-<link href="css/pricing.css?v=270.11" rel="stylesheet"/>
+<link href="css/pricing.css?v=270.13" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
 <script src="js/responsive.js?v=269.7" defer></script>
-<script src="js/bc-date.js?v=270.1" defer></script>
+<script src="js/bc-date.js?v=270.13" defer></script>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
 .quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
@@ -1801,6 +1801,7 @@ document.addEventListener('error', function(e) {
 <button type="button" class="pr-back" id="pricing-back-btn" onclick="prRequestBack()" title="Back to RFQ (Alt+←)" aria-label="Back to RFQ"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 <div class="pr-tt"><h2 id="pricing-modal-title">Pricing</h2><div class="pr-sub" id="pricing-rfq-info"></div></div>
 <span class="pr-pill pr-pill-status" id="pr-status-pill">Draft</span>
+<span class="pr-pill pr-pill-view" id="pr-view-pill" hidden title="This pricing is shown read only">🔒 View Only</span>
 <button type="button" class="pr-pill pr-pill-note" id="pr-note-pill" hidden onclick="prShowTab('notes')" title="This pricing has an internal note"><i></i><span class="pr-x2">Internal Note</span></button>
 <div class="pr-sp"></div>
 <button class="close-btn" onclick="requestClosePricingEntry()" aria-label="Close pricing">✕</button>
@@ -2230,7 +2231,7 @@ import { initializeApp }
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, getDoc as _fsGetDoc, getDocFromServer, setDoc, onSnapshot as _fsOnSnapshot, deleteDoc,
-         collection, getDocs as _fsGetDocs, query, where, limit, writeBatch,
+         collection, getDocs as _fsGetDocs, query, where, limit, orderBy, startAfter, writeBatch,
          initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
          runTransaction, serverTimestamp, increment, deleteField, getCountFromServer, connectFirestoreEmulator }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -3144,6 +3145,24 @@ window.BCWin = {
     await window.BCWin.idle();
     return n;
   },
+  /** V270.1.3: one page of a history query — `filters` [[field, op, value]…], newest first by `orderField`, `size`
+   *  records, continuing after `cursor` (the last snapshot of the previous page). Needs the composite indexes in
+   *  firestore.indexes.json. Reads = the records returned (at most `size`). → { rows, cursor, done } */
+  async page(col, filters, orderField, size, cursor) {
+    const cons = filters.map(([f, op, v]) => where(f, op, v));
+    cons.push(orderBy(orderField, 'desc'));
+    if (cursor) cons.push(startAfter(cursor));
+    cons.push(limit(size));
+    const s = await getDocs(query(collection(db, col), ...cons)); const rows = [], snaps = [];
+    s.forEach(x => { rows.push(x.data()); snaps.push(x); });
+    return { rows, cursor: snaps.length ? snaps[snaps.length - 1] : cursor, done: snaps.length < size };
+  },
+  /** V270.1.3: records already read elsewhere (e.g. a history page) join the loaded list — no second read to open them. */
+  addDocs(col, docs) {
+    if (!BC_WIN_SPECS[col] || !docs || !docs.length) return 0;
+    const st = _winState(col); const n = _winAddExtra(col, docs); if (n && st.started) _winNotify(st);
+    return n;
+  },
   /** Is there ANY record (loaded or not) with field <op> value? One small read. Used before deleting masters. */
   async anyWhere(col, field, op, value) {
     const s = await getDocs(query(collection(db, col), where(field, op, value), limit(1)));
@@ -3941,13 +3960,13 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.12';
+      s.src = 'js/app.js?v=270.13';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
         const sv = document.createElement('script'); sv.id = 'bizcore-so-view-script'; sv.src = 'js/so-view.js?v=270.1'; document.body.appendChild(sv);
         // V270.1: the Pricing screen (tabs, line menu, price references, phone cards)
-        const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.12'; document.body.appendChild(pu);
+        const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.13'; document.body.appendChild(pu);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.6'; document.body.appendChild(ds); };
       document.body.appendChild(s);
