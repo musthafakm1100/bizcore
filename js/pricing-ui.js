@@ -116,7 +116,9 @@
       el.style.width = width + 'px';
       const b = anchor.getBoundingClientRect(), h = el.offsetHeight, w = el.offsetWidth;
       el.style.left = Math.max(8, Math.min(b.right - w, window.innerWidth - w - 8)) + 'px';
-      el.style.top = (b.bottom + h + 8 < window.innerHeight || b.top < h + 8 ? b.bottom + 4 : b.top - h - 4) + 'px';
+      // below the button, or above it when there's no room; always inside the screen (8 px)
+      let top = b.bottom + h + 8 < window.innerHeight ? b.bottom + 4 : b.top - h - 4;
+      el.style.top = Math.max(8, Math.min(top, window.innerHeight - h - 8)) + 'px';
     }
     anchor.classList.add('is-open');
     pop = { el, dim, anchor };
@@ -134,7 +136,7 @@
     setTimeout(() => el.querySelector('button:not([disabled])')?.focus({ preventScroll: true }), 0);
     return el;
   }
-  const mi = (act, label, { key = '', cls = '', disabled = false } = {}) => `<button type="button" class="pr-mi ${cls}" data-act="${act}"${disabled ? ' disabled' : ''}>${label}${key ? `<span class="pr-k">${key}</span>` : ''}</button>`;
+  const mi = (act, label, { key = '', cls = '', disabled = false } = {}) => `<button type="button" class="pr-mi ${cls}" data-act="${act}"${disabled ? ' disabled' : ''}><span>${label}</span>${key ? `<span class="pr-k">${key}</span>` : ''}</button>`;
   document.addEventListener('mousedown', e => { if (pop && !pop.el.contains(e.target) && !pop.anchor.contains(e.target)) closePop(); }, true);
   window.addEventListener('resize', () => { closePop(); renderCardsSoon(); });
   window.addEventListener('scroll', e => { if (pop && !pop.el.contains(e.target) && !pop.dim) closePop(); }, true);
@@ -146,11 +148,11 @@
     if (pop && pop.anchor === btn) { closePop(); return; }
     const rows = rowsAll(), i = rows.indexOf(tr), locked = tr.querySelector('[data-role="sell-lock"]')?.classList.contains('is-locked');
     const html = mi('above', 'Insert Line Above') + mi('dup', 'Duplicate Line') + mi('up', 'Move Up', { key: 'Alt+↑', disabled: i <= 0 }) + mi('down', 'Move Down', { key: 'Alt+↓', disabled: i >= rows.length - 1 })
-      + mi('details', 'Line Details · Quote Ref. · Supplier Note') + mi('lock', locked ? 'Unlock Sell Price' : 'Lock Sell Price')
+      + mi('details', 'Line Details<span class="pr-msub">Quote Ref. · Supplier Note</span>') + mi('lock', locked ? 'Unlock Sell Price' : 'Lock Sell Price')
       + '<div class="pr-sepm"></div>' + mi('del', '🗑 Delete Line', { key: 'Ctrl+Del', cls: 'pr-mi-del' });
     const desc = val(tr, 'desc') || 'New line';
     openPop(btn, html, {
-      width: 250, title: `Line ${i + 1} · ${esc(desc.length > 38 ? desc.slice(0, 38) + '…' : desc)}`,
+      width: 272, title: `Line ${i + 1} · ${esc(desc.length > 38 ? desc.slice(0, 38) + '…' : desc)}`,
       onClick: act => { closePop(); ({ above: () => insertAbove(tr), dup: () => duplicate(tr), up: () => move(tr, -1), down: () => move(tr, 1), details: () => lineDetails(tr), lock: () => togglePricingSellLock(tr.querySelector('[data-role="sell-lock"]')), del: () => confirmDelete(tr) })[act]?.(); },
     });
   }
