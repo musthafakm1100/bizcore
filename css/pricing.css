@@ -1,0 +1,394 @@
+/* ═══════════════════════════════════════════════════════════════
+   V270.1 — Pricing screen (approved mockups PR_29 – PR_44, docs/V270_1_PRICING.md)
+   A centred window over the dimmed app: width min(1320px, 100vw − 36px). Below 1200 px the summary panel becomes a
+   totals bar; below 900 px Line Total is dropped; at 760 px and below the lines are cards (full screen).
+   Everything is scoped to #pricing-modal, except the dialogs / menus / toast, which sit on the page body (.pr-*).
+   ═══════════════════════════════════════════════════════════════ */
+#pricing-modal{--pr-navy:#173a5e;--pr-line:#dfe5ec;--pr-line2:#edf1f5;--pr-muted:#64748b;--pr-ink:#1f2937;--pr-soft:#f7f9fc;--pr-blue:#1d63d8;--pr-green:#166534;--pr-side:284px}
+#pricing-modal.modal-overlay{padding:18px!important;background:rgba(15,23,42,.45)}
+#pricing-modal .modal.pr-win{width:min(1320px,calc(100vw - 36px))!important;max-width:none!important;height:calc(100vh - 36px)!important;height:calc(100dvh - 36px)!important;max-height:none!important;border-radius:12px!important;border:0!important;box-shadow:0 20px 50px rgba(15,23,42,.3)!important;display:flex;flex-direction:column;overflow:hidden;font-size:13px;color:var(--pr-ink);background:#fff}
+#pricing-modal .pr-win *{box-sizing:border-box}
+#pricing-modal .pr-win :is(input,select,textarea,button){font-family:inherit}
+
+/* ── header ── */
+#pricing-modal .modal-header.pr-hd{flex:0 0 auto;background:var(--pr-navy)!important;color:#fff;display:flex;align-items:center;gap:8px;padding:8px 16px!important;min-height:56px;border:0!important;border-radius:0!important}
+#pricing-modal .pr-back{flex:0 0 auto;width:32px;height:32px;margin-left:-6px;border:0;border-radius:8px;background:transparent;color:#fff;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;opacity:.9;padding:0}
+#pricing-modal .pr-back:hover{background:rgba(255,255,255,.12);opacity:1}
+#pricing-modal .pr-back:focus-visible{outline:2px solid #93c5fd;outline-offset:1px}
+#pricing-modal .pr-tt{display:flex;flex-direction:column;justify-content:center;min-width:0}
+#pricing-modal .pr-hd h2{font-size:15.5px!important;font-weight:600!important;color:#fff!important;white-space:nowrap;margin:0!important;line-height:1.25;letter-spacing:0}
+#pricing-modal .pr-sub{font-size:12px;opacity:.85;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff}
+#pricing-modal .pr-sp{flex:1}
+#pricing-modal .pr-hd .smart-back-btn{display:none!important}   /* the ← arrow is the way back here */
+#pricing-modal .pr-hd .modal-header-title-wrap{display:contents}
+#pricing-modal .pr-hd .close-btn{color:#fff!important;opacity:.85;background:transparent!important;border:0!important;font-size:19px}
+#pricing-modal .pr-hd .close-btn:hover{opacity:1;background:rgba(255,255,255,.12)!important}
+.pr-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap;border:0;line-height:1.35;font-family:inherit}
+#pricing-modal .pr-pill-status{background:#e8f0fb;color:#1e4f86;margin-left:6px}
+#pricing-modal .pr-pill-note{background:#fff4e6;color:#9a3412;cursor:pointer}
+#pricing-modal .pr-pill-note i{width:7px;height:7px;border-radius:50%;background:#ea6a10;display:inline-block}
+#pricing-modal .pr-pill-note[hidden]{display:none}
+
+/* ── body + supplier bar ── */
+#pricing-modal .modal-body.pr-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:0!important;overflow:hidden!important;background:#fff}
+#pricing-modal .pr-sbar{flex:0 0 auto;display:grid;grid-template-columns:minmax(220px,300px) 160px 160px auto 1fr;gap:12px;align-items:end;padding:10px 18px 12px;background:var(--pr-soft);border-bottom:1px solid var(--pr-line)}
+#pricing-modal .pr-f{display:flex;flex-direction:column;gap:4px;min-width:0}
+#pricing-modal .pr-f label{font-size:11px;color:var(--pr-muted);margin:0;font-weight:400;text-transform:none;letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pricing-modal .pr-req{color:#b42318;font-weight:500}
+#pricing-modal .pr-sbar input{min-width:0!important;max-width:none!important;height:32px!important;border:1px solid #d5dde7!important;border-radius:8px!important;background:#fff;padding:0 10px!important;font-size:13px!important;width:100%;color:var(--pr-ink);box-shadow:none}
+#pricing-modal .pr-sbar input:focus{border-color:#2e75b6!important;box-shadow:0 0 0 3px rgba(46,117,182,.15)!important;outline:0}
+#pricing-modal .pr-sbar input.pricing-required-invalid{border-color:#dc2626!important;box-shadow:0 0 0 3px rgba(220,38,38,.12)!important}
+#pricing-modal .pr-supwrap{position:relative;display:block;width:100%;min-width:0}
+#pricing-modal .pr-supwrap input{padding-right:32px!important;width:100%!important}
+#pricing-modal .pr-in-ic{position:absolute;right:3px;top:3px;width:28px;height:26px;border:0;border-radius:6px;background:transparent;color:var(--pr-muted);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+#pricing-modal .pr-in-ic:hover{background:#eef2f6}
+#pricing-modal .pr-supwrap .cust-dropdown{z-index:30}
+.pr-btn{height:32px;border:1px solid #d5dde7;border-radius:8px;background:#fff;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 12px;font:500 12.5px/1 inherit;font-family:inherit;color:#334155;white-space:nowrap;cursor:pointer}
+.pr-btn:hover{background:#f8fafc}
+.pr-btn:focus-visible{outline:2px solid #2e75b6;outline-offset:1px}
+.pr-btn.pr-pri{background:#173a5e;color:#fff;border-color:#173a5e}.pr-btn.pr-pri:hover{background:#12304e}
+.pr-btn.pr-danger{background:#b42318;color:#fff;border-color:#b42318}.pr-btn.pr-danger:hover{background:#9b1d14}
+.pr-btn.pr-danger-o{color:#b42318}
+#pricing-modal .pr-split{display:inline-flex}
+#pricing-modal .pr-split .pr-btn:first-child{border-radius:8px 0 0 8px}
+#pricing-modal .pr-split .pr-btn:last-child{border-radius:0 8px 8px 0;border-left:0;padding:0 9px}
+#pricing-modal .pr-split .pr-btn.is-open{background:#eef2f6}
+
+/* ── work area: main + summary ── */
+#pricing-modal .pr-work{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) var(--pr-side)}
+#pricing-modal .pr-main{min-width:0;min-height:0;display:flex;flex-direction:column;padding:8px 18px 0}
+#pricing-modal .pr-tabs{flex:0 0 auto;display:flex;gap:4px;border-bottom:1px solid var(--pr-line)}
+#pricing-modal .pr-tb{padding:9px 12px;font-size:13px;color:#475569;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:6px;white-space:nowrap;background:transparent;cursor:pointer;font-weight:400;border-radius:0}
+#pricing-modal .pr-tb:hover{color:var(--pr-navy)}
+#pricing-modal .pr-tb.on{color:var(--pr-navy);border-bottom-color:var(--pr-navy);font-weight:600}
+#pricing-modal .pr-n{font-size:11px;color:var(--pr-muted);background:#eef2f6;border-radius:10px;padding:0 7px;font-weight:500;line-height:18px}
+#pricing-modal .pr-dot{width:7px;height:7px;border-radius:50%;background:#ea6a10;display:inline-block}
+#pricing-modal .pr-dot[hidden]{display:none}
+#pricing-modal .pr-ts{display:none}
+#pricing-modal .pr-panel{display:none;flex:1 1 auto;min-height:0;flex-direction:column;padding-top:10px}
+#pricing-modal .pr-panel.on{display:flex}
+#pricing-modal .pr-scroll{flex:1 1 auto;min-height:0;overflow:auto;padding-bottom:12px}
+#pricing-modal .pr-muted{color:var(--pr-muted)}
+#pricing-modal .pr-b,.pr-b{font-weight:600}
+#pricing-modal .pr-r{text-align:right}
+#pricing-modal .pr-c{text-align:center}
+#pricing-modal .pr-small{font-size:12px}
+#pricing-modal .pr-empty{padding:14px;color:var(--pr-muted);font-size:12.5px;text-align:center;border:1px dashed #cbd5e1;border-radius:10px}
+
+/* ── the items grid: one column set for header, lines, quick add and totals ── */
+#pricing-modal .pr-gt{flex:1 1 auto;min-height:0;overflow:auto;border:1px solid var(--pr-line);border-radius:10px;background:#fff;scroll-padding-top:44px;scroll-padding-bottom:48px}
+#pricing-modal table.pr-table{table-layout:fixed;width:100%;min-width:942px!important;border-collapse:separate!important;border-spacing:0;font-size:13px!important;margin:0;background:#fff}
+#pricing-modal .pr-table col.c-no{width:44px}#pricing-modal .pr-table col.c-qty{width:98px}#pricing-modal .pr-table col.c-buy{width:94px}
+#pricing-modal .pr-table col.c-mk{width:78px}#pricing-modal .pr-table col.c-sell{width:94px}#pricing-modal .pr-table col.c-lt{width:98px}
+#pricing-modal .pr-table col.c-pf{width:104px}#pricing-modal .pr-table col.c-menu{width:32px}
+#pricing-modal .pr-table th{position:sticky;top:0;z-index:3;background:#f1f5f9!important;border:0!important;border-bottom:1px solid #dbe3ec!important;padding:8px!important;font-size:11.5px!important;font-weight:600!important;color:#475569!important;white-space:nowrap!important;text-align:left;vertical-align:bottom;line-height:1.3;text-transform:none!important;letter-spacing:0!important;height:auto!important}
+#pricing-modal .pr-table th.pr-r{text-align:right}#pricing-modal .pr-table th.pr-c{text-align:center}
+#pricing-modal .pr-thsub{font-weight:400;color:#94a3b8}
+#pricing-modal #pricing-table th{width:auto!important;min-width:0!important;box-shadow:none!important;border-radius:0!important}
+#pricing-modal #pricing-table input[data-role="qty"]{min-width:0!important}
+#pricing-modal #pricing-table td.pricing-drag-cell{width:auto;min-width:0;vertical-align:top!important;text-align:left;padding-left:5px!important;padding-right:4px!important}
+#pricing-modal .pr-table td{padding:7px 8px!important;vertical-align:top!important;border:0!important;border-bottom:1px solid var(--pr-line2)!important;white-space:normal!important;background:#fff;height:auto!important;font-size:13px}
+#pricing-modal .pr-table tbody tr.pr-row:hover td{background:#fafcff}
+#pricing-modal .pr-table tbody tr.pricing-keyboard-row td{background:#f7faff}
+#pricing-modal .pr-table tbody tr.pricing-row-dragging td{opacity:.45}
+#pricing-modal .pr-table tbody tr.pricing-row-drag-over td{box-shadow:inset 0 2px 0 #2e75b6}
+#pricing-modal .pr-nowrap{display:flex;align-items:center;gap:3px;padding-top:7px;color:#94a3b8;font-size:12px;white-space:nowrap}
+#pricing-modal .pricing-drag-handle{color:#cbd5e1;letter-spacing:-2px;cursor:grab;font-size:13px;line-height:1;user-select:none;padding:0;border:0;background:none;width:auto;height:auto}
+#pricing-modal .pricing-drag-handle:hover{color:#64748b}
+#pricing-modal .pricing-line-number{color:#94a3b8}
+/* item cell: the description wraps (up to 3 lines) and is edited in place */
+#pricing-modal .pr-descwrap{position:relative;padding:6px 7px;border:1px solid transparent;border-radius:6px;min-height:30px}
+#pricing-modal .pr-desc-view{line-height:1.35;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;color:var(--pr-ink)}
+#pricing-modal .pr-desc-view.is-empty{color:#94a3b8}
+#pricing-modal .pr-row:hover .pr-descwrap{border-color:var(--pr-line)}
+#pricing-modal input.pr-desc{position:absolute;inset:0;width:100%!important;height:100%!important;min-height:30px;border:1px solid #2e75b6!important;border-radius:6px!important;padding:0 7px!important;background:#fff!important;font-size:13px!important;color:var(--pr-ink);opacity:0;box-shadow:0 0 0 3px rgba(46,117,182,.15)}
+#pricing-modal input.pr-desc:focus{opacity:1;outline:0;z-index:1}
+#pricing-modal .pr-meta{display:flex;align-items:center;gap:4px;font-size:11px;color:#94a3b8;margin-top:1px;padding:0 0 0 7px;min-width:0;white-space:nowrap}
+#pricing-modal input.pr-code{width:9ch!important;flex:0 1 auto;min-width:4ch;height:20px!important;border:1px solid transparent!important;border-radius:4px!important;padding:0 3px!important;margin-left:-4px;background:transparent!important;font-size:11px!important;color:#64748b!important;box-shadow:none!important}
+#pricing-modal input.pr-code:hover{border-color:var(--pr-line)!important}
+#pricing-modal input.pr-code:focus{border-color:#2e75b6!important;background:#fff!important;outline:0}
+#pricing-modal select.pr-sup{flex:0 1 auto;min-width:0;max-width:62%;height:20px!important;border:1px solid transparent!important;border-radius:4px!important;padding:0 2px!important;background-color:transparent!important;font-size:11px!important;color:#475569!important;cursor:pointer;text-overflow:ellipsis}
+#pricing-modal select.pr-sup:hover{border-color:var(--pr-line)!important}
+#pricing-modal select.pr-sup:focus{border-color:#2e75b6!important;background-color:#fff!important;outline:0}
+#pricing-modal .pr-sep{color:#cbd5e1}
+#pricing-modal .pr-lref{overflow:hidden;text-overflow:ellipsis;color:#64748b}
+#pricing-modal .pr-lref:not(:empty)::before{content:"·";color:#cbd5e1;margin:0 4px 0 2px}
+#pricing-modal .pr-lref[hidden]{display:none}
+#pricing-modal .pr-notei{color:#b45309}
+/* number inputs */
+#pricing-modal .pr-inp,#pricing-modal .pr-qu input{height:30px!important;width:100%!important;min-width:0;border:1px solid var(--pr-line)!important;border-radius:6px!important;background:#fff!important;padding:0 8px!important;text-align:right;font-size:13px!important;color:var(--pr-ink)!important;font-variant-numeric:tabular-nums;box-shadow:none}
+#pricing-modal .pr-inp:focus,#pricing-modal .pr-qu input:focus{border-color:#2e75b6!important;box-shadow:0 0 0 3px rgba(46,117,182,.15)!important;outline:0;position:relative;z-index:1}
+#pricing-modal .pr-inp:disabled{background:#f8fafc!important;color:#64748b!important}
+#pricing-modal .pr-qu{display:grid;grid-template-columns:minmax(0,1fr) 40px}
+#pricing-modal .pr-qu input:first-child{border-radius:6px 0 0 6px!important}
+#pricing-modal .pr-qu input:last-child{border-radius:0 6px 6px 0!important;border-left:0!important;text-align:left;background:#f8fafc!important;color:#475569!important;padding:0 6px!important}
+#pricing-modal .pr-sellwrap{position:relative;display:block}
+#pricing-modal .pr-sellwrap input.is-price-locked{padding-left:20px!important}
+#pricing-modal .pr-lock{position:absolute;left:3px;top:50%;transform:translateY(-50%);width:17px;height:20px;border:0;background:none;color:#cbd5e1;display:none;align-items:center;justify-content:center;cursor:pointer;padding:0;z-index:2}
+#pricing-modal .pr-lock.is-locked{display:inline-flex;color:#b45309}
+#pricing-modal input.is-price-locked{background:#fffbeb!important}
+/* Last Paid / Last Quoted under the price */
+.pr-ref{display:flex;justify-content:flex-end;width:100%;border:0;background:none;padding:0;margin:4px 0 0;font:inherit;font-size:11px!important;line-height:1.3;color:var(--pr-muted,#64748b);white-space:nowrap;cursor:pointer;text-align:right}
+.pr-ref b{font-weight:500;color:#1d63d8;text-decoration:underline dotted;text-underline-offset:2px}
+.pr-ref.other b{color:#7c3aed}
+.pr-ref.none{color:#b6c0cc;cursor:default}
+.pr-ref:focus-visible{outline:2px solid #2e75b6;outline-offset:1px;border-radius:3px}
+#pricing-modal .pr-table td.pr-val,#pricing-modal .pr-val{padding-top:14px!important;font-variant-numeric:tabular-nums;white-space:nowrap!important}
+#pricing-modal .pr-pf small{display:block;font-size:11px;color:var(--pr-muted)!important;margin-top:3px}
+#pricing-modal .pr-pf .neg,#pricing-modal .pr-neg{color:#b42318!important}
+#pricing-modal .pr-table td.pr-menu,#pricing-modal .pr-ctable td.pr-menu{text-align:center;padding:8px 2px!important}
+.pr-menu-btn{width:26px;height:28px;border:0;background:none;border-radius:6px;color:#64748b;font-size:16px;line-height:1;cursor:pointer;padding:0;font-family:inherit}
+.pr-menu-btn:hover,.pr-menu-btn.is-open{background:#eef2f6;color:#173a5e}
+/* quick add + totals */
+#pricing-modal tr.pricing-quick-add-row td{background:#fafbfd!important;border-bottom:0!important;vertical-align:middle!important}
+#pricing-modal .pr-qa{position:relative;height:30px;border:1px dashed #cbd5e1;border-radius:6px;display:flex;align-items:center;gap:8px;padding:0 6px 0 10px;background:#fff}
+#pricing-modal .pr-qa:focus-within{border-style:solid;border-color:#2e75b6;box-shadow:0 0 0 3px rgba(46,117,182,.15)}
+#pricing-modal .pr-qa-ic{color:#94a3b8;flex:0 0 auto}
+#pricing-modal .pr-qa input{flex:1;min-width:0;height:28px!important;border:0!important;background:transparent!important;padding:0!important;font-size:13px!important;box-shadow:none!important;outline:0}
+.pr-kbd,#pricing-modal kbd{font:10.5px/1.5 inherit;font-family:inherit;border:1px solid #cbd5e1;border-bottom-width:2px;border-radius:4px;padding:0 4px;color:#64748b;background:#fff}
+#pricing-modal .pr-qa-hint{color:#94a3b8;font-size:12px}
+#pricing-modal .pr-table tfoot td{position:sticky;bottom:0;z-index:3;background:#f4f7fa!important;border-top:1px solid var(--pr-line)!important;border-bottom:0!important;padding:9px 8px!important;font-variant-numeric:tabular-nums;vertical-align:top!important;white-space:nowrap!important}
+#pricing-modal .pr-table tfoot small{display:block;font-weight:400;font-size:11px;color:var(--pr-muted);margin-top:2px}
+#pricing-modal .pr-hint{flex:0 0 auto;font-size:11px;color:#94a3b8;padding:7px 2px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pricing-modal .pr-hint b{font-weight:400;letter-spacing:-2px}
+#pricing-modal .pr-cards,#pricing-modal .pr-ccards{display:none}
+
+/* ── Additional Costs tab ── */
+#pricing-modal .pr-cg{border:1px solid var(--pr-line);border-radius:10px;overflow:hidden}
+#pricing-modal table.pr-ctable{table-layout:fixed;width:100%;min-width:0!important;border-collapse:separate!important;border-spacing:0;font-size:13px!important;margin:0}
+#pricing-modal .pr-ctable col.c-no{width:44px}#pricing-modal .pr-ctable col.c-meth{width:160px}#pricing-modal .pr-ctable col.c-val{width:100px}
+#pricing-modal .pr-ctable col.c-amt{width:110px}#pricing-modal .pr-ctable col.c-how{width:24%}#pricing-modal .pr-ctable col.c-menu{width:32px}
+#pricing-modal .pr-ctable th{background:#f1f5f9!important;border:0!important;border-bottom:1px solid #dbe3ec!important;padding:8px!important;font-size:11.5px!important;font-weight:600!important;color:#475569!important;white-space:nowrap!important;text-align:left;text-transform:none!important;letter-spacing:0!important}
+#pricing-modal .pr-ctable th.pr-r{text-align:right}
+#pricing-modal .pr-ctable td{padding:7px 8px!important;vertical-align:top!important;border:0!important;border-bottom:1px solid var(--pr-line2)!important;white-space:normal!important;background:#fff;font-size:13px}
+#pricing-modal .pr-ctable select,#pricing-modal .pr-fi{height:30px!important;width:100%;border:1px solid var(--pr-line)!important;border-radius:6px!important;background-color:#fff!important;padding:0 8px!important;font-size:13px!important;color:var(--pr-ink)!important;box-shadow:none}
+#pricing-modal .pr-ctable select:disabled,#pricing-modal .pr-fi:disabled{background-color:#f8fafc!important;color:#64748b!important;opacity:1}
+#pricing-modal .pr-cname{display:flex;align-items:center;gap:6px;min-width:0}
+#pricing-modal .pr-cname select{flex:1;min-width:0}
+#pricing-modal .pr-cname-t{flex:1;min-width:0;padding:6px 0 0 1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#475569}
+#pricing-modal .pr-crow.is-locked .pr-cname select{display:none}
+.pr-mtag{font-size:10.5px;border-radius:5px;padding:1px 6px;background:#eef2f6;color:#475569;white-space:nowrap;flex:0 0 auto}
+#pricing-modal .pr-ctable td.pr-cno{padding-top:13px!important;color:#94a3b8;font-size:12px}
+#pricing-modal .pr-ctable td.pr-how{font-size:12px;padding-top:13px!important}
+#pricing-modal .pr-ctable td.pr-val{padding-top:13px!important}
+#pricing-modal .pr-lockic{display:inline-block;padding-top:6px;font-size:12px;opacity:.7}
+#pricing-modal .pr-ctable tr.pr-cadd td{background:#fafbfd!important;vertical-align:middle!important}
+#pricing-modal .pr-cadd-in{display:flex;gap:8px;align-items:center}
+#pricing-modal .pr-cadd-in select{flex:1;min-width:0;border-style:dashed!important;color:#64748b!important}
+#pricing-modal .pr-cadd-in .pr-btn{height:30px;flex:0 0 auto}
+#pricing-modal .pr-ctable tr.pr-totrow td{background:#f4f7fa!important;border-bottom:0!important;padding-top:10px!important}
+#pricing-modal .pr-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:12px}
+#pricing-modal .pr-box{border:1px solid var(--pr-line);border-radius:10px;padding:14px 16px;background:#fff;min-width:0}
+#pricing-modal .pr-box h5{font-size:12.5px;font-weight:600;margin:0 0 8px;color:#334155;text-transform:none;letter-spacing:0}
+#pricing-modal .pr-methods{font-size:12.5px;line-height:1.75;color:#475569}
+#pricing-modal .pr-methods b{font-weight:600}
+#pricing-modal .pr-ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:78%}
+.pr-lnk{border:0;background:none;color:#1d63d8;cursor:pointer;padding:4px 0;font:inherit;text-decoration:none}
+.pr-lnk:hover{text-decoration:underline}
+
+/* ── Internal Notes, Vendor Quotes ── */
+#pricing-modal .pr-notehead,#pricing-modal .pr-notefoot{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:12px;color:var(--pr-muted)}
+#pricing-modal .pr-notehead{margin-bottom:8px}
+#pricing-modal .pr-notehead span:last-child{font-size:11.5px;color:#94a3b8;white-space:nowrap}
+#pricing-modal .pr-notefoot{margin-top:8px;font-size:11.5px;color:#94a3b8}
+#pricing-modal textarea.pr-ta{width:100%;min-height:220px;border:1px solid #d5dde7!important;border-radius:8px!important;padding:10px 12px!important;line-height:1.6;font-size:13px!important;resize:vertical;color:var(--pr-ink)}
+#pricing-modal textarea.pr-ta:focus{border-color:#2e75b6!important;box-shadow:0 0 0 3px rgba(46,117,182,.15)!important;outline:0}
+#pricing-modal .pr-qtable{border:1px solid var(--pr-line);border-radius:10px;overflow:hidden}
+#pricing-modal .pr-qrow{display:grid;grid-template-columns:36px minmax(200px,1.4fr) minmax(150px,1fr) 110px 100px 110px 120px;align-items:center;border-bottom:1px solid var(--pr-line2)}
+#pricing-modal .pr-qrow:last-child{border-bottom:0}
+#pricing-modal .pr-qrow>div{padding:9px 8px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pricing-modal .pr-qrow.pr-qh{background:#f1f5f9;font-size:11.5px;font-weight:600;color:#475569}
+#pricing-modal .pr-qf a{color:#1d63d8;text-decoration:underline;text-underline-offset:3px}
+#pricing-modal .pr-pm,#pricing-modal .pr-qm{display:none}
+#pricing-modal .pr-qa-act{display:flex;justify-content:flex-end;align-items:center;gap:10px}
+#pricing-modal .pr-qa-act .pr-del{color:#b42318}
+#pricing-modal .pr-bad{color:#b42318;font-size:11.5px}
+#pricing-modal .pr-drop{border:1.5px dashed #cbd5e1;border-radius:10px;padding:16px;text-align:center;color:#64748b;margin-top:12px;background:#fafbfd;cursor:pointer}
+#pricing-modal .pr-drop b{color:#1d63d8;font-weight:500}
+#pricing-modal .pr-drop.is-over{border-color:#2e75b6;background:#eef4fc}
+
+/* ── summary panel ── */
+#pricing-modal .pr-side{border-left:1px solid var(--pr-line);background:#fbfcfe;padding:16px 20px;overflow:auto;min-height:0}
+#pricing-modal .pr-side h4{font-size:11px;font-weight:600;color:var(--pr-muted);letter-spacing:.04em;text-transform:uppercase;margin:0 0 6px}
+#pricing-modal .pr-kv{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;font-size:13px;color:#475569}
+#pricing-modal .pr-kv b{font-weight:500;color:var(--pr-ink);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+#pricing-modal .pr-kv.pr-sum{border-top:1px solid var(--pr-line);margin-top:2px;padding-top:8px}
+#pricing-modal .pr-kv.pr-sum b{font-weight:600}
+#pricing-modal .pr-grp{margin-bottom:16px}
+#pricing-modal .pr-res{--st:#166534;--st-bg:#f0fdf4;--st-bd:#bbf7d0;border:1px solid var(--st-bd);background:var(--st-bg);border-radius:12px;padding:14px}
+#pricing-modal .pr-res[data-state="low"]{--st:#9a3412;--st-bg:#fff7ed;--st-bd:#fed7aa}
+#pricing-modal .pr-res[data-state="loss"]{--st:#b42318;--st-bg:#fef2f2;--st-bd:#fecaca}
+#pricing-modal .pr-res[data-state="none"]{--st:#475569;--st-bg:#f8fafc;--st-bd:#e2e8f0}
+#pricing-modal .pr-p{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+#pricing-modal .pr-p span{font-size:12.5px;color:var(--st)}
+#pricing-modal .pr-p b{font-size:20px;font-weight:600;color:var(--st);font-variant-numeric:tabular-nums;white-space:nowrap}
+#pricing-modal .pr-tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+#pricing-modal .pr-tile{background:#fff;border:1px solid var(--st-bd);border-radius:10px;padding:8px 10px}
+#pricing-modal .pr-tile span{display:block;font-size:11px;color:var(--st)}
+#pricing-modal .pr-tile b{font-size:16px;font-weight:600;color:var(--st)}
+#pricing-modal .pr-tgt{font-size:11.5px;color:var(--st);display:flex;justify-content:space-between;gap:8px}
+#pricing-modal .pr-meter{position:relative;height:8px;border-radius:4px;background:#e2e8f0;margin:10px 0 4px;cursor:ew-resize;touch-action:none}
+#pricing-modal .pr-meter i{position:absolute;top:-4px;width:3px;height:16px;background:#1f2937;border-radius:2px}
+#pricing-modal .pr-meter.is-dragging{box-shadow:0 0 0 3px rgba(46,117,182,.2)}
+#pricing-modal .pr-mlab{position:relative;height:14px;font-size:10.5px;color:#94a3b8}
+#pricing-modal .pr-mlab span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+#pricing-modal .pr-mlab span:first-child{transform:none}
+#pricing-modal .pr-mlab span:last-child{transform:translateX(-100%)}
+#pricing-modal .pr-statusline{margin-top:10px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+#pricing-modal .pr-appr{font-size:11.5px;color:#9a3412}
+#pricing-modal .pr-note2{font-size:11px;color:#94a3b8;line-height:1.55;margin-top:12px}
+#pricing-modal .pr-tbar{display:none}
+
+/* ── footer ── */
+#pricing-modal .modal-footer.pr-ft{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:10px 18px!important;border-top:1px solid var(--pr-line);background:#fff;flex-wrap:nowrap}
+#pricing-modal .pr-ft .btn{height:32px;min-height:32px;padding:0 14px;font-size:12.5px;border-radius:8px;white-space:nowrap}
+#pricing-modal .pr-h{font-size:11.5px;color:var(--pr-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pricing-modal .pr-h.is-dirty{color:#b45309}
+#pricing-modal .pr-h.is-saved{color:var(--pr-green)}
+
+/* ── below 1200 px: summary → totals bar ── */
+@media (max-width:1199px){
+  #pricing-modal.modal-overlay{padding:12px!important}
+  #pricing-modal .modal.pr-win{width:calc(100vw - 24px)!important;height:calc(100vh - 24px)!important;height:calc(100dvh - 24px)!important}
+  #pricing-modal .pr-work{grid-template-columns:minmax(0,1fr)}
+  #pricing-modal .pr-side{display:none}
+  #pricing-modal .pr-tbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;flex:0 0 auto;padding:10px 18px;border-top:1px solid var(--pr-line);background:var(--pr-soft);font-size:12.5px;color:#475569}
+  #pricing-modal .pr-tbar b{font-weight:600;color:var(--pr-ink);font-variant-numeric:tabular-nums}
+  #pricing-modal .pr-tbar b.pr-st-ok{color:var(--pr-green)}#pricing-modal .pr-tbar b.pr-st-low{color:#9a3412}#pricing-modal .pr-tbar b.pr-st-loss{color:#b42318}
+}
+/* ── tablet portrait: no Line Total ── */
+@media (max-width:900px){
+  #pricing-modal table.pr-table{min-width:690px!important}
+  #pricing-modal .pr-table col.c-no{width:40px}#pricing-modal .pr-table col.c-qty{width:92px}#pricing-modal .pr-table col.c-buy{width:86px}
+  #pricing-modal .pr-table col.c-mk{width:76px}#pricing-modal .pr-table col.c-sell{width:86px}#pricing-modal .pr-table col.c-lt{width:0}
+  #pricing-modal .pr-table col.c-pf{width:108px}#pricing-modal .pr-table col.c-menu{width:30px}
+  #pricing-modal .pr-table .pr-lt{padding:0!important;font-size:0!important;overflow:hidden;visibility:hidden;border-left:0!important;border-right:0!important}
+  #pricing-modal .pr-sbar{grid-template-columns:1fr 130px 150px auto}
+  #pricing-modal .pr-sbar>div:last-child:not(.pr-split){display:none}
+  #pricing-modal .pr-sub .pr-x2{display:none}
+  #pricing-modal .pr-qa-hint{font-size:0!important}
+  #pricing-modal .pr-ctable col.c-meth{width:150px}#pricing-modal .pr-ctable col.c-val{width:90px}#pricing-modal .pr-ctable col.c-how{width:0}
+  #pricing-modal .pr-ctable .pr-how{padding:0!important;font-size:0!important;visibility:hidden}
+  #pricing-modal .pr-two{grid-template-columns:1fr}
+  #pricing-modal .pr-qrow{grid-template-columns:30px minmax(160px,1.4fr) minmax(120px,1fr) 100px 90px 110px}
+  #pricing-modal .pr-qrow .pr-qsz{display:none}
+  #pricing-modal .pr-hint{display:none}
+}
+/* ── phone: cards, full screen ── */
+@media (max-width:760px){
+  #pricing-modal.modal-overlay{padding:0!important}
+  #pricing-modal .modal.pr-win{width:100vw!important;height:100vh!important;height:100dvh!important;border-radius:0!important}
+  #pricing-modal .modal-header.pr-hd{padding:8px 10px!important;gap:4px;padding-top:calc(8px + env(safe-area-inset-top))!important}
+  #pricing-modal .pr-back{width:44px;height:44px;margin-left:-4px}
+  #pricing-modal .pr-hd h2{font-size:14.5px!important}
+  #pricing-modal .pr-pill-status{display:none}
+  #pricing-modal .pr-x2,#pricing-modal .pr-cv{display:none}
+  #pricing-modal .pr-pill-note{padding:4px}
+  #pricing-modal .pr-tl{display:none}#pricing-modal .pr-ts{display:inline}
+  #pricing-modal .pr-sbar{grid-template-columns:1fr 1fr;padding:10px 14px;gap:10px}
+  #pricing-modal .pr-sbar .pr-ps{grid-column:1 / -1}
+  #pricing-modal .pr-sbar .pr-ap{display:none}
+  #pricing-modal .pr-sbar input{height:40px!important;font-size:16px!important}
+  #pricing-modal .pr-main{padding:4px 12px 0}
+  #pricing-modal .pr-tabs{overflow-x:auto;gap:0;justify-content:space-between}
+  #pricing-modal .pr-tb{padding:10px 6px;gap:4px}
+  #pricing-modal .pr-cards{display:block;flex:1 1 auto;min-height:0;overflow:auto;padding:4px 0 8px;-webkit-overflow-scrolling:touch}
+  #pricing-modal .pr-gt{flex:0 0 auto;overflow:visible;border:0;border-radius:0;background:transparent;padding-bottom:8px}
+  #pricing-modal table.pr-table{min-width:0!important;table-layout:auto;background:transparent}
+  #pricing-modal .pr-table colgroup,#pricing-modal .pr-table thead,#pricing-modal .pr-table tfoot,#pricing-modal .pr-table tbody tr:not(.pricing-quick-add-row){display:none}
+  #pricing-modal tr.pricing-quick-add-row td{background:transparent!important;padding:0!important}
+  #pricing-modal tr.pricing-quick-add-row td:first-child,#pricing-modal tr.pricing-quick-add-row .pr-qa-hint{display:none}
+  #pricing-modal tr.pricing-quick-add-row td.pr-menu{width:48px;padding-left:8px!important}
+  #pricing-modal .pr-qa{height:44px}
+  #pricing-modal .pr-qa input{font-size:16px!important}
+  #pricing-modal .pr-qa .pr-kbd{display:none}
+  #pricing-modal tr.pricing-quick-add-row .pr-menu-btn{width:44px;height:44px;border:1px solid var(--pr-line);font-size:20px}
+  #pricing-modal .pr-pc{border:1px solid var(--pr-line);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#fff}
+  #pricing-modal .pr-pc-t{display:flex;gap:8px;align-items:flex-start}
+  #pricing-modal .pr-pc-d{flex:1;line-height:1.35;min-width:0;word-break:break-word}
+  #pricing-modal .pr-pc-d small{display:block;color:#94a3b8;font-size:11.5px;margin-top:2px}
+  #pricing-modal .pr-pc-n{color:#94a3b8}
+  #pricing-modal .pr-pc-m{width:36px;height:36px;margin:-6px -6px 0 0;border:0;background:none;border-radius:8px;font-size:18px;color:#64748b;flex:0 0 auto;font-family:inherit}
+  #pricing-modal .pr-g3{display:grid;grid-template-columns:1fr .9fr 1fr;gap:8px;margin-top:9px;align-items:start}
+  #pricing-modal .pr-g3>div{display:grid;grid-template-rows:28px 36px auto;row-gap:4px;min-width:0}
+  #pricing-modal .pr-g3 label{font-size:10.5px;line-height:1.2;color:var(--pr-muted);display:flex;align-items:flex-end;margin:0;font-weight:400}
+  #pricing-modal .pr-g3 .pr-inp,#pricing-modal .pr-g3 .pr-fi{height:36px!important;font-size:16px!important}
+  #pricing-modal .pr-g3 .pr-ref{margin-top:0}
+  #pricing-modal .pr-pc-f{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#475569;margin-top:8px;border-top:1px solid var(--pr-line2);padding-top:7px}
+  #pricing-modal .pr-pc-f[hidden]{display:none}
+  #pricing-modal .pr-tbar{padding:8px 14px;font-size:12px;display:grid;grid-template-columns:1fr 1fr;gap:3px 12px}
+  #pricing-modal .pr-tbar .pr-hide-p{display:none}
+  #pricing-modal .modal-footer.pr-ft{padding:8px 12px calc(10px + env(safe-area-inset-bottom))!important}
+  #pricing-modal .pr-ft .pr-cl,#pricing-modal .pr-ft .pr-h,#pricing-modal .pr-ft .pr-sp{display:none}
+  #pricing-modal .pr-ft .btn{height:44px;flex:1}
+  #pricing-modal .pr-cg{display:none}
+  #pricing-modal .pr-ccards{display:block}
+  #pricing-modal .pr-g3.pr-c3{grid-template-columns:1.45fr .75fr .9fr}
+  #pricing-modal .pr-g3.pr-c3>div{grid-template-rows:16px 36px}
+  #pricing-modal .pr-inp.pr-ro{display:flex;align-items:center;justify-content:flex-end;border-color:transparent!important;background:#f8fafc!important;font-weight:500}
+  #pricing-modal .pr-cname-m{display:grid;gap:4px;margin-top:8px}
+  #pricing-modal .pr-cname-m label{font-size:10.5px;color:var(--pr-muted)}
+  #pricing-modal .pr-cadd-m{display:flex;flex-direction:column;gap:8px;border-style:dashed}
+  #pricing-modal .pr-cadd-m select{height:40px!important;font-size:16px!important}
+  #pricing-modal .pr-cadd-m .pr-btn{height:40px}
+  #pricing-modal .pr-ctotal{background:#f4f7fa}
+  #pricing-modal .pr-ctotal .pr-pc-t{align-items:center}
+  #pricing-modal .pr-two{grid-template-columns:minmax(0,1fr)}
+  #pricing-modal .pr-nh{display:none}
+  #pricing-modal .pr-qrow.pr-qh{display:none}
+  #pricing-modal .pr-qrow{grid-template-columns:28px minmax(0,1fr) 40px;align-items:start}
+  #pricing-modal .pr-qrow>div{white-space:normal}
+  #pricing-modal .pr-qrow .pr-qs,#pricing-modal .pr-qrow .pr-qd,#pricing-modal .pr-qrow .pr-qsz,#pricing-modal .pr-qrow .pr-qr{display:none}
+  #pricing-modal .pr-pm{display:block;font-size:11.5px;color:#64748b;margin-top:3px;white-space:normal}
+  #pricing-modal .pr-qfull{display:none}
+  #pricing-modal .pr-qm{display:inline-block;width:36px;height:36px;font-size:18px}
+  #pricing-modal textarea.pr-ta{font-size:16px!important}
+  #pricing-modal .pr-notefoot,#pricing-modal .pr-notehead{flex-wrap:wrap}
+}
+
+/* ── on the page body: menus, bottom sheets, dialogs, toast ── */
+.pr-pop{position:fixed;background:#fff;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 18px 44px rgba(15,23,42,.25);z-index:100050;padding:6px;font-size:13px;color:#1e293b;max-height:min(460px,calc(100vh - 24px));overflow:auto}
+.pr-mi{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:0;border-radius:8px;background:transparent;font:inherit;font-size:13px;color:#1e293b;text-align:left;cursor:pointer;text-decoration:none;white-space:nowrap}
+.pr-mi:hover,.pr-mi:focus-visible{background:#f1f5f9;outline:0}
+.pr-mi:disabled{color:#cbd5e1;cursor:default;background:transparent}
+.pr-mi .pr-k{margin-left:auto;font-size:11px;color:#94a3b8}
+.pr-mi.pr-mi-del{color:#b42318}
+.pr-sepm{height:1px;background:#edf1f5;margin:4px 2px}
+.pr-dim{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:100069}
+.pr-dim.pr-dim-pop{z-index:100049}
+.pr-sheet{position:fixed;left:0;right:0;bottom:0;background:#fff;border-radius:18px 18px 0 0;z-index:100050;padding:6px 8px calc(16px + env(safe-area-inset-bottom));max-height:85vh;overflow:auto;font-size:14px;color:#1e293b;box-shadow:0 -10px 30px rgba(15,23,42,.2)}
+.pr-sheet .pr-mi{padding:12px 10px;font-size:14px}
+.pr-grab{width:44px;height:5px;border-radius:3px;background:#cbd5e1;margin:6px auto 8px}
+.pr-sheet-t{padding:4px 10px 8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr-sheet-close{padding:8px 10px 0}.pr-sheet-close .pr-btn{width:100%;height:44px;font-size:14px}
+.pr-cf{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(440px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;background:#fff;border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.3);z-index:100070;padding:20px;font-size:13px;color:#1f2937}
+.pr-cf.pr-cf-wide{width:min(520px,calc(100vw - 32px))}
+.pr-cf h3{font-size:15px;font-weight:600;margin:0 0 6px;color:#1f2937}
+.pr-cf p{font-size:13px;color:#475569;line-height:1.5;margin:0 0 6px}
+.pr-cf p b{font-weight:600;color:#1f2937}
+.pr-cf .pr-cf-note{font-size:12px;color:#64748b}
+.pr-cf-it{background:#f8fafc;border:1px solid #dfe5ec;border-radius:8px;padding:10px 12px;margin:12px 0;font-size:13px;line-height:1.4;word-break:break-word}
+.pr-cf-it small{display:block;color:#64748b;font-size:11.5px;margin-top:2px}
+.pr-cf-bt{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin-top:14px}
+.pr-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pr-form label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:#64748b}
+.pr-form .pr-wide{grid-column:1 / -1}
+.pr-form .pr-fi{height:34px;border:1px solid #d5dde7;border-radius:8px;padding:0 10px;font:inherit;font-size:13px;color:#1f2937;background:#fff}
+.pr-form textarea.pr-fi{height:auto;padding:8px 10px;resize:vertical}
+.pr-form .pr-fi:focus{border-color:#2e75b6;box-shadow:0 0 0 3px rgba(46,117,182,.15);outline:0}
+.pr-form .pr-muted{color:#94a3b8}
+.pr-toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);background:#1f2937;color:#fff;border-radius:10px;padding:10px 14px;font-size:12.5px;display:flex;align-items:center;gap:14px;z-index:100080;box-shadow:0 10px 30px rgba(15,23,42,.25);max-width:calc(100vw - 24px)}
+.pr-toast button{border:0;background:none;color:#93c5fd;font:inherit;font-weight:600;cursor:pointer;padding:0}
+/* price reference list */
+.pr-rf-h{padding:6px 8px 8px;font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr-rf{display:flex;align-items:center;gap:10px;padding:8px;border-top:1px solid #edf1f5}
+.pr-rf-m{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pr-rf-m b{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.pr-rf-m span{font-size:12px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr-rf-m small{font-size:11.5px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr-rf .pr-use{height:28px;padding:0 10px}
+.pr-rf-empty{padding:10px 8px;color:#64748b;font-size:12.5px;border-top:1px solid #edf1f5}
+.pr-rf-f{padding:8px 8px 4px;font-size:11px;color:#94a3b8;border-top:1px solid #edf1f5}
+.pr-st{font-style:normal;font-size:10.5px;font-weight:600;border-radius:10px;padding:0 6px;background:#eef2f6;color:#475569}
+.pr-st-won{background:#dcfce7;color:#166534}.pr-st-lost{background:#fee2e2;color:#b42318}.pr-st-sent{background:#e8f0fb;color:#1e4f86}
+.pr-oc{font-style:normal;color:#7c3aed;font-weight:500}

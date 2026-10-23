@@ -525,7 +525,7 @@ function sovProfitModel(m){
 const sovMarkup = (p, c) => (c > 0.005 ? p / c * 100 : NaN);
 const sovMargin = (p, s) => (s > 0.005 ? p / s * 100 : NaN);
 function sovProfit(m, view){
-  const ps = sovPricingSettings(), method = ps.marginMethod === 'margin' ? 'margin' : 'markup';
+  const ps = sovPricingSettings(), method = (ps.marginMethod === 'gross_margin' || ps.marginMethod === 'margin') ? 'margin' : 'markup';
   const P = sovProfitModel(m), t = P.t;
   const main = (p, c, s) => method === 'markup' ? sovMarkup(p, c) : sovMargin(p, s);
   const other = (p, c, s) => method === 'markup' ? sovMargin(p, s) : sovMarkup(p, c);

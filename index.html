@@ -33,9 +33,12 @@
 <link href="css/theme.css?v=266.5" rel="stylesheet"/>
 <link href="css/so-register.css?v=269.2" rel="stylesheet"/>
 <link href="css/so-view.css?v=269.72" rel="stylesheet"/>
+<link href="css/bc-date.css?v=270.1" rel="stylesheet"/>
+<link href="css/pricing.css?v=270.1" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
 <script src="js/responsive.js?v=269.7" defer></script>
+<script src="js/bc-date.js?v=270.1" defer></script>
 <style id="bizcore-typography-standard">
 .page-title,.view-title,h1.document-title{font-size:22px!important;font-weight:700!important;}
 .quotation-number,.doc-number{font-size:22px!important;font-weight:700!important;}
@@ -1791,157 +1794,110 @@ document.addEventListener('error', function(e) {
 </div>
 </div>
 </div>
-<!-- PRICING SHEET MODAL -->
-<div class="modal-overlay" id="pricing-modal">
-<div class="modal modal-normal">
-<div class="modal-header">
-<h2 id="pricing-modal-title">Pricing sheet</h2>
-<div style="display:flex;align-items:center;gap:8px">
-
+<!-- PRICING SHEET MODAL — V270.1 layout (docs/V270_1_PRICING.md) -->
+<div class="modal-overlay pr-overlay" id="pricing-modal">
+<div class="modal modal-normal pr-win">
+<div class="modal-header pr-hd">
+<button type="button" class="pr-back" id="pricing-back-btn" onclick="prRequestBack()" title="Back to RFQ (Alt+←)" aria-label="Back to RFQ"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+<div class="pr-tt"><h2 id="pricing-modal-title">Pricing</h2><div class="pr-sub" id="pricing-rfq-info"></div></div>
+<span class="pr-pill pr-pill-status" id="pr-status-pill">Draft</span>
+<button type="button" class="pr-pill pr-pill-note" id="pr-note-pill" hidden onclick="prShowTab('notes')" title="This pricing has an internal note"><i></i><span class="pr-x2">Internal Note</span></button>
+<div class="pr-sp"></div>
 <button class="close-btn" onclick="requestClosePricingEntry()" aria-label="Close pricing">✕</button>
 </div>
+<div class="modal-body pr-body">
+<div class="pr-sbar">
+<div class="pr-f pr-ps"><label for="pricing-sup-search">Primary Supplier <b class="pr-req">*</b></label>
+<div class="cust-wrap pr-supwrap"><input autocomplete="off" id="pricing-sup-search" onblur="setTimeout(closePricingSupDD,200);prCheckPrimarySupplier()" onclick="openPricingSupDD()" oninput="this.dataset.supplierId='';filterPricingSupDD()" placeholder="Search Supplier Master…"/><button type="button" class="pr-in-ic" tabindex="-1" title="Show suppliers" aria-label="Show suppliers" onmousedown="event.preventDefault()" onclick="const i=document.getElementById('pricing-sup-search');i.focus();openPricingSupDD()"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="m5 8 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="cust-dropdown" id="pricing-sup-dd"></div></div></div>
+<div class="pr-f"><label for="pricing-sup-ref">Supplier Quote Ref. <b class="pr-req">*</b></label><input id="pricing-sup-ref" placeholder="Quote No."/></div>
+<div class="pr-f"><label for="pricing-sup-date">Quote Date <b class="pr-req">*</b></label><input id="pricing-sup-date" autocomplete="off"/></div>
+<div class="pr-split pr-ap"><button type="button" class="pr-btn" onclick="applyPrimarySupplierToPricingLines('blank')" title="Put the primary supplier and quote ref. on lines that have none">Apply Supplier To Lines</button><button type="button" class="pr-btn" aria-label="More apply options" onclick="prApplyMenu(this)">▾</button></div>
 </div>
-<div class="modal-body">
-<!-- RFQ info bar -->
-<div id="pricing-rfq-info" style="background:var(--blue-pale);border:1px solid var(--blue-light);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;display:flex;gap:20px;flex-wrap:wrap;font-size:12px"></div>
-<div class="pricing-workspace">
-<div class="pricing-workspace-main">
-<!-- Compact supplier and vendor quotation header -->
-<div class="pricing-top-panel">
-<div class="pricing-supplier-grid">
-<div class="form-group">
-<label>Primary supplier</label>
-<div class="cust-wrap">
-<input autocomplete="off" id="pricing-sup-search" onblur="setTimeout(closePricingSupDD,200)" onclick="openPricingSupDD()" oninput="filterPricingSupDD()" placeholder="Search supplier…"/>
-<div class="cust-dropdown" id="pricing-sup-dd"></div>
+<div class="pr-work">
+<div class="pr-main">
+<div class="pr-tabs" role="tablist" id="pr-tabs">
+<button type="button" class="pr-tb on" role="tab" data-tab="items" onclick="prShowTab('items')">Items <span class="pr-n" id="pr-n-items">0</span></button>
+<button type="button" class="pr-tb" role="tab" data-tab="costs" onclick="prShowTab('costs')"><span class="pr-tl">Additional Costs</span><span class="pr-ts">Costs</span> <span class="pr-n" id="pr-n-costs">0.00</span></button>
+<button type="button" class="pr-tb" role="tab" data-tab="notes" onclick="prShowTab('notes')"><span class="pr-tl">Internal Notes</span><span class="pr-ts">Notes</span> <span class="pr-dot" id="pr-note-dot" hidden></span></button>
+<button type="button" class="pr-tb" role="tab" data-tab="quotes" onclick="prShowTab('quotes')"><span class="pr-tl">Vendor Quotes</span><span class="pr-ts">Quotes</span> <span class="pr-n" id="pr-n-quotes">0</span></button>
+</div>
+<section class="pr-panel on" data-panel="items">
+<div class="pr-cards" id="pr-cards"></div>
+<div class="pr-gt" id="pr-gt">
+<table class="pricing-table pr-table" id="pricing-table">
+<colgroup><col class="c-no"/><col class="c-item"/><col class="c-qty"/><col class="c-buy"/><col class="c-mk"/><col class="c-sell"/><col class="c-lt"/><col class="c-pf"/><col class="c-menu"/></colgroup>
+<thead><tr>
+<th class="pr-no">#</th><th>Item · Code · Supplier</th><th class="pr-c">Qty</th><th class="pr-r">Buy Price</th><th class="pr-r">Markup<br/>On Buy %</th><th class="pr-r">Sell Price</th><th class="pr-r pr-lt">Line Total</th><th class="pr-r">Profit<br/><span class="pr-thsub">Markup · Margin</span></th><th></th>
+</tr></thead>
+<tbody id="pricing-tbody"></tbody>
+<tfoot><tr class="pr-totrow"><td></td><td class="pr-tot-l" id="pr-tot-label">Total · 0 Lines</td><td></td><td class="pr-r" id="pr-tot-buy">0.00</td><td></td><td></td><td class="pr-r pr-lt pr-b" id="pr-tot-sell">0.00</td><td class="pr-r pr-b" id="pr-tot-profit">0.00<small></small></td><td></td></tr></tfoot>
+</table>
+</div>
+<div class="pr-hint">Drag <b>⋮⋮</b> to reorder · <kbd>Enter</kbd> next field · <kbd>↑</kbd><kbd>↓</kbd> other line · <kbd>F2</kbd> price reference · <kbd>Ctrl</kbd>+<kbd>Del</kbd> delete line · <kbd>Ctrl</kbd>+<kbd>S</kbd> save</div>
+</section>
+<section class="pr-panel" data-panel="costs" id="internal-costs-section">
+<div class="pr-scroll">
+<div class="pr-ccards" id="pr-ccards"></div>
+<div class="pr-cg">
+<table class="internal-costs-table pr-ctable">
+<colgroup><col class="c-no"/><col class="c-citem"/><col class="c-meth"/><col class="c-val"/><col class="c-amt"/><col class="c-how"/><col class="c-menu"/></colgroup>
+<thead><tr><th class="pr-no">#</th><th>Cost Item</th><th>Method</th><th class="pr-r">Value</th><th class="pr-r">Amount (<span data-pr-cur>SAR</span>)</th><th class="pr-how">How It Is Worked Out</th><th></th></tr></thead>
+<tbody id="internal-costs-tbody"></tbody>
+<tfoot>
+<tr class="pr-cadd"><td class="pr-no">+</td><td colspan="2"><div class="pr-cadd-in"><select id="pr-cost-pick" onchange="prAddCostFromPick(this)" aria-label="Add cost from Cost Master"></select><button type="button" class="pr-btn" onclick="prAddDefaultCosts()">+ Add All Default Costs</button></div></td><td colspan="4"></td></tr>
+<tr class="pr-totrow"><td></td><td class="pr-b">Total Additional Costs</td><td></td><td></td><td class="pr-r pr-b" id="internal-costs-total">0.00</td><td class="pr-how pr-muted" id="internal-costs-count"></td><td></td></tr>
+</tfoot>
+</table>
+</div>
+<div class="pr-two">
+<div class="pr-box"><h5>Shared Over The Lines (By Buy Value)</h5><div id="pr-cost-shares"></div></div>
+<div class="pr-box"><h5>Methods</h5><div class="pr-methods"><b>Fixed Amount</b> — the amount as entered<br/><b>% Of Material</b> — of the total buy value<br/><b>% Of Total Cost</b> — of material + the costs above it, in order<br/><b>% Of Selling</b> — of the total sell (ex-VAT)<br/><span class="pr-muted">Locked costs come from Administration → Cost Components.</span></div></div>
 </div>
 </div>
-<div class="form-group"><label>Quote reference</label><input id="pricing-sup-ref" placeholder="Quote no."/></div>
-<div class="form-group"><label>Quote date</label><input id="pricing-sup-date" inputmode="numeric" maxlength="10" placeholder="DD/MM/YYYY" autocomplete="off"/></div>
+</section>
+<section class="pr-panel" data-panel="notes">
+<div class="pr-scroll">
+<div class="pr-notehead"><span>Internal use only — never printed on customer documents</span><span id="pricing-internal-notes-count">0 / 2000</span></div>
+<textarea id="pricing-internal-notes" class="pr-ta" maxlength="2000" rows="10" placeholder="Supplier conditions, negotiation details or internal instructions…" oninput="document.getElementById('pricing-internal-notes-count').textContent=this.value.length+' / 2000';prUpdateNoteMarks()"></textarea>
+<div class="pr-notefoot"><span id="pr-note-last"></span><span class="pr-nh">The dot on the tab and the tag in the header show that a note exists</span></div>
 </div>
-<div class="pricing-top-actions">
-<div class="pricing-supplier-actions">
-<button class="btn btn-secondary btn-sm" onclick="applyPrimarySupplierToPricingLines('blank')" type="button"><i class="ti ti-wand"></i>Fill blank lines</button>
-<button class="btn btn-secondary btn-sm" onclick="if(confirm('Replace supplier and quotation reference on all pricing lines?'))applyPrimarySupplierToPricingLines('all')" type="button"><i class="ti ti-copy-check"></i>Replace all</button>
-</div>
-</div>
-<div class="pricing-vendor-compact">
-<div class="pricing-vendor-label"><strong>Vendor quotations</strong><span>PDF or image attachments</span></div>
-<div class="pricing-vendor-content">
+</section>
+<section class="pr-panel" data-panel="quotes">
+<div class="pr-scroll">
 <input accept="image/*,.pdf" id="pricing-attach-input" onchange="handlePricingAttach(event)" style="display:none" type="file"/>
 <div id="pricing-attach-list"></div>
-<button class="btn btn-secondary btn-sm" onclick="document.getElementById('pricing-attach-input').click()" type="button"><i class="ti ti-paperclip"></i>Attach</button>
+<div class="pr-drop" id="pr-drop" onclick="document.getElementById('pricing-attach-input').click()" role="button" tabindex="0">📎 Drop PDF or image files here, or <b>Attach</b> · each file keeps the supplier and quote ref. entered above</div>
 </div>
-</div>
-</div>
-<!-- Compact table action -->
-<div class="pricing-grid-actions">
-<span class="pricing-grid-help">Select a product from the Quick Add row below</span>
-<button class="btn btn-danger btn-sm" onclick="confirmClearPricingRows()" title="Clear all pricing lines"><i class="ti ti-trash"></i>Clear all</button>
-</div>
-<!-- Pricing table -->
-<div class="pricing-table-scroll">
-<table class="pricing-table" id="pricing-table">
-<thead>
-<tr>
-<th class="pricing-drag-column" style="width:24px" title="Drag lines to reorder"></th>
-<th style="width:42px">#</th>
-<th style="width:90px">Code</th>
-<th style="width:260px">Description</th>
-<th style="width:105px">Qty</th>
-<th style="width:70px">UOM</th>
-<th style="width:150px">Supplier</th>
-<th style="width:110px">Quote ref.</th>
-<th style="width:105px">Buy price</th>
-<th style="width:85px">Markup %</th>
-<th style="width:110px">Sell price</th>
-<th style="width:95px">Margin</th>
-<th style="width:80px">Margin %</th>
-<th style="width:36px"></th>
-</tr>
-</thead>
-<tbody id="pricing-tbody"></tbody>
-</table>
-</div>
-<!-- Document-level notes and additional costs in one balanced row -->
-<div class="pricing-notes-costs-row pricing-bottom-rebuilt">
-<section class="pricing-internal-notes-section pricing-bottom-card pricing-note-card">
-<div class="pricing-internal-notes-head">
-<div><strong>Internal Notes</strong><span>Internal use only — not copied to customer documents</span></div>
-<span id="pricing-internal-notes-count">0 / 2000</span>
-</div>
-<textarea id="pricing-internal-notes" maxlength="2000" rows="4" placeholder="Add pricing-level notes, supplier conditions, negotiation details or internal instructions…" oninput="document.getElementById('pricing-internal-notes-count').textContent=this.value.length+' / 2000'"></textarea>
-</section>
-<section class="internal-costs internal-costs-below pricing-bottom-card pricing-cost-card" id="internal-costs-section">
-<div class="internal-costs-summary">
-<span class="internal-costs-summary-title">Additional Costs</span>
-<span class="internal-costs-summary-meta" id="internal-costs-count">None added</span>
-<span class="internal-costs-summary-total" id="internal-costs-total">SAR 0.00</span>
-<button class="btn btn-secondary btn-sm" id="internal-costs-toggle" onclick="toggleAdditionalCosts()" type="button"><i class="ti ti-adjustments"></i>Manage</button>
-</div>
-<div class="internal-costs-body" id="internal-costs-body">
-<div class="internal-costs-toolbar">
-<span class="internal-costs-note">Defaults come from System Administration. Locked components cannot be changed here.</span>
-<button class="btn btn-secondary btn-sm" onclick="addAdditionalCostRow({},true)" type="button"><i class="ti ti-plus"></i>Add cost</button>
-</div>
-<table class="internal-costs-table">
-<thead><tr><th>Cost type</th><th>Calculation method</th><th>Value</th><th>Calculated cost</th><th class="cost-action-head" title="Action" aria-label="Action"><i class="ti ti-dots-vertical" aria-hidden="true"></i></th></tr></thead>
-<tbody id="internal-costs-tbody"></tbody>
-</table>
-</div>
-<datalist id="additional-cost-types"><option value="Transportation"><option value="Administration"><option value="Commission"><option value="Packing"><option value="Loading &amp; Unloading"><option value="Installation"><option value="Accommodation"><option value="Other"></option></option></option></option></option></option></option></option></datalist>
 </section>
 </div>
+<aside aria-label="Pricing summary" class="pr-side" id="pricing-summary">
+<div class="pr-grp"><h4>Cost</h4>
+<div class="pr-kv"><span>Material (Buy)</span><b id="ps-cost">0.00</b></div>
+<div class="pr-kv"><span>Additional Costs</span><b id="ps-additional-cost">0.00</b></div>
+<div class="pr-kv pr-sum"><span>Total Cost</span><b id="ps-total-cost">0.00</b></div></div>
+<div class="pr-grp"><h4>Selling</h4>
+<div class="pr-kv"><span>Total Sell (Ex-VAT)</span><b id="ps-sell">0.00</b></div>
+<div class="pr-kv"><span data-pricing-vat-label>VAT</span><b id="ps-vat">0.00</b></div>
+<div class="pr-kv pr-sum"><span>Total (Incl. VAT)</span><b id="ps-gross">0.00</b></div></div>
+<div class="pr-res" id="pricing-margin-status-card">
+<div class="pr-p"><span>Profit</span><b id="ps-margin">0.00</b></div>
+<div class="pr-tiles"><div class="pr-tile"><span>Markup %</span><b id="ps-markup">0.0%</b></div><div class="pr-tile"><span>Margin %</span><b id="ps-marginpct">0.0%</b></div></div>
+<div class="pr-tgt"><span id="ps-target-label">Target Markup</span><span id="ps-target">—</span></div>
+<div class="pr-meter" id="margin-gauge" title="Drag to set the target and adjust the unlocked selling prices"><i id="margin-gauge-marker"></i></div>
+<div class="pr-mlab" id="pr-mlab"></div>
+<div class="pr-statusline"><span class="pr-pill" id="ps-status-label">—</span><span class="pr-appr" id="ps-status-approval"></span></div>
 </div>
-<div class="pricing-financial-column">
-<aside aria-label="Pricing summary" class="pricing-summary-panel">
-<div class="pricing-summary-title"><i class="ti ti-chart-dots-3"></i><span class="pricing-summary-title-text">Summary</span><button class="btn pricing-summary-toggle" id="pricing-summary-toggle" onclick="togglePricingSummaryPanel()" title="Collapse summary" type="button"><i class="ti ti-layout-sidebar-right-collapse"></i></button></div>
-<div class="pricing-margin-status-card" id="pricing-margin-status-card" style="display:none">
-<div class="pricing-margin-status-main">
-<span class="pricing-margin-status-dot" id="ps-status-dot"></span>
-<span class="pricing-margin-status-icon" id="ps-status-icon">⚠️</span>
-<strong id="ps-status-label">Below Target</strong>
-</div>
-<div class="pricing-margin-status-detail" id="ps-status-detail">
-<span class="pricing-margin-status-line" id="ps-status-current">Current margin: 0.0%</span>
-<span class="pricing-margin-status-line" id="ps-status-range">Range: —</span>
-<span class="pricing-margin-status-approval" id="ps-status-approval" aria-live="polite">&nbsp;</span>
-</div>
-</div>
-<div class="pricing-summary" id="pricing-summary">
-<div class="pricing-summary-section">Cost</div>
-<div class="ps-item"><div class="ps-label">Material cost</div><div class="ps-val" id="ps-cost">SAR 0</div></div>
-<div class="ps-item"><div class="ps-label">Additional cost</div><div class="ps-val" id="ps-additional-cost">SAR 0</div></div>
-<div class="ps-item"><div class="ps-label">Total cost</div><div class="ps-val" id="ps-total-cost">SAR 0</div></div>
-<div class="pricing-summary-section">Selling</div>
-<div class="ps-item"><div class="ps-label">Total sell</div><div class="ps-val" id="ps-sell">SAR 0</div></div>
-<div class="pricing-summary-section">Result</div>
-<div class="ps-item ps-highlight"><div class="ps-label">Profit</div><div class="ps-val green" id="ps-margin">SAR 0</div></div>
-<div class="ps-item ps-highlight"><div class="ps-label">Margin</div><div class="ps-val green" id="ps-pct">0%</div></div>
-</div>
-<div class="margin-gauge-wrap" id="margin-gauge-wrap">
-<div class="margin-gauge-head"><strong>Margin status</strong><span id="margin-gauge-value">0.0%</span></div>
-<div class="margin-gauge-vertical-wrap">
-<div class="margin-gauge-scale"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div>
-<div aria-label="Drag vertically to set overall margin percentage" class="margin-gauge is-draggable" id="margin-gauge" title="Drag vertically to set the target margin and adjust all selling prices">
-<span class="margin-gauge-marker" id="margin-gauge-marker" style="bottom:0%"><span class="margin-gauge-marker-icon" id="margin-gauge-marker-icon"></span></span>
-</div>
-</div>
-<div class="margin-gauge-help">Drag to set target margin</div>
-</div>
+<div class="pr-note2" id="pr-formula-note">Markup = Profit ÷ Total Cost · Margin = Profit ÷ Total Sell. Line figures include each line's share of the additional costs.</div>
 </aside>
 </div>
+<div class="pr-tbar" id="pr-tbar"></div>
 </div>
-</div>
-<div class="modal-footer">
-<span id="pricing-back-btn"></span>
-<span class="pricing-save-note" id="pricing-save-note">Save pricing before conversion.</span>
-<div class="pricing-footer-actions">
-<button class="btn pricing-footer-btn pricing-cancel-btn btn-sm" onclick="requestClosePricingEntry('cancel')"><i class="ti ti-arrow-back-up"></i>Cancel</button>
-<button class="btn btn-primary pricing-footer-btn btn-sm" id="pricing-save-btn" onclick="requestSavePricing()"><i class="ti ti-device-floppy"></i>Save</button>
-<button class="btn btn-success btn-sm" disabled="" id="pricing-convert-btn" onclick="convertToQuotation()"><i class="ti ti-file-arrow-right"></i>Convert</button>
-<button class="btn btn-secondary pricing-footer-btn pricing-close-btn btn-sm" onclick="requestClosePricingEntry('close')"><i class="ti ti-x"></i>Close</button>
-</div>
+<div class="modal-footer pr-ft">
+<span class="pricing-save-note pr-h" id="pricing-save-note"></span>
+<div class="pr-sp"></div>
+<button class="btn btn-secondary pricing-footer-btn pricing-close-btn btn-sm pr-cl" onclick="requestClosePricingEntry('close')">Close</button>
+<button class="btn btn-primary pricing-footer-btn btn-sm" id="pricing-save-btn" onclick="requestSavePricing()">Save</button>
+<button class="btn btn-success btn-sm" disabled="" id="pricing-convert-btn" onclick="convertToQuotation()">Save &amp; Convert</button>
 </div>
 </div>
 </div>
@@ -3985,11 +3941,13 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=269.7';
+      s.src = 'js/app.js?v=270.1';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
-        const sv = document.createElement('script'); sv.id = 'bizcore-so-view-script'; sv.src = 'js/so-view.js?v=269.72'; document.body.appendChild(sv);
+        const sv = document.createElement('script'); sv.id = 'bizcore-so-view-script'; sv.src = 'js/so-view.js?v=270.1'; document.body.appendChild(sv);
+        // V270.1: the Pricing screen (tabs, line menu, price references, phone cards)
+        const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.1'; document.body.appendChild(pu);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.6'; document.body.appendChild(ds); };
       document.body.appendChild(s);

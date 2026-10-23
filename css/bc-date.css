@@ -1,0 +1,30 @@
+/* V270.1 — BizCore date field (js/bc-date.js). DD-MM-YYYY, typed or picked from the calendar. */
+.bcd-wrap{position:relative;display:flex;align-items:center;width:100%;min-width:0}
+.bcd-wrap>input.bcd-input{width:100%;padding-right:34px!important;font-variant-numeric:tabular-nums}
+.bcd-wrap>input.bcd-input.bcd-invalid{border-color:#dc2626!important;box-shadow:0 0 0 3px rgba(220,38,38,.12)!important}
+.bcd-btn{position:absolute;right:3px;top:50%;transform:translateY(-50%);width:28px;height:26px;border:0;border-radius:6px;background:transparent;color:#64748b;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.bcd-btn:hover{background:#eef2f6;color:#173a5e}
+.bcd-pop{position:fixed;z-index:100060;width:272px;background:#fff;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 18px 44px rgba(15,23,42,.25);padding:10px;font-family:inherit;font-size:13px;color:#1f2937}
+.bcd-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.bcd-title{font-weight:600;font-size:13.5px}
+.bcd-nav{width:30px;height:30px;border:0;border-radius:8px;background:transparent;font-size:20px;line-height:1;color:#334155;cursor:pointer;font-family:inherit}
+.bcd-nav:hover:not(:disabled){background:#f1f5f9}.bcd-nav:disabled{color:#cbd5e1;cursor:default}
+.bcd-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.bcd-dow{font-size:11px;color:#94a3b8;text-align:center;padding:4px 0}
+.bcd-day{height:32px;border:1px solid transparent;border-radius:8px;background:transparent;font:inherit;font-size:12.5px;color:#1f2937;cursor:pointer;font-variant-numeric:tabular-nums;padding:0}
+.bcd-day:hover:not([aria-disabled="true"]){background:#eef4fc}
+.bcd-day:focus-visible{outline:2px solid #2e75b6;outline-offset:0}
+.bcd-day.bcd-other{color:#a3adba}
+.bcd-day.bcd-today{border-color:#173a5e}
+.bcd-day.bcd-sel{background:#173a5e;color:#fff;border-color:#173a5e}
+.bcd-day.bcd-off{color:#d5dbe3;cursor:not-allowed;text-decoration:line-through}
+.bcd-foot{display:flex;gap:6px;margin-top:8px;border-top:1px solid #edf1f5;padding-top:8px}
+.bcd-act{height:30px;padding:0 10px;border:1px solid #d5dde7;border-radius:8px;background:#fff;font:inherit;font-size:12.5px;color:#334155;cursor:pointer}
+.bcd-act:hover:not(:disabled){background:#f8fafc}.bcd-act:disabled{color:#cbd5e1;cursor:default}
+.bcd-clear{margin-left:auto;color:#b42318}
+.bcd-dim{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:100059}
+.bcd-pop.bcd-sheet{left:0!important;right:0;bottom:0;top:auto!important;width:auto;border-radius:18px 18px 0 0;padding:6px 14px calc(14px + env(safe-area-inset-bottom))}
+.bcd-grab{width:44px;height:5px;border-radius:3px;background:#cbd5e1;margin:4px auto 8px}
+.bcd-sheet .bcd-day{height:42px;font-size:14px}
+.bcd-sheet .bcd-act{height:40px;flex:1}
+.bcd-sheet .bcd-clear{margin-left:0}

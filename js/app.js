@@ -30,6 +30,7 @@ let pricingVendorQuotes = [];
 let pricingSupplierName = '';
 let pricingDirty = false;
 let pricingSaved = false;
+let pricingChangedSinceOpen = false, pricingCostRowSeq = 0, pricingLastLines = [];   // V270.1
 let pricingInternalCosts = [];
 let pricingDragRow = null;
 let pricingDragFocus = null;
@@ -2552,35 +2553,24 @@ function renderAll() { renderDashboard(); renderTable(); renderCustomers(); rend
 
 
 let pricingEntryCloseConfirmOpen=false;
+/* V270.1: Close / ✕ / Back. Nothing changed since the screen opened → leave at once. Otherwise:
+   Stay · Discard & Close (Go Back) · Save & Close (Go Back) — js/pricing-ui.js prConfirmLeave. */
 function requestClosePricingEntry(source='close'){
   const modal=document.getElementById('pricing-modal');
   if(!modal || !modal.classList.contains('open') || pricingEntryCloseConfirmOpen) return;
+  const leave=()=>{
+    if(typeof window.bizcorePerformClose==='function') window.bizcorePerformClose('pricing-modal',true);
+    else closeModal('pricing-modal');
+  };
+  if(!pricingChangedSinceOpen){ leave(); return; }
+  if(typeof prConfirmLeave==='function'){
+    pricingEntryCloseConfirmOpen=true;
+    prConfirmLeave({goingBack:false,onDone:()=>{pricingEntryCloseConfirmOpen=false;},leave});
+    return;
+  }
   pricingEntryCloseConfirmOpen=true;
-
-  const isCancel=source==='cancel';
-  showConfirm({
-    icon:'⚠️',
-    title:isCancel?'Cancel Pricing?':'Close Pricing?',
-    message:isCancel
-      ? 'Are you sure you want to cancel and leave this Pricing screen?'
-      : 'Are you sure you want to close this Pricing screen?',
-    details:{'Unsaved changes':'Any changes not saved will be discarded.'},
-    confirmText:isCancel?'Yes, cancel':'Close',
-    cancelText:'Continue editing',
-    confirmClass:'btn-primary',
-    onConfirm:()=>{
-      pricingEntryCloseConfirmOpen=false;
-      if(typeof window.bizcorePerformClose==='function'){
-        window.bizcorePerformClose('pricing-modal',true);
-      }else{
-        closeModal('pricing-modal');
-      }
-    },
-    onCancel:()=>{
-      pricingEntryCloseConfirmOpen=false;
-      setTimeout(()=>document.querySelector('#pricing-modal .pricing-close-btn, #pricing-modal .pricing-cancel-btn')?.focus(),30);
-    }
-  });
+  showConfirm({icon:'⚠️',title:'Close Pricing?',message:'Any changes not saved will be discarded.',confirmText:'Close',cancelText:'Continue editing',confirmClass:'btn-primary',
+    onConfirm:()=>{pricingEntryCloseConfirmOpen=false;leave();},onCancel:()=>{pricingEntryCloseConfirmOpen=false;}});
 }
 
 window.requestClosePricingEntry=requestClosePricingEntry;
@@ -3020,15 +3010,21 @@ function getMarginStatusForPercent(pct){const a=readStoredMarginStatuses().filte
 function updateMarginGaugeScale(){
   const gauge=document.getElementById('margin-gauge');
   if(!gauge)return;
+  const max=pricingMeterMax();
   const statuses=readStoredMarginStatuses().filter(x=>x.active).sort((a,b)=>Number(a.from)-Number(b.from));
   const stops=[];
   statuses.forEach(status=>{
-    const from=Math.max(0,Math.min(100,Number(status.from)));
-    const to=Math.max(0,Math.min(100,Number(status.to)));
+    const from=Math.max(0,Math.min(100,Number(status.from)/max*100));
+    const to=Math.max(0,Math.min(100,Number(status.to)/max*100));
     if(to<=from)return;
-    stops.push(`${status.color} ${from.toFixed(2)}%`,`${status.color} ${to.toFixed(2)}%`);
+    stops.push(`${status.color}55 ${from.toFixed(2)}%`,`${status.color}55 ${to.toFixed(2)}%`);
   });
-  gauge.style.background=stops.length?`linear-gradient(0deg,${stops.join(',')})`:'linear-gradient(0deg,#e2e8f0 0%,#e2e8f0 100%)';
+  gauge.style.background=stops.length?`linear-gradient(90deg,${stops.join(',')})`:'#e2e8f0';
+  const ps=activePricingSettings(),lab=document.getElementById('pr-mlab');
+  if(lab){
+    const marks=[0,Number(ps.minMargin)||0,Number(ps.targetMargin)||0].filter((v,i,a)=>v>=0&&v<max&&a.indexOf(v)===i).sort((a,b)=>a-b);
+    lab.innerHTML=marks.map(v=>`<span style="left:${(v/max*100).toFixed(2)}%">${v}%</span>`).join('')+`<span style="left:100%">${max}%+</span>`;
+  }
 }
 
 const DEFAULT_PRICING_SETTINGS={currency:'SAR',decimals:2,vat:15,marginMethod:'markup',allowBelowCost:false,warnLow:true,minMargin:10,managerApproval:true,includeCosts:true,roundSelling:false,roundMethod:'0.01',validity:7,targetMargin:20};
@@ -3079,7 +3075,6 @@ function getLivePricingMetrics(){
 }
 function updatePricingSettingsRuntimeUI(){
   const ps=activePricingSettings();
-  document.querySelectorAll('#pricing-table th').forEach(th=>{if(/markup|margin %/i.test(th.textContent.trim()) && !/overall/i.test(th.textContent)) th.textContent=pricingMethodLabel();});
   document.querySelectorAll('#pricing-tbody [data-role="buy"],#pricing-tbody [data-role="sell"]').forEach(el=>{el.placeholder=(0).toFixed(pricingDecimals());});
   const target=document.getElementById('margin-gauge-target'); if(target) target.textContent='Target '+Number(ps.targetMargin||0).toFixed(1)+'%';
   const vatEls=document.querySelectorAll('[data-pricing-vat-label]'); vatEls.forEach(e=>e.textContent='VAT ('+Number(ps.vat||0).toFixed(2).replace(/\.00$/,'')+'%)');
@@ -7218,7 +7213,10 @@ async function saveSupplier() {
     quickAddContext = null;
     document.getElementById('sup-modal').style.zIndex = '';
     document.getElementById('pricing-sup-search').value = s.company;
+    document.getElementById('pricing-sup-search').dataset.supplierId = s.id;   // V270.1
+    document.getElementById('pricing-sup-search').classList.remove('pricing-required-invalid');
     pricingSupplierName = s.company;
+    if (typeof prRefreshSupplierOptions === 'function') prRefreshSupplierOptions();
     const body = document.querySelector('#pricing-modal .modal-body');
     if (body && body._savedScroll !== undefined) setTimeout(()=>{ body.scrollTop = body._savedScroll; },50);
     applyPrimarySupplierToPricingLines('blank');
@@ -8351,10 +8349,13 @@ function filterPricingSupDD() {
 }
 function selectPricingSupplier(id) {
   const s = suppliers.find(x=>x.id===id); if (!s) return;
-  document.getElementById('pricing-sup-search').value = s.company;
-  document.getElementById('pricing-sup-search').dataset.supplierId = s.id;
+  const el=document.getElementById('pricing-sup-search');
+  el.value = s.company;
+  el.dataset.supplierId = s.id;
+  el.classList.remove('pricing-required-invalid'); el.setAttribute('aria-invalid','false');
   pricingSupplierName = s.company;
   closePricingSupDD();
+  markPricingDirty();
 }
 
 function quickAddSupplierFromPricing() {
@@ -8373,34 +8374,36 @@ function quickAddSupplierFromPricing() {
 
 function renderPricingVendorQuotes() {
   const box = document.getElementById('pricing-attach-list');
+  const n=document.getElementById('pr-n-quotes'); if(n) n.textContent=String(pricingVendorQuotes.length);
   if (!box) return;
   if (!pricingVendorQuotes.length) {
-    box.innerHTML = '<div style="font-size:11px;color:var(--gray);padding:4px 0">No vendor quotations attached.</div>';
+    box.innerHTML = '<div class="pr-empty">No vendor quotations attached yet.</div>';
     return;
   }
-  box.innerHTML = pricingVendorQuotes.map((q,i)=>`
-    <div class="attach-item" style="margin-top:6px;gap:8px">
-      <i class="ti ti-${q.type?.includes('pdf')?'file-type-pdf':'photo'}" style="color:var(--blue)"></i>
-      <div style="min-width:0;flex:1">
-        <div style="font-size:12px;font-weight:600;color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${q.supplier||'Unspecified supplier'} <span style="font-weight:400;color:var(--gray)">${q.ref?'· '+q.ref:''}</span></div>
-        <a href="${q.url||q.data}" download="${q.name}" target="_blank" rel="noopener" style="font-size:11px;color:var(--gray);text-decoration:none">${q.name}</a>
-      </div>
-      <button type="button" class="abtn abtn-del" onclick="removePricingVendorQuote(${i})" title="Remove attachment"><i class="ti ti-trash"></i></button>
-    </div>`).join('');
+  const esc=v=>escapeHtml(String(v??''));
+  const size=b=>!b?'':b>=1048576?(b/1048576).toFixed(1)+' MB':Math.max(1,Math.round(b/1024))+' KB';
+  const kind=q=>String(q.type||'').includes('pdf')||/\.pdf$/i.test(q.name||'')?'PDF':'Image';
+  box.innerHTML = `<div class="pr-qtable"><div class="pr-qrow pr-qh"><div></div><div>File</div><div class="pr-qs">Supplier</div><div class="pr-qr">Quote Ref.</div><div class="pr-qd">Date</div><div class="pr-qsz">Size</div><div class="pr-r">Actions</div></div>`+
+    pricingVendorQuotes.map((q,i)=>{
+      const href=q.url||q.data||'', meta=[q.supplier||'Unspecified supplier',q.ref?'Ref '+q.ref:'',q.date?pricingISOToDisplay(q.date):'',[kind(q),size(q.size)].filter(Boolean).join(' · ')].filter(Boolean).join(' · ');
+      return `<div class="pr-qrow"><div class="pr-qic">${kind(q)==='PDF'?'📄':'🖼️'}</div>
+        <div class="pr-qf"><a href="${esc(href)}" target="_blank" rel="noopener">${esc(q.name||'Attachment')}</a>${q._uploadFailed?' <span class="pr-bad">Upload failed</span>':q._uploadPromise?' <span class="pr-muted">Uploading…</span>':''}<div class="pr-pm">${esc(meta)}</div></div>
+        <div class="pr-qs">${esc(q.supplier||'—')}</div><div class="pr-qr">${esc(q.ref||'—')}</div><div class="pr-qd">${esc(q.date?pricingISOToDisplay(q.date):'—')}</div><div class="pr-qsz pr-muted">${esc([kind(q),size(q.size)].filter(Boolean).join(' · '))}</div>
+        <div class="pr-r pr-qa-act"><a class="pr-lnk pr-qfull" href="${esc(href)}" target="_blank" rel="noopener">View</a><a class="pr-lnk pr-qfull" href="${esc(href)}" download="${esc(q.name||'attachment')}" title="Download">⤓</a><button type="button" class="pr-lnk pr-qfull pr-del" onclick="prRemoveVendorQuote(${i})" title="Remove attachment" aria-label="Remove attachment">🗑</button><button type="button" class="pr-menu-btn pr-qm" onclick="prVendorQuoteMenu(this,${i})" aria-label="Attachment actions">⋮</button></div></div>`;
+    }).join('')+'</div>';
 }
 
 function handlePricingAttach(e) {
-  const file = e.target.files[0]; if (!file) return;
-  if (file.size > 10*1024*1024) { showToast('Attachment must be under 10MB','error'); e.target.value=''; return; }
+  const files=[...(e.target.files||[])]; if(!files.length) return;
+  files.forEach(file=>{
+  if (file.size > 10*1024*1024) { showToast(file.name+': attachment must be under 10MB','error'); return; }
+  if (!/^image\//.test(file.type||'') && !/pdf/.test(file.type||'') && !/\.pdf$/i.test(file.name||'')) { showToast(file.name+': only PDF or image files can be attached','error'); return; }
   const supplier = document.getElementById('pricing-sup-search').value.trim() || pricingSupplierName;
   const ref = document.getElementById('pricing-sup-ref').value.trim();
   const date = getPricingSupplierDateISO();
   const localPreview = URL.createObjectURL(file); // instant preview, no base64 needed
-  const entry = {id:'vq'+Date.now(), supplier, ref, date, name:file.name, type:file.type, data:localPreview};
+  const entry = {id:'vq'+Date.now()+Math.random().toString(36).slice(2,5), supplier, ref, date, name:file.name, type:file.type, size:file.size, data:localPreview};
   pricingVendorQuotes.push(entry);
-  renderPricingVendorQuotes();
-  markPricingDirty();
-
   if (window.FB) {
     const path = 'pricing/' + (pricingRFQId || ('new-'+Date.now().toString(36))) + '/' + entry.id + '_' + file.name;
     entry._uploadPromise = window.FB.uploadFile(path, file).then(url => {
@@ -8411,11 +8414,15 @@ function handlePricingAttach(e) {
         entry._uploadFailed = true;
         showToast('Attachment upload failed — please try again before saving','error');
       }
+      delete entry._uploadPromise;
       renderPricingVendorQuotes();
       return url;
     });
   }
-  e.target.value='';
+  });
+  renderPricingVendorQuotes();
+  markPricingDirty();
+  if(e.target && 'value' in e.target) try{ e.target.value=''; }catch(_){}
 }
 
 function removePricingVendorQuote(index) {
@@ -8440,6 +8447,16 @@ function applyPrimarySupplierToPricingLines(mode='blank') {
   showToast(mode==='all'?'Primary supplier applied to all lines':'Primary supplier applied to blank lines','success');
 }
 
+/* V270.1: one line of the Pricing grid (docs/V270_1_PRICING.md). Same data-roles and handlers as before; the layout is
+   # · Item (code · supplier under it) · Qty + UOM · Buy (Last Paid) · Markup On Buy % · Sell (Last Quoted) · Line Total ·
+   Profit (Markup · Margin) · ⋮. The line's quote ref. and supplier note are kept on the line (⋮ → Line Details). */
+function pricingSupplierOptionsHtml(){
+  return '<option value="">— Supplier —</option>'+bcSortBy(suppliers,s=>s.company).map(s=>`<option value="${escapeHtml(String(s.company||''))}">${escapeHtml(String(s.company||''))}</option>`).join('');
+}
+function pricingDefaultMarkupOnBuy(){
+  const ps=activePricingSettings(),t=Number(ps.targetMargin||0);
+  return ps.marginMethod==='gross_margin' ? (t>=100?0:t/(100-t)*100) : t;
+}
 function addPricingRow(item={}) {
   const tbody = document.getElementById('pricing-tbody');
   const n = tbody.querySelectorAll('tr:not(.pricing-quick-add-row)').length+1;
@@ -8447,63 +8464,70 @@ function addPricingRow(item={}) {
   const primaryRef = document.getElementById('pricing-sup-ref')?.value.trim() || '';
   const rowSupplier = item.supplierName ?? item.supplier ?? primarySupplier;
   const rowSupRef = item.supRef ?? item.supplierRef ?? primaryRef;
-  const supplierOptions = ['<option value=""></option>'].concat(bcSortBy(suppliers,s=>s.company).map(s=>`<option value="${String(s.company).replace(/"/g,'&quot;')}">${s.company}</option>`)).join('');
+  const esc = v => escapeHtml(String(v ?? ''));
+  const dec = pricingDecimals();
+  const markupValue = item.markup!==undefined&&item.markup!=='' ? item.markup : pricingDefaultMarkupOnBuy().toFixed(1);
   const tr = document.createElement('tr');
+  tr.className = 'pr-row';
   tr.dataset.lineId = item.lineId || ('pricing-line-' + Date.now() + '-' + Math.random().toString(36).slice(2,8));
   tr.dataset.sortOrder = String(Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : n);
   tr.dataset.productId = item.productId || item.itemId || '';
+  tr.dataset.supNote = item.supNote || '';
   tr.innerHTML = `
-    <td class="pricing-drag-cell"><div tabindex="-1" class="pricing-drag-handle" draggable="true"
+    <td class="pricing-drag-cell pr-no"><div class="pr-nowrap"><span tabindex="-1" class="pricing-drag-handle" draggable="true"
       ondragstart="startPricingRowDrag(event,this)" ondragend="endPricingRowDrag(event)"
-      title="Drag to reorder line" aria-label="Drag to reorder line" role="button"><span aria-hidden="true">⋮⋮</span></div></td>
-    <td class="pricing-line-number" style="text-align:center;color:var(--gray);font-size:12px">${n}</td>
-    <td><input data-role="code" placeholder="Code" value="${item.code||''}" style="font-size:12px"></td>
-    <td class="pricing-item-cell"><input data-role="desc" class="pricing-line-item-search" placeholder="Search or enter item description" value="${item.desc||''}" autocomplete="off" onfocus="openPricingLineItemSearch(this)" oninput="filterPricingLineItemSearch(this)" onkeydown="handlePricingLineItemKeydown(event,this)" onblur="setTimeout(closePricingLineItemSearch,180)" style="width:100%"></td>
-    <td><input data-role="qty" type="text" inputmode="decimal" value="${formatQuantity(item.qty||1)}" onfocus="beginQuantityEdit(this)" oninput="calcPricingRow(this)" onblur="endQuantityEdit(this)" style="text-align:right"></td>
-    <td><input data-role="uom" placeholder="Pcs" value="${item.uom||'Pcs'}"></td>
-    <td><select data-role="supplier" style="width:100%;min-width:140px;height:30px;border:1px solid var(--border);border-radius:4px;font-size:13px;padding:0 7px">${supplierOptions}</select></td>
-    <td><input data-role="supref" placeholder="Quote ref." value="${rowSupRef||''}" style="font-size:12px"></td>
-    <td><input data-role="buy" type="text" inputmode="decimal" value="${item.buy!==undefined&&item.buy!==''?formatNumber(item.buy,pricingDecimals()):''}" onfocus="beginPriceEdit(this)" oninput="calcPricingRow(this)" onblur="endPriceEdit(this)" placeholder="${(0).toFixed(pricingDecimals())}" style="text-align:right"></td>
-    <td><input data-role="markup" type="number" min="0" step="0.1" value="${item.markup!==undefined&&item.markup!==''?item.markup:Number(activePricingSettings().targetMargin||0).toFixed(1)}" oninput="calcFromMarkup(this)" placeholder="%" style="text-align:right;background:#fffbf0"></td>
-    <td><div class="pricing-sell-lock-wrap"><input data-role="sell" class="${item.sellLocked?'is-price-locked':''}" type="text" inputmode="decimal" value="${item.sell!==undefined&&item.sell!==''?formatNumber(item.sell,pricingDecimals()):''}" onfocus="beginPriceEdit(this)" oninput="calcFromSell(this)" onblur="endPriceEdit(this)" placeholder="${(0).toFixed(pricingDecimals())}" style="text-align:right;font-weight:650"><button type="button" tabindex="-1" class="pricing-price-lock${item.sellLocked?' is-locked':''}" data-role="sell-lock" aria-pressed="${item.sellLocked?'true':'false'}" title="${item.sellLocked?'Unlock selling price — margin gauge will adjust this line':'Lock selling price — margin gauge will leave this line unchanged'}" onclick="togglePricingSellLock(this)"><i class="ti ${item.sellLocked?'ti-lock':'ti-lock-open'}"></i></button></div></td>
-    <td class="margin-cell">—</td>
-    <td class="margin-cell">—</td>
-    <td><div class="pricing-row-actions">
-      <button type="button" tabindex="-1" class="del-btn" onclick="removePricingRow(this)" title="Remove row" aria-label="Remove row"><i class="ti ti-trash"></i></button>
-    </div></td>`;
+      title="Drag to reorder line" aria-label="Drag to reorder line" role="button">⋮⋮</span><span class="pricing-line-number">${n}</span></div></td>
+    <td class="pricing-item-cell pr-item"><div class="pr-descwrap"><div class="pr-desc-view${item.desc?'':' is-empty'}" aria-hidden="true">${item.desc?esc(item.desc):'Search or enter item description'}</div><input data-role="desc" class="pricing-line-item-search pr-desc" placeholder="Search or enter item description" value="${esc(item.desc)}" autocomplete="off" onfocus="openPricingLineItemSearch(this)" oninput="filterPricingLineItemSearch(this)" onkeydown="handlePricingLineItemKeydown(event,this)" onblur="setTimeout(closePricingLineItemSearch,180)" title="${esc(item.desc)}"></div>
+      <div class="pr-meta"><input data-role="code" class="pr-code" placeholder="Code" value="${esc(item.code)}" aria-label="Item code"><span class="pr-sep">·</span><select data-role="supplier" class="pr-sup" aria-label="Line supplier" title="Line supplier">${pricingSupplierOptionsHtml()}</select><span class="pr-lref"></span></div>
+      <input type="hidden" data-role="supref" value="${esc(rowSupRef)}"></td>
+    <td class="pr-qtyc"><div class="pr-qu"><input data-role="qty" type="text" inputmode="decimal" value="${formatQuantity(item.qty||1)}" onfocus="beginQuantityEdit(this)" oninput="calcPricingRow(this)" onblur="endQuantityEdit(this)" aria-label="Quantity"><input data-role="uom" placeholder="Pcs" value="${esc(item.uom||'Pcs')}" aria-label="Unit"></div></td>
+    <td class="pr-buyc"><input data-role="buy" class="pr-inp" type="text" inputmode="decimal" value="${item.buy!==undefined&&item.buy!==''?formatNumber(item.buy,dec):''}" onfocus="beginPriceEdit(this)" oninput="calcPricingRow(this)" onblur="endPriceEdit(this)" placeholder="${(0).toFixed(dec)}" aria-label="Buy price"><button type="button" class="pr-ref" data-ref="buy" tabindex="-1" onclick="prOpenRef(this)"></button></td>
+    <td class="pr-mkc"><input data-role="markup" class="pr-inp" type="text" inputmode="decimal" value="${esc(markupValue)}" oninput="calcFromMarkup(this)" placeholder="%" aria-label="Markup on buy %"></td>
+    <td class="pr-sellc"><div class="pricing-sell-lock-wrap pr-sellwrap"><input data-role="sell" class="pr-inp ${item.sellLocked?'is-price-locked':''}" type="text" inputmode="decimal" value="${item.sell!==undefined&&item.sell!==''?formatNumber(item.sell,dec):''}" onfocus="beginPriceEdit(this)" oninput="calcFromSell(this)" onblur="endPriceEdit(this)" placeholder="${(0).toFixed(dec)}" aria-label="Sell price"><button type="button" data-role="sell-lock" tabindex="-1" class="pr-lock ${item.sellLocked?'is-locked':''}" aria-pressed="${item.sellLocked?'true':'false'}" onclick="togglePricingSellLock(this)" title="${item.sellLocked?'Unlock selling price — margin gauge will adjust this line':'Lock selling price — margin gauge will leave this line unchanged'}"><svg viewBox="0 0 20 20" width="12" height="12" aria-hidden="true"><rect x="4.5" y="9" width="11" height="8" rx="1.6" fill="currentColor"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9" fill="none" stroke="currentColor" stroke-width="1.7"/></svg></button></div><button type="button" class="pr-ref" data-ref="sell" tabindex="-1" onclick="prOpenRef(this)"></button></td>
+    <td class="pr-r pr-lt pr-val" data-pr="lt">—</td>
+    <td class="pr-r pr-val pr-pf"><span class="margin-cell" data-pr="profit">—</span><small class="margin-cell" data-pr="pct"></small></td>
+    <td class="pr-menu"><button type="button" class="pr-menu-btn" tabindex="-1" title="Line actions" aria-label="Line actions" onclick="prRowMenu(this)">⋮</button></td>`;
   tr.addEventListener('dragover', handlePricingRowDragOver);
   tr.addEventListener('dragleave', clearPricingRowDragOver);
   tr.addEventListener('drop', dropPricingRow);
   tr.addEventListener('keydown', handlePricingRowKeyboardMove);
   const quickRow = tbody.querySelector('.pricing-quick-add-row');
   if (quickRow) tbody.insertBefore(tr, quickRow); else tbody.appendChild(tr);
-  tr.querySelector('[data-role="supplier"]').value = rowSupplier || '';
+  const supSel = tr.querySelector('[data-role="supplier"]');
+  if (rowSupplier && ![...supSel.options].some(o=>o.value===rowSupplier)) supSel.insertAdjacentHTML('beforeend',`<option value="${esc(rowSupplier)}">${esc(rowSupplier)} (not in Supplier Master)</option>`);
+  supSel.value = rowSupplier || '';
   if (item.buy || item.sell) calcPricingRow(tr.querySelector('[data-role="qty"]'));
   ensurePricingQuickAddRow();
   renumberPricingRows();
+  if (typeof prRefreshRefs === 'function') prRefreshRefs(tr);
+  if (typeof prShowLineRef === 'function') prShowLineRef(tr);
   return tr;
 }
 
 function ensurePricingQuickAddRow() {
   const tbody = document.getElementById('pricing-tbody');
   if (!tbody) return;
+  const current = tbody.querySelector('.pricing-quick-add-row');
+  if (current && current === tbody.lastElementChild && tbody.querySelectorAll('.pricing-quick-add-row').length===1) return;
+  const keep = current && document.activeElement && current.contains(document.activeElement);
   tbody.querySelectorAll('.pricing-quick-add-row').forEach(tr=>tr.remove());
   const tr = document.createElement('tr');
   tr.className = 'pricing-quick-add-row';
   tr.innerHTML = `
-    <td class="pricing-drag-cell"></td>
-    <td style="text-align:center">+</td>
-    <td colspan="4">
-      <div class="pricing-quick-add-wrap">
-        <i class="ti ti-search pricing-quick-add-icon"></i>
-        <input id="pricing-prod-search" placeholder="Select Item…" autocomplete="off"
+    <td class="pr-no pr-muted">+</td>
+    <td colspan="3">
+      <div class="pricing-quick-add-wrap pr-qa">
+        <svg class="pr-qa-ic" viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m13 13 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <input id="pricing-prod-search" placeholder="Add item — type name, code or brand" autocomplete="off"
           oninput="filterPricingProdSearch()" onfocus="openPricingProdSearch()" onblur="setTimeout(closePricingProdSearch,200)">
+        <kbd class="pr-kbd">Enter</kbd>
         <div id="pricing-prod-dd"></div>
       </div>
     </td>
-    <td colspan="7" style="color:#64748b;font-size:12px">Search by item name, code, description, brand or category.</td>
-    <td><button type="button" class="btn btn-secondary btn-sm" onclick="quickAddProductFromPricing()" title="Create new item"><i class="ti ti-plus"></i></button></td>`;
+    <td colspan="4" class="pr-qa-hint">Search by item name, code, brand or category</td>
+    <td class="pr-menu"><button type="button" class="pr-menu-btn" onclick="quickAddProductFromPricing()" title="Create a new item in the Item Master" aria-label="Create new item">+</button></td>`;
   tbody.appendChild(tr);
+  if (keep) document.getElementById('pricing-prod-search')?.focus();
 }
 
 function renumberPricingRows() {
@@ -8514,6 +8538,7 @@ function renumberPricingRows() {
     const numberCell=tr.querySelector('.pricing-line-number');
     if(numberCell) numberCell.textContent=sortOrder;
   });
+  if(typeof prAfterRowsChange==='function') prAfterRowsChange();
 }
 
 function capturePricingFocus(row) {
@@ -8569,12 +8594,13 @@ function readPricingItemsFromDOM() {
     const supplierName=tr.querySelector('[data-role="supplier"]')?.value.trim()||'';
     const supRef=tr.querySelector('[data-role="supref"]')?.value.trim()||'';
     const buy=parsePricingNumber(tr.querySelector('[data-role="buy"]')?.value);
-    const markup=parseFloat(tr.querySelector('[data-role="markup"]')?.value)||0;
+    const markup=parseFloat(String(tr.querySelector('[data-role="markup"]')?.value||'').replace(/,/g,''))||0;
     const sell=parsePricingNumber(tr.querySelector('[data-role="sell"]')?.value);
     const sortOrder=index+1;
     tr.dataset.sortOrder=String(sortOrder);
     const sellLocked=tr.querySelector('[data-role="sell-lock"]')?.classList.contains('is-locked')||false;
-    if(desc||buy||code){const lineSupplier=findUniqueMasterByName(suppliers,supplierName);items.push({lineId:tr.dataset.lineId,productId:tr.dataset.productId||'',sortOrder,code,desc,qty,uom,supplierName,supplierId:lineSupplier?.id||'',supRef,buy,markup,sell,sellLocked});}
+    const supNote=String(tr.dataset.supNote||'').trim();
+    if(desc||buy||code){const lineSupplier=findUniqueMasterByName(suppliers,supplierName);const it={lineId:tr.dataset.lineId,productId:tr.dataset.productId||'',sortOrder,code,desc,qty,uom,supplierName,supplierId:lineSupplier?.id||'',supRef,buy,markup,sell,sellLocked};if(supNote)it.supNote=supNote;items.push(it);}
   });
   return items;
 }
@@ -8710,6 +8736,8 @@ function positionPricingLineItemSearch(input) {
 function openPricingLineItemSearch(input) {
   pricingLineItemSearchInput = input;
   pricingLineItemSearchIndex = -1;
+  // V270.1: a line that already has its item opens the list only when the description is changed (typing)
+  if (input && input.value.trim()) return;
   filterPricingLineItemSearch(input);
 }
 
@@ -8751,7 +8779,6 @@ function filterPricingLineItemSearch(input) {
     `<div class="pricing-line-item-create" onmousedown="quickAddProductFromPricing();return false"><i class="ti ti-plus"></i> Create new item${input.value.trim() ? ' — ' + input.value.trim() : ''}</div>`;
   dd.style.display = 'block';
   positionPricingLineItemSearch(input);
-  markPricingDirty();
 }
 
 function selectPricingLineItem(productId) {
@@ -8772,11 +8799,13 @@ function selectPricingLineItem(productId) {
   const sell = tr.querySelector('[data-role="sell"]');
   if (qty) qty.value = formatQuantity(1);
   if (buy) buy.value = '';
-  if (markup) markup.value = Number(activePricingSettings().targetMargin || 0).toFixed(1);
+  if (markup) markup.value = pricingDefaultMarkupOnBuy().toFixed(1);
   if (sell) sell.value = p.price > 0 ? formatNumber(p.price, pricingDecimals()) : '';
   closePricingLineItemSearch();
   markPricingDirty();
   if (sell?.value) calcFromSell(sell); else calcPricingSummary();
+  if (typeof prRefreshRefs === 'function') prRefreshRefs(tr);
+  if (typeof prAfterRowsChange === 'function') prAfterRowsChange();
   if (qty) setTimeout(() => { qty.focus(); qty.select(); }, 20);
 }
 
@@ -8801,7 +8830,7 @@ function handlePricingLineItemKeydown(event,input) {
     event.stopPropagation();
     const dd = document.getElementById('pricing-line-item-dd');
     const isOpen = dd?.style.display === 'block' && pricingLineItemSearchInput === input;
-    if (!isOpen) openPricingLineItemSearch(input);
+    if (!isOpen) { pricingLineItemSearchIndex = -1; filterPricingLineItemSearch(input); }   // V270.1: ↓ always opens the list
     highlightPricingLineItemOption(pricingLineItemSearchIndex < 0 ? 0 : pricingLineItemSearchIndex + 1);
     return;
   }
@@ -8884,7 +8913,7 @@ function addProductToPricing(pid) {
   if (quickSearch) quickSearch.value = '';
   closePricingProdSearch();
   // Add row with product details — buy price empty (user enters cost), sell = list price as suggestion
-  const addedRow = addPricingRow({code:p.code||'', desc:p.name, qty:1, uom:p.uom||'Pcs', buy:'', sell:p.price||''});
+  const addedRow = addPricingRow({productId:p.id, code:p.code||'', desc:p.name, qty:1, uom:p.uom||'Pcs', buy:'', sell:p.price||''});   // V270.1: keeps the Item Master link (Last Paid / Last Quoted)
   // Start line entry at quantity; the item search remains the only way to create rows.
   const qtyInput = addedRow?.querySelector('[data-role="qty"]');
   if (qtyInput) setTimeout(()=>{ qtyInput.focus(); qtyInput.select(); },50);
@@ -8936,37 +8965,40 @@ function getRowNums(input) {
     tr,
     qty:  parsePricingNumber(tr.querySelector('[data-role="qty"]')?.value),
     buy:  parsePricingNumber(tr.querySelector('[data-role="buy"]')?.value),
-    markup: parseFloat(tr.querySelector('[data-role="markup"]')?.value)||0,
+    markup: parseFloat(String(tr.querySelector('[data-role="markup"]')?.value||'').replace(/,/g,''))||0,
     sell: parsePricingNumber(tr.querySelector('[data-role="sell"]')?.value)
   };
 }
 
+/* V270.1: the % typed on a line is always Markup On Buy = (Sell − Buy) ÷ Buy. Profit, Markup % and Margin % of the line
+   (with its share of the additional costs) are worked out in calcPricingSummary. */
 function calcPricingRow(input) {
-  const {tr,qty,buy,sell}=getRowNums(input);
+  const {tr,buy,sell}=getRowNums(input);
   const pctInput=tr.querySelector('[data-role="markup"]');
-  if(!buy&&!sell){updateMarginCells(tr,0,0);calcPricingSummary();return;}
-  if(buy && !sell && pctInput && pctInput.value===''){
-    pctInput.value=Number(activePricingSettings().targetMargin||0).toFixed(1);
-    const si=tr.querySelector('[data-role="sell"]'); if(si)si.value=formatNumber(sellingFromPricingPercent(buy,pctInput.value),pricingDecimals());
+  const sellInput=tr.querySelector('[data-role="sell"]');
+  if(!buy&&!sell){calcPricingSummary();return;}
+  if(buy && !sell && pctInput){
+    if(pctInput.value==='') pctInput.value=pricingDefaultMarkupOnBuy().toFixed(1);
+    const pct=parseFloat(String(pctInput.value).replace(/,/g,''))||0;
+    if(sellInput) sellInput.value=formatNumber(pricingRound(buy*(1+pct/100)),pricingDecimals());
   }
-  const currentSell=parsePricingNumber(tr.querySelector('[data-role="sell"]')?.value);
-  const pct=pricingPercent(buy,currentSell), margin=(currentSell-buy)*qty;
-  if(pctInput && currentSell) pctInput.value=pct.toFixed(1);
-  updateMarginCells(tr,margin,pct);calcPricingSummary();
+  const currentSell=parsePricingNumber(sellInput?.value);
+  if(pctInput && currentSell && buy) pctInput.value=((currentSell-buy)/buy*100).toFixed(1);
+  calcPricingSummary();
 }
 
 function calcFromMarkup(input) {
-  const {tr,qty,buy,markup}=getRowNums(input); if(!buy)return;
-  const sell=sellingFromPricingPercent(buy,markup), sellInput=tr.querySelector('[data-role="sell"]');
+  const {tr,buy,markup}=getRowNums(input); if(!buy){calcPricingSummary();return;}
+  const sell=pricingRound(buy*(1+markup/100)), sellInput=tr.querySelector('[data-role="sell"]');
   if(sellInput)sellInput.value=formatNumber(sell,pricingDecimals());
-  updateMarginCells(tr,(sell-buy)*qty,pricingPercent(buy,sell));calcPricingSummary();
+  calcPricingSummary();
 }
 
 function calcFromSell(input) {
-  const {tr,qty,buy,sell}=getRowNums(input); if(!buy||!sell){calcPricingRow(input);return;}
-  const pct=pricingPercent(buy,sell), pctInput=tr.querySelector('[data-role="markup"]');
-  if(pctInput)pctInput.value=pct.toFixed(1);
-  updateMarginCells(tr,(sell-buy)*qty,pct);calcPricingSummary();
+  const {tr,buy,sell}=getRowNums(input); if(!buy||!sell){calcPricingRow(input);return;}
+  const pctInput=tr.querySelector('[data-role="markup"]');
+  if(pctInput)pctInput.value=((sell-buy)/buy*100).toFixed(1);
+  calcPricingSummary();
 }
 
 function togglePricingSellLock(button) {
@@ -8979,62 +9011,55 @@ function togglePricingSellLock(button) {
   const sell=button.closest('td')?.querySelector('[data-role="sell"]');
   if(sell) sell.classList.toggle('is-price-locked',locked);
   markPricingDirty();
-  showToast(locked?'Selling price locked. Margin gauge will leave this line unchanged.':'Selling price unlocked. Margin gauge can adjust this line.','success');
+  if(typeof prAfterRowsChange==='function') prAfterRowsChange();
+  showToast(locked?'Selling price locked. The target drag will leave this line unchanged.':'Selling price unlocked. The target drag can adjust this line.','success');
 }
 
-function updateMarginCells(tr,margin,pct) {
-  const cells=tr.querySelectorAll('.margin-cell'),status=getMarginStatusForPercent(pct),cls=pct<0?'neg':pct<Number(activePricingSettings().minMargin||0)?'low':'good';
-  if(cells[0]){cells[0].textContent=pricingFmt(margin);cells[0].className='margin-cell '+cls;if(status)cells[0].style.color=status.color;}
-  if(cells[1]){cells[1].textContent=pct.toFixed(1)+'%';cells[1].className='margin-cell '+cls;if(status)cells[1].style.color=status.color;}
-}
+function updateMarginCells(tr) { calcPricingSummary(); }
 
 function updatePricingActionButtons() {
   const saveBtn=document.getElementById('pricing-save-btn');
   const convertBtn=document.getElementById('pricing-convert-btn');
   const r=rfqs.find(x=>x.id===pricingRFQId);
   const isRevision=Number(r?.currentPricingVersion||1)>1;
+  const what=isRevision?'Revision':'Quotation';
   if(saveBtn){
     saveBtn.disabled=pricingSaveInProgress||pricingConvertInProgress;
-    saveBtn.innerHTML=pricingSaveInProgress
-      ? '<i class="ti ti-loader-2 pricing-btn-spinner"></i>Saving…'
-      : '<i class="ti ti-device-floppy"></i>Save';
+    saveBtn.textContent=pricingSaveInProgress?'Saving…':'Save';
   }
   if(convertBtn){
     convertBtn.disabled=pricingSaveInProgress||pricingConvertInProgress;
-    if(pricingConvertInProgress) convertBtn.innerHTML='<i class="ti ti-loader-2 pricing-btn-spinner"></i>Converting…';
-    else if(!pricingSaved||pricingDirty) convertBtn.innerHTML='<i class="ti ti-file-arrow-right"></i>Save &amp; '+(isRevision?'create revision':'convert');
-    else convertBtn.innerHTML='<i class="ti ti-file-arrow-right"></i>'+(isRevision?'Create quotation revision':'Convert to quotation');
+    if(pricingConvertInProgress) convertBtn.textContent='Converting…';
+    else if(!pricingSaved||pricingDirty) convertBtn.innerHTML='Save &amp; Convert<span class="pr-cv"> To '+what+'</span>';
+    else convertBtn.innerHTML='Convert<span class="pr-cv"> To '+what+'</span>';
+    convertBtn.title=(!pricingSaved||pricingDirty)?'Save this pricing, then create the '+what.toLowerCase():'Create the '+what.toLowerCase()+' from this pricing';
   }
 }
 
 function markPricingDirty() {
   pricingDirty = true;
   pricingSaved = false;
+  pricingChangedSinceOpen = true;
   const note = document.getElementById('pricing-save-note');
-  if (note) note.textContent = 'Unsaved changes — Save & Convert will save them first.';
+  if (note) { note.textContent = '● Unsaved changes'; note.className='pricing-save-note pr-h is-dirty'; }
   updatePricingActionButtons();
 }
 
 function setPricingSavedState(saved) {
   pricingSaved = !!saved;
   pricingDirty = !saved;
+  if (saved) pricingChangedSinceOpen = false;
   const note = document.getElementById('pricing-save-note');
-  if (note) note.textContent = saved ? 'Pricing saved. Ready to convert.' : 'Pricing has not been saved yet.';
+  if (note) { note.textContent = saved ? 'Saved · ready to convert' : 'Not saved yet'; note.className='pricing-save-note pr-h'+(saved?' is-saved':''); }
   updatePricingActionButtons();
 }
 
 function setAdditionalCostsExpanded(expanded) {
-  const section=document.getElementById('internal-costs-section');
-  const btn=document.getElementById('internal-costs-toggle');
-  if(!section)return;
-  section.classList.toggle('is-open',!!expanded);
-  if(btn)btn.innerHTML=expanded?'<i class="ti ti-chevron-up"></i>Collapse':'<i class="ti ti-adjustments"></i>Manage';
+  // V270.1: Additional Costs is a tab now. Asking to expand it opens the tab.
+  if(expanded && typeof prShowTab==='function' && document.getElementById('pricing-modal')?.classList.contains('open')) prShowTab('costs');
 }
 
-function toggleAdditionalCosts() {
-  const section=document.getElementById('internal-costs-section');
-  setAdditionalCostsExpanded(!(section&&section.classList.contains('is-open')));
-}
+function toggleAdditionalCosts() { setAdditionalCostsExpanded(true); }
 
 function getCostNameOptions(selected='') {
   const appliedCostComponents=readStoredCostComponents();
@@ -9047,19 +9072,25 @@ function addAdditionalCostRow(cost={}, expandEditor=false) {
   if(expandEditor)setAdditionalCostsExpanded(true);
   const locked=cost.locked===true;
   const tr=document.createElement('tr');
+  tr.className='pr-crow'+(locked?' is-locked':'');
   tr.dataset.masterId=cost.masterId||'';tr.dataset.locked=locked?'true':'false';tr.dataset.seq=String(cost.seq||999);
-  tr.innerHTML=`<td><select data-cost-role="name" ${locked?'disabled':''}>${getCostNameOptions(cost.name||'')}</select></td>
-    <td><select data-cost-role="method" ${locked?'disabled':''}>
-      <option value="fixed">Fixed amount</option><option value="material_pct">% of material cost</option>
-      <option value="total_cost_pct">% of total cost</option><option value="sales_pct">% of total selling</option>
+  tr.dataset.costKey='c'+(++pricingCostRowSeq);
+  const tag=cost.masterId?(locked?'Cost Master · Locked':'Cost Master'):'Custom';
+  tr.innerHTML=`<td class="pr-no pr-cno"></td>
+    <td><div class="pr-cname">${locked?`<span class="pr-cname-t" title="${escapeHtml(String(cost.name||''))}">${escapeHtml(String(cost.name||''))}</span>`:''}<select data-cost-role="name" ${locked?'disabled':''} aria-label="Cost item">${getCostNameOptions(cost.name||'')}</select><span class="pr-mtag">${tag}${locked?' 🔒':''}</span></div></td>
+    <td><select data-cost-role="method" ${locked?'disabled':''} aria-label="Method">
+      <option value="fixed">Fixed Amount</option><option value="material_pct">% Of Material</option>
+      <option value="total_cost_pct">% Of Total Cost</option><option value="sales_pct">% Of Selling</option>
     </select></td>
-    <td><input data-cost-role="value" type="number" min="0" step="0.01" value="${Number(cost.value)||0}" ${locked?'disabled':''}></td>
-    <td class="internal-cost-amount" data-cost-role="amount">SAR 0.00</td>
-    <td>${locked?'<span title="Locked by Cost Components Master" style="color:#64748b"><i class="ti ti-lock"></i></span>':'<button type="button" class="row-del" title="Remove cost" onclick="this.closest(\'tr\').remove();markPricingDirty();calcPricingSummary()">×</button>'}</td>`;
+    <td><input data-cost-role="value" class="pr-inp" type="text" inputmode="decimal" value="${Number(cost.value)||0}" ${locked?'disabled':''} aria-label="Value"></td>
+    <td class="pr-r pr-val internal-cost-amount" data-cost-role="amount">0.00</td>
+    <td class="pr-how pr-muted" data-cost-role="how"></td>
+    <td class="pr-menu">${locked?'<span class="pr-lockic" title="Locked by the Cost Components master">🔒</span>':'<button type="button" class="pr-menu-btn row-del" tabindex="-1" title="Cost actions" aria-label="Cost actions" onclick="prCostMenu(this)">⋮</button>'}</td>`;
   tbody.appendChild(tr);
   const method=tr.querySelector('[data-cost-role="method"]');if(method)method.value=cost.method||'fixed';
   tr.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',()=>{markPricingDirty();calcPricingSummary();}));
   if(expandEditor)markPricingDirty();
+  if(typeof prAfterCostsChange==='function') prAfterCostsChange();
 }
 function addInternalCostRow(cost={}){addAdditionalCostRow(cost);}
 function ensureDefaultAdditionalCosts(existingCosts=[]) {
@@ -9069,17 +9100,20 @@ function ensureDefaultAdditionalCosts(existingCosts=[]) {
 }
 function readInternalCosts(materialCost,totalSell) {
   const costs=[];let total=0;let runningTotalCost=materialCost;
+  const f=n=>formatNumber(n,pricingDecimals());
   document.querySelectorAll('#internal-costs-tbody tr').forEach((tr,index)=>{
     const name=tr.querySelector('[data-cost-role="name"]')?.value.trim()||'';
     const method=tr.querySelector('[data-cost-role="method"]')?.value||'fixed';
-    const value=parseFloat(tr.querySelector('[data-cost-role="value"]')?.value)||0;
-    let amount=0;
-    if(method==='material_pct')amount=materialCost*value/100;
-    else if(method==='total_cost_pct')amount=runningTotalCost*value/100;
-    else if(method==='sales_pct')amount=totalSell*value/100;
+    const value=parseFloat(String(tr.querySelector('[data-cost-role="value"]')?.value||'').replace(/,/g,''))||0;
+    let amount=0,how='—';
+    if(method==='material_pct'){amount=materialCost*value/100;how=value.toFixed(2)+'% × '+f(materialCost)+' material';}
+    else if(method==='total_cost_pct'){amount=runningTotalCost*value/100;how=value.toFixed(2)+'% × '+f(runningTotalCost)+' cost so far';}
+    else if(method==='sales_pct'){amount=totalSell*value/100;how=value.toFixed(2)+'% × '+f(totalSell)+' selling';}
     else amount=value;
     amount=Math.max(0,amount||0);total+=amount;runningTotalCost+=amount;
-    const cell=tr.querySelector('[data-cost-role="amount"]');if(cell)cell.textContent=pricingFmt(amount);
+    const cell=tr.querySelector('[data-cost-role="amount"]');if(cell)cell.textContent=f(amount);
+    const howCell=tr.querySelector('[data-cost-role="how"]');if(howCell)howCell.textContent=how;
+    const no=tr.querySelector('.pr-cno');if(no)no.textContent=index+1;
     if(name||value)costs.push({masterId:tr.dataset.masterId||undefined,seq:Number(tr.dataset.seq)||index+1,name,method,value,amount,locked:tr.dataset.locked==='true',fromMaster:!!tr.dataset.masterId});
   });
   return {costs,total};
@@ -9119,90 +9153,92 @@ function setTargetPricingMargin(targetPct) {
     if(!buy||!qty)return;
     const sell=pricingRound(buy*factor),si=tr.querySelector('[data-role="sell"]'),pi=tr.querySelector('[data-role="markup"]');
     if(si)si.value=formatNumber(sell,pricingDecimals());
-    if(pi)pi.value=pricingPercent(buy,sell).toFixed(1);
+    if(pi)pi.value=(buy?(sell-buy)/buy*100:0).toFixed(1);   // V270.1: Markup On Buy %
     calcPricingRow(si||tr);
   });
   markPricingDirty();calcPricingSummary();
 }
 
+/* V270.1: the target meter is horizontal. Dragging it (or clicking on it) sets the target % and adjusts the unlocked
+   selling prices, as the old vertical gauge did. */
 function initMarginGaugeDrag() {
   const gauge=document.getElementById('margin-gauge'); if(!gauge||gauge.dataset.bound)return; gauge.dataset.bound='1';
-  const apply=e=>{const r=gauge.getBoundingClientRect();const y=Math.max(0,Math.min(r.height,e.clientY-r.top));setTargetPricingMargin(((r.height-y)/r.height)*100);};
+  const apply=e=>{const r=gauge.getBoundingClientRect();const x=Math.max(0,Math.min(r.width,e.clientX-r.left));setTargetPricingMargin(Math.round((x/r.width)*pricingMeterMax()*10)/10);};
   gauge.addEventListener('pointerdown',e=>{gauge.setPointerCapture(e.pointerId);gauge.classList.add('is-dragging');apply(e);});
   gauge.addEventListener('pointermove',e=>{if(gauge.hasPointerCapture(e.pointerId))apply(e);});
   gauge.addEventListener('pointerup',e=>{gauge.classList.remove('is-dragging');try{gauge.releasePointerCapture(e.pointerId)}catch(_){}});
 }
+function pricingMeterMax(){
+  const ps=activePricingSettings(), t=Math.max(Number(ps.targetMargin)||0,Number(ps.minMargin)||0);
+  return Math.max(30,Math.ceil(t*1.5/10)*10);
+}
 
+/* V270.1 — the figures (approved formulas):
+   line cost = Buy × Qty + the line's share of the additional costs (shared by buy value) · Profit = Sell − line cost
+   Markup % = Profit ÷ cost · Margin % = Profit ÷ Sell. The line totals add up exactly to the summary.
+   The status (and the target / minimum check) uses the method chosen in Pricing Settings, on the totals incl. costs. */
 function calcPricingSummary() {
-  let totalCost=0, totalSell=0;
-  document.querySelectorAll('#pricing-tbody tr').forEach(tr => {
-    const qty  = parsePricingNumber(tr.querySelector('[data-role="qty"]')?.value);
-    const buy  = parsePricingNumber(tr.querySelector('[data-role="buy"]')?.value);
-    const sell = parsePricingNumber(tr.querySelector('[data-role="sell"]')?.value);
-    totalCost += buy*qty;
-    totalSell += sell*qty;
+  const dec=pricingDecimals(), f=n=>formatNumber(n,dec), ps=activePricingSettings();
+  const rows=[...document.querySelectorAll('#pricing-tbody tr:not(.pricing-quick-add-row)')];
+  const lines=rows.map(tr=>{
+    const qty=parsePricingNumber(tr.querySelector('[data-role="qty"]')?.value);
+    const buy=parsePricingNumber(tr.querySelector('[data-role="buy"]')?.value);
+    const sell=parsePricingNumber(tr.querySelector('[data-role="sell"]')?.value);
+    return {tr,qty,buy,sell,mat:qty*buy,sale:qty*sell};
   });
+  const totalCost=lines.reduce((s,l)=>s+l.mat,0), totalSell=lines.reduce((s,l)=>s+l.sale,0);
   const internal = readInternalCosts(totalCost,totalSell);
   pricingInternalCosts = internal.costs;
-  const activeCostCount=internal.costs.filter(c=>Number(c.amount)>0 || c.method==='zakat_auto' || Number(c.value)>0).length;
-  const costCountEl=document.getElementById('internal-costs-count');
-  const costTotalEl=document.getElementById('internal-costs-total');
-  if(costCountEl)costCountEl.textContent=activeCostCount ? activeCostCount+' '+(activeCostCount===1?'item':'items') : 'None added';
-  if(costTotalEl)costTotalEl.textContent=pricingFmt(internal.total);
-  const profitabilityCost = totalCost + internal.total;
-  const margin = totalSell-profitabilityCost;
+  const addTotal=internal.total, factor=totalCost>0?addTotal/totalCost:0;
+  const profitabilityCost = totalCost + addTotal;
+  const profit = totalSell-profitabilityCost;
+  const markupPct=profitabilityCost>0?profit/profitabilityCost*100:0, marginPct=totalSell>0?profit/totalSell*100:0;
   const pct = pricingPercent(profitabilityCost,totalSell);
-  document.getElementById('ps-cost').textContent = pricingFmt(totalCost);
-  document.getElementById('ps-additional-cost').textContent = pricingFmt(internal.total);
-  document.getElementById('ps-total-cost').textContent = pricingFmt(profitabilityCost);
-  document.getElementById('ps-sell').textContent = pricingFmt(totalSell);
-  document.getElementById('ps-margin').textContent = pricingFmt(margin);
-  document.getElementById('ps-pct').textContent    = pct.toFixed(1)+'%';
-  // Color coding
-  const colorClass = pct>=20?'green':'';
-  document.getElementById('ps-margin').className = 'ps-val '+colorClass;
-  document.getElementById('ps-pct').className    = 'ps-val '+colorClass;
-  // Margin gauge: 0–100% scale, with values outside the range pinned to the nearest end
-  const gaugePct = Math.max(0, Math.min(100, pct));
-  const gaugeMarker = document.getElementById('margin-gauge-marker');
-  const gaugeValue = document.getElementById('margin-gauge-value');
-  if (gaugeMarker) gaugeMarker.style.bottom = gaugePct.toFixed(1)+'%';
-  if (gaugeValue) gaugeValue.textContent = pct.toFixed(1)+'%';
-  // Administrator-managed Margin Status integrated into the Summary panel
-  const statusCard = document.getElementById('pricing-margin-status-card');
-  const statusLabel = document.getElementById('ps-status-label');
-  const statusDetail = document.getElementById('ps-status-detail');
-  const statusCurrent = document.getElementById('ps-status-current');
-  const statusRange = document.getElementById('ps-status-range');
-  const statusApproval = document.getElementById('ps-status-approval');
-  const statusDot = document.getElementById('ps-status-dot');
-  const statusIcon = document.getElementById('ps-status-icon');
-  const gaugeMarkerIcon = document.getElementById('margin-gauge-marker-icon');
+  const minM=Number(ps.minMargin||0), target=Number(ps.targetMargin||0), byMargin=ps.marginMethod==='gross_margin';
+  lines.forEach(l=>{
+    l.share=l.mat*factor; l.cost=l.mat+l.share; l.profit=l.sale-l.cost;
+    l.markup=l.cost>0?l.profit/l.cost*100:0; l.margin=l.sale>0?l.profit/l.sale*100:0;
+    const ok=l.mat>0&&l.sale>0, linePct=byMargin?l.margin:l.markup, status=ok?getMarginStatusForPercent(linePct):null;
+    const lt=l.tr.querySelector('[data-pr="lt"]'), pf=l.tr.querySelector('[data-pr="profit"]'), pc=l.tr.querySelector('[data-pr="pct"]');
+    const cls=!ok?'':l.profit<0?'neg':linePct<minM?'low':'good';
+    if(lt) lt.textContent=l.sale?f(l.sale):'—';
+    if(pf){pf.textContent=ok?f(l.profit):'—';pf.className='margin-cell '+cls;pf.style.color=status?status.color:'';}
+    if(pc){pc.textContent=ok?l.markup.toFixed(1)+'% · '+l.margin.toFixed(1)+'%':(l.sale>0&&!l.mat?'No Buy Price':'');pc.className='margin-cell '+cls;}
+  });
+  pricingLastLines=lines;
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  const count=lines.filter(l=>l.tr.querySelector('[data-role="desc"]')?.value.trim()||l.mat||l.sale).length;
+  set('pr-tot-label','Total · '+count+' Line'+(count===1?'':'s'));
+  set('pr-tot-buy',f(totalCost)); set('pr-tot-sell',f(totalSell));
+  const tp=document.getElementById('pr-tot-profit');
+  if(tp) tp.innerHTML=(totalSell&&totalCost?escapeHtml(f(profit)):'—')+`<small>${totalSell&&profitabilityCost?markupPct.toFixed(1)+'% · '+marginPct.toFixed(1)+'%':''}</small>`;
+  set('pr-n-items',String(count));
+  const nc=document.getElementById('pr-n-costs'); if(nc) nc.innerHTML='<span class="pr-tl">'+escapeHtml(pricingCurrency())+' </span>'+escapeHtml(f(addTotal));
+  set('internal-costs-total',f(addTotal));
+  set('internal-costs-count',addTotal?(totalCost?(addTotal/totalCost*100).toFixed(2)+'% of material':'')+(totalSell?' · '+(addTotal/totalSell*100).toFixed(2)+'% of selling':''):'');
+  const vatRate=(Number(ps.vat)||0)/100, vat=Math.round(totalSell*vatRate*Math.pow(10,dec))/Math.pow(10,dec);
+  set('ps-cost',pricingFmt(totalCost)); set('ps-additional-cost',pricingFmt(addTotal)); set('ps-total-cost',pricingFmt(profitabilityCost));
+  set('ps-sell',pricingFmt(totalSell)); set('ps-vat',pricingFmt(vat)); set('ps-gross',pricingFmt(totalSell+vat));
+  set('ps-margin',pricingFmt(profit));
+  const has=totalSell>0&&totalCost>0;
+  set('ps-markup',has?markupPct.toFixed(1)+'%':'—'); set('ps-marginpct',has?marginPct.toFixed(1)+'%':'—');
+  set('ps-target-label',byMargin?'Target Margin':'Target Markup');
+  set('ps-target','Min '+minM+'% · Target '+target+'%');
   updateMarginGaugeScale();
-  if (statusCard && statusLabel && statusDetail && totalCost>0) {
-    const status=getMarginStatusForPercent(pct);
-    if(status){
-      statusCard.className='pricing-margin-status-card';
-      statusCard.style.display='block';
-      statusCard.style.borderColor=status.color;
-      statusCard.style.background=status.color+'12';
-      statusLabel.textContent=status.name;
-      statusLabel.style.color=status.color;
-      if(statusIcon){statusIcon.textContent=status.icon||'●';statusIcon.style.color=status.color;}
-      if(gaugeMarkerIcon)gaugeMarkerIcon.textContent=status.icon||'';
-      if(statusDot){statusDot.style.background=status.color;statusDot.style.boxShadow=`0 0 0 4px ${status.color}1A`;}
-      const ps=activePricingSettings();
-      if(statusCurrent) statusCurrent.textContent='Current margin: '+pct.toFixed(1)+'%';
-      if(statusRange) statusRange.textContent='Range: '+Number(status.from).toFixed(1)+'% to '+Number(status.to).toFixed(1)+'%';
-      if(statusApproval){
-        const belowMinimum=pct<Number(ps.minMargin||0);
-        statusApproval.textContent=belowMinimum?(ps.managerApproval?'Manager approval required':'Below minimum margin'):'\u00a0';
-        statusApproval.classList.toggle('is-empty',!belowMinimum);
-      }
-    }else{
-      statusCard.style.display='block';statusCard.style.borderColor='#64748b';statusCard.style.background='#64748b12';statusLabel.textContent='Unclassified';statusLabel.style.color='#64748b';if(statusIcon){statusIcon.textContent='?';statusIcon.style.color='#64748b';}if(gaugeMarkerIcon)gaugeMarkerIcon.textContent='';if(statusDot){statusDot.style.background='#64748b';statusDot.style.boxShadow='0 0 0 4px rgba(100,116,139,.10)';}if(statusCurrent) statusCurrent.textContent='Current margin: '+pct.toFixed(1)+'%';if(statusRange) statusRange.textContent='No active range configured';if(statusApproval){statusApproval.textContent='\u00a0';statusApproval.classList.add('is-empty');}
-    }
-  } else if (statusCard) statusCard.style.display='none';
+  const marker=document.getElementById('margin-gauge-marker');
+  if(marker){marker.style.display=has?'':'none';marker.style.left='calc('+Math.max(0,Math.min(100,pct/pricingMeterMax()*100)).toFixed(2)+'% - 1.5px)';}
+  const card=document.getElementById('pricing-margin-status-card'), pill=document.getElementById('ps-status-label'), appr=document.getElementById('ps-status-approval');
+  const state=!has?'none':profit<0?'loss':pct<minM?'low':'ok';
+  if(card) card.dataset.state=state;
+  const status=has?getMarginStatusForPercent(pct):null;
+  if(pill){
+    pill.textContent=has?((status?status.name:'Unclassified')+' · '+(byMargin?'Margin ':'Markup ')+pct.toFixed(1)+'%'):'Enter Buy And Sell Prices';
+    pill.style.color=status?status.color:'#64748b'; pill.style.background=(status?status.color:'#64748b')+'1a';
+  }
+  if(appr){const below=has&&pct<minM;appr.textContent=below?(ps.managerApproval?'Manager approval required':'Below minimum'):'';}
+  const tbar=document.getElementById('pr-tbar');
+  if(tbar) tbar.innerHTML=`<span class="pr-hide-p">Cost <b>${escapeHtml(f(profitabilityCost))}</b></span><span>Sell <b>${escapeHtml(f(totalSell))}</b></span><span>Profit <b class="pr-st-${state}">${has?escapeHtml(f(profit)):'—'}</b></span><span>Markup <b class="pr-st-${state}">${has?markupPct.toFixed(1)+'%':'—'}</b></span><span>Margin <b class="pr-st-${state}">${has?marginPct.toFixed(1)+'%':'—'}</b></span>${has?`<span class="pr-pill pr-hide-p" style="color:${status?status.color:'#64748b'};background:${(status?status.color:'#64748b')}1a">${escapeHtml(status?status.name:'Unclassified')}</span>`:''}`;
+  if(typeof prAfterCalc==='function') prAfterCalc(lines,{totalCost,totalSell,addTotal,factor});
 }
 
 
@@ -9269,23 +9305,8 @@ function validatePricingPrices() {
 }
 
 let pricingSummaryManualState = null;
-function applyPricingSummaryPanelState() {
-  const workspace=document.querySelector('#pricing-modal .pricing-workspace');
-  const btn=document.getElementById('pricing-summary-toggle');
-  if(!workspace||!btn) return;
-  const autoCompact=window.innerWidth<=1450 && window.innerWidth>820;
-  const compact=window.innerWidth<=820 ? false : (pricingSummaryManualState===null ? autoCompact : pricingSummaryManualState);
-  workspace.classList.toggle('summary-compact',compact);
-  workspace.classList.toggle('summary-expanded',!compact && pricingSummaryManualState===false);
-  btn.innerHTML=compact?'<i class="ti ti-layout-sidebar-right-expand"></i>':'<i class="ti ti-layout-sidebar-right-collapse"></i>';
-  btn.title=compact?'Expand summary':'Collapse summary';
-}
-function togglePricingSummaryPanel() {
-  const workspace=document.querySelector('#pricing-modal .pricing-workspace');
-  const currentlyCompact=workspace?.classList.contains('summary-compact') || (window.innerWidth<=1450 && !workspace?.classList.contains('summary-expanded'));
-  pricingSummaryManualState=!currentlyCompact;
-  applyPricingSummaryPanelState();
-}
+function applyPricingSummaryPanelState() { /* V270.1: the summary panel is fixed (hidden below 1200 px, where the totals bar shows) */ }
+function togglePricingSummaryPanel() {}
 window.addEventListener('resize',()=>{ if(document.getElementById('pricing-modal')?.classList.contains('active')) applyPricingSummaryPanelState(); closePricingProdSearch(); });
 
 
@@ -9296,24 +9317,16 @@ function pricingLocalISODate(date=new Date()) {
   return `${y}-${m}-${d}`;
 }
 function pricingISOToDisplay(value='') {
-  const m=String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : value;
+  // V270.1: DD-MM-YYYY throughout BizCore
+  return window.BCDate ? (BCDate.format(value)||String(value||'')) : (String(value).replace(/^(\d{4})-(\d{2})-(\d{2})$/,'$3-$2-$1'));
 }
 function pricingDisplayToISO(value='') {
-  const m=String(value).trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if(window.BCDate){ const v=BCDate.parse(value); return v||''; }
+  const m=String(value).trim().match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
   if(!m)return '';
-  const d=Number(m[1]), mo=Number(m[2]), y=Number(m[3]);
-  const dt=new Date(y,mo-1,d,12,0,0,0);
-  if(dt.getFullYear()!==y || dt.getMonth()!==mo-1 || dt.getDate()!==d)return '';
   return `${m[3]}-${m[2]}-${m[1]}`;
 }
-function formatPricingDateInput(el) {
-  const digits=el.value.replace(/\D/g,'').slice(0,8);
-  let out=digits.slice(0,2);
-  if(digits.length>2)out+='/'+digits.slice(2,4);
-  if(digits.length>4)out+='/'+digits.slice(4,8);
-  el.value=out;
-}
+function formatPricingDateInput(el) { /* V270.1: the BizCore date field formats on leaving the field */ }
 function pricingSupplierDateBounds() {
   const today=new Date();
   today.setHours(12,0,0,0);
@@ -9328,19 +9341,10 @@ function applyPricingSupplierDateRules({defaultToday=false}={}) {
   if(defaultToday && !el.value) el.value=pricingISOToDisplay(bounds.max);
   if(!el.dataset.dateRulesBound){
     el.dataset.dateRulesBound='1';
-    el.addEventListener('input',()=>formatPricingDateInput(el));
-    el.addEventListener('keydown',(e)=>{
-      if((e.key==='Backspace' || e.key==='Delete') && el.selectionStart===el.selectionEnd){
-        const pos=el.selectionStart;
-        if(e.key==='Backspace' && (pos===3 || pos===6)){
-          e.preventDefault(); el.setSelectionRange(pos-1,pos-1);
-        }else if(e.key==='Delete' && (pos===2 || pos===5)){
-          e.preventDefault(); el.setSelectionRange(pos+1,pos+1);
-        }
-      }
-    });
-    el.addEventListener('blur',()=>validatePricingSupplierDate({silentEmpty:true}));
+    if(window.BCDate) BCDate.attach(el,{min:()=>pricingSupplierDateBounds().min,max:()=>pricingSupplierDateBounds().max,onCommit:()=>validatePricingSupplierDate({silentEmpty:true})});
+    else el.addEventListener('blur',()=>validatePricingSupplierDate({silentEmpty:true}));
   }
+  if(window.BCDate && el._bcdate){ const iso=BCDate.parse(el.value); if(iso) el.value=BCDate.format(iso); }
 }
 function getPricingSupplierDateISO(){
   const el=document.getElementById('pricing-sup-date');
@@ -9351,14 +9355,14 @@ function validatePricingSupplierDate({silentEmpty=false}={}) {
   if(!el || !el.value)return true;
   const iso=pricingDisplayToISO(el.value);
   let message='';
-  if(!iso) message='Enter the quotation date as DD/MM/YYYY.';
+  if(!iso) message='Enter the quotation date as DD-MM-YYYY, e.g. '+pricingISOToDisplay(pricingLocalISODate())+'.';
   else {
     const bounds=pricingSupplierDateBounds();
     if(iso>bounds.max) message='Future quotation dates are not allowed.';
     else if(iso<bounds.min) message='Quotation date cannot be more than six months old.';
   }
   if(!message){
-    el.classList.remove('pricing-required-invalid');
+    el.classList.remove('pricing-required-invalid','bcd-invalid');
     el.setAttribute('aria-invalid','false');
     return true;
   }
@@ -9390,22 +9394,26 @@ async function openPricingSheet(rfqId,{closeSource=true}={}) {
   }
   // Opening Pricing is navigation only. RFQ advances to Pricing only after a successful Pricing save.
   // This prevents Start Pricing -> Cancel/Close from changing the RFQ workflow status.
-  document.getElementById('pricing-modal-title').textContent = 'Pricing V'+(r.currentPricingVersion||1)+' — '+r.rfqNo+' / '+r.company;
-  // RFQ info bar
-  document.getElementById('pricing-rfq-info').innerHTML = `
-    <span><strong>Customer:</strong> ${r.company}</span>
-    <span><strong>Ref:</strong> ${r.ref||'—'}</span>
-    <span><strong>Due:</strong> ${fmtDate(r.due)}</span>
-    <span style="color:var(--gray)">${r.desc||''}</span>`;
+  const esc=v=>escapeHtml(String(v??''));
+  const ps=activePricingSettings();
+  document.getElementById('pricing-modal-title').textContent = 'Pricing V'+(r.currentPricingVersion||1)+' — '+r.rfqNo;
+  // V270.1 subtitle: customer · Ref · Due · Target
+  const due=r.due?pricingISOToDisplay(String(r.due).slice(0,10)):'';
+  document.getElementById('pricing-rfq-info').innerHTML = `<span class="pr-cust">${esc(r.company||'')}</span><span class="pr-x2">${r.ref?' · Ref '+esc(r.ref):''}${due?' · Due '+esc(due):''} · Target ${ps.marginMethod==='gross_margin'?'Margin':'Markup'} ${Number(ps.minMargin||0)}–${Number(ps.targetMargin||0)}%</span>`;
+  document.getElementById('pricing-rfq-info').title=[r.company,r.ref&&('Ref '+r.ref),due&&('Due '+due),r.desc].filter(Boolean).join(' · ');
+  const statusPill=document.getElementById('pr-status-pill');
+  if(statusPill){ const st=activeVersion?.status||(r.pricingItems?.length?'Saved':'Draft'); statusPill.textContent=st==='Revision Draft'?'Revision Draft':st==='Saved'?'Saved':'Draft'; }
   // Supplier
   document.getElementById('pricing-sup-search').value = r.supplierName||'';
   document.getElementById('pricing-sup-search').dataset.supplierId = r.supplierId || findUniqueMasterByName(suppliers,r.supplierName)?.id || '';
+  document.getElementById('pricing-sup-search').classList.remove('pricing-required-invalid');
   pricingSupplierName = r.supplierName||'';
   document.getElementById('pricing-sup-ref').value = r.supRef||'';
   document.getElementById('pricing-sup-date').value = pricingISOToDisplay(r.supDate||'');
   applyPricingSupplierDateRules({defaultToday:!r.supDate});
   const pricingNotesEl=document.getElementById('pricing-internal-notes');
   if(pricingNotesEl){ pricingNotesEl.value=r.internalNotes||''; const count=document.getElementById('pricing-internal-notes-count'); if(count) count.textContent=pricingNotesEl.value.length+' / 2000'; }
+  const noteLast=document.getElementById('pr-note-last'); if(noteLast) noteLast.textContent=r.internalNotes&&activeVersion?.updated?'Last saved '+pricingISOToDisplay(String(activeVersion.updated).slice(0,10)):'';
   // Vendor quotation attachments (supports legacy single attachment)
   pricingVendorQuotes = Array.isArray(r.vendorQuotes) ? [...r.vendorQuotes] : [];
   if (!pricingVendorQuotes.length && r.pricingAttachment) {
@@ -9415,44 +9423,53 @@ async function openPricingSheet(rfqId,{closeSource=true}={}) {
   // Items
   document.getElementById('pricing-tbody').innerHTML='';
   document.getElementById('internal-costs-tbody').innerHTML='';
-  setAdditionalCostsExpanded(false);
   ensureDefaultAdditionalCosts(r.internalCosts||[]);
   [...(r.pricingItems||[])]
     .map((it,index)=>({...it,sortOrder:Number.isFinite(Number(it.sortOrder))?Number(it.sortOrder):index+1}))
     .sort((a,b)=>a.sortOrder-b.sortOrder)
-    .forEach(it=>addPricingRow(it));
+    .forEach(it=>{ window.pricingBulkLoading=true; try{ addPricingRow(it); } finally { window.pricingBulkLoading=false; } });
   ensurePricingQuickAddRow();
   calcPricingSummary();
   setPricingSavedState(!!(r.pricingItems&&r.pricingItems.length));
   updatePricingActionButtons();
   initMarginGaugeDrag(); updatePricingSettingsRuntimeUI();
-  const pm=document.getElementById('pricing-modal'); if(pm&&!pm.dataset.dirtyBound){pm.dataset.dirtyBound='1';pm.addEventListener('input',e=>{if(e.target.matches('input,select,textarea')&&!e.target.closest('#internal-costs-tbody'))markPricingDirty();});}
-  // Update back button based on navigation context
+  const pm=document.getElementById('pricing-modal'); if(pm&&!pm.dataset.dirtyBound){pm.dataset.dirtyBound='1';pm.addEventListener('input',e=>{if(e.target.matches('input,select,textarea')&&!e.target.closest('#internal-costs-tbody')&&e.target.id!=='pricing-prod-search'&&e.target.id!=='pr-cost-pick')markPricingDirty();});}
+  // Back arrow: to the quotation when Pricing was opened from one, otherwise to the RFQ
   const backBtnEl = document.getElementById('pricing-back-btn');
   if (backBtnEl) {
-    if (navFromQuoteId) {
-      backBtnEl.innerHTML = '<button class="btn btn-secondary" onclick="backToQuoteFromPricing()"><i class="ti ti-arrow-left"></i>Back to quotation</button>';
-    }
+    const label=navFromQuoteId?'Back to Quotation':'Back to RFQ';
+    backBtnEl.title=label+' (Alt+←)'; backBtnEl.setAttribute('aria-label',label);
   }
+  if (typeof prOnOpen === 'function') prOnOpen(r);
+  delete modalSizes['pricing-modal'];
   openModalWithSize('pricing-modal');
-  requestAnimationFrame(applyPricingSummaryPanelState);
+  pricingChangedSinceOpen=false;
+  if (typeof prAfterOpen === 'function') requestAnimationFrame(prAfterOpen);
 }
 
 function validatePricingHeaderFields() {
   const fields = [
-    { id:'pricing-sup-search', label:'Supplier name' },
-    { id:'pricing-sup-ref', label:'Supplier quotation reference' },
-    { id:'pricing-sup-date', label:'Supplier quotation date' }
+    { id:'pricing-sup-search', label:'Primary supplier' },
+    { id:'pricing-sup-ref', label:'Supplier quote reference' },
+    { id:'pricing-sup-date', label:'Supplier quote date' }
   ];
   const missing = fields.filter(f => !document.getElementById(f.id)?.value.trim());
-
+  // V270.1: the primary supplier must come from the Supplier Master (or be added with + New Supplier)
+  const supEl=document.getElementById('pricing-sup-search');
+  const notInMaster=supEl && supEl.value.trim() && !pricingResolvePrimarySupplier();
   fields.forEach(f => {
     const el=document.getElementById(f.id);
     if(!el)return;
-    el.classList.toggle('pricing-required-invalid', missing.some(m=>m.id===f.id));
-    el.setAttribute('aria-invalid', missing.some(m=>m.id===f.id) ? 'true' : 'false');
+    const bad=missing.some(m=>m.id===f.id) || (f.id==='pricing-sup-search' && notInMaster);
+    el.classList.toggle('pricing-required-invalid', bad);
+    el.setAttribute('aria-invalid', bad ? 'true' : 'false');
   });
-
+  if(!missing.length && notInMaster){
+    showConfirm({icon:'⚠️',title:'Supplier not in the Supplier Master',message:'"'+supEl.value.trim()+'" is not in the Supplier Master. Choose the supplier from the list, or add it as a new supplier.',
+      confirmText:'Add New Supplier',cancelText:'Choose From List',confirmClass:'btn-primary',
+      onConfirm:()=>quickAddSupplierFromPricing(),onCancel:()=>{prShowTab?.('items');setTimeout(()=>{supEl.focus();openPricingSupDD();},120);}});
+    return false;
+  }
   if(!missing.length)return validatePricingSupplierDate();
 
   const first=document.getElementById(missing[0].id);
@@ -9464,16 +9481,20 @@ function validatePricingHeaderFields() {
     confirmText:'Enter details',
     cancelText:'Continue editing',
     confirmClass:'btn-primary',
-    onConfirm:()=>{
-      first?.scrollIntoView({behavior:'smooth',block:'center'});
-      setTimeout(()=>first?.focus(),180);
-    },
-    onCancel:()=>{
-      first?.scrollIntoView({behavior:'smooth',block:'center'});
-      setTimeout(()=>first?.focus(),100);
-    }
+    onConfirm:()=>{ setTimeout(()=>first?.focus(),180); },
+    onCancel:()=>{ setTimeout(()=>first?.focus(),100); }
   });
   return false;
+}
+/** V270.1: the Supplier Master record for the typed primary supplier (exact name, any case), or null. */
+function pricingResolvePrimarySupplier(){
+  const el=document.getElementById('pricing-sup-search'); if(!el) return null;
+  const id=el.dataset.supplierId, name=el.value.trim().toLowerCase();
+  if(!name) return null;
+  const byId=id&&suppliers.find(s=>s.id===id&&String(s.company||'').trim().toLowerCase()===name);
+  if(byId) return byId;
+  const hits=suppliers.filter(s=>String(s.company||'').trim().toLowerCase()===name);
+  return hits.length===1?hits[0]:null;
 }
 
 async function requestSavePricing() {
@@ -9526,6 +9547,7 @@ async function savePricing() {
   if (r.status==='New') r.status='Pricing';
   if (!(await saveRFQs())) { showToast(rfqSaveFailedMessage(),'error','Pricing not saved'); return false; }
   setPricingSavedState(true);
+  { const sp=document.getElementById('pr-status-pill'); if(sp && sp.textContent==='Draft') sp.textContent='Saved'; }   // V270.1
   // Synchronize the global safe-close/autosave system with the successful Pricing save.
   if(typeof window.bizcoreFormSaved==='function') window.bizcoreFormSaved('pricing-modal');
   document.querySelectorAll('#pricing-sup-search,#pricing-sup-ref,#pricing-sup-date').forEach(el=>{
@@ -13113,7 +13135,7 @@ document.addEventListener('DOMContentLoaded',restoreRFQMainMonitor);
 
 /* ── BIZCORE TASK-AWARE WORKSPACES ────────────────────────── */
 const modalDefaultWorkspace = {
-  'pricing-modal':'fullscreen',
+  'pricing-modal':'normal',   // V270.1: a centred window (see css/pricing.css)
   'quote-modal':'normal',
   'pricing-ro-modal':'fullscreen',
   'so-create-modal':'fullscreen',
@@ -13455,7 +13477,7 @@ document.addEventListener('DOMContentLoaded',initialiseWorkspaceControls);
 (function initPricingKeyboardNavigation(){
   const GRID = '#pricing-tbody';
   const EDITABLE = 'input[data-role], select[data-role]';
-  const roleOrder = ['code','desc','qty','uom','supplier','supref','buy','markup','sell'];
+  const roleOrder = ['desc','code','supplier','qty','uom','buy','markup','sell'];   // V270.1: the order on screen
 
   function activePricingModal(){
     const modal=document.getElementById('pricing-modal');
@@ -13624,6 +13646,7 @@ document.addEventListener('DOMContentLoaded',initialiseWorkspaceControls);
 
   // Focus the most useful first field when a new product line is added.
   document.addEventListener('pricing-row-added',e=>{
+    if(window.pricingBulkLoading) return;   // V270.1: opening a pricing doesn't jump to the last line
     const row=e.detail?.row;
     setTimeout(()=>focusField(fieldAt(row,'buy')),0);
   });
