@@ -271,3 +271,6 @@ See **docs/V270_2_6_RFQ_ENTRY.md** (mockup RFQ_2, Layout C). Upload list there (
 - Tests: tests/browser/date-sync.e2e.mjs.
 - Upload: **index.html, sw.js, js/bc-date.js** (`bizcore-shell-v27027`) — plus the V270.2.6 / V270.2.5 files if not
   uploaded yet. No rules change.
+
+## V270.2.9 — RFQ view (Layout A) and age badge (25 Oct 2026)
+See **docs/V270_2_9_RFQ_VIEW.md** (mockup RFQV_2). `bizcore-shell-v27029`. No rules change.

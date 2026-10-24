@@ -8,7 +8,7 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v27028';
+const CACHE_NAME = 'bizcore-shell-v27029';
 const APP_SHELL = [
   './login.html',
   './delivery.html',

@@ -1,9 +1,10 @@
-BizCore V270.2.8 — copy into C:\BizCore (replace), then upload:
+BizCore V270.2.9 — copy into C:\BizCore (replace), then upload:
   index.html
   sw.js
   js/app.js
-  js/rfq-entry.js
   css/rfq-entry.css
+If V270.2.8 / V270.2.6 is not uploaded yet, also upload:
+  js/rfq-entry.js
 If V270.2.7 is not uploaded yet, also upload:
   js/bc-date.js
 If V270.2.5 is not uploaded yet, also upload:

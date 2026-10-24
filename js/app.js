@@ -7567,7 +7567,7 @@ function renderRFQPage() {
   }
   document.querySelectorAll('#page-rfq [data-rfq-monitor-filter]').forEach(el=>el.classList.remove('active'));
 
-  sorted=sortRegisterRows(sorted,'rfq',{no:r=>r.rfqNo,customer:r=>r.company,reference:r=>r.ref,date:r=>r.date,due:r=>r.due||'',status:r=>getRFQWorkflowStage(r),progress:r=>{const qs=quotations.filter(q=>q.rfqId===r.id);return qs.some(q=>salesOrders.some(so=>so.quotationId===q.id))?'Sales Order':qs.length?'Quotation':(r.pricingItems&&r.pricingItems.length)?'Pricing':r.status||'RFQ'}});
+  sorted=sortRegisterRows(sorted,'rfq',{no:r=>r.rfqNo,customer:r=>r.company,reference:r=>r.ref,date:r=>r.date,due:r=>r.due||'',status:r=>getRFQWorkflowStage(r),age:r=>{const a=rfqOpenAge(r);return a?a.days:-1;},progress:r=>{const qs=quotations.filter(q=>q.rfqId===r.id);return qs.some(q=>salesOrders.some(so=>so.quotationId===q.id))?'Sales Order':qs.length?'Quotation':(r.pricingItems&&r.pricingItems.length)?'Pricing':r.status||'RFQ'}});
   { const c=document.getElementById('rfq-register-count'); if(c) c.textContent=`${sorted.length} RFQ${sorted.length===1?'':'s'}`; }
 
   const list = document.getElementById('rfq-list');
@@ -7602,13 +7602,14 @@ function renderRFQPage() {
       <td class="rfq-cell-muted">${dateText}</td>
       <td class="rfq-cell-muted" style="${overdue?'color:var(--red);font-weight:700':''}">${dueStr}</td>
       <td><span class="badge ${stClass}">${getRFQWorkflowStageLabel(displayStatus)}</span></td>
+      <td>${rfqAgeBadgeHtml(rfqOpenAge(r))}</td>
       <td><span class="rfq-progress">${progress}</span></td>
     </tr>`;
   }).join('');
 
   list.innerHTML = `<div class="rfq-register"><table>
-    <colgroup><col style="width:15%"><col style="width:26%"><col style="width:16%"><col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:11%"></colgroup>
-    <thead><tr><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="no" onclick="event.stopPropagation();setRegisterSort('rfq','no',renderRFQPage)">RFQ No.</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="customer" onclick="event.stopPropagation();setRegisterSort('rfq','customer',renderRFQPage)">Customer</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="reference" onclick="event.stopPropagation();setRegisterSort('rfq','reference',renderRFQPage)">Reference</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="date" onclick="event.stopPropagation();setRegisterSort('rfq','date',renderRFQPage)">RFQ Date</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="due" onclick="event.stopPropagation();setRegisterSort('rfq','due',renderRFQPage)">Due Date</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="status" onclick="event.stopPropagation();setRegisterSort('rfq','status',renderRFQPage)">Status</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="progress" onclick="event.stopPropagation();setRegisterSort('rfq','progress',renderRFQPage)">Progress</th></tr></thead>
+    <colgroup><col style="width:14%"><col style="width:22%"><col style="width:14%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup>
+    <thead><tr><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="no" onclick="event.stopPropagation();setRegisterSort('rfq','no',renderRFQPage)">RFQ No.</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="customer" onclick="event.stopPropagation();setRegisterSort('rfq','customer',renderRFQPage)">Customer</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="reference" onclick="event.stopPropagation();setRegisterSort('rfq','reference',renderRFQPage)">Reference</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="date" onclick="event.stopPropagation();setRegisterSort('rfq','date',renderRFQPage)">RFQ Date</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="due" onclick="event.stopPropagation();setRegisterSort('rfq','due',renderRFQPage)">Due Date</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="status" onclick="event.stopPropagation();setRegisterSort('rfq','status',renderRFQPage)">Status</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="age" onclick="event.stopPropagation();setRegisterSort('rfq','age',renderRFQPage)" title="Days since the RFQ was received, until a quotation is created">Age</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="progress" onclick="event.stopPropagation();setRegisterSort('rfq','progress',renderRFQPage)">Progress</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
   updateRegisterSortIndicators();
@@ -8378,7 +8379,8 @@ async function saveRFQ() {
     quotationId: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.quotationId : null,
     quotationIds: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.quotationIds||[] : [],
     quotedDate: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.quotedDate||null : null,
-    created: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.created : new Date().toISOString()
+    created: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.created : new Date().toISOString(),
+    createdBy: editingRFQId ? (previousRFQ?.createdBy||'') : (window.currentUser?.displayName||window.currentUser?.email||'')   // V270.2.9: shown as "Entered … · name"
   };
   const listIndex=editingRFQId?rfqs.findIndex(x=>x.id===editingRFQId):-1;
   if (editingRFQId) { if(listIndex>-1) rfqs[listIndex]=r; }
@@ -8416,6 +8418,17 @@ function toggleRFQDetailSection(titleEl) {
   titleEl.setAttribute('aria-expanded', expanded ? 'true' : 'false');
 }
 
+/** V270.2.9: days since Date received while the RFQ waits for a quotation (New / In Pricing). null once a quotation
+    exists, the RFQ is a Sales Order or No Bid. 0–2 grey · 3–6 amber · 7+ red · after 14 days "14+ days". */
+function rfqOpenAge(r){
+  if(!r||!['New','Pricing'].includes(getRFQWorkflowStage(r)))return null;
+  const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(r.date||''); if(!m)return null;
+  const now=new Date(); const days=Math.max(0,Math.round((Date.UTC(now.getFullYear(),now.getMonth(),now.getDate())-Date.UTC(+m[1],+m[2]-1,+m[3]))/86400000));
+  return {days,label:days===0?'Today':days>14?'14+ days':`${days} day${days===1?'':'s'}`,tone:days>=7?'red':days>=3?'amber':'grey'};
+}
+function rfqAgeBadgeHtml(age){ if(!age)return ''; return `<span class="rfq-age ${age.tone}" title="${age.days>14?'More than 14':age.days} day${age.days===1?'':'s'} since the RFQ was received — no quotation yet">⏱ ${age.label}</span>`; }
+function rfqViewTab(k){ const m=document.getElementById('rfq-view-modal'); if(!m)return; m.querySelectorAll('[data-rv-tab]').forEach(b=>b.classList.toggle('on',b.dataset.rvTab===k)); m.querySelectorAll('[data-rv-pane]').forEach(p=>p.hidden=p.dataset.rvPane!==k); }
+window.rfqViewTab=rfqViewTab;
 function viewRFQ(id) {
   const r = rfqs.find(x=>x.id===id); if (!r) return;
   const {ageDays, overdue, dueStr, ageLabel} = rfqAge(r);
@@ -8426,65 +8439,83 @@ function viewRFQ(id) {
   const hasQuote = !!r.quotationId;
   const isNoBid = r.status === 'No Bid';
   const canDelete = !hasPricing && !hasQuote;
-  document.getElementById('rfq-view-title').textContent = r.rfqNo + ' — ' + r.company;
-  document.getElementById('rfq-view-body').className = 'modal-body rfq-view-body';
+  // V270.2.9 — RFQ view, Layout A (approved mockup RFQV_2): header = number + status + age badge;
+  // strip = Customer · Customer RFQ reference (larger) / Contact · Request type · Received · Response due · Assigned · Entered;
+  // next step + progress line; tabs Items · Requirements · Attachments · Activity.
+  const E=v=>escapeHtml(String(v==null?'':v));
+  const stage=getRFQWorkflowStage(r);
+  const age=rfqOpenAge(r);
+  document.getElementById('rfq-view-title').innerHTML=`<span class="rv-no">${E(r.rfqNo)}</span><span class="badge ${stClass} rv-pill">${E(getRFQWorkflowStageLabel(displayStatus))}</span>${rfqAgeBadgeHtml(age)}`;
+  document.getElementById('rfq-view-modal').querySelector('.modal-header')?.classList.add('rv-hd');
+  document.getElementById('rfq-view-body').className = 'modal-body rfq-view-body rv-body';
   document.getElementById('rfq-view-footer').className = 'modal-footer rfq-view-footer';
-
   const isImg = r.attachment && !r.attachment.type?.includes('pdf');
   const attachSrc = r.attachment ? (r.attachment.url || r.attachment.data) : null;
   const attachHtml = r.attachment
-    ? `<div class="attach-item"><i class="ti ti-${r.attachment.type?.includes('pdf')?'pdf':'photo'}"></i><span style="flex:1;color:#475569">${r.attachment.name}</span>${isImg?`<button class="abtn abtn-view" onclick="document.getElementById('rfq-img-prev').style.display=document.getElementById('rfq-img-prev').style.display==='none'?'block':'none'"><i class="ti ti-eye"></i>View</button>`:''}<a href="${attachSrc}" download="${r.attachment.name}" target="_blank" rel="noopener" class="abtn abtn-edit" style="text-decoration:none"><i class="ti ti-download"></i>Download</a></div>${isImg?`<div id="rfq-img-prev" style="display:none;margin-top:8px;text-align:center;background:#f8fafc;border:1px solid var(--border);border-radius:7px;padding:10px"><img src="${attachSrc}" style="max-width:100%;max-height:420px;object-fit:contain;border-radius:4px"></div>`:''}` : '<div style="font-size:12px;color:#94a3b8">No attachment added.</div>';
-
-  const reqItems = (r.pricingItems && r.pricingItems.length) ? r.pricingItems : [];
-  const pricedCount = reqItems.filter(i => parseFloat(i.buy)>0 || parseFloat(i.sell)>0 || i.supplier || i.quoteRef).length;
-  const pendingCount = Math.max(0, reqItems.length-pricedCount);
-  const supplierCount = new Set(reqItems.map(i=>i.supplier).filter(Boolean)).size;
-  const pricingProgress = reqItems.length ? Math.round((pricedCount/reqItems.length)*100) : 0;
-  const pricingHtml = `<div class="rfq-progress-grid">
-    <div class="rfq-progress-stat"><span>Total items</span><strong>${reqItems.length||'—'}</strong></div>
-    <div class="rfq-progress-stat success"><span>Items priced</span><strong>${pricedCount}</strong></div>
-    <div class="rfq-progress-stat warning"><span>Pending</span><strong>${pendingCount}</strong></div>
-    <div class="rfq-progress-stat info"><span>Suppliers contacted</span><strong>${supplierCount}</strong></div>
-    <div class="rfq-progress-bar-wrap"><div><span>Pricing completion</span><strong>${pricingProgress}%</strong></div><div class="rfq-progress-bar"><i style="width:${pricingProgress}%"></i></div></div>
-  </div>`;
-  // V270.2.6: before pricing, the RFQ's own lines (with remarks); after, the pricing lines with their status
-  const rfqOwnLines = reqItems.length ? [] : (Array.isArray(r.rfqLines)?r.rfqLines:[]).slice().sort((a,b)=>(Number(a.sortOrder)||0)-(Number(b.sortOrder)||0));
-  const rfqTypeLabel = {product:'Product',service:'Service',mixed:'Mixed (products and services)'}[r.requestType||'product']||'Product';
-  const reqDetails = [[r.requestType==='service'?'Site / location':r.requestType==='mixed'?'Delivery / site location':'Delivery location', r.site],
-    [r.requestType==='service'?'Required start':r.requestType==='mixed'?'Required by':'Required delivery', r.requiredDate?fmtDate(r.requiredDate):''],
-    ['Expected duration', r.requestType==='product'?'':r.duration]].filter(x=>x[1]);
-  const reqDetailsHtml = reqDetails.length ? `<div class="rfq-req-details">${reqDetails.map(([k,v])=>`<div class="detail-row"><span class="dk">${escapeHtml(k)}</span><span>${escapeHtml(v)}</span></div>`).join('')}</div>` : '';
-  const reqNoteTitle = r.requestType==='service'?'Scope of work':r.requestType==='mixed'?'Scope of work / general requirements':'General requirements';
-  const itemsHtml = reqItems.length ? `<div class="rfq-items-table-wrap"><table class="rfq-items-table"><thead><tr><th>#</th><th>Code</th><th>Description</th><th class="num">Qty</th><th class="num">UOM</th><th>Pricing status</th></tr></thead><tbody>${reqItems.map((i,n)=>`<tr><td>${n+1}</td><td>${i.code||'—'}</td><td>${i.desc||i.description||'—'}</td><td>${i.qty||'—'}</td><td>${i.uom||'—'}</td><td><span class="rfq-line-status ${parseFloat(i.buy)>0||parseFloat(i.sell)>0||i.supplier?'priced':'pending'}">${parseFloat(i.buy)>0||parseFloat(i.sell)>0||i.supplier?'Priced':'Pending'}</span></td></tr>`).join('')}</tbody></table></div>`
-    : rfqOwnLines.length ? `<div class="rfq-items-table-wrap"><table class="rfq-items-table"><thead><tr><th>#</th><th>Description</th><th class="num">Qty</th><th class="num">UOM</th><th>Remarks</th></tr></thead><tbody>${rfqOwnLines.map((i,n)=>`<tr><td>${n+1}</td><td>${escapeHtml(i.desc||'—')}${r.requestType==='mixed'?`<span class="rfq-line-kind">${i.kind==='service'?'Service':'Product'}</span>`:''}</td><td>${formatQuantity?formatQuantity(i.qty):i.qty}</td><td>${escapeHtml(i.uom||'—')}</td><td>${escapeHtml(i.remarks||'')}</td></tr>`).join('')}</tbody></table></div>`
-    : `<p class="rfq-view-requirements">${r.desc?escapeHtml(r.desc):'No requirement details entered.'}</p>`;
-
-  let nextTitle='Start pricing', nextCopy='Add supplier cost and proposed selling prices for this RFQ.';
-  if (isNoBid) { nextTitle='RFQ closed as No Bid'; nextCopy='Reopen it only when the opportunity becomes active again.'; }
-  else if (hasQuote) { nextTitle='Quotation created'; nextCopy='Open the linked quotation to continue the sales process.'; }
-  else if (hasPricing) { nextTitle='Review or continue pricing'; nextCopy='Pricing is available. Review it or convert it into a quotation.'; }
-
-  const flowQuote = hasQuote ? `<button class="rfq-flow-step done" data-qid="${r.quotationId}" onclick="viewQuoteFromRFQ(this)" style="cursor:pointer"><i class="ti ti-check"></i>Quotation</button>` : `<span class="rfq-flow-step"><i class="ti ti-file-text"></i>Quotation</span>`;
-  document.getElementById('rfq-view-body').innerHTML = `
-    <div class="rfq-view-hero">
-      <div><div class="rfq-view-id">${r.rfqNo}</div><div class="rfq-view-company">${r.company}</div><div class="rfq-view-ref">${r.ref ? 'Customer reference: '+r.ref : 'No customer reference provided'}</div></div>
-      <div class="rfq-view-status-wrap"><span class="badge ${stClass}">${getRFQWorkflowStageLabel(displayStatus)}</span><div class="rfq-view-age">Received ${ageLabel}${overdue?' · due '+dueStr:''}</div></div>
-    </div>
-    <div class="rfq-view-grid">
-      <div style="display:flex;flex-direction:column;gap:14px">
-        <div class="rfq-view-card rfq-section-info"><div class="rfq-view-card-title rfq-collapsible-title" role="button" tabindex="0" aria-expanded="true" onclick="toggleRFQDetailSection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleRFQDetailSection(this)}"><i class="ti ti-building"></i>RFQ information<i class="ti ti-chevron-down rfq-section-chevron"></i></div><div class="rfq-card-content"><div class="rfq-view-info">
-          <div class="detail-row"><span class="dk">Request type</span><span>${rfqTypeLabel}</span></div><div class="detail-row"><span class="dk">Contact</span><span>${r.contact||'—'}</span></div><div class="detail-row"><span class="dk">Channel</span><span>${r.channel||'—'}</span></div>
-          <div class="detail-row"><span class="dk">Received date</span><span>${fmtDate(r.date)}</span></div><div class="detail-row"><span class="dk">Response due</span><span style="${overdue?'color:var(--red);font-weight:700':''}">${dueStr||'—'}</span></div>
-          <div class="detail-row"><span class="dk">Assigned to</span><span>${r.assigned||'—'}</span></div><div class="detail-row"><span class="dk">Current stage</span><span>${getRFQWorkflowStageLabel(displayStatus)}</span></div>
-        </div></div></div>
-        <div class="rfq-view-card rfq-items-card"><div class="rfq-view-card-title rfq-collapsible-title" role="button" tabindex="0" aria-expanded="true" onclick="toggleRFQDetailSection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleRFQDetailSection(this)}"><i class="ti ti-list-details"></i>Required Items<i class="ti ti-chevron-down rfq-section-chevron"></i></div><div class="rfq-card-content">${itemsHtml}${(reqItems.length||rfqOwnLines.length)&&r.desc?`<div class="rfq-requirement-note"><strong>${reqNoteTitle}</strong><p>${escapeHtml(r.desc)}</p></div>`:''}${reqDetailsHtml}</div></div>
-        <div class="rfq-view-card rfq-section-pricing"><div class="rfq-view-card-title rfq-collapsible-title" role="button" tabindex="0" aria-expanded="true" onclick="toggleRFQDetailSection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleRFQDetailSection(this)}"><i class="ti ti-progress-check"></i>Pricing progress<i class="ti ti-chevron-down rfq-section-chevron"></i></div><div class="rfq-card-content">${pricingHtml}</div></div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:14px">
-        <div class="rfq-view-card rfq-section-progress"><div class="rfq-next-action"><div class="rfq-next-action-label">Recommended next action</div><div class="rfq-next-action-title">${nextTitle}</div><div class="rfq-next-action-copy">${nextCopy}</div></div><div class="rfq-view-card-title" style="margin-top:2px"><i class="ti ti-route"></i>Document progress</div><div class="rfq-flow"><span class="rfq-flow-step done"><i class="ti ti-check"></i>RFQ</span><i class="ti ti-chevron-right rfq-flow-arrow"></i><span class="rfq-flow-step ${hasPricing?'done':(!isNoBid?'current':'')}"><i class="ti ti-calculator"></i>Pricing</span><i class="ti ti-chevron-right rfq-flow-arrow"></i>${flowQuote}</div>${isNoBid?`<div class="rfq-no-bid-box"><strong>No Bid reason:</strong> ${r.noBidReason||'Not specified'}${r.noBidNote?`<br><span>${r.noBidNote}</span>`:''}</div>`:''}</div>
-        <div class="rfq-view-card rfq-section-attachment"><div class="rfq-view-card-title rfq-collapsible-title" role="button" tabindex="0" aria-expanded="true" onclick="toggleRFQDetailSection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleRFQDetailSection(this)}"><i class="ti ti-paperclip"></i>Attachment<i class="ti ti-chevron-down rfq-section-chevron"></i></div><div class="rfq-card-content">${attachHtml}</div></div>
-      </div>
-    </div>`;
+    ? `<div class="attach-item"><i class="ti ti-${r.attachment.type?.includes('pdf')?'pdf':'photo'}"></i><span style="flex:1;color:#475569">${E(r.attachment.name)}</span>${isImg?`<button class="abtn abtn-view" onclick="document.getElementById('rfq-img-prev').style.display=document.getElementById('rfq-img-prev').style.display==='none'?'block':'none'"><i class="ti ti-eye"></i>View</button>`:''}<a href="${E(attachSrc)}" download="${E(r.attachment.name)}" target="_blank" rel="noopener" class="abtn abtn-edit" style="text-decoration:none"><i class="ti ti-download"></i>Download</a></div>${isImg?`<div id="rfq-img-prev" style="display:none;margin-top:8px;text-align:center;background:#f8fafc;border:1px solid var(--border);border-radius:7px;padding:10px"><img src="${E(attachSrc)}" style="max-width:100%;max-height:420px;object-fit:contain;border-radius:4px"></div>`:''}` : '<p class="rv-empty">No attachment added.</p>';
+  // dates
+  const today=new Date(); const todayISO=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const dayDiff=(a,b)=>{const t=x=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(x||'');return m?Date.UTC(+m[1],+m[2]-1,+m[3]):NaN;};return Math.round((t(a)-t(b))/86400000);};
+  const answered=['Quoted','Sales Order'].includes(stage), closed=stage==='No Bid';
+  let dueNote='';
+  if(r.due){ const d=dayDiff(r.due,todayISO); dueNote= answered?'answered':closed?'closed':d<0?`overdue by ${-d} day${d===-1?'':'s'}`:d===0?'due today':`in ${d} day${d===1?'':'s'}`; }
+  const created=r.created?new Date(r.created):null;
+  const enteredDate=created&&!isNaN(created)?fmtDate(`${created.getFullYear()}-${String(created.getMonth()+1).padStart(2,'0')}-${String(created.getDate()).padStart(2,'0')}`):'—';
+  const enteredSub=created&&!isNaN(created)?`${String(created.getHours()).padStart(2,'0')}:${String(created.getMinutes()).padStart(2,'0')}${r.createdBy?' · '+E(r.createdBy):''}`:'';
+  const typeLabel={product:'Product',service:'Service',mixed:'Mixed'}[r.requestType||'product']||'Product';
+  const kv=[['Contact',`<b>${E(r.contact||'—')}</b>`],['Request type',`<b>${typeLabel}</b>`],['Received',`<b>${fmtDate(r.date)||'—'}</b>${r.channel?`<small>via ${E(r.channel)}</small>`:''}`],
+    ['Response due',`<b class="${overdue?'rv-over':''}">${r.due?fmtDate(r.due):'—'}</b>${dueNote?`<small>${dueNote}</small>`:''}`],['Assigned to',`<b>${E(r.assigned||'—')}</b>`],['Entered',`<b>${enteredDate}</b>${enteredSub?`<small>${enteredSub}</small>`:''}`]];
+  // documents for the progress line and activity
+  const qIds=new Set([...(Array.isArray(r.quotationIds)?r.quotationIds:[]),r.quotationId,...quotations.filter(q=>q.rfqId===r.id).map(q=>q.id)].filter(Boolean));
+  const qs=quotations.filter(q=>qIds.has(q.id)).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+  const sos=salesOrders.filter(so=>qIds.has(so.quotationId));
+  const versions=(typeof ensurePricingVersions==='function'?ensurePricingVersions(r):[])||[];
+  const reqItems=hasPricing?r.pricingItems:[];
+  const isPriced=i=>parseFloat(i.buy)>0||parseFloat(i.sell)>0;
+  const pricedCount=reqItems.filter(isPriced).length;
+  const latestQ=qs[qs.length-1];
+  const steps=[['RFQ',fmtDate(r.date)||'',1],
+    ['Pricing',!hasPricing&&!versions.length?'not started':answered?`V${r.currentPricingVersion||versions.length||1} · done`:`${pricedCount} / ${reqItems.length} priced`,answered||sos.length?1:(hasPricing||versions.length)?'cur':0],
+    ['Quotation',latestQ?E(latestQ.qno||''):'—',sos.length?1:latestQ?'cur':0],
+    ['Sales Order',sos[0]?E(sos[0].soNo||''):'—',sos.length?'cur':0]];
+  const flowHtml=`<div class="rv-flow">${steps.map(([t,sub,d],i)=>`<div class="rv-step ${d===1?'done':d==='cur'?'cur':''}"><i>${d===1?'✓':i+1}</i><b>${t}</b><small>${sub}</small></div>`).join('')}</div>`;
+  let nT,nC;
+  if(isNoBid){nT='Closed as No Bid';nC=r.noBidReason?E(r.noBidReason):'Reopen it only when the opportunity becomes active again.';}
+  else if(sos.length){nT='Sales Order created';nC=`${E(sos[0].soNo||'')} · continue in Sales Orders.`;}
+  else if(latestQ){nT='Quotation created';nC=`${E(latestQ.qno||'')}${latestQ.status?' · '+E(latestQ.status):''} · follow up with the customer.`;}
+  else if(hasPricing){nT=overdue?'Response is overdue':'Finish pricing';nC=pricedCount<reqItems.length?`${reqItems.length-pricedCount} of ${reqItems.length} lines still need a price; then create the quotation.`:'All lines are priced — create the quotation.';}
+  else {nT=overdue?'Response is overdue':'Start pricing';nC=overdue?'Price the RFQ now or close it as No Bid.':'Collect supplier prices and set selling prices for this RFQ.';}
+  // items
+  const ownLines=(Array.isArray(r.rfqLines)?r.rfqLines:[]).slice().sort((a,b)=>(Number(a.sortOrder)||0)-(Number(b.sortOrder)||0));
+  const mixed=r.requestType==='mixed';
+  let itemsHtml;
+  if(reqItems.length){
+    const remOf=new Map(ownLines.map(l=>[l.lineId,l]));
+    itemsHtml=`<table class="rv-tb"><thead><tr><th class="sl">SL</th><th>Item / Description</th><th class="num">Qty</th><th>UOM</th><th>Pricing</th></tr></thead><tbody>${[...reqItems].sort((a,b)=>(Number(a.sortOrder)||0)-(Number(b.sortOrder)||0)).map((i,n)=>{const own=remOf.get(i.rfqLineId);return `<tr><td class="sl">${n+1}</td><td><span class="rv-dot ${i.productId?'m':'f'}"></span>${E(i.desc||'—')}${mixed&&own?`<span class="rv-kind">${own.kind==='service'?'Service':'Product'}</span>`:''}</td><td class="num">${formatQuantity(i.qty)}</td><td>${E(i.uom||'—')}</td><td>${isPriced(i)?'<span class="rv-st p">Priced</span>':'<span class="rv-st w">Pending</span>'}</td></tr>`;}).join('')}</tbody></table>`;
+  } else if(ownLines.length){
+    itemsHtml=`<table class="rv-tb"><thead><tr><th class="sl">SL</th><th>Item / Description</th><th class="num">Qty</th><th>UOM</th><th>Remarks / Specs</th></tr></thead><tbody>${ownLines.map((i,n)=>`<tr><td class="sl">${n+1}</td><td><span class="rv-dot ${i.productId?'m':'f'}" title="${i.productId?'Item Master':'Not in Item Master'}"></span>${E(i.desc||'—')}${mixed?`<span class="rv-kind">${i.kind==='service'?'Service':'Product'}</span>`:''}</td><td class="num">${formatQuantity(i.qty)}</td><td>${E(i.uom||'—')}</td><td class="rv-rem">${E(i.remarks||'')}</td></tr>`).join('')}</tbody></table>`;
+  } else itemsHtml=`<p class="rv-empty">No lines on this RFQ${r.desc?' — see Requirements.':'.'}</p>`;
+  const lineCount=reqItems.length||ownLines.length;
+  // requirements
+  const reqDetails=[[r.requestType==='service'?'Site / location':r.requestType==='mixed'?'Delivery / site':'Delivery location',r.site],[r.requestType==='service'?'Required start':r.requestType==='mixed'?'Required by':'Required delivery',r.requiredDate?fmtDate(r.requiredDate):''],['Duration',r.requestType==='product'?'':r.duration]].filter(x=>x[1]);
+  const reqHtml=(reqDetails.length?`<div class="rv-reqkv">${reqDetails.map(([k,v])=>`<span>${E(k)} <b>${E(v)}</b></span>`).join('')}</div>`:'')+(r.desc?`<div class="rv-req">${E(r.desc)}</div>`:(reqDetails.length?'':'<p class="rv-empty">No requirements entered.</p>'));
+  const hasReq=!!(r.desc||reqDetails.length);
+  // activity (from what is stored — no separate log)
+  const act=[];
+  const dt=x=>{const d=new Date(x);return isNaN(d)?(fmtDate(String(x||'').slice(0,10))||''):`${fmtDate(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;};
+  if(r.created) act.push([r.created,`RFQ logged${r.createdBy?' by '+E(r.createdBy):''}${r.channel?' ('+E(r.channel)+')':''} · received ${fmtDate(r.date)}`]);
+  versions.forEach(v=>{const at=v.updated||v.created; if(at) act.push([at,`Pricing V${E(v.version)} ${E(String(v.status||'Saved').toLowerCase())}`]);});
+  qs.forEach(q=>act.push([q.created||q.date,`Quotation ${E(q.qno||'')} created${q.status?' · '+E(q.status):''}`]));
+  sos.forEach(so=>act.push([so.created||so.date,`Sales Order ${E(so.soNo||'')} created`]));
+  if(isNoBid) act.push([r.closedDate||'',`Closed as No Bid${r.noBidReason?' — '+E(r.noBidReason):''}`]);
+  const actHtml=act.length?`<ul class="rv-act">${act.filter(a=>a[0]!==undefined).sort((a,b)=>String(a[0]).localeCompare(String(b[0]))).map(([t,x])=>`<li><time>${t?dt(t):''}</time><span>${x}</span></li>`).join('')}</ul>`:'<p class="rv-empty">Nothing recorded yet.</p>';
+  const tabs=[['items','Items',lineCount||''],['reqs','Requirements',hasReq?'✓':''],['att','Attachments',r.attachment?1:''],['act','Activity','']];
+  document.getElementById('rfq-view-body').innerHTML=`
+    <div class="rv-card"><div class="rv-id"><div class="rv-id-c"><span>Customer</span><b>${E(r.company||'—')}</b></div><div class="rv-id-r"><span>Customer RFQ reference / subject</span><b title="${E(r.ref||'')}">${E(r.ref||'—')}</b></div></div>
+      <div class="rv-kv">${kv.map(([k,v])=>`<div><span>${k}</span>${v}</div>`).join('')}</div></div>
+    <div class="rv-next${overdue&&!answered&&!closed?' is-over':''}"><div class="rv-next-t"><small>Next step</small><b>${nT}</b><p>${nC}</p></div>${flowHtml}</div>
+    <div class="rv-tabs" role="tablist">${tabs.map(([k,t,n],i)=>`<button type="button" class="rv-tab${i===0?' on':''}" data-rv-tab="${k}" role="tab" onclick="rfqViewTab('${k}')">${t}${n!==''?`<span class="rv-n">${n}</span>`:''}</button>`).join('')}</div>
+    <div class="rv-pane"><div data-rv-pane="items">${itemsHtml}</div><div data-rv-pane="reqs" hidden>${reqHtml}</div><div data-rv-pane="att" hidden>${attachHtml}</div><div data-rv-pane="act" hidden>${actHtml}</div></div>`;
 
   const navActions=[]; const recordActions=[]; const dangerActions=[];
   navActions.push(navFromQuoteId
