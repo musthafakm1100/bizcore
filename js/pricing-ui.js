@@ -22,6 +22,7 @@
   const dmy = iso => (window.BCDate ? BCDate.format(String(iso || '').slice(0, 10)) : String(iso || '')) || '—';
   const val = (tr, role) => tr?.querySelector(`[data-role="${role}"]`)?.value ?? '';
   const low = v => String(v || '').trim().toLowerCase();
+  const netUp = it => (typeof quoteLineNetUnit === 'function' ? quoteLineNetUnit(it) : Number(it.up));   // V270.2: quoted price after a line discount
 
   /* ── tabs, note marks ── */
   function prShowTab(name) {
@@ -292,7 +293,7 @@
       if (!q || !QUOTED.has(q.status)) return;
       (q.items || []).forEach(it => {
         if (it.lineType && it.lineType !== 'item') return;
-        const up = Number(it.up); if (!(up > 0)) return;
+        const up = netUp(it); if (!(up > 0)) return;   // V270.2: after the line discount
         const hit = pid && it.prodId ? String(it.prodId) === pid : ((code && low(it.code) === code) || (desc && low(it.desc) === desc));
         if (!hit) return;
         const same = (custId && q.custId === custId) || (!!company && low(q.company) === company);
@@ -680,7 +681,7 @@
         (d.items || []).forEach(it => {
           if (it.lineType && it.lineType !== 'item') return;
           let k = ''; try { k = window.BizCorePI.core.itemKeyOf({ productId: it.prodId, code: it.code, desc: it.desc, uom: it.uom }); } catch (_) {}
-          if (k === st.key && Number(it.up) > 0) out.push({ id: d.id, date: d.date, no: d.qno || d.id, party: d.company || '', qty: it.qty, uom: it.uom || '', price: Number(it.up), status: d.status, same: st.custId && d.custId === st.custId });
+          if (k === st.key && netUp(it) > 0) out.push({ id: d.id, date: d.date, no: d.qno || d.id, party: d.company || '', qty: it.qty, uom: it.uom || '', price: netUp(it), status: d.status, same: st.custId && d.custId === st.custId });
         });
       }
     });
@@ -698,7 +699,7 @@
     finally { st.busy = false; st.more = false; }
   }
   function histHtml(st) {
-    const r = rfqs.find(x => x.id === pricingRFQId) || {};
+    const r = { company: st.company || (rfqs.find(x => x.id === pricingRFQId) || {}).company || '' };
     const sups = bcSortBy(suppliers.filter(x => x && x.id), x => x.company).map(x => `<option value="${esc(x.id)}"${st.supplierId === x.id ? ' selected' : ''}>${esc(x.company)}</option>`).join('');
     const per = [['3', 'Last 3 Months'], ['6', 'Last 6 Months'], ['12', 'Last 12 Months'], ['all', 'All Time']].map(([v, t]) => `<option value="${v}"${st.period === v ? ' selected' : ''}>${t}</option>`).join('');
     const filt = st.kind === 'buy'
@@ -721,9 +722,11 @@
     const more = $('pr-hmore'); if (more) { more.hidden = !!(c.done || c.error); more.disabled = !!st.busy; more.textContent = st.busy ? 'Loading…' : 'Load 5 More'; }
     const info = $('pr-hinfo'); if (info) info.textContent = c.error ? '' : `${c.docs.length} ${c.docs.length === 1 ? 'document' : 'documents'} · newest first${c.done ? ' · that is all' : ''} · click a number to open it`;
   }
-  async function prOpenHistory(tr, kind) {
-    const r = rfqs.find(x => x.id === pricingRFQId) || {};
-    const st = { kind, key: itemKeyOfRow(tr), desc: val(tr, 'desc') || 'Item', code: val(tr, 'code'), supplierId: '', cust: 'all', custId: r.custId || '', status: 'all', period: '12' };
+  /* V270.2: also opened from a quotation line — opts = { key, desc, code, custId, company } instead of a Pricing row */
+  async function prOpenHistory(tr, kind, opts) {
+    const r = opts ? { custId: opts.custId || '', company: opts.company || '' } : (rfqs.find(x => x.id === pricingRFQId) || {});
+    const st = opts ? { kind, key: opts.key || '', desc: opts.desc || 'Item', code: opts.code || '', supplierId: '', cust: 'all', custId: r.custId || '', company: r.company || '', status: 'all', period: '12' }
+      : { kind, key: itemKeyOfRow(tr), desc: val(tr, 'desc') || 'Item', code: val(tr, 'code'), supplierId: '', cust: 'all', custId: r.custId || '', company: r.company || '', status: 'all', period: '12' };
     if (!st.key) { toast('Price history needs the item (choose it from the Item Master).'); return; }
     closeDialog(); closePop();
     const dim = document.createElement('div'); dim.className = 'pr-dim';

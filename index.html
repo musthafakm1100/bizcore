@@ -35,6 +35,7 @@
 <link href="css/so-view.css?v=269.72" rel="stylesheet"/>
 <link href="css/bc-date.css?v=270.1" rel="stylesheet"/>
 <link href="css/pricing.css?v=270.13" rel="stylesheet"/>
+<link href="css/quotation.css?v=270.2" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
 <script src="js/responsive.js?v=269.7" defer></script>
@@ -1325,7 +1326,7 @@ document.addEventListener('error', function(e) {
 <div class="pricing-settings-grid admin-master-width">
 <section class="pricing-setting-card"><div class="pricing-setting-card-head"><h3><i class="ti ti-note" style="margin-right:6px"></i>Line Item Note Style</h3><p>Choose how customer-facing line notes appear inside the Description cell.</p></div><div class="pricing-setting-card-body">
 <div class="form-group"><label>Note presentation</label><select id="qprint-line-note-style" onchange="markQuotationPrintDirty()"><option value="highlight">Soft Highlight</option><option value="blueAccent">Blue Accent</option><option value="minimal">Minimal</option><option value="badge">Note Badge</option></select></div>
-<div class="info-box" style="margin-top:10px"><i class="ti ti-info-circle"></i><div><strong>Global quotation print preference</strong><div style="font-size:11px;margin-top:3px">The note text remains part of each quotation line. This setting changes presentation only. This preference applies across all quotation print/PDF templates, including Product, Contracting, bilingual and image-reference layouts.</div></div></div>
+<div class="info-box" style="margin-top:10px"><i class="ti ti-info-circle"></i><div><strong>Global quotation print preference</strong><div style="font-size:11px;margin-top:3px">The note text remains part of each quotation line. This setting changes presentation only. This is the default for all quotation print/PDF templates, including Product, Contracting, bilingual and image-reference layouts. A quotation can choose its own style, and a single note line can too, in Quotation Entry (Items → Notes); that never changes this default. Quotations already sent keep the style they were sent with.</div></div></div>
 </div></section>
 <section class="pricing-setting-card"><div class="pricing-setting-card-head"><h3><i class="ti ti-eye" style="margin-right:6px"></i>Live Preview</h3><p>Preview the selected style before saving.</p></div><div class="pricing-setting-card-body"><div id="qprint-note-preview"></div></div></section>
 </div>
@@ -1445,71 +1446,126 @@ document.addEventListener('error', function(e) {
 </div>
 </div>
 <!-- NEW / EDIT QUOTATION MODAL -->
-<div class="modal-overlay" id="quote-modal">
-<div class="modal modal-normal">
-<div class="modal-header">
-<div><h2 id="modal-title">New quotation</h2><div id="quote-header-sub" style="font-size:11px;color:var(--gray);margin-top:2px"></div></div>
-<div style="display:flex;align-items:center;gap:8px">
-
-<button class="close-btn" onclick="confirmCloseModal('quote-modal')">✕</button>
+<div class="modal-overlay qt-overlay" id="quote-modal">
+<!-- V270.2 — Quotation Entry (approved mockups QT_1 – QT_12, docs/V270_2_QUOTATION.md). Element ids are the ones js/app.js uses. -->
+<div class="modal modal-normal qt-win">
+<div class="modal-header qt-hd">
+<button type="button" class="qt-back" id="qt-back-btn" onclick="qtRequestBack()" title="Close (Alt+←)" aria-label="Back"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+<div class="qt-tt"><h2 id="modal-title">New Quotation</h2><div class="qt-sub" id="quote-header-sub"></div></div>
+<button type="button" class="qt-pill qt-pill-status" id="qt-status-pill" onclick="qtStatusMenu(this)" aria-haspopup="menu" title="Quotation status"><span id="qt-status-text">Draft</span><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+<select class="qt-hidden-select" id="f-status" tabindex="-1" aria-hidden="true"><option>Draft</option><option>Sent</option><option>Won</option><option>Lost</option><option>Expired</option><option>Revised</option></select>
+<button type="button" class="qt-pill qt-pill-note" id="qt-note-pill" hidden onclick="qtShowTab('internal')" title="This quotation has an internal note (never printed)"><i></i><span class="qt-x2">Internal Note</span></button>
+<div class="qt-sp"></div>
+<nav class="qt-flow" id="qt-flow" aria-label="Document flow"></nav>
+<button type="button" class="close-btn" onclick="qtRequestClose()" aria-label="Close quotation">✕</button>
 </div>
-</div>
-<div class="modal-body" onchange="markDirty('quote-modal')" oninput="markDirty('quote-modal')">
-<div class="quote-conversion-context" id="quote-conversion-context" style="display:none">
-<div class="quote-conversion-main"><span class="quote-conversion-kicker">PRICING → QUOTATION</span><strong id="quote-conversion-title">Create from Pricing</strong><span id="quote-conversion-subtitle">Commercial values are linked to the approved pricing document.</span></div>
-<div class="quote-flow-mini"><span>RFQ</span><i class="ti ti-arrow-right"></i><span class="done">Pricing ✓</span><i class="ti ti-arrow-right"></i><span class="active">Quotation</span><i class="ti ti-arrow-right"></i><span>Sales Order</span></div>
-</div>
-<div class="quote-head-strip">
-<div class="quote-meta"><strong id="quote-strip-no">New quotation</strong><span id="quote-strip-customer">Select a customer</span><span id="quote-valid-until">Valid until: —</span></div>
-<div style="display:flex;align-items:center;gap:8px"><span class="quote-save-state saved" id="quote-form-state">Saved</span><select class="quote-status-select" id="f-status"><option>Draft</option><option>Sent</option><option>Won</option><option>Lost</option><option>Expired</option><option>Revised</option></select></div>
-</div>
-<section class="quote-header-section">
-<div class="quote-section-heading"><span><i class="ti ti-layout-form"></i>Header information</span></div>
-<div class="quote-info-layout quote-info-layout-three">
-<section class="quote-info-panel quote-customer-panel">
-<div class="quote-info-panel-head"><i class="ti ti-building-store"></i>Customer &amp; reference</div>
-<div class="quote-info-panel-body quote-customer-grid">
-<div class="form-group quote-customer-select-field"><div class="quote-label-action"><label>Customer Name *</label><button class="quote-inline-add" onclick="quickAddCustomerFromQuote()" type="button"><i class="ti ti-user-plus"></i> New customer</button></div><div class="cust-wrap"><input autocomplete="off" id="f-cust-search" onblur="setTimeout(closeCustDropdown,200)" onclick="openCustDropdown()" oninput="filterCustDropdown();updateQuoteHeaderSummary()" onkeydown="handleQuoteCustomerKey(event)" placeholder="Search customer…"/><div class="cust-dropdown" id="cust-dd"></div></div></div>
-<div class="form-group"><label>Customer Ref. / PO No.</label><input id="f-ref" placeholder="RFQ / PO reference"/></div>
-<div class="form-group"><label>Contact Name *</label><div class="cust-wrap"><input autocomplete="off" id="f-contact" onblur="setTimeout(closeContactDropdown,200)" onclick="openContactDropdown()" oninput="filterContactDropdown()" placeholder="Select or type contact…"/><div class="cust-dropdown" id="contact-dd"></div></div><div id="f-contact-hint" style="font-size:11px;color:var(--gray);margin-top:4px;display:none"><i class="ti ti-info-circle"></i> <a href="#" id="save-contact-link" onclick="saveNewContactFromQuote();return false" style="color:var(--blue)">Save new contact</a></div></div>
-<div class="form-group"><label>Project / Site</label><input id="f-project" placeholder="Project or location"/></div>
+<div class="modal-body qt-body" onchange="markDirty('quote-modal')" oninput="markDirty('quote-modal')">
+<section class="qt-band" id="qt-band" aria-label="Quotation details">
+<div class="qt-band-hd"><b>Quotation Details</b><button type="button" class="pr-btn pr-pri" onclick="qtDetails(false)">Done</button></div>
+<div class="qt-band-full">
+<div class="qt-r1">
+<div class="qt-f qt-f-cust"><div class="qt-lb"><label for="f-cust-search">Customer <b class="qt-req">*</b></label><button type="button" class="qt-lnk" onclick="quickAddCustomerFromQuote()">+ New Customer</button></div>
+<div class="cust-wrap qt-wrap"><input autocomplete="off" id="f-cust-search" onblur="setTimeout(closeCustDropdown,200)" onclick="openCustDropdown()" oninput="filterCustDropdown();updateQuoteHeaderSummary()" onkeydown="handleQuoteCustomerKey(event)" placeholder="Search customer…"/><span class="qt-okmark" id="qt-cust-ok" hidden title="Customer from the Customer Master">✓</span><div class="cust-dropdown" id="cust-dd"></div></div>
+<div class="qt-info" id="quote-customer-info"></div></div>
+<div class="qt-f qt-f-contact"><div class="qt-lb"><label for="f-contact">Contact <b class="qt-req">*</b></label></div><div class="cust-wrap qt-wrap"><input autocomplete="off" id="f-contact" onblur="setTimeout(closeContactDropdown,200)" onclick="openContactDropdown()" oninput="filterContactDropdown()" placeholder="Select or type contact…"/><div class="cust-dropdown" id="contact-dd"></div></div><div class="qt-info" id="f-contact-hint" style="display:none"><a href="#" id="save-contact-link" onclick="saveNewContactFromQuote();return false">Save as a new contact</a></div><div class="qt-info" id="qt-contact-info"></div></div>
+<div class="qt-f"><div class="qt-lb"><label for="f-ref">Customer Ref. / PO No.</label></div><input id="f-ref" placeholder="RFQ / PO reference"/></div>
+<div class="qt-f"><div class="qt-lb"><label for="f-project">Project / Site</label></div><input id="f-project" placeholder="Project or location"/></div>
 <input id="f-company" type="hidden"/><input id="f-city" type="hidden"/>
-<div class="quote-customer-line" id="quote-customer-info"><i class="ti ti-info-circle"></i> Select a customer to display address and VAT information.</div>
 </div>
-</section>
-<section class="quote-info-panel quote-details-panel">
-<div class="quote-info-panel-head"><i class="ti ti-file-description"></i>Quotation details</div>
-<div class="quote-info-panel-body quote-detail-grid">
-<div class="form-group"><label>Quotation No.</label><input id="f-qno" readonly="" style="background:#f8f9fa;font-weight:700;color:var(--blue)"/></div>
-<div class="form-group quote-date-field"><label>Date</label><div class="quote-date-combo"><input id="f-date" inputmode="numeric" maxlength="10" onblur="normalizeQuoteDateInput();syncQuoteCalendarFromText()" oninput="formatQuoteDateTyping(this);updateValidUntil()" placeholder="DD/MM/YYYY" type="text"/><button aria-label="Choose date from calendar" class="quote-calendar-button" onclick="openQuoteCalendar()" title="Choose date" type="button"><i class="ti ti-calendar"></i></button><input aria-label="Quotation date calendar" id="f-date-calendar" onchange="applyQuoteCalendarDate(this.value)" tabindex="-1" type="date"/></div><div class="quote-date-hint">Type DD/MM/YYYY or choose from calendar</div></div>
-<div class="form-group"><label>Validity (days)</label><input id="f-validity" min="1" oninput="updateValidUntil()" type="number" value="7"/><div class="quote-validity-hint" id="quote-validity-inline">Auto expiry</div></div>
-<div class="form-group quote-term-field quote-delivery-term"><label>Delivery terms</label><div class="terms-wrap"><select class="terms-select" id="f-delivery" onchange="onTermsChange('delivery')"></select></div><div class="terms-add-inline" id="f-delivery-add"><input id="f-delivery-new" onkeydown="if(event.key==='Enter'){saveNewTerm('delivery');event.preventDefault()}" placeholder="New delivery term…"/><button class="btn btn-primary btn-sm" onclick="saveNewTerm('delivery')"><i class="ti ti-check"></i>Add</button><button class="btn btn-secondary btn-sm" onclick="cancelNewTerm('delivery')">Cancel</button></div></div>
-<div class="form-group quote-term-field quote-payment-term"><label>Payment terms</label><div class="terms-wrap"><select class="terms-select" id="f-payment" onchange="onTermsChange('payment')"></select></div><div class="terms-add-inline" id="f-payment-add"><input id="f-payment-new" onkeydown="if(event.key==='Enter'){saveNewTerm('payment');event.preventDefault()}" placeholder="New payment term…"/><button class="btn btn-primary btn-sm" onclick="saveNewTerm('payment')"><i class="ti ti-check"></i>Add</button><button class="btn btn-secondary btn-sm" onclick="cancelNewTerm('payment')">Cancel</button></div></div>
+<div class="qt-r2">
+<div class="qt-f"><div class="qt-lb"><label for="f-qno">Quotation No.</label></div><input id="f-qno" readonly="" class="qt-ro"/></div>
+<div class="qt-f"><div class="qt-lb"><label for="f-date">Date <b class="qt-req">*</b></label></div><input id="f-date" autocomplete="off"/></div>
+<div class="qt-f"><div class="qt-lb"><label for="f-validity">Validity</label></div><div class="qt-wrap qt-valwrap"><input id="f-validity" min="1" inputmode="numeric" oninput="updateValidUntil()" type="number" value="7"/><span class="qt-sfx" id="quote-validity-inline">days</span></div></div>
+<div class="qt-f quote-term-field"><div class="qt-lb"><label for="f-delivery">Delivery Terms</label></div><div class="terms-wrap"><select class="terms-select" id="f-delivery" onchange="onTermsChange('delivery')"></select></div><div class="terms-add-inline" id="f-delivery-add"><input id="f-delivery-new" onkeydown="if(event.key==='Enter'){saveNewTerm('delivery');event.preventDefault()}" placeholder="New delivery term…"/><button class="btn btn-primary btn-sm" onclick="saveNewTerm('delivery')"><i class="ti ti-check"></i>Add</button><button class="btn btn-secondary btn-sm" onclick="cancelNewTerm('delivery')">Cancel</button></div></div>
+<div class="qt-f quote-term-field"><div class="qt-lb"><label for="f-payment">Payment Terms</label></div><div class="terms-wrap"><select class="terms-select" id="f-payment" onchange="onTermsChange('payment')"></select></div><div class="terms-add-inline" id="f-payment-add"><input id="f-payment-new" onkeydown="if(event.key==='Enter'){saveNewTerm('payment');event.preventDefault()}" placeholder="New payment term…"/><button class="btn btn-primary btn-sm" onclick="saveNewTerm('payment')"><i class="ti ti-check"></i>Add</button><button class="btn btn-secondary btn-sm" onclick="cancelNewTerm('payment')">Cancel</button></div></div>
+<button type="button" class="qt-fold" onclick="qtFold(true)" title="Fold the details into one line (keeps more lines in view)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>Fold</button>
 </div>
-</section>
-<section class="quote-info-panel quote-notes-panel">
-<div class="quote-info-panel-head"><i class="ti ti-notes"></i>Notes &amp; remarks</div>
-<div class="quote-info-panel-body quote-notes-grid quote-notes-grid-top">
-<div class="form-group"><label>Customer notes / remarks <span class="quote-note-visibility customer">Visible to customer</span></label><textarea id="f-notes" placeholder="Remarks that may appear on the quotation…"></textarea></div>
-<div class="form-group"><label>Internal notes <span class="quote-note-visibility internal">Internal only</span></label><textarea id="f-internal-notes" placeholder="Internal instructions, follow-up notes, approvals…"></textarea></div>
-<div class="form-group" style="grid-column:1/-1"><label>Additional conditions <span class="quote-note-visibility customer">Visible to customer</span></label><textarea id="f-additional-conditions" placeholder="Optional additional commercial conditions for this quotation. Enter one condition per line…"></textarea><div class="quote-date-hint">Printed under Terms &amp; Conditions after Validity, Delivery Terms and Payment Terms.</div></div>
+<div class="qt-band-flow" id="qt-band-flow"></div>
 </div>
+<div class="qt-band-fold" id="qt-band-fold" aria-label="Quotation details (folded)"></div>
+</section>
+<button type="button" class="qt-detcard" id="qt-detcard" onclick="qtDetails(true)"></button>
+<div class="qt-work">
+<div class="qt-main">
+<div class="qt-tabs" role="tablist" id="qt-tabs">
+<button type="button" class="qt-tb on" role="tab" aria-selected="true" data-tab="items" onclick="qtShowTab('items')">Items <span class="qt-n" id="qt-n-items">0</span></button>
+<button type="button" class="qt-tb" role="tab" aria-selected="false" data-tab="remarks" onclick="qtShowTab('remarks')"><span class="qt-tl">Remarks &amp; Conditions</span><span class="qt-ts">Remarks</span> <i class="qt-dot qt-dot-g" id="qt-remarks-dot" hidden title="Has text — prints on the quotation"></i></button>
+<button type="button" class="qt-tb" role="tab" aria-selected="false" data-tab="internal" onclick="qtShowTab('internal')"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="qt-tl">Internal Notes</span><span class="qt-ts">Internal</span> <i class="qt-dot" id="qt-internal-dot" hidden title="Has a note — never printed"></i></button>
+<div class="qt-sp"></div>
+<div class="qt-seg" id="qt-template" role="group" aria-label="Template"><button type="button" id="type-btn-product" onclick="setQuoteType('product')">Products</button><button type="button" id="type-btn-contracting" onclick="setQuoteType('contracting')">Services</button></div>
+</div>
+<section class="qt-panel on" data-panel="items">
+<div class="qt-tool">
+<div class="qt-tool-p" id="product-search-bar">
+<div class="qt-srch"><svg class="qt-si" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input autocomplete="off" id="prod-search-inp" onblur="setTimeout(closeProdSearch,200)" onfocus="openProdSearch()" oninput="filterProdSearch()" onkeydown="handleQuoteProductSearchKey(event)" placeholder="Search product database to add…" aria-label="Search product database"/><kbd class="qt-kbd">F3</kbd><div id="prod-search-dd" class="qt-prod-dd"></div></div>
+<button type="button" class="pr-btn" onclick="qtAddLine('item')">+ Blank Item</button><button type="button" class="pr-btn qt-wide-only" onclick="qtAddLine('heading')">Heading</button><button type="button" class="pr-btn qt-wide-only" onclick="qtAddLine('note')">Note</button><button type="button" class="pr-btn qt-wide-only" onclick="quickAddProductFromQuote()">New Product</button>
+</div>
+<div class="qt-tool-s" id="service-add-btn" style="display:none"><button type="button" class="pr-btn" onclick="qtAddLine('scope')">+ Add Scope Line</button><button type="button" class="pr-btn qt-wide-only" onclick="qtAddLine('heading')">Heading</button><button type="button" class="pr-btn qt-wide-only" onclick="qtAddLine('note')">Note</button></div>
+<div class="qt-sp"></div>
+<button type="button" class="pr-btn qt-ns-btn" id="qt-notestyle-btn" onclick="qtDocNoteStyleMenu(this)" title="Note style for this quotation only"><span class="qt-muted">Notes:</span> <span id="qt-notestyle-name">Soft Highlight</span><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+<button type="button" class="pr-btn qt-ic1" onclick="qtMoreMenu(this)" aria-label="More item actions" title="More: Heading, Note, New Product, Clear All Lines">⋯</button>
+</div>
+<div class="qt-cards" id="qt-cards"></div>
+<div class="qt-gt" id="qt-gt"><table class="qt-table" id="qt-items-table"><thead id="items-thead"></thead><tbody id="items-tbody"></tbody><tfoot id="items-tfoot"></tfoot></table></div>
+<div class="qt-hint"><kbd>Enter</kbd> next field · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> new line · <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> move line · <kbd>F2</kbd> price history · <kbd>Ctrl</kbd>+<kbd>Del</kbd> delete line · drag <b>⋮⋮</b> to reorder · <kbd>Ctrl</kbd>+<kbd>S</kbd> save draft</div>
+</section>
+<section class="qt-panel" data-panel="remarks">
+<div class="qt-scroll"><div class="qt-rm">
+<div class="qt-rm-col">
+<div class="qt-fld"><label class="qt-lh" for="f-notes">Customer Remarks <span class="qt-vis">Prints on quotation</span><span class="qt-cnt" id="qt-notes-cnt"></span></label><textarea id="f-notes" rows="4" placeholder="Remarks that print on the quotation…"></textarea><div class="qt-help">Printed on the quotation as Notes.</div></div>
+<div class="qt-fld"><label class="qt-lh" for="f-additional-conditions">Additional Conditions <span class="qt-vis">Prints on quotation</span><span class="qt-cnt" id="qt-cond-cnt"></span></label><textarea id="f-additional-conditions" rows="5" placeholder="Optional additional commercial conditions. Enter one condition per line…"></textarea><div class="qt-help">One condition per line. Printed under Terms &amp; Conditions after Validity, Delivery Terms and Payment Terms.</div></div>
+<div class="qt-intnote"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Internal notes are kept on their own tab and are never printed or sent to the customer.</span><button type="button" class="qt-lnk" onclick="qtShowTab('internal')">Open Internal Notes ›</button></div>
+</div>
+<div class="qt-prev"><div class="qt-h4">How It Prints</div><div class="qt-paper" id="qt-print-prev"></div></div>
+</div></div>
+</section>
+<section class="qt-panel" data-panel="internal">
+<div class="qt-scroll"><div class="qt-int">
+<label class="qt-lh" for="f-internal-notes"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> Internal Notes <span class="qt-vis qt-vis-int">Never printed</span><span class="qt-cnt" id="qt-int-cnt"></span></label>
+<textarea id="f-internal-notes" rows="8" placeholder="Internal instructions, follow-up notes, approvals…"></textarea>
+<div class="qt-help">Only for your team. Never shown on the quotation, its PDF or anything sent to the customer.</div>
+</div></div>
 </section>
 </div>
-</section>
-<section class="quote-items-panel">
-<div class="quote-section-heading"><span><i class="ti ti-list-details"></i>Quotation items</span><div class="quote-tabs"><button class="btn btn-sm btn-primary" id="type-btn-product" onclick="setQuoteType('product')"><i class="ti ti-package"></i>Products</button><button class="btn btn-sm btn-secondary" id="type-btn-contracting" onclick="setQuoteType('contracting')"><i class="ti ti-tool"></i>Services</button></div></div>
-<div id="product-search-bar" style="margin-bottom:8px;display:flex;align-items:center;gap:7px"><div style="position:relative;flex:1;max-width:460px"><i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--gray);font-size:14px"></i><input autocomplete="off" id="prod-search-inp" onblur="setTimeout(closeProdSearch,200)" onfocus="openProdSearch()" oninput="filterProdSearch()" onkeydown="handleQuoteProductSearchKey(event)" placeholder="Search product database…" style="width:100%;height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px 0 32px;font-size:12px;outline:none"/><div id="prod-search-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--blue-mid);border-top:none;border-radius:0 0 var(--radius) var(--radius);max-height:220px;overflow-y:auto;z-index:300;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div></div><button class="btn btn-secondary btn-sm" onclick="addItemRow()"><i class="ti ti-plus"></i>Blank item</button><button class="btn btn-secondary btn-sm" onclick="addSpecialQuoteRow('heading')"><i class="ti ti-heading"></i>Add heading</button><button class="btn btn-secondary btn-sm" onclick="addSpecialQuoteRow('note')"><i class="ti ti-note"></i>Add note</button><button class="btn btn-secondary btn-sm" onclick="quickAddProductFromQuote()"><i class="ti ti-package-import"></i>New product</button><button class="btn btn-danger btn-sm" onclick="clearAllItems()"><i class="ti ti-trash"></i>Clear all</button></div>
-<div class="quote-items-wrap"><table class="items-table" id="items-table-main"><thead id="items-thead"><tr><th style="width:32px">SL</th><th style="width:110px">Item code</th><th style="width:145px">Brand / Model</th><th style="width:230px">Description</th><th style="width:82px">Qty *</th><th style="width:90px">UOM</th><th style="width:100px">Unit price *</th><th style="width:100px">Total</th><th style="width:32px"></th></tr></thead><tbody id="items-tbody"></tbody></table></div>
-<div id="service-add-btn" style="display:none;margin-top:8px;gap:6px"><button class="btn btn-secondary btn-sm" onclick="addServiceRow()"><i class="ti ti-plus"></i>Add scope line</button><button class="btn btn-secondary btn-sm" onclick="addSpecialQuoteRow('heading')"><i class="ti ti-heading"></i>Add heading</button><button class="btn btn-secondary btn-sm" onclick="addSpecialQuoteRow('note')"><i class="ti ti-note"></i>Add note</button><button class="btn btn-danger btn-sm" onclick="clearAllItems()"><i class="ti ti-trash"></i>Clear all</button></div>
-<div class="quote-bottom-summary"><div class="quote-commercial-summary" id="quote-commercial-summary" style="display:none">
-<div class="quote-commercial-title"><span><i class="ti ti-chart-line"></i> Internal commercial summary</span><small>Screen only · never printed</small></div>
-<div class="quote-commercial-grid"><div><span>Estimated cost</span><strong id="qcs-cost">SAR 0.00</strong></div><div><span>Quotation value</span><strong id="qcs-value">SAR 0.00</strong></div><div><span>Gross profit</span><strong id="qcs-profit">SAR 0.00</strong></div><div><span>Margin</span><strong id="qcs-margin">0.0%</strong></div></div>
-<div class="quote-commercial-ref" id="qcs-ref"></div><div class="quote-price-change-note" id="qcs-change" style="display:none"><i class="ti ti-alert-triangle"></i><span></span></div>
-</div><div class="totals-box"><div class="totals-row"><span>Sub-total</span><span id="t-subtotal">SAR 0.00</span></div><div class="totals-row"><span>Discount <input id="f-discount" min="0" oninput="calcTotals()" style="width:70px;height:22px;font-size:12px;border:1px solid var(--border);border-radius:4px;padding:0 6px;margin-left:6px" type="number" value="0"/> SAR</span><span id="t-discount" style="color:var(--red)">- SAR 0.00</span></div><div class="totals-row"><span>Total before VAT</span><span id="t-before-vat">SAR 0.00</span></div><div class="totals-row"><span id="t-vat-label">VAT (15%)</span><span id="t-vat">SAR 0.00</span></div><div class="totals-row net"><span>Net amount</span><span id="t-net">SAR 0.00</span></div></div></div>
-</section>
+<aside class="qt-side" id="qt-side" aria-label="Quotation summary">
+<div class="qt-side-hd"><b>Quotation Summary</b><button type="button" class="pr-btn" onclick="qtSide(false)">Done</button></div>
+<div class="qt-tot">
+<div class="qt-h4">Quotation Total</div>
+<div class="qt-kv"><span>Sub-total</span><b id="t-subtotal">0.00</b></div>
+<div class="qt-kv"><span>Line Discounts</span><b class="qt-neg" id="t-line-disc">0.00</b></div>
+<div class="qt-kv"><label for="f-discount">Quotation Discount</label><input id="f-discount" class="qt-mini" inputmode="decimal" placeholder="0.00" autocomplete="off" oninput="calcTotals()" onfocus="beginNumberEdit(this)" onblur="qtFormatQuoteDisc(this)" title=""/></div>
+<span id="t-discount" hidden></span>
+<div class="qt-kv qt-sum"><span>Total Before VAT</span><b id="t-before-vat">0.00</b></div>
+<div class="qt-kv"><span id="t-vat-label">VAT 15%</span><b id="t-vat">0.00</b></div>
+<div class="qt-grand"><span>Grand Total</span><b id="t-net">0.00</b></div>
 </div>
-<div class="modal-footer"><div class="quote-footer-state"><span id="quote-footer-state">✓ Saved</span><span>Ctrl + S to save</span></div><div class="quote-footer-actions"><button class="btn btn-secondary" onclick="confirmCloseModal('quote-modal')">Cancel</button><button class="btn btn-secondary" onclick="saveQuotation('draft')"><i class="ti ti-device-floppy"></i>Save Draft</button><button class="btn btn-primary" onclick="saveQuotation('preview')"><i class="ti ti-eye"></i>Save &amp; Preview</button><button class="btn btn-success" onclick="saveQuotation('sent')"><i class="ti ti-send"></i>Save &amp; Mark Sent</button></div></div>
+<div class="qt-res" id="quote-commercial-summary" hidden data-state="good">
+<div class="qt-h4"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Internal · Never Printed</div>
+<div class="qt-kv"><span>Estimated Cost</span><b id="qcs-cost">0.00</b></div>
+<div class="qt-kv"><span>Selling (Ex-VAT)</span><b id="qcs-value">0.00</b></div>
+<div class="qt-tiles"><div class="qt-tile"><span>Profit</span><b id="qcs-profit">0.00</b></div><div class="qt-tile"><span>Markup</span><b id="qcs-markup">0.0%</b></div><div class="qt-tile"><span>Margin</span><b id="qcs-margin">0.0%</b></div></div>
+<span class="qt-stp" id="qcs-status"></span>
+<div class="qt-small" id="qcs-cmp" hidden></div>
+<div class="qt-small qt-chg" id="qcs-change" hidden><span></span></div>
+<div class="qt-small">Pricing <button type="button" class="qt-lnk" id="qcs-ref" onclick="qtOpenFlow('pricing')"></button></div>
+</div>
+<div class="qt-res qt-res-none" id="quote-commercial-none"><div class="qt-h4"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Internal · Never Printed</div><div class="qt-small">No Pricing is linked to this quotation, so cost and profit are not available. They show when a quotation is made from Pricing.</div></div>
+</aside>
+</div>
+<button type="button" class="qt-bar" id="qt-bar" onclick="qtSide(true)" aria-label="Show the quotation summary">
+<span class="qt-bk"><small>Sub-total</small><b id="qtb-sub">0.00</b></span><span class="qt-bk qt-bk-neg"><small>Discounts</small><b id="qtb-disc">0.00</b></span><span class="qt-bk"><small id="qtb-vat-l">VAT 15%</small><b id="qtb-vat">0.00</b></span>
+<span class="qt-bk qt-bk-g"><small>Grand Total</small><b id="qtb-net">0.00</b></span><span class="qt-sp"></span><span class="qt-bk-int" id="qtb-int" hidden><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span id="qtb-int-t"></span></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+</button>
+</div>
+<div class="modal-footer qt-ft">
+<div class="qt-fst"><span id="quote-footer-state">✓ Saved</span><span class="qt-fk">· Ctrl+S to save</span><span class="qt-ready" id="qt-ready"></span></div>
+<div class="qt-sp"></div>
+<button type="button" class="btn btn-secondary qt-f-close" onclick="qtRequestClose()">Close</button>
+<button type="button" class="btn btn-secondary qt-f-draft" onclick="saveQuotation('draft')"><i class="ti ti-device-floppy"></i>Save Draft</button>
+<button type="button" class="btn btn-primary qt-f-prev" onclick="saveQuotation('preview')"><i class="ti ti-eye"></i>Save &amp; Preview</button>
+<button type="button" class="btn btn-success qt-f-sent" onclick="saveQuotation('sent')"><i class="ti ti-send"></i>Save &amp; Mark Sent</button>
+<button type="button" class="btn btn-secondary qt-f-more" onclick="qtFooterMore(this)" aria-label="More: Save Draft, Save &amp; Mark Sent, Close">⋯</button>
+</div>
 </div>
 </div>
 <!-- VIEW QUOTATION MODAL -->
@@ -3960,13 +4016,15 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.13';
+      s.src = 'js/app.js?v=270.2';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
         const sv = document.createElement('script'); sv.id = 'bizcore-so-view-script'; sv.src = 'js/so-view.js?v=270.1'; document.body.appendChild(sv);
         // V270.1: the Pricing screen (tabs, line menu, price references, phone cards)
-        const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.13'; document.body.appendChild(pu);
+        const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.2'; document.body.appendChild(pu);
+        // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
+        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=270.2'; document.body.appendChild(qu);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.6'; document.body.appendChild(ds); };
       document.body.appendChild(s);

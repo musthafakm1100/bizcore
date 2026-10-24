@@ -1303,7 +1303,12 @@ async function applyCurrencyDisplayChanges(){settings.currencyDisplay=collectCur
 const QUOTATION_LINE_NOTE_STYLES={highlight:'Soft Highlight',blueAccent:'Blue Accent',minimal:'Minimal',badge:'Note Badge'};
 function ensureQuotationPrintSettings(){const saved=settings.quotationPrint||{};settings.quotationPrint={lineNoteStyle:saved.lineNoteStyle||'highlight'};return settings.quotationPrint;}
 function quotationLineNoteStyle(){const v=ensureQuotationPrintSettings().lineNoteStyle;return QUOTATION_LINE_NOTE_STYLES[v]?v:'highlight';}
-function quotationPrintLineNoteHtml(text){const safe=escapeHtml(String(text||''));const style=quotationLineNoteStyle();if(style==='minimal')return `<div class="inline-note note-minimal"><b>Note:</b> ${safe}</div>`;if(style==='badge')return `<div class="inline-note note-badge"><span>NOTE</span><em>${safe}</em></div>`;if(style==='blueAccent')return `<div class="inline-note note-blue"><b>Note:</b> ${safe}</div>`;return `<div class="inline-note note-highlight"><b>Note:</b> ${safe}</div>`;}
+/* V270.2: a quotation may choose its own note style (q.noteStyle) and a note line its own (item.noteStyle); blank = the level
+   above (line → quotation → the style frozen when it was marked Sent → Administration default). */
+function quotationNoteStyleKey(v){return QUOTATION_LINE_NOTE_STYLES[v]?v:'';}
+function quotationDocNoteStyle(q){return quotationNoteStyleKey(q?.noteStyle)||quotationNoteStyleKey(q?.noteStyleAtSend)||quotationLineNoteStyle();}
+function quotationEffectiveNoteStyle(q,it){return quotationNoteStyleKey(it?.noteStyle)||quotationDocNoteStyle(q);}
+function quotationPrintLineNoteHtml(text,styleKey){const safe=escapeHtml(String(text||''));const style=quotationNoteStyleKey(styleKey)||quotationLineNoteStyle();if(style==='minimal')return `<div class="inline-note note-minimal"><b>Note:</b> ${safe}</div>`;if(style==='badge')return `<div class="inline-note note-badge"><span>NOTE</span><em>${safe}</em></div>`;if(style==='blueAccent')return `<div class="inline-note note-blue"><b>Note:</b> ${safe}</div>`;return `<div class="inline-note note-highlight"><b>Note:</b> ${safe}</div>`;}
 function renderQuotationPrintSettings(){const cfg=ensureQuotationPrintSettings(),sel=document.getElementById('qprint-line-note-style');if(sel)sel.value=cfg.lineNoteStyle;updateQuotationLineNotePreview();setQuotationPrintDirty(false);}
 function setQuotationPrintDirty(dirty){const st=document.getElementById('quotation-print-change-status'),btn=document.getElementById('quotation-print-apply-btn');if(st){st.textContent=dirty?'Unsaved changes':'No pending changes';st.style.color=dirty?'var(--orange-txt)':'var(--gray)';}if(btn)btn.disabled=!dirty;}
 function markQuotationPrintDirty(){setQuotationPrintDirty(true);updateQuotationLineNotePreview();}
@@ -1349,6 +1354,7 @@ function fmtDate(d) {
 function fmtShort(n) { if(n>=1000000) return 'SAR '+(n/1000000).toFixed(1)+'M'; if(n>=1000) return 'SAR '+(n/1000).toFixed(0)+'K'; return fmt(n); }
 const DEFAULT_TAX_SETTINGS={id:'tax-vat15',code:'VAT15',name:'Standard VAT',rate:15,effectiveFrom:'2018-01-01',effectiveTo:'',active:true,isDefault:true,remarks:''};
 let currentQuoteVatRate=null;
+let currentQuoteNoteStyle='';   // V270.2: the open quotation's own note style ('' = Administration default)
 function taxMasterId(){return 'tax-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7)}
 function readTaxMaster(){
   try{
@@ -1456,12 +1462,31 @@ function deleteTaxMasterRecord(id){
   const wasDefault=t.isDefault;rows=rows.filter(x=>x.id!==id);if(wasDefault){const replacement=rows.find(x=>x.active&&taxIsEffective(x))||rows[0];replacement.isDefault=true}writeTaxMaster(rows);renderTaxMaster();showToast('Tax record deleted.','success');
 }
 
+/* ── V270.2 line discounts (docs/V270_2_QUOTATION.md) ──
+   A line keeps its quoted unit price (up) and, when discounted, discAmt (SAR, 2 decimals), discPct (exact %) and
+   discBy ('pct' | 'amt': the one that was typed). Line total = qty × up − discAmt. A line without discAmt works exactly
+   as before (qty × up, unrounded), so older quotations show and total the same. */
+const qtR2=n=>Math.round((Number(n)+Number.EPSILON)*100)/100;
+function quoteLineGross(it){ return (parseFloat(it?.qty)||0)*(parseFloat(it?.up)||0); }
+function quoteLineDisc(it){ const a=Number(it?.discAmt); return Number.isFinite(a)&&a>0?a:0; }
+function quoteLineNet(it){ const d=quoteLineDisc(it), g=quoteLineGross(it); return d?qtR2(g-d):g; }
+function quoteLineDiscPct(it){ const d=quoteLineDisc(it); if(!d) return 0; const p=Number(it.discPct); if(Number.isFinite(p)&&p>0) return p; const g=quoteLineGross(it); return g?d/g*100:0; }
+/** The price per unit after the line discount — what a Sales Order, delivery or invoice of this line is worth per unit. */
+function quoteLineNetUnit(it){ const q=parseFloat(it?.qty)||0, d=quoteLineDisc(it); if(!d||!q) return parseFloat(it?.up)||0; return quoteLineNet(it)/q; }
+function quoteHasLineDiscounts(q){ return (q?.items||[]).some(i=>(!i.lineType||i.lineType==='item')&&quoteLineDisc(i)>0); }
+/** The Disc. cell of View / Print / PDF: "4.55%" over "−300.00"; empty for a line without a discount. */
+function quoteLineDiscCellHtml(it,money){ const d=quoteLineDisc(it); if(!d) return ''; return '<span class="qd-pct">'+quoteLineDiscPct(it).toFixed(2)+'%</span><span class="qd-amt">−'+(money?money(d):d.toFixed(2))+'</span>'; }
+/** Totals in the approved order: Sub-total (Σ qty × price) − line discounts = lines total − quotation discount = before VAT
+ *  + VAT = net. `sub` stays the sum of the line totals (what the printed lines add up to); `gross` and `lineDisc` are new. */
 function calcQuote(q) {
-  const sub = (q.items||[]).filter(i=>!i.lineType||i.lineType==='item').reduce((s,i)=>s+(parseFloat(i.qty)||0)*(parseFloat(i.up)||0),0);
+  const lines=(q.items||[]).filter(i=>!i.lineType||i.lineType==='item');
+  const gross = lines.reduce((s,i)=>s+quoteLineGross(i),0);
+  const lineDisc = lines.reduce((s,i)=>s+quoteLineDisc(i),0);
+  const sub = lineDisc ? lines.reduce((s,i)=>s+quoteLineNet(i),0) : gross;
   const disc = parseFloat(q.discount)||0;
   const bvat = Math.max(0,sub-disc);
   const vat = Math.round(bvat*vatRate(q)*100)/100;
-  return {sub,disc,bvat,vat,net:bvat+vat};
+  return {sub,disc,bvat,vat,net:bvat+vat,gross,lineDisc};
 }
 
 function getStatusClass(s) {
@@ -2416,36 +2441,33 @@ function filterProdSearch() {
   updateQuoteProductHighlight();
 }
 
+/* V270.2: quotation line fields are found by name (data-f / data-quote-*), not by their position in the row */
+function qtField(tr,f){ return tr?tr.querySelector('[data-f="'+f+'"]'):null; }
+function qtFieldVal(tr,f){ return String(qtField(tr,f)?.value||'').trim(); }
+function qtSetField(tr,f,v){ const el=qtField(tr,f); if(!el) return; el.value=v==null?'':String(v); if(el.tagName==='TEXTAREA') qtAutoGrow(el); }
+/* hidden (closed window, phone cards): sized when shown */
+function qtAutoGrow(el){ if(!el||el.tagName!=='TEXTAREA'||!el.isConnected||!el.offsetParent) return; const cs=getComputedStyle(el), px=v=>parseFloat(v)||0; const lh=px(cs.lineHeight)||18, bd=px(cs.borderTopWidth)+px(cs.borderBottomWidth); const max=Math.ceil(lh*Number(el.dataset.maxLines||3)+px(cs.paddingTop)+px(cs.paddingBottom)+bd); el.style.setProperty('height','auto','important'); const want=el.scrollHeight+bd; el.style.setProperty('height',Math.min(want,max)+'px','important'); el.style.overflowY=want>max+1?'auto':'hidden'; }   // 'important': older quote-modal rules fix textarea heights
 function isBlankProductRow(tr) {
   if (!tr || tr.dataset.rowKind !== 'product') return false;
-  const inputs = [...tr.querySelectorAll('input')];
-  const code = inputs[0]?.value.trim() || '';
-  const brand = inputs[1]?.value.trim() || '';
-  const model = inputs[2]?.value.trim() || '';
-  const desc = inputs[3]?.value.trim() || '';
-  const specs = inputs[4]?.value.trim() || '';
-  const qty = inputs[5]?.value.trim() || '';
-  const price = inputs[6]?.value.trim() || '';
-  return !code && !brand && !model && !desc && !specs && !qty && !price;
+  return ['code','brand','model','desc','specs'].every(f=>!qtFieldVal(tr,f))
+    && !String(tr.querySelector('[data-quote-qty]')?.value||'').trim() && !String(tr.querySelector('[data-quote-price]')?.value||'').trim();
 }
 
 function populateProductRow(tr, p) {
   const specLine = (p.specs||[]).map(s=>`${s.k}: ${s.v}`).join(' | ');
-  const inputs = [...tr.querySelectorAll('input')];
-  if (inputs[0]) inputs[0].value = p.code || '';
-  if (inputs[1]) inputs[1].value = p.brand || '';
-  if (inputs[2]) inputs[2].value = p.model || '';
-  if (inputs[3]) inputs[3].value = p.name || '';
-  if (inputs[4]) inputs[4].value = specLine;
-  if (inputs[5]) inputs[5].value = 1;
-  if (inputs[6]) inputs[6].value = p.price || '';
+  qtSetField(tr,'code',p.code||''); qtSetField(tr,'brand',p.brand||''); qtSetField(tr,'model',p.model||'');
+  qtSetField(tr,'desc',p.name||''); qtSetField(tr,'specs',specLine);
+  const qty=tr.querySelector('[data-quote-qty]'), price=tr.querySelector('[data-quote-price]');
+  if (qty) qty.value = 1;
+  if (price) price.value = p.price ? parseBizNumber(p.price).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '';
   const uom = tr.querySelector('select');
-  if (uom && p.uom) { uom.value = p.uom; uom.dataset.masterUom=p.uom; uom.disabled=true; }
+  if (uom && p.uom) { if(![...uom.options].some(o=>o.value===p.uom)) uom.add(new Option(p.uom,p.uom)); uom.value = p.uom; uom.dataset.masterUom=p.uom; uom.disabled=true; }
   tr.dataset.prodId = p.id;
   if (p.image) tr.dataset.image = p.image;
   calcTotals();
   markDirty('quote-modal');
-  setTimeout(()=>inputs[5]?.focus(),0);
+  if(typeof qtAfterRowsChange==='function') qtAfterRowsChange();
+  setTimeout(()=>qty?.focus(),0);
 }
 
 function addProductRow(pid, targetRow=null) {
@@ -2460,13 +2482,15 @@ function addProductRow(pid, targetRow=null) {
     return;
   }
   addItemRow({code:p.code, desc:p.name, brand:p.brand||'', model:p.model||'', specs:(p.specs||[]).map(s=>`${s.k}: ${s.v}`).join(' | '), qty:1, uom:p.uom, up:p.price, prodId:p.id});
+  if(typeof qtAfterRowsChange==='function') qtAfterRowsChange();
 }
 
 
 function clearQuoteProductRowMasterData(tr){
   if(!tr || tr.dataset.rowKind!=='product') return;
-  const inputs=[...tr.querySelectorAll('input')];
-  [0,1,2,4,5,6].forEach(i=>{if(inputs[i]) inputs[i].value='';});
+  ['code','brand','model','specs'].forEach(f=>qtSetField(tr,f,''));
+  const qty=tr.querySelector('[data-quote-qty]'), price=tr.querySelector('[data-quote-price]');
+  if(qty) qty.value=''; if(price) price.value='';
   delete tr.dataset.prodId; delete tr.dataset.image;
   const uom=tr.querySelector('select');
   if(uom){uom.value='Pcs';uom.dataset.masterUom='Pcs';uom.disabled=true;}
@@ -2509,7 +2533,10 @@ function navigateQuoteProductDropdown(event){
 }
 function handleQuoteLineDescriptionKeydown(event,input){
   if(event.key==='Escape'){closeProdSearch();return;}
-  navigateQuoteProductDropdown(event);
+  const dd=document.getElementById('prod-search-dd'), open=dd&&dd.style.display==='block'&&dd.querySelector('.quote-search-option');
+  if(open && navigateQuoteProductDropdown(event)) return;
+  // V270.2: the description box grows with the text but Enter never adds a line break — it moves on to Specifications
+  if(event.key==='Enter'&&!event.shiftKey){ event.preventDefault(); closeProdSearch(); const tr=input.closest('tr'); (qtField(tr,'specs')||tr?.querySelector('[data-quote-qty]'))?.focus(); }
 }
 function handleQuoteProductSearchKey(event) {
   activeQuoteProductRow=null;
@@ -2521,36 +2548,32 @@ function handleQuoteProductSearchKey(event) {
 function setQuoteType(type, options={}) {
   type = (type === 'contracting') ? 'contracting' : 'product';
   currentQuoteType = type;
-  const tabs=document.querySelector('.quote-tabs');
-  if(tabs){tabs.classList.toggle('template-locked',!!options.locked);tabs.setAttribute('aria-label',quotationTypeLabel(type)+' template');}
-  const heading=tabs?tabs.closest('.quote-section-heading')?.querySelector(':scope > span'):null;   // V266.6: the items heading (was renaming "Header information")
-  if(heading) heading.innerHTML='<i class="ti '+quotationTypeIcon(type)+'"></i>'+(type==='contracting'?'Service scope & pricing':'Quotation items');
+  const seg=document.getElementById('qt-template');
+  if(seg){seg.classList.toggle('template-locked',!!options.locked);seg.setAttribute('aria-label',quotationTypeLabel(type)+' template');}
   ['product','contracting'].forEach(t=>{
     const btn = document.getElementById('type-btn-'+t);
-    if (btn) {btn.className = type===t ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';btn.disabled=!!options.locked && type!==t;btn.style.display=options.locked && type!==t?'none':'';btn.style.pointerEvents=options.locked?'none':'';}
+    if (btn) {btn.classList.toggle('on',type===t);btn.setAttribute('aria-pressed',type===t?'true':'false');btn.disabled=!!options.locked && type!==t;btn.title=options.locked&&type!==t?'The template is chosen when the quotation is started':'';}
   });
   const pbar = document.getElementById('product-search-bar');
   const sbar = document.getElementById('service-add-btn');
   const thead = document.getElementById('items-thead');
-
+  const tfoot = document.getElementById('items-tfoot');
+  const table = document.getElementById('qt-items-table');
+  if (table) table.classList.toggle('qt-svc', type==='contracting');
+  const req='<b class="qt-req">*</b>';
+  // V270.2: one column set for the header, the lines and the totals row (docs/V270_2_QUOTATION.md)
   if (type === 'product') {
-    pbar.style.display = 'flex';
-    sbar.style.display = 'none';
-    thead.innerHTML = `<tr>
-      <th style="width:32px">#</th><th style="width:110px">Item code</th>
-      <th style="width:145px">Brand / Model</th><th>Description &amp; specs</th>
-      <th style="width:70px">Qty *</th><th style="width:82px">UOM</th>
-      <th style="width:95px">Unit price *</th><th style="width:95px">Total</th><th style="width:95px"></th>
-    </tr>`;
+    if(pbar) pbar.style.display = '';
+    if(sbar) sbar.style.display = 'none';
+    if(thead) thead.innerHTML = `<tr><th class="qt-th-no">#</th><th class="qt-th-code">Code · Brand / Model</th><th class="qt-th-desc">Description &amp; Specifications</th><th class="qt-th-qty qt-c">Qty ${req}</th><th class="qt-th-price qt-r">Unit Price ${req}</th><th class="qt-th-dp qt-r">Disc %</th><th class="qt-th-da qt-r">Disc SAR</th><th class="qt-th-tot qt-r">Line Total</th><th class="qt-th-menu"><span class="qt-sr">Line menu</span></th></tr>`;
+    if(tfoot) tfoot.innerHTML = `<tr class="qt-totrow"><td></td><td colspan="2" id="qt-tot-label">Total · 0 Items</td><td></td><td></td><td></td><td class="qt-r" id="qt-tot-disc"></td><td class="qt-r" id="qt-tot-net">0.00</td><td></td></tr>`;
   } else {
-    pbar.style.display = 'none';
-    sbar.style.display = 'flex';
-    thead.innerHTML = `<tr>
-      <th style="width:32px">#</th><th>Scope of work / Contracting description</th>
-      <th style="width:55px">Qty *</th><th style="width:80px">Unit</th>
-      <th style="width:95px">Rate *</th><th style="width:95px">Total</th><th style="width:95px"></th>
-    </tr>`;
+    if(pbar) pbar.style.display = 'none';
+    if(sbar) sbar.style.display = '';
+    if(thead) thead.innerHTML = `<tr><th class="qt-th-no">#</th><th class="qt-th-scope">Scope Of Work</th><th class="qt-th-qty qt-c">Qty ${req}</th><th class="qt-th-price qt-r">Rate ${req}</th><th class="qt-th-dp qt-r">Disc %</th><th class="qt-th-da qt-r">Disc SAR</th><th class="qt-th-tot qt-r">Line Total</th><th class="qt-th-menu"><span class="qt-sr">Line menu</span></th></tr>`;
+    if(tfoot) tfoot.innerHTML = `<tr class="qt-totrow"><td></td><td id="qt-tot-label">Total · 0 Scope Lines</td><td></td><td></td><td></td><td class="qt-r" id="qt-tot-disc"></td><td class="qt-r" id="qt-tot-net">0.00</td><td></td></tr>`;
   }
+  if(typeof qtAfterTypeChange==='function') qtAfterTypeChange(type);
 }
 
 
@@ -3610,12 +3633,14 @@ function buildQuotationLineItemRows(rows){
       if(rowType==='Item') itemLine++;
       const qty=rowType==='Item'?(Number(it.qty)||0):'';
       const unitPrice=rowType==='Item'?(Number(it.up)||0):'';
-      const amount=rowType==='Item'?qty*unitPrice:'';
+      const amount=rowType==='Item'?quoteLineNet(it):'';   // V270.2: after the line discount
+      const discPct=rowType==='Item'&&quoteLineDisc(it)?Number(quoteLineDiscPct(it).toFixed(2)):'';
+      const discAmt=rowType==='Item'&&quoteLineDisc(it)?quoteLineDisc(it):'';
       output.push([
         q.qno||'', normalizedQuotationDate(q), q.company||'', q.ref||'', rowType,
         rowType==='Item'?itemLine:'', index+1, it.code||'',
         rowType==='Item'?(it.desc||''):(it.text||it.desc||''), it.brand||'', it.model||'', it.specs||'',
-        qty, it.uom||'', unitPrice, rowType==='Item'?vatRate(q):'', amount
+        qty, it.uom||'', unitPrice, discPct, discAmt, rowType==='Item'?vatRate(q):'', amount
       ]);
     });
   });
@@ -3670,7 +3695,7 @@ function exportQuotationRegisterExcel(includeLines=false, prefetchedRows=null){
 
     let lineCount=0;
     if(includeLines){
-      const lineHeaders=['Quotation No.','Quotation Date','Customer','Reference / RFQ','Row Type','Item Line','Sort Order','Item Code','Description / Text','Brand','Model','Specifications','Qty','UOM','Unit Price','VAT Rate %','Line Amount'];
+      const lineHeaders=['Quotation No.','Quotation Date','Customer','Reference / RFQ','Row Type','Item Line','Sort Order','Item Code','Description / Text','Brand','Model','Specifications','Qty','UOM','Unit Price','Disc %','Disc SAR','VAT Rate %','Line Amount'];
       const lineRows=buildQuotationLineItemRows(rows);
       lineCount=lineRows.length;
       const lineAoa=[
@@ -3681,12 +3706,12 @@ function exportQuotationRegisterExcel(includeLines=false, prefetchedRows=null){
         [], lineHeaders, ...lineRows
       ];
       const lineWs=XLSX.utils.aoa_to_sheet(lineAoa,{cellDates:false});
-      lineWs['!cols']=[{wch:20},{wch:14},{wch:30},{wch:22},{wch:12},{wch:10},{wch:10},{wch:16},{wch:48},{wch:18},{wch:18},{wch:34},{wch:12},{wch:10},{wch:15},{wch:12},{wch:16}];
-      lineWs['!autofilter']={ref:`A6:Q${lineRows.length+6}`};
+      lineWs['!cols']=[{wch:20},{wch:14},{wch:30},{wch:22},{wch:12},{wch:10},{wch:10},{wch:16},{wch:48},{wch:18},{wch:18},{wch:34},{wch:12},{wch:10},{wch:15},{wch:9},{wch:12},{wch:12},{wch:16}];
+      lineWs['!autofilter']={ref:`A6:S${lineRows.length+6}`};
       lineWs['!freeze']={xSplit:0,ySplit:6,topLeftCell:'A7',activePane:'bottomLeft',state:'frozen'};
       for(let r=7;r<=lineRows.length+6;r++){
-        ['M','O','Q'].forEach(col=>{if(lineWs[`${col}${r}`]) lineWs[`${col}${r}`].z='#,##0.00';});
-        if(lineWs[`P${r}`]) lineWs[`P${r}`].z='0.00';
+        ['M','O','Q','S'].forEach(col=>{if(lineWs[`${col}${r}`]) lineWs[`${col}${r}`].z='#,##0.00';});
+        ['P','R'].forEach(col=>{if(lineWs[`${col}${r}`]) lineWs[`${col}${r}`].z='0.00';});
       }
       XLSX.utils.book_append_sheet(wb,lineWs,'Quotation Line Items');
     }
@@ -4681,7 +4706,7 @@ function setQuoteFormState(state='saved') {
 }
 function quoteDateDisplayFromISO(iso){
   const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso||'');
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : String(iso||'');   // V270.2: DD-MM-YYYY (BizCore date field)
 }
 function quoteDateISOFromDisplay(value){
   const v=String(value||'').trim();
@@ -4705,7 +4730,7 @@ function quoteDateISOFromDisplay(value){
 }
 function todayQuoteDateDisplay(){
   const d=new Date();
-  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`;
 }
 function formatQuoteDateTyping(input){
   const digits=String(input.value||'').replace(/\D/g,'').slice(0,8);
@@ -4716,18 +4741,18 @@ function normalizeQuoteDateInput(){
   const input=document.getElementById('f-date'); if(!input) return;
   const iso=quoteDateISOFromDisplay(input.value);
   if(iso){input.value=quoteDateDisplayFromISO(iso);input.classList.remove('field-error');}
-  else if(input.value.trim()){input.classList.add('field-error');showToast('Enter quotation date as DD/MM/YYYY.','warning');}
+  else if(input.value.trim()){input.classList.add('field-error');showToast('Enter the quotation date as DD-MM-YYYY.','warning');}
   updateValidUntil();
 }
 function updateValidUntil(){
   const d=quoteDateISOFromDisplay(document.getElementById('f-date')?.value), days=parseInt(document.getElementById('f-validity')?.value)||0;
   const el=document.getElementById('quote-valid-until');
   const inline=document.getElementById('quote-validity-inline');
-  if(!d){if(el)el.textContent='Valid until: —';if(inline)inline.textContent='Expiry calculated automatically';return;}
+  if(!d){if(el)el.textContent='Valid until: —';if(inline)inline.textContent='days';return;}
   const dt=new Date(d+'T00:00:00');dt.setDate(dt.getDate()+days);
   const formatted=fmtDate(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`);   // V266.6: DD-MM-YYYY everywhere
   if(el)el.textContent='Valid until: '+formatted;
-  if(inline)inline.textContent='Expires: '+formatted;
+  if(inline)inline.textContent=(days===1?'day':'days')+' · '+formatted;   // V270.2: shown inside the Validity box
 }
 function updateQuoteHeaderSummary(){
   const q=document.getElementById('f-qno')?.value||'New quotation';
@@ -4874,32 +4899,53 @@ function quotationWorkflowNext(){
 }
 
 /* ── NEW / EDIT QUOTATION ── */
+/* V270.2 — the link to Pricing and the internal summary ("Internal · Never Printed").
+   ctx = { rfqNo, pricingRef, version, cost (material + additional costs), sell (the Pricing's total sell) }.
+   Saved on the quotation as pricingRef / pricingCost / pricingSell, so a draft opened again keeps its summary. */
 function setQuotationPricingContext(ctx=null){
   window._pendingQuotationPricingContext=ctx||null;
-  const box=document.getElementById('quote-conversion-context');
   const summary=document.getElementById('quote-commercial-summary');
-  if(!box||!summary)return;
-  if(!ctx){box.style.display='none';summary.style.display='none';return;}
-  box.style.display='flex';summary.style.display='block';
-  document.getElementById('quote-conversion-title').textContent='Create from Pricing '+(ctx.pricingRef||'');
-  document.getElementById('quote-conversion-subtitle').textContent=(ctx.rfqNo?('RFQ '+ctx.rfqNo+' · '):'')+'Review customer-facing terms before saving.';
-  document.getElementById('qcs-ref').innerHTML='<span>Pricing reference</span><strong>'+escapeHtml(ctx.pricingRef||'—')+'</strong>';
-  updateQuotationCommercialSummary();
+  if(summary) summary.hidden=!ctx;
+  const none=document.getElementById('quote-commercial-none'); if(none) none.hidden=!!ctx;
+  const ref=document.getElementById('qcs-ref'); if(ref) ref.textContent=ctx?.pricingRef||'';
+  if(ctx) updateQuotationCommercialSummary();
+  if(typeof qtPaintHeader==='function') qtPaintHeader();
 }
 function updateQuotationCommercialSummary(){
   const ctx=window._pendingQuotationPricingContext;
   const summary=document.getElementById('quote-commercial-summary'); if(!summary||!ctx)return;
-  let value=0,changed=0;
-  [...document.querySelectorAll('#items-tbody tr')].forEach((tr,i)=>{
+  let changed=0;
+  [...document.querySelectorAll('#items-tbody tr')].forEach(tr=>{
     if(tr.dataset.lineType==='heading'||tr.dataset.lineType==='note')return;
-    const qty=parseBizNumber(tr.querySelector('[data-quote-qty]')?.value), price=parseBizNumber(tr.querySelector('[data-quote-price]')?.value);
-    value+=qty*price;
-    const original=Number(tr.dataset.pricingSell||0); if(original&&Math.abs(price-original)>0.005)changed++;
+    const price=parseBizNumber(tr.querySelector('[data-quote-price]')?.value), original=Number(tr.dataset.pricingSell||0);
+    if(original&&Math.abs(price-original)>0.005)changed++;
   });
-  const cost=Number(ctx.cost||0), profit=value-cost, margin=value?profit/value*100:0;
+  const t=window._qtTotals||{bvat:0,lineDisc:0,disc:0};
+  const value=t.bvat, cost=Number(ctx.cost||0), profit=value-cost;
+  const markup=cost?profit/cost*100:0, margin=value?profit/value*100:0;
   const money=n=>documentMoney('quotation','summary',n);
-  document.getElementById('qcs-cost').textContent=money(cost);document.getElementById('qcs-value').textContent=money(value);document.getElementById('qcs-profit').textContent=money(profit);document.getElementById('qcs-margin').textContent=margin.toFixed(1)+'%';
-  const note=document.getElementById('qcs-change'); if(note){note.style.display=changed?'flex':'none';note.querySelector('span').textContent=changed+' selling price'+(changed===1?' has':'s have')+' changed from Pricing. Margin has been recalculated.';}
+  const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v;};
+  set('qcs-cost',money(cost)); set('qcs-value',money(value)); set('qcs-profit',formatNumber(profit,2));
+  set('qcs-markup',markup.toFixed(1)+'%'); set('qcs-margin',margin.toFixed(1)+'%');
+  // Status by the Pricing Settings method and minimum — information only (approved 23 Oct 2026: it never blocks saving)
+  const ps=activePricingSettings(), byMargin=ps.marginMethod==='gross_margin', pct=pricingPercent(cost,value), min=Number(ps.minMargin||0);
+  const state=!value?'none':profit<0?'loss':pct<min?'low':'good';
+  summary.dataset.state=state;
+  const lbl=byMargin?'Margin':'Markup';
+  set('qcs-status',state==='none'?'No selling value yet':state==='loss'?'Loss · '+money(-profit)+' below cost':state==='low'?'Low · '+lbl+' below '+min.toFixed(1)+'% minimum':'Good · '+lbl+' '+pct.toFixed(1)+'%');
+  const cmp=document.getElementById('qcs-cmp');
+  if(cmp){
+    const pSell=Number(ctx.sell||0), pPct=pSell?pricingPercent(cost,pSell):null, why=[];
+    if(t.lineDisc>0||t.disc>0) why.push('discounts'); if(changed) why.push(changed+' price change'+(changed===1?'':'s'));
+    cmp.hidden=pPct===null||Math.abs(pPct-pct)<0.05;
+    cmp.textContent=pPct===null?'':'Pricing '+(ctx.version?'V'+ctx.version+' ':'')+lbl.toLowerCase()+' '+pPct.toFixed(1)+'% → '+pct.toFixed(1)+'%'+(why.length?' after '+why.join(' and '):'')+'.';
+  }
+  const note=document.getElementById('qcs-change'); if(note){note.hidden=!changed;const sp=note.querySelector('span');if(sp)sp.textContent=changed+' selling price'+(changed===1?' has':'s have')+' changed from Pricing.';}
+}
+/** "Pricing 180.00 ↑" under a changed price — click to put the Pricing price back. */
+function qtUsePricingPrice(btn){
+  const tr=btn.closest('tr'), ps=Number(tr?.dataset.pricingSell||0), inp=tr?.querySelector('[data-quote-price]'); if(!ps||!inp) return;
+  inp.value=ps.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); calcTotals(); markDirty('quote-modal');
 }
 
 function openNewQuotation(templateType) {
@@ -4922,7 +4968,8 @@ function openNewQuotation(templateType) {
   document.getElementById('f-notes').value='';
   document.getElementById('f-internal-notes').value='';
   document.getElementById('f-additional-conditions').value='';
-  document.getElementById('f-discount').value='0';
+  document.getElementById('f-discount').value='';
+  currentQuoteNoteStyle='';
   currentQuoteType=selectedTemplate;
   setQuoteType(selectedTemplate,{locked:true});
   document.getElementById('items-tbody').innerHTML='';
@@ -4930,7 +4977,9 @@ function openNewQuotation(templateType) {
   calcTotals();
   if(document.getElementById('prod-search-inp')) document.getElementById('prod-search-inp').value='';
   updateValidUntil(); updateQuoteHeaderSummary(); setQuoteFormState('saved');
+  if(typeof qtOnOpen==='function') qtOnOpen();
   openModalWithSize('quote-modal');
+  if(typeof qtAfterOpen==='function') qtAfterOpen();
 }
 
 function editQuotation(id, skipVatCheck=false) {
@@ -5001,7 +5050,8 @@ function editQuotation(id, skipVatCheck=false) {
   document.getElementById('f-notes').value=q.notes||'';
   document.getElementById('f-internal-notes').value=q.internalNotes||'';
   document.getElementById('f-additional-conditions').value=q.additionalConditions||'';
-  document.getElementById('f-discount').value=q.discount||0;
+  document.getElementById('f-discount').value=Number(q.discount)?qtMoneyText(q.discount):'';
+  currentQuoteNoteStyle=quotationNoteStyleKey(q.noteStyle);
   // detect type from saved items or default to product
   const savedType = q.quoteType || (q.items||[])[0]?.type || 'product';
   currentQuoteType = savedType === 'contracting' ? 'contracting' : 'product';
@@ -5009,59 +5059,78 @@ function editQuotation(id, skipVatCheck=false) {
   document.getElementById('items-tbody').innerHTML='';
   (q.items||[]).forEach(it=>addItemRow(it));
   if(!q.items||!q.items.length) addItemRow();
+  setQuotationPricingContext(qtPricingContextOf(q));
   calcTotals();
   if(document.getElementById('prod-search-inp')) document.getElementById('prod-search-inp').value='';
   updateValidUntil(); updateQuoteHeaderSummary(); setQuoteFormState('saved');
+  if(typeof qtOnOpen==='function') qtOnOpen(q);
   openModalWithSize('quote-modal');
+  if(typeof qtAfterOpen==='function') qtAfterOpen(q);
+}
+/** V270.2: the Pricing link of a saved quotation (only quotations saved from V270.2 on carry the cost). */
+function qtPricingContextOf(q){
+  if(!q||!(Number(q.pricingCost)>0)) return null;
+  const r=q.rfqId?rfqs.find(x=>x.id===q.rfqId):null;
+  return {rfqNo:r?.rfqNo||'',pricingRef:q.pricingRef||'',cost:Number(q.pricingCost),sell:Number(q.pricingSell||0),version:Number(q.pricingVersion||1)};
 }
 
+/* V270.2 — quotation lines. Product: # · Code + Brand / Model · Description (grows to 3 lines) + Specifications · Qty + UOM ·
+   Unit Price · Disc % · Disc SAR · Line Total · ⋮. Service: # · Scope (grows to 8 lines) · Qty + Unit · Rate · Disc % ·
+   Disc SAR · Line Total · ⋮. Headings and notes span the middle columns. Fields are found by name (data-f, data-quote-*). */
+function qtDiscPctText(p){ const n=Number(p)||0; return n?n.toFixed(2):''; }
+function qtMoneyText(n){ const v=Number(n)||0; return v?v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):''; }
 function addItemRow(item={}) {
-  if(item.lineType==='heading'||item.lineType==='note'){ addSpecialQuoteRow(item.lineType,item.text||item.desc||''); return; }
+  if(item.lineType==='heading'||item.lineType==='note'){ return addSpecialQuoteRow(item.lineType,item.text||item.desc||'',{noteStyle:item.noteStyle||'',focus:false}); }
   const n = document.querySelectorAll('#items-tbody tr:not(.quote-special-row)').length+1;
   const tr = document.createElement('tr');
   tr.dataset.lineType='item';
+  tr.className='qt-row';
   const isScopeRow = item.rowKind === 'scope' || item.type === 'contracting' || currentQuoteType === 'contracting';
   const isProduct = !isScopeRow;
   tr.dataset.rowKind = isScopeRow ? 'scope' : 'product';
+  tr.dataset.lineKey = item.lineKey || ('ql'+Date.now().toString(36)+Math.random().toString(36).slice(2,7));
   if (item.prodId) tr.dataset.prodId = item.prodId;
   if (item.image) tr.dataset.image = item.image;
-  if(item.pricingSell!==undefined) tr.dataset.pricingSell=String(item.pricingSell);
-  if(item.pricingBuy!==undefined) tr.dataset.pricingBuy=String(item.pricingBuy);
+  if(item.pricingSell!==undefined&&item.pricingSell!=='') tr.dataset.pricingSell=String(item.pricingSell);
+  if(item.pricingBuy!==undefined&&item.pricingBuy!=='') tr.dataset.pricingBuy=String(item.pricingBuy);
+  const discAmt=quoteLineDisc(item);
+  if(discAmt){ tr.dataset.discBy=item.discBy==='pct'?'pct':'amt'; tr.dataset.discPct=String(quoteLineDiscPct(item)); }
   const selectedUom=item.uom||(isProduct?'Pcs':'Job');
   const options=(isProduct?uomMaster.filter(u=>u.active):uomMaster.filter(u=>u.active && ['Job','Hours','Days','Months','Visit','Lump sum','EA'].includes(u.code)));
   if(!options.some(u=>u.code===selectedUom)) options.push(getUomRule(selectedUom));
   const uomOptions=bcSortBy(options,u=>u.code).map(u=>`<option value="${escapeHtml(u.code)}"${u.code===selectedUom?' selected':''}>${escapeHtml(u.code)}</option>`).join('');
   const qtyValue=item.qty!==undefined&&item.qty!==''?formatQtyForUom(item.qty,selectedUom):(isProduct?'':'1');
   const priceValue=item.up!==undefined&&item.up!==''?parseBizNumber(item.up).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'';
+  const e=v=>escapeHtml(String(v??''));
+  const dpVal=discAmt?qtDiscPctText(quoteLineDiscPct(item)):'', daVal=discAmt?qtMoneyText(discAmt):'';
+  const noCell=`<td class="qt-no"><span class="qt-grip" title="Drag to reorder" aria-hidden="true">⋮⋮</span><span class="qt-n">${n}</span></td>`;
+  const qtyCell=`<td class="qt-qc"><div class="qt-qu"><input data-quote-qty type="text" inputmode="decimal" required value="${e(qtyValue)}" onfocus="beginNumberEdit(this)" oninput="calcTotals()" onblur="enforceQuoteQty(this,true)" aria-label="Quantity"><select class="quote-uom-readonly" data-master-uom="${e(selectedUom)}" disabled aria-label="Unit (from the Item / Service Master)" title="From the Item / Service Master">${uomOptions}</select></div></td>`;
+  const priceCell=`<td class="qt-pc"><input class="qt-inp" data-quote-price type="text" inputmode="decimal" required value="${e(priceValue)}" onfocus="beginNumberEdit(this)" oninput="calcTotals()" onblur="formatQuotePrice(this)" aria-label="${isProduct?'Unit price':'Rate'}"><button type="button" class="qt-ref" hidden tabindex="-1" onclick="qtUsePricingPrice(this)"></button></td>`;
+  const discCells=`<td class="qt-dpc"><input class="qt-inp" data-quote-dpct type="text" inputmode="decimal" value="${e(dpVal)}" placeholder="—" onfocus="beginNumberEdit(this)" oninput="qtDiscInput(this,'pct')" onblur="qtDiscBlur(this,'pct')" aria-label="Discount %"></td><td class="qt-dac"><input class="qt-inp" data-quote-damt type="text" inputmode="decimal" value="${e(daVal)}" placeholder="—" onfocus="beginNumberEdit(this)" oninput="qtDiscInput(this,'amt')" onblur="qtDiscBlur(this,'amt')" aria-label="Discount SAR"></td>`;
+  const tailCells=`<td class="qt-tc"><div class="total-cell">0.00</div><div class="qt-gross"></div></td><td class="qt-mc"><button type="button" class="pr-menu-btn qt-menu-btn" onclick="qtRowMenu(this)" aria-label="Line menu" title="Line menu">⋮</button></td>`;
   if (isProduct) {
-    tr.innerHTML = `
-      <td style="text-align:center;color:var(--gray);font-size:11px;width:32px">${n}</td>
-      <td><input placeholder="Code" value="${item.code||''}" style="font-size:12px"></td>
-      <td><input placeholder="Brand" value="${item.brand||''}" style="font-size:11px;margin-bottom:3px"><input placeholder="Model" value="${item.model||''}" style="font-size:11px;margin-top:2px"></td>
-      <td><input class="quote-line-product-search" placeholder="Search or select product" value="${item.desc||''}" autocomplete="off" onfocus="handleQuoteLineDescriptionFocus(this)" oninput="handleQuoteLineDescriptionInput(this)" onkeydown="handleQuoteLineDescriptionKeydown(event,this)" onblur="setTimeout(closeProdSearch,200)" style="width:100%;margin-bottom:3px;font-weight:500"><input placeholder="Specs (e.g. Color: White | Size: A4)" value="${item.specs||''}" style="width:100%;font-size:11px;color:var(--gray);margin-top:2px"></td>
-      <td><input data-quote-qty type="text" inputmode="decimal" required value="${qtyValue}" onfocus="beginNumberEdit(this)" oninput="calcTotals()" onblur="enforceQuoteQty(this,true)" style="text-align:center"></td>
-      <td><select class="quote-uom-readonly" data-master-uom="${escapeHtml(selectedUom)}" disabled aria-label="UOM derived from item master" title="Derived from Item / Service Master">${uomOptions}</select></td>
-      <td><input data-quote-price type="text" inputmode="decimal" required value="${priceValue}" onfocus="beginNumberEdit(this)" oninput="calcTotals()" onblur="formatQuotePrice(this)" style="text-align:right"></td>
-      <td class="total-cell">0.00</td><td><button class="del-btn" onclick="this.closest('tr').remove();calcTotals()"><i class="ti ti-trash"></i></button></td>`;
+    tr.innerHTML = noCell
+      +`<td class="qt-cc"><input data-f="code" class="qt-code" placeholder="Code" value="${e(item.code)}" aria-label="Item code" oninput="calcTotals()"><div class="qt-bm"><input data-f="brand" placeholder="Brand" value="${e(item.brand)}" aria-label="Brand" oninput="calcTotals()"><input data-f="model" placeholder="Model" value="${e(item.model)}" aria-label="Model" oninput="calcTotals()"></div></td>`
+      +`<td class="qt-dc"><textarea data-f="desc" rows="1" data-max-lines="3" class="qt-desc quote-line-product-search" placeholder="Search or type the item…" autocomplete="off" onfocus="handleQuoteLineDescriptionFocus(this)" oninput="qtAutoGrow(this);handleQuoteLineDescriptionInput(this)" onkeydown="handleQuoteLineDescriptionKeydown(event,this)" onblur="setTimeout(closeProdSearch,200)" aria-label="Description">${e(item.desc)}</textarea><input data-f="specs" class="qt-specs" placeholder="Specifications (e.g. Size: A4 | Weight: 80gsm)" value="${e(item.specs)}" aria-label="Specifications"><button type="button" class="qt-meta" tabindex="-1" onclick="qtEditLine(this.closest('tr'))" title="Item code, brand and model"></button></td>`
+      +qtyCell+priceCell+discCells+tailCells;
   } else {
-    tr.innerHTML = `
-      <td style="text-align:center;color:var(--gray);font-size:11px;width:32px">${n}</td>
-      <td><textarea placeholder="Describe the scope of work, deliverables, civil / MEP work…" style="width:100%;height:64px;border:1px solid #ced4da;border-radius:4px;padding:6px 8px;font-size:12px;resize:vertical;outline:none;font-family:Inter,Segoe UI,Arial,sans-serif">${item.desc||''}</textarea></td>
-      <td><input data-quote-qty type="text" inputmode="decimal" required value="${qtyValue}" onfocus="beginNumberEdit(this)" oninput="calcTotals()" onblur="enforceQuoteQty(this,true)" style="text-align:center"></td>
-      <td><select class="quote-uom-readonly" data-master-uom="${escapeHtml(selectedUom)}" disabled aria-label="UOM derived from item master" title="Derived from Item / Service Master">${uomOptions}</select></td>
-      <td><input data-quote-price type="text" inputmode="decimal" required value="${priceValue}" onfocus="beginNumberEdit(this)" oninput="calcTotals()" onblur="formatQuotePrice(this)" style="text-align:right"></td>
-      <td class="total-cell">0.00</td><td><button class="del-btn" onclick="this.closest('tr').remove();calcTotals()"><i class="ti ti-trash"></i></button></td>`;
+    tr.innerHTML = noCell
+      +`<td class="qt-sc"><textarea data-f="desc" rows="2" data-max-lines="8" class="qt-scope" placeholder="Describe the scope of work, deliverables, civil / MEP work…" oninput="qtAutoGrow(this)" aria-label="Scope of work">${e(item.desc)}</textarea></td>`
+      +qtyCell+priceCell+discCells+tailCells;
   }
-  document.getElementById('items-tbody').appendChild(tr); calcTotals();
+  document.getElementById('items-tbody').appendChild(tr);
+  tr.querySelectorAll('textarea').forEach(qtAutoGrow);
+  calcTotals();
+  return tr;
 }
 
-function addServiceRow() { addItemRow({rowKind:'scope', qty:1, uom:'Job'}); }
+function addServiceRow() { return addItemRow({rowKind:'scope', qty:1, uom:'Job'}); }
 function renumberQuoteItemRows(){
   let n=0;
   document.querySelectorAll('#items-tbody tr').forEach(tr=>{
     if(tr.dataset.lineType==='heading'||tr.dataset.lineType==='note') return;
     n++;
-    const cell=tr.cells&&tr.cells[0]; if(cell) cell.textContent=n;
+    const el=tr.querySelector('.qt-n'); if(el) el.textContent=n; else { const cell=tr.cells&&tr.cells[0]; if(cell) cell.textContent=n; }
   });
 }
 function isUntouchedQuoteItemRow(tr){
@@ -5083,22 +5152,32 @@ function replaceInitialBlankQuoteRowIfNeeded(){
   const onlyRow=tbody.firstElementChild;
   if(isUntouchedQuoteItemRow(onlyRow)) onlyRow.remove();
 }
-function addSpecialQuoteRow(type='note', text=''){
+/** A heading or a note line. A note keeps its own style in data-note-style ('' = the quotation's style). */
+function addSpecialQuoteRow(type='note', text='', opts={}){
   const tbody=document.getElementById('items-tbody'); if(!tbody)return;
   // On a new quotation, Heading/Note should be allowed to become the first row.
   // Replace the untouched starter item row instead of appending below it.
   replaceInitialBlankQuoteRowIfNeeded();
   const tr=document.createElement('tr');
   tr.dataset.lineType=type;
-  tr.className='quote-special-row '+(type==='heading'?'quote-heading-row':'quote-note-row');
-  const label=type==='heading'?'Heading':'Note';
+  tr.dataset.lineKey='ql'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  tr.className='quote-special-row '+(type==='heading'?'quote-heading-row qt-hrow':'quote-note-row qt-nrow');
+  const span=currentQuoteType==='contracting'?6:7;
   const placeholder=type==='heading'?'e.g. Option 1 – Supply only':'e.g. Installation price is not included.';
-  tr.innerHTML=`<td colspan="8"><div class="quote-special-wrap"><span class="quote-special-badge">${label}</span><input class="quote-special-text" value="${escapeHtml(text)}" placeholder="${placeholder}" onkeydown="handleSpecialQuoteRowKey(event,this)" oninput="markDirty('quote-modal')"></div></td><td><button class="del-btn" onclick="this.closest('tr').remove();renumberQuoteItemRows();calcTotals()"><i class="ti ti-trash"></i></button></td>`;
+  const input=`<input class="quote-special-text" value="${escapeHtml(text)}" placeholder="${placeholder}" onkeydown="handleSpecialQuoteRowKey(event,this)" oninput="markDirty('quote-modal')" aria-label="${type==='heading'?'Heading':'Note'} text">`;
+  if(type==='heading'){
+    tr.innerHTML=`<td class="qt-no"><span class="qt-grip" title="Drag to reorder" aria-hidden="true">⋮⋮</span></td><td colspan="${span}"><div class="qt-hwrap"><span class="qt-badge">Heading</span>${input}</div></td><td class="qt-mc"><button type="button" class="pr-menu-btn qt-menu-btn" onclick="qtRowMenu(this)" aria-label="Line menu" title="Line menu">⋮</button></td>`;
+  } else {
+    tr.dataset.noteStyle=quotationNoteStyleKey(opts.noteStyle)||'';
+    tr.innerHTML=`<td class="qt-no"><span class="qt-grip" title="Drag to reorder" aria-hidden="true">⋮⋮</span></td><td colspan="${span}"><div class="qt-nline"><div class="qt-note"><b class="qt-note-b">NOTE</b><b class="qt-note-l">Note:</b>${input}</div><button type="button" class="qt-schip" onclick="qtNoteStyleMenu(this)" aria-label="Note style"></button></div></td><td class="qt-mc"><button type="button" class="pr-menu-btn qt-menu-btn" onclick="qtRowMenu(this)" aria-label="Line menu" title="Line menu">⋮</button></td>`;
+  }
   tbody.appendChild(tr); renumberQuoteItemRows(); calcTotals();
-  setTimeout(()=>tr.querySelector('input')?.focus(),0);
+  if(typeof qtPaintNotes==='function') qtPaintNotes();
+  if(opts.focus!==false) setTimeout(()=>tr.querySelector('input')?.focus(),0);
+  return tr;
 }
 function handleSpecialQuoteRowKey(event,input){
-  if(event.key==='Enter'){event.preventDefault(); addItemRow(); const last=document.querySelector('#items-tbody tr:last-child input, #items-tbody tr:last-child textarea'); last?.focus();}
+  if(event.key==='Enter'){event.preventDefault(); const tr=addItemRow(); if(typeof qtAfterRowsChange==='function') qtAfterRowsChange(); (tr?.querySelector('textarea, input'))?.focus();}
   if(event.key==='Escape'){event.preventDefault(); input.blur();}
 }
 
@@ -5265,31 +5344,101 @@ function openModalWithSize(modalId) {
   lastClosedModal=null;
 }
 
+/* V270.2 — the quotation's VAT rate. Fixes "VAT (15%) 0.00": when the rate had not been set yet (a quotation made from
+   Pricing), Number(null) gave 0 for the figure while the label fell back to the Tax Master rate. */
+function qtVatPercent(){ const v=currentQuoteVatRate; return (v===null||v===undefined||v===''||!Number.isFinite(Number(v)))?getQuoteVatPercent():Number(v); }
+const qtNumText=v=>String(v??'').replace(/[,\s]/g,'');
+const qtNumOk=v=>{ const t=qtNumText(v); return t!==''&&t!=='.'&&/^\d*\.?\d*$/.test(t); };
+/** Line discount of one row. The field that was typed (data-disc-by) is kept; the other one follows. Never rewrites the
+ *  field that has the focus. Returns { amt, pct, err } — a wrong value counts as 0 and blocks Save. */
+function qtLineDiscount(tr,gross){
+  const pi=tr.querySelector('[data-quote-dpct]'), ai=tr.querySelector('[data-quote-damt]');
+  if(!pi||!ai) return {amt:0,pct:0,err:''};
+  const by=tr.dataset.discBy||'', active=document.activeElement;
+  let amt=0,pct=0,err='';
+  if(by==='pct'){
+    const raw=qtNumText(pi.value), exact=tr.dataset.discPct!==undefined&&tr.dataset.discPct!==''?Number(tr.dataset.discPct):Number(raw);
+    if(raw===''){ pct=0; }
+    else if(!qtNumOk(raw)||!Number.isFinite(exact)||exact<0) err='Enter 0 or more.';
+    else if(exact>100) err="A discount can't be more than 100 %.";
+    else { pct=exact; amt=qtR2(gross*pct/100); }
+    if(active!==ai) ai.value=(!err&&amt)?qtMoneyText(amt):'';
+  } else if(by==='amt'){
+    const raw=qtNumText(ai.value), a=Number(raw);
+    if(raw===''){ amt=0; }
+    else if(!qtNumOk(raw)||!Number.isFinite(a)||a<0) err='Enter 0 or more.';
+    else if(a>gross+0.004) err="Can't be more than the line gross "+qtMoneyText(gross||0)+(gross?'':'0.00')+'.';
+    else { amt=qtR2(a); pct=gross?amt/gross*100:0; }
+    tr.dataset.discPct=(!err&&amt)?String(pct):'';
+    if(active!==pi) pi.value=(!err&&amt)?qtDiscPctText(pct):'';
+  }
+  pi.classList.toggle('qt-bad',!!err&&by==='pct'); ai.classList.toggle('qt-bad',!!err&&by==='amt');
+  pi.classList.toggle('qt-der',by==='amt'&&!err&&!!amt); ai.classList.toggle('qt-der',by==='pct'&&!err&&!!amt);
+  pi.title=err&&by==='pct'?err:''; ai.title=err&&by==='amt'?err:'';
+  tr.dataset.discErr=err;
+  return err?{amt:0,pct:0,err}:{amt,pct,err:''};
+}
+function qtDiscInput(el,kind){
+  const tr=el.closest('tr'); if(!tr) return;
+  const empty=qtNumText(el.value)==='';
+  if(empty){ tr.dataset.discBy=''; tr.dataset.discPct=''; const other=tr.querySelector(kind==='pct'?'[data-quote-damt]':'[data-quote-dpct]'); if(other) other.value=''; }
+  else { tr.dataset.discBy=kind; if(kind==='pct') tr.dataset.discPct=qtNumOk(el.value)?String(Number(qtNumText(el.value))):''; }
+  calcTotals(); markDirty('quote-modal');
+}
+function qtDiscBlur(el,kind){
+  const tr=el.closest('tr'); if(!tr) return;
+  if(!tr.querySelector('[data-quote-'+(kind==='pct'?'dpct':'damt')+']').classList.contains('qt-bad') && qtNumOk(el.value)){
+    const v=Number(qtNumText(el.value));
+    el.value=v?(kind==='pct'?qtDiscPctText(v):qtMoneyText(v)):'';
+    if(!v){ tr.dataset.discBy=''; tr.dataset.discPct=''; }
+  }
+  calcTotals();
+}
 function calcTotals() {
-  let sub=0;
+  let gross=0,lineDisc=0,lineNet=0,items=0,bad=0;
   document.querySelectorAll('#items-tbody tr').forEach(tr=>{
     if(tr.dataset.lineType==='heading'||tr.dataset.lineType==='note') return;
+    items++;
     const qty=parseBizNumber(tr.querySelector('[data-quote-qty]')?.value);
     const up=parseBizNumber(tr.querySelector('[data-quote-price]')?.value);
-    const tot=qty*up; sub+=tot;
+    const g=qty*up, d=qtLineDiscount(tr,g), net=d.amt?qtR2(g-d.amt):g;
+    if(d.err) bad++;
+    gross+=g; lineDisc+=d.amt; lineNet+=net;
     const tc=tr.querySelector('.total-cell');
-    if(tc) tc.textContent=tot.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+    if(tc) tc.textContent=net.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const mt=tr.querySelector('.qt-meta'); if(mt){ const bm=[qtFieldVal(tr,'brand'),qtFieldVal(tr,'model')].filter(Boolean).join(' '); mt.textContent=[qtFieldVal(tr,'code'),bm].filter(Boolean).join(' · ')||'+ Code · Brand · Model'; }   // shown on narrow screens
+    const gc=tr.querySelector('.qt-gross'); if(gc) gc.textContent=d.amt?'Gross '+g.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}):'';
+    const ref=tr.querySelector('.qt-ref'), ps=Number(tr.dataset.pricingSell||0);
+    if(ref){ const show=ps>0&&up>0&&Math.abs(up-ps)>0.005; ref.hidden=!show; if(show){ ref.textContent='Pricing '+ps.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})+(up>ps?' ↑':' ↓'); ref.title='Price in Pricing: '+ps.toFixed(2)+' — click to use it'; } }
   });
-  const disc=parseFloat(document.getElementById('f-discount').value)||0;
-  const bvat=Math.max(0,sub-disc);
-  const rate=Number.isFinite(Number(currentQuoteVatRate))?Number(currentQuoteVatRate):getQuoteVatPercent();
+  const discEl=document.getElementById('f-discount');
+  const discRaw=qtNumText(discEl?.value), disc=qtNumOk(discRaw)?Number(discRaw):0;
+  const discBad=!!discRaw&&(!qtNumOk(discRaw)||disc>lineNet+0.004);
+  if(discEl){ discEl.classList.toggle('qt-bad',discBad); discEl.title=discBad?(qtNumOk(discRaw)?"Can't be more than the lines total "+qtMoneyText(lineNet)+'.':'Enter 0 or more.'):''; }
+  const qd=discBad?0:disc;
+  const bvat=Math.max(0,lineNet-qd);
+  const rate=qtVatPercent();
   const vat=Math.round(bvat*(rate/100)*100)/100;
   const net=bvat+vat;
-  document.getElementById('t-subtotal').textContent=documentMoney('quotation','summary',sub);
-  document.getElementById('t-discount').textContent='- '+documentMoney('quotation','summary',disc);
-  document.getElementById('t-before-vat').textContent=documentMoney('quotation','summary',bvat);
-  document.getElementById('t-vat').textContent=documentMoney('quotation','summary',vat);
-  document.getElementById('t-net').textContent=documentMoney('quotation','grandTotal',net);
+  const set=(id,t)=>{const el=document.getElementById(id); if(el) el.textContent=t;};
+  set('t-subtotal',documentMoney('quotation','summary',gross));
+  set('t-line-disc',lineDisc?'−'+documentMoney('quotation','summary',lineDisc):documentMoney('quotation','summary',0));
+  set('t-discount','- '+documentMoney('quotation','summary',qd));
+  set('t-before-vat',documentMoney('quotation','summary',bvat));
+  set('t-vat',documentMoney('quotation','summary',vat));
+  set('t-net',documentMoney('quotation','grandTotal',net));
+  set('t-vat-label',`VAT ${Number(rate).toFixed(2).replace(/\.00$/,'')}%`);
+  const svc=currentQuoteType==='contracting';
+  set('qt-tot-label','Total · '+items+(svc?(items===1?' Scope Line':' Scope Lines'):(items===1?' Item':' Items')));
+  set('qt-tot-disc',lineDisc?'−'+lineDisc.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}):'');
+  set('qt-tot-net',lineNet.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}));
+  window._qtTotals={gross,lineDisc,lineNet,disc:qd,bvat,vat,net,rate,items,badLines:bad,discBad};
   updateQuotationCommercialSummary();
-  document.getElementById('t-vat-label').textContent=`VAT (${Number(currentQuoteVatRate??getQuoteVatPercent()).toFixed(2).replace(/\.00$/,'')}%)`;
+  if(typeof qtAfterCalc==='function') qtAfterCalc(window._qtTotals);
 }
 
-async function saveQuotation(mode='save') {
+/* opts.skipConfirm: the person already chose "Save & Close" in the Leave Without Saving? dialog (V270.2) */
+async function saveQuotation(mode='save', opts={}) {
   if(mode==='draft') document.getElementById('f-status').value='Draft';
   if(mode==='sent') document.getElementById('f-status').value='Sent';
   const company=document.getElementById('f-company').value.trim();
@@ -5310,6 +5459,12 @@ async function saveQuotation(mode='save') {
     if(qty<=0){showToast('Quantity is mandatory on line '+(i+1),'error');nums[0]?.focus();return;}
     if(price<=0){showToast('Unit price is mandatory on line '+(i+1),'error');nums[1]?.focus();return;}
   }
+  // V270.2: line discounts and the quotation discount must be valid before saving
+  calcTotals();
+  for(let i=0;i<rows.length;i++){
+    if(rows[i].dataset.discErr){ const f=rows[i].querySelector(rows[i].dataset.discBy==='pct'?'[data-quote-dpct]':'[data-quote-damt]'); showToast('Line '+(i+1)+' — discount: '+rows[i].dataset.discErr,'error'); if(typeof qtRevealRow==='function') qtRevealRow(rows[i]); f?.focus(); return; }
+  }
+  if(window._qtTotals?.discBad){ const f=document.getElementById('f-discount'); showToast('Quotation discount: '+(f?.title||'check the amount'),'error'); f?.focus(); return; }
   // Capture pendingRFQId immediately before any async operations
   const capturedRFQId = document._pendingRFQId || null;
   const capturedEditingId = editingId;
@@ -5317,37 +5472,20 @@ async function saveQuotation(mode='save') {
   const previewItems=[];
   document.querySelectorAll('#items-tbody tr').forEach(tr=>{
     if(tr.dataset.lineType==='heading'||tr.dataset.lineType==='note'){const t=(tr.querySelector('.quote-special-text')?.value||'').trim();if(t)previewItems.push(t);return;}
-    const ta=tr.querySelector('textarea');
-    if(ta){
-      const desc=(ta.value||'').trim();
-      if(desc) previewItems.push(desc);
-    } else {
-      const textInputs=tr.querySelectorAll('input:not([type="number"])');
-      const desc=(textInputs[3]?.value||textInputs[1]?.value||'').trim();
-      if(desc) previewItems.push(desc);
-    }
+    const desc=qtFieldVal(tr,'desc');
+    if(desc) previewItems.push(desc);
   });
   const previewQno=document.getElementById('f-qno').value;
   const previewStatus=document.getElementById('f-status').value;
-  const previewDisc=parseFloat(document.getElementById('f-discount').value)||0;
-  // Calculate net for display
-  let previewSub=0;
-  document.querySelectorAll('#items-tbody tr').forEach(tr=>{
-    if(tr.dataset.lineType==='heading'||tr.dataset.lineType==='note') return;
-    const qty=parseBizNumber(tr.querySelector('[data-quote-qty]')?.value);
-    const up=parseBizNumber(tr.querySelector('[data-quote-price]')?.value);
-    previewSub+=qty*up;
-  });
-  const previewBvat=Math.max(0,previewSub-previewDisc);
-  const previewRate=Number(currentQuoteVatRate??getQuoteVatPercent());
-  const previewVat=Math.round(previewBvat*(previewRate/100)*100)/100;
-  const previewNet=previewBvat+previewVat;
+  // V270.2: the figures in the confirmation are the ones on the screen (line discounts, quotation discount, VAT)
+  const previewT=window._qtTotals||{lineDisc:0,disc:0,net:0};
+  const previewNet=previewT.net;
   // Protected transactional save: only one quotation save/confirmation may own the form.
   const quoteSaveKey='quotation:'+String(capturedEditingId||document._pendingRFQId||'new');
   if(_documentSaveLocks.has(quoteSaveKey)) return;
   _documentSaveLocks.add(quoteSaveKey);
   // Show confirmation — wrap in promise
-  const confirmed = await new Promise(resolve => {
+  const confirmed = opts.skipConfirm ? true : await new Promise(resolve => {
     showConfirm({
       icon: editingId ? '✏️' : '📋',
       title: editingId ? 'Save changes to quotation?' : 'Create new quotation?',
@@ -5359,6 +5497,8 @@ async function saveQuotation(mode='save') {
         'Customer': company,
         'Status': previewStatus,
         'Items': previewItems.length + ' line item(s)',
+        ...(previewT.lineDisc>0?{'Line discounts':'− '+fmt(previewT.lineDisc)}:{}),
+        ...(previewT.disc>0?{'Quotation discount':'− '+fmt(previewT.disc)}:{}),
         'Net amount (incl. VAT)': fmt(previewNet)
       },
       confirmText: editingId ? '✓ Save changes' : '✓ Create quotation',
@@ -5417,34 +5557,34 @@ async function saveQuotation(mode='save') {
   document.querySelectorAll('#items-tbody tr').forEach(tr=>{
     if(tr.dataset.lineType==='heading'||tr.dataset.lineType==='note'){
       const text=(tr.querySelector('.quote-special-text')?.value||'').trim();
-      if(text) items.push({lineType:tr.dataset.lineType,text});
+      if(text){ const line={lineType:tr.dataset.lineType,text}; const ns=tr.dataset.lineType==='note'?quotationNoteStyleKey(tr.dataset.noteStyle):''; if(ns) line.noteStyle=ns; items.push(line); }   // V270.2: a note's own style
       return;
     }
     const qty=parseBizNumber(tr.querySelector('[data-quote-qty]')?.value);
     const up=parseBizNumber(tr.querySelector('[data-quote-price]')?.value);
     const sel=tr.querySelector('select');
-    const textarea=tr.querySelector('textarea');
-    let desc='',code='',brand='',model='',specs='';
-    if (textarea) {
-      desc=(textarea.value||'').trim();
-    } else {
-      const textInputs=tr.querySelectorAll('input:not([type="number"])');
-      code=(textInputs[0]?.value||'').trim();
-      brand=(textInputs[1]?.value||'').trim();
-      model=(textInputs[2]?.value||'').trim();
-      desc=(textInputs[3]?.value||'').trim();
-      specs=(textInputs[4]?.value||'').trim();
-    }
-    const rowKind = textarea ? 'scope' : 'product';
+    const isScope=tr.dataset.rowKind==='scope';
+    const textarea=isScope;
+    const desc=qtFieldVal(tr,'desc'), code=isScope?'':qtFieldVal(tr,'code'), brand=isScope?'':qtFieldVal(tr,'brand'), model=isScope?'':qtFieldVal(tr,'model'), specs=isScope?'':qtFieldVal(tr,'specs');
+    const rowKind = isScope ? 'scope' : 'product';
     const prodId = tr.dataset.prodId || '';
     const rowImage = tr.dataset.image || '';
     const matchedProduct = !textarea ? (products.find(p => (prodId && p.id===prodId) || (code && p.code===code) || (desc && p.name===desc)) || null) : null;
     // Lines keep only a picture LINK; an embedded "data:" picture would bloat the document (shown from the product instead).
     const linkOnly = v => (typeof v === 'string' && !/^data:/i.test(v)) ? v : '';
     const image = linkOnly(rowImage) || linkOnly(matchedProduct && matchedProduct.image);
-    if(desc||qty||up) items.push({lineType:'item',code,brand,model,desc,specs,qty,uom:sel?.value||'Pcs',up,type:(textarea?'contracting':currentQuoteType),rowKind,prodId,image});
+    if(desc||qty||up){
+      const line={lineType:'item',code,brand,model,desc,specs,qty,uom:sel?.value||'Pcs',up,type:(textarea?'contracting':currentQuoteType),rowKind,prodId,image};
+      // V270.2: line discount (only when there is one — a line without stays exactly as before)
+      const d=qtLineDiscount(tr,qty*up);
+      if(d.amt>0){ line.discAmt=d.amt; line.discPct=Number(d.pct.toFixed(6)); line.discBy=tr.dataset.discBy==='pct'?'pct':'amt'; }
+      if(tr.dataset.pricingSell) line.pricingSell=Number(tr.dataset.pricingSell);
+      if(tr.dataset.pricingBuy) line.pricingBuy=Number(tr.dataset.pricingBuy);
+      items.push(line);
+    }
   });
   const qno=finalQno;
+  const prevQ=capturedEditingId?quotations.find(x=>x.id===capturedEditingId):null;
   const q={
     id:capturedEditingId||qno, qno,
     origin: capturedRFQId ? 'RFQ/Pricing' : (window._pendingQuotationOrigin || 'Direct'),
@@ -5460,12 +5600,14 @@ async function saveQuotation(mode='save') {
     notes:document.getElementById('f-notes').value,
     internalNotes:document.getElementById('f-internal-notes').value,
     additionalConditions:document.getElementById('f-additional-conditions').value,
-    discount:parseFloat(document.getElementById('f-discount').value)||0,
+    discount:window._qtTotals?window._qtTotals.disc:(parseFloat(document.getElementById('f-discount').value)||0),
     quoteType: currentQuoteType,
+    ...(quotationNoteStyleKey(currentQuoteNoteStyle)?{noteStyle:currentQuoteNoteStyle}:{}),   // V270.2: this quotation's note style
+    ...(()=>{ const ctx=window._pendingQuotationPricingContext; return ctx&&Number(ctx.cost)>0?{pricingRef:ctx.pricingRef||'',pricingCost:qtR2(ctx.cost),pricingSell:qtR2(ctx.sell||0)}:{}; })(),
     taxCode: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.taxCode||activeTaxSettings().code) : activeTaxSettings(document.getElementById('f-date')?.value).code,
     taxName: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.taxName||activeTaxSettings().name) : activeTaxSettings(document.getElementById('f-date')?.value).name,
     taxEffectiveFrom: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.taxEffectiveFrom||activeTaxSettings().effectiveFrom) : activeTaxSettings(document.getElementById('f-date')?.value).effectiveFrom,
-    vatRate: Number(currentQuoteVatRate??getQuoteVatPercent()),
+    vatRate: qtVatPercent(),
     vatSource: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.vatSource||'Document Snapshot') : 'Tax Master Snapshot',
     items, custId:selectedCustId, ...quotationItemKeysField(items),   // V270.1.3: itemKeys for Selling Price History
     rfqId: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.rfqId||null) : (capturedRFQId||null),
@@ -5475,6 +5617,9 @@ async function saveQuotation(mode='save') {
     created:capturedEditingId?(quotations.find(x=>x.id===capturedEditingId)?.created||new Date().toISOString()):new Date().toISOString(),
     updated:new Date().toISOString()
   };
+  // V270.2 (agreed 23 Oct 2026): once a quotation is no longer a Draft its note style is frozen, so it always reprints
+  // exactly as it was sent even if the Administration default changes later.
+  if(q.status!=='Draft'&&!q.noteStyle) q.noteStyleAtSend=prevQ?.noteStyleAtSend||quotationLineNoteStyle();
   if(capturedEditingId){
     const idx=quotations.findIndex(x=>x.id===capturedEditingId);
     if(idx>-1) quotations[idx]=q;
@@ -5638,23 +5783,28 @@ function viewQuotation(id, skipVatCheck=false) {
 
   let itemNo=0;
   const quoteItems=q.items||[], itemRows=[];
+  // V270.2: a Disc. column only when a line has a discount; notes in their saved style (line → quotation → Administration)
+  const qvDisc=quoteHasLineDiscounts(q), qvCols=qvDisc?7:6;
   for(let idx=0; idx<quoteItems.length; idx++){
     const it=quoteItems[idx];
-    if(it.lineType==='heading'){ itemRows.push('<tr class="qv-heading"><td colspan="6">'+escapeHtml(it.text||it.desc||'')+'</td></tr>'); continue; }
-    if(it.lineType==='note'){ itemRows.push('<tr class="qv-note"><td></td><td colspan="5"><div class="qdoc-inline-note"><b>Note:</b> '+escapeHtml(it.text||it.desc||'')+'</div></td></tr>'); continue; }
+    if(it.lineType==='heading'){ itemRows.push('<tr class="qv-heading"><td colspan="'+qvCols+'">'+escapeHtml(it.text||it.desc||'')+'</td></tr>'); continue; }
+    if(it.lineType==='note'){ itemRows.push('<tr class="qv-note"><td></td><td colspan="'+(qvCols-1)+'">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it))+'</td></tr>'); continue; }
     itemNo++;
-    const total=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0), service=it.type==='service';
+    const total=quoteLineNet(it), service=it.type==='service';
     const title=escapeHtml(it.desc||'—');
     const sub=[!service&&it.specs?escapeHtml(it.specs):'',!service&&[it.brand,it.model].filter(Boolean).length?escapeHtml([it.brand,it.model].filter(Boolean).join(' / ')):''].filter(Boolean).join(' · ');
     const next=quoteItems[idx+1], inlineNote=(next&&next.lineType==='note')?String(next.text||next.desc||'').trim():'';
     if(inlineNote) idx++;
-    itemRows.push('<tr class="qv-item"><td class="center">'+String(itemNo).padStart(3,'0')+'</td><td><div class="qv-desc-title">'+title+'</div>'+(sub?'<div class="qv-desc-sub">'+sub+'</div>':'')+(inlineNote?'<div class="qdoc-inline-note"><b>Note:</b> '+escapeHtml(inlineNote)+'</div>':'')+'</td><td class="center">'+escapeHtml(String(it.qty??''))+'</td><td class="center">'+escapeHtml(it.uom||'')+'</td><td class="num">'+qvLineUnitMoney(it.up)+'</td><td class="num"><strong>'+qvLineAmountMoney(total)+'</strong></td></tr>');
+    itemRows.push('<tr class="qv-item"><td class="center">'+String(itemNo).padStart(3,'0')+'</td><td><div class="qv-desc-title">'+title+'</div>'+(sub?'<div class="qv-desc-sub">'+sub+'</div>':'')+(inlineNote?quotationPrintLineNoteHtml(inlineNote,quotationEffectiveNoteStyle(q,next)):'')+'</td><td class="center">'+escapeHtml(String(it.qty??''))+'</td><td class="center">'+escapeHtml(it.uom||'')+'</td><td class="num">'+qvLineUnitMoney(it.up)+'</td>'+(qvDisc?'<td class="num qv-disc">'+quoteLineDiscCellHtml(it,qvLineAmountMoney)+'</td>':'')+'<td class="num"><strong>'+qvLineAmountMoney(total)+'</strong></td></tr>');
   }
-  const items=itemRows.join('')||'<tr><td colspan="6" style="padding:20px;text-align:center;color:#64748b">No line items</td></tr>';
+  const items=itemRows.join('')||'<tr><td colspan="'+qvCols+'" style="padding:20px;text-align:center;color:#64748b">No line items</td></tr>';
 
-  let margin='—', pricingCost=0, pricingSell=0;
-  if(hPricing){pricingCost=lRFQ.pricingItems.reduce((s,i)=>s+(parseFloat(i.buy)||0)*(parseFloat(i.qty)||0),0);pricingSell=lRFQ.pricingItems.reduce((s,i)=>s+(parseFloat(i.sell)||0)*(parseFloat(i.qty)||0),0);margin=pricingCost?(((pricingSell-pricingCost)/pricingCost)*100).toFixed(1)+'%':'0.0%';}
-  const grossProfit=hPricing?(totals.sub-pricingCost):null;
+  // V270.2: profit after all discounts; the cost includes Pricing's additional costs when the quotation carries it
+  let margin='—', pricingCost=0, hasCost=false;
+  if(Number(q.pricingCost)>0){pricingCost=Number(q.pricingCost);hasCost=true;}
+  else if(hPricing){pricingCost=lRFQ.pricingItems.reduce((s,i)=>s+(parseFloat(i.buy)||0)*(parseFloat(i.qty)||0),0);hasCost=true;}
+  if(hasCost) margin=pricingPercent(pricingCost,totals.bvat).toFixed(1)+'%';
+  const grossProfit=hasCost?(totals.bvat-pricingCost):null;
   const notes=String(q.notes||'').trim();
   const additionalConditions=quotationAdditionalConditionItems(q);
   const validityDays=parseInt(q.validity,10)||0;
@@ -5690,9 +5840,9 @@ function viewQuotation(id, skipVatCheck=false) {
   const qvValidDays=(()=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(vu||'');if(!m)return null;const t=new Date();return Math.round((new Date(+m[1],+m[2]-1,+m[3])-new Date(t.getFullYear(),t.getMonth(),t.getDate()))/86400000);})();
   const qvValidity=qvValidDays===null?'—':qvValidDays<0?'Expired':qvValidDays===0?'Today':qvValidDays+' day'+(qvValidDays===1?'':'s');
   const qvKpis=bcKpiGrid([
-    {label:'Estimated cost',value:hPricing?formatNumber(pricingCost,2):'—',tone:hPricing?'':'muted'},
+    {label:'Estimated cost',value:hasCost?formatNumber(pricingCost,2):'—',tone:hasCost?'':'muted'},
     {label:'Gross profit',value:grossProfit!==null?formatNumber(grossProfit,2):'—',tone:grossProfit===null?'muted':(grossProfit<0?'red':'green')},
-    {label:'Margin',value:margin,tone:hPricing?'':'muted'},
+    {label:activePricingSettings().marginMethod==='gross_margin'?'Margin':'Markup',value:margin,tone:hasCost?'':'muted'},
     {label:'Valid for',value:qvValidity,tone:qvValidDays!==null&&qvValidDays<0?'red':''}
   ]);
 
@@ -5718,7 +5868,7 @@ function viewQuotation(id, skipVatCheck=false) {
             <div><small>${bilingualMode?'VAT / <span class="ar">الضريبة</span>':'VAT'}</small><strong>${savedVat}%</strong></div>
             <div><small>${bilingualMode?'CURRENCY / <span class="ar">العملة</span>':'CURRENCY'}</small><strong>${escapeHtml(settings.currency||settings.baseCurrency||'SAR')}</strong></div>
           </section>
-          <section class="qdoc-items"><table><thead><tr><th class="center">SL</th><th>${bilingualMode?'Description / <span class="ar">البيان</span>':'Description'}</th><th class="center">Qty</th><th class="center">UOM</th><th class="num">Unit Price</th><th class="num">Amount</th></tr></thead><tbody>${items}</tbody></table></section>
+          <section class="qdoc-items"><table><thead><tr><th class="center">SL</th><th>${bilingualMode?'Description / <span class="ar">البيان</span>':'Description'}</th><th class="center">Qty</th><th class="center">UOM</th><th class="num">Unit Price</th>${qvDisc?'<th class="num">Disc.</th>':''}<th class="num">Amount</th></tr></thead><tbody>${items}</tbody></table></section>
           <section class="qdoc-bottom">
             <div class="qdoc-terms qdoc-terms-approved"><span class="qdoc-eyebrow">TERMS &amp; CONDITIONS</span><ul>${termsHtml}</ul></div>
             <div class="qdoc-totals"><div><span>Subtotal</span><strong>${qvSummaryMoney(totals.sub)}</strong></div>${totals.disc>0?`<div><span>Discount</span><strong>- ${qvSummaryMoney(totals.disc)}</strong></div>`:''}<div><span>VAT (${savedVat}%)</span><strong>${qvSummaryMoney(totals.vat)}</strong></div><div class="grand"><span>Grand Total</span><strong>${qvGrandTotalMoney(totals.net)}</strong></div></div>
@@ -5779,6 +5929,7 @@ async function commitStatus(id, newStatus) {
   const oldStatus = q.status;
   q.status = newStatus;
   q.updated = new Date().toISOString();
+  if(newStatus!=='Draft'&&!q.noteStyle&&!q.noteStyleAtSend) q.noteStyleAtSend=quotationLineNoteStyle();   // V270.2: freeze the note style once it leaves Draft
   await saveQuotations();
   renderAll();
   renderStatusBar(q, newStatus);
@@ -5895,7 +6046,8 @@ function createQuotationRevision(id){
   document.getElementById('f-notes').value=q.notes||'';
   document.getElementById('f-internal-notes').value=q.internalNotes||'';
   document.getElementById('f-additional-conditions').value=q.additionalConditions||'';
-  document.getElementById('f-discount').value=q.discount||0;
+  document.getElementById('f-discount').value=Number(q.discount)?qtMoneyText(q.discount):'';
+  currentQuoteNoteStyle=quotationNoteStyleKey(q.noteStyle);   // V270.2: a revision keeps the quotation's own choice (not the style frozen at Sent)
 
   const savedType=q.quoteType||(q.items||[])[0]?.type||'product';
   currentQuoteType=savedType==='contracting'?'contracting':'product';
@@ -5903,11 +6055,14 @@ function createQuotationRevision(id){
   document.getElementById('items-tbody').innerHTML='';
   (q.items||[]).forEach(it=>addItemRow(JSON.parse(JSON.stringify(it))));
   if(!q.items||!q.items.length)addItemRow();
+  setQuotationPricingContext(qtPricingContextOf(q));
   calcTotals();
   updateValidUntil();
   updateQuoteHeaderSummary();
   setQuoteFormState('saved');
+  if(typeof qtOnOpen==='function') qtOnOpen(q);
   openModalWithSize('quote-modal');
+  if(typeof qtAfterOpen==='function') qtAfterOpen(q);
   showToast('Revision prepared — number will be assigned only when saved','info');
 }
 
@@ -9567,9 +9722,13 @@ async function convertToQuotation() {
   document.getElementById('f-notes').value = r.desc||'';
   populateTermsSelect('delivery');
   populateTermsSelect('payment');
-  document.getElementById('f-discount').value='0';
+  document.getElementById('f-discount').value='';
+  document.getElementById('f-internal-notes').value='';
+  document.getElementById('f-additional-conditions').value='';
+  currentQuoteVatRate=Number(activeTaxSettings().rate)||0;   // V270.2: was never set here, so the VAT figure showed 0.00
+  currentQuoteNoteStyle='';
   // Items — from pricing, use sell prices
-  currentQuoteType='product'; setQuoteType('product');
+  currentQuoteType='product'; setQuoteType('product',{locked:true});   // V270.2: the template is set by Pricing
   document.getElementById('items-tbody').innerHTML='';
   const pricingRef='PR-'+String(r.rfqNo||pricingRFQId||'').replace(/^RFQ-?/i,'')+'-V'+Number(activePricingVersion?.version||r.currentPricingVersion||1);
   const pricingCost=r.pricingItems.reduce((s,it)=>s+(Number(it.buy)||0)*(Number(it.qty)||0),0);
@@ -9585,7 +9744,8 @@ async function convertToQuotation() {
       specs:(product?.specs||[]).filter(s=>s.k&&s.v).map(s=>`${s.k}: ${s.v}`).join(' | '),
       prodId:product?.id||it.productId||''});
   });
-  setQuotationPricingContext({rfqNo:r.rfqNo,pricingRef,cost:pricingCost,version:Number(activePricingVersion?.version||r.currentPricingVersion||1)});
+  // V270.2: the internal summary uses the full Pricing cost (material + additional costs), like Pricing itself
+  setQuotationPricingContext({rfqNo:r.rfqNo,pricingRef,cost:pricingCost+internalTotal,sell:totalSell,version:Number(activePricingVersion?.version||r.currentPricingVersion||1)});
   calcTotals();
   // Link RFQ
   document._pendingRFQId = pricingRFQId;
@@ -9595,7 +9755,9 @@ async function convertToQuotation() {
     rfqId:pricingRFQId,
     sourceQuotationId:r.quotationId||revisionInfo.revisionOf||null
   } : null;
+  if(typeof qtOnOpen==='function') qtOnOpen();
   openModalWithSize('quote-modal');
+  if(typeof qtAfterOpen==='function') qtAfterOpen();
   showToast('Pricing saved and transferred — review and save the quotation','success');
   } finally {
     pricingConvertInProgress=false;
@@ -10431,7 +10593,8 @@ function getQuotationSOProgress(quotationId, excludeSOId='') {
   const linked=salesOrders.filter(so=>so.quotationId===quotationId && so.id!==excludeSOId);
   const ordered={};
   linked.forEach(so=>(so.items||[]).forEach(it=>{ const idx=Number(it.origIdx); ordered[idx]=roundQtyForUom((ordered[idx]||0)+(parseFloat(it.qty)||0),it.uom); }));
-  const remaining=(q.items||[]).map((it,i)=>{const quoted=parseFloat(it.qty)||0, prev=ordered[i]||0, rem=roundQtyForUom(Math.max(0,quoted-prev),it.uom);return {...it,origIdx:i,origQty:quoted,orderedQty:prev,remainingQty:rem};}).filter(it=>it.remainingQty>0);
+  // V270.2: a discounted quotation line goes to the order at its price after the line discount (quotedUp keeps the list price)
+  const remaining=(q.items||[]).map((it,i)=>{const quoted=parseFloat(it.qty)||0, prev=ordered[i]||0, rem=roundQtyForUom(Math.max(0,quoted-prev),it.uom);const net=quoteLineDisc(it)?{up:quoteLineNetUnit(it),quotedUp:parseFloat(it.up)||0}:{};return {...it,...net,origIdx:i,origQty:quoted,orderedQty:prev,remainingQty:rem};}).filter(it=>it.remainingQty>0);
   return {remaining,complete:remaining.length===0,linked};
 }
 function soFormatFileSize(bytes){if(!Number.isFinite(bytes)||bytes<=0)return '';if(bytes<1024)return bytes+' B';if(bytes<1024*1024)return (bytes/1024).toFixed(bytes<10240?1:0)+' KB';return (bytes/(1024*1024)).toFixed(1)+' MB';}
@@ -12295,20 +12458,22 @@ function printQuotationProductA4(id, imageVariant){
   let itemNo=0;
   const quoteItems=q.items||[];
   const rowParts=[];
+  // V270.2: Disc. column only when a line is discounted; notes in their saved style; line amounts after the discount
+  const hasDisc=quoteHasLineDiscounts(q), cols=6+(hasDisc?1:0)+(imageMode?1:0);
   for(let idx=0; idx<quoteItems.length; idx++){
     const it=quoteItems[idx];
-    if(it.lineType==='heading'){ rowParts.push('<tr class="heading"><td colspan="6">'+escapeHtml(it.text||it.desc||'')+'</td></tr>'); continue; }
-    if(it.lineType==='note'){ rowParts.push('<tr class="note standalone-note"><td></td><td colspan="5"><div class="inline-note"><b>Note:</b> '+escapeHtml(it.text||it.desc||'')+'</div></td></tr>'); continue; }
+    if(it.lineType==='heading'){ rowParts.push('<tr class="heading"><td colspan="'+cols+'">'+escapeHtml(it.text||it.desc||'')+'</td></tr>'); continue; }
+    if(it.lineType==='note'){ rowParts.push('<tr class="note standalone-note"><td></td><td colspan="'+(cols-1)+'">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it))+'</td></tr>'); continue; }
     itemNo++;
-    const total=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0), service=it.type==='service';
+    const total=quoteLineNet(it), service=it.type==='service';
     const sub=[!service&&it.specs?escapeHtml(it.specs):'',!service&&[it.brand,it.model].filter(Boolean).length?escapeHtml([it.brand,it.model].filter(Boolean).join(' / ')):''].filter(Boolean).join(' · ');
     const next=quoteItems[idx+1];
     const inlineNote=(next&&next.lineType==='note')?String(next.text||next.desc||'').trim():'';
     if(inlineNote) idx++;
     const imageCell=imageMode?'<td class="imgcell">'+(productImage(it)?'<img src="'+productImage(it)+'" alt="">':'<div class="imgph">No image</div>')+'</td>':'';
-    rowParts.push('<tr><td class="c">'+String(itemNo).padStart(3,'0')+'</td>'+imageCell+'<td><div class="desc">'+escapeHtml(it.desc||'—')+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+(inlineNote?quotationPrintLineNoteHtml(inlineNote):'')+'</td><td class="c">'+escapeHtml(String(it.qty??''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+qvLineUnitMoney(it.up)+'</td><td class="r">'+qvLineAmountMoney(total)+'</td></tr>');
+    rowParts.push('<tr><td class="c">'+String(itemNo).padStart(3,'0')+'</td>'+imageCell+'<td><div class="desc">'+escapeHtml(it.desc||'—')+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+(inlineNote?quotationPrintLineNoteHtml(inlineNote,quotationEffectiveNoteStyle(q,next)):'')+'</td><td class="c">'+escapeHtml(String(it.qty??''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+qvLineUnitMoney(it.up)+'</td>'+(hasDisc?'<td class="r disc">'+quoteLineDiscCellHtml(it,qvLineAmountMoney)+'</td>':'')+'<td class="r">'+qvLineAmountMoney(total)+'</td></tr>');
   }
-  const rows=rowParts.join('')||'<tr><td colspan="'+(imageMode?7:6)+'" class="empty">No line items</td></tr>';
+  const rows=rowParts.join('')||'<tr><td colspan="'+cols+'" class="empty">No line items</td></tr>';
   const notes=String(q.notes||'').trim();
   const additionalConditions=quotationAdditionalConditionItems(q);
   const validityDays=parseInt(q.validity,10)||0;
@@ -12335,7 +12500,7 @@ function printQuotationProductA4(id, imageVariant){
 .sheet{width:210mm;min-height:297mm;margin:0 auto;padding:12mm 11mm 10mm;background:#fff;display:flex;flex-direction:column}
 .header{display:grid;grid-template-columns:1.22fr .95fr 1.05fr;gap:8px;align-items:start;padding-bottom:10px;border-bottom:2px solid #174b7a}.q-logo{max-width:260px;max-height:78px;width:auto;height:auto;object-fit:contain}.q-logo-fallback{width:78px;height:78px;border:1px solid #cbd8e5;display:flex;align-items:center;justify-content:center;font-size:23px;font-weight:800;color:#174b7a}.company{font-size:9.5px;line-height:1.5;color:#50657a;border-left:1px solid #cbd8e5;padding-left:10px;min-height:58px}.titlebox{border:1px solid #b9cce0}.titlebox h1{margin:0;padding:8px 10px;font-size:19px;letter-spacing:.35px;color:#174b7a;background:#f7fafc}.titlebox>div{padding:7px 10px;border-top:1px solid #d7e1eb}.titlebox small{display:block;text-transform:uppercase;font-weight:800;color:#5f7489;font-size:8px;margin-bottom:2px}.titlebox strong{font-size:11px}.titlegrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.subtitle{margin:5px 0 10px;text-align:right;font-size:8px;letter-spacing:3px;color:#64788c}
 .party{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}.box{border:1px solid #cbd8e5}.box h3{margin:0;background:#f3f7fa;padding:6px 9px;font-size:9px;text-transform:uppercase;color:#174b7a;border-bottom:1px solid #cbd8e5}.box .content{padding:8px 9px;min-height:67px;line-height:1.45}.box .content strong{display:block;font-size:11.5px;margin-bottom:2px}.box p{font-size:9.5px;color:#50657a;margin:2px 0}.refs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:9px 0}.refs>div{border:1px solid #cbd8e5;background:#f3f7fa;padding:7px 8px;min-height:43px}.refs small{display:block;font-size:7.5px;font-weight:800;text-transform:uppercase;color:#5e7488;margin-bottom:4px}.refs strong{font-size:9.5px}
-.items{width:100%;border-collapse:collapse;border-bottom:1px solid #cbd8e5}.items thead{display:table-header-group}.items tr{break-inside:avoid;page-break-inside:avoid}.items th{background:#174b7a;color:#fff;padding:6px 5px;border:1px solid #174b7a;font-size:8px;text-align:left}.items td{padding:6px 5px;border:1px solid #d6e0e9;font-size:9px;color:#263f56;vertical-align:top}.items tbody tr:last-child td{border-bottom:1px solid #cbd8e5}.items .c{text-align:center}.items .r{text-align:right;white-space:nowrap}.items .imgcell{width:${imageCfg.col};text-align:center;vertical-align:middle;padding:4px}.items .imgcell img{display:block;max-width:${imageCfg.w};max-height:${imageCfg.h};width:auto;height:auto;object-fit:contain;margin:0 auto}.items .imgph{width:100%;min-height:${imageCfg.h};display:flex;align-items:center;justify-content:center;border:1px dashed #cbd8e5;background:#f8fafc;color:#94a3b8;font-size:7.5px}.desc{font-size:9.5px}.sub{font-size:8.5px;color:#64788c;margin-top:2px}.inline-note{margin-top:5px;font-size:8.5px;line-height:1.35}.inline-note b{font-weight:800}.note-highlight{padding:4px 6px;background:#fffbea;border:1px solid #eadfae;color:#5a4a0a}.note-blue{padding:4px 7px;background:#eef6fd;border-left:3px solid #2684d8;color:#294d6d}.note-minimal{padding:2px 1px;color:#5d7186;font-style:italic}.note-badge{display:flex;align-items:center;gap:6px;color:#415a70}.note-badge span{display:inline-block;background:#2684d8;color:#fff;border-radius:3px;padding:2px 5px;font-size:7px;font-weight:800;letter-spacing:.4px}.note-badge em{font-style:normal}.heading td{background:#eef4fb!important;color:#174b7a!important;font-weight:800!important}.note td{background:#fff!important;color:#475569!important}.standalone-note .inline-note{margin:0}.empty{text-align:center;padding:20px!important;color:#64748b!important}
+.items{width:100%;border-collapse:collapse;border-bottom:1px solid #cbd8e5}.items thead{display:table-header-group}.items tr{break-inside:avoid;page-break-inside:avoid}.items th{background:#174b7a;color:#fff;padding:6px 5px;border:1px solid #174b7a;font-size:8px;text-align:left}.items td{padding:6px 5px;border:1px solid #d6e0e9;font-size:9px;color:#263f56;vertical-align:top}.items tbody tr:last-child td{border-bottom:1px solid #cbd8e5}.items .c{text-align:center}.items .r{text-align:right;white-space:nowrap}.items .imgcell{width:${imageCfg.col};text-align:center;vertical-align:middle;padding:4px}.items .imgcell img{display:block;max-width:${imageCfg.w};max-height:${imageCfg.h};width:auto;height:auto;object-fit:contain;margin:0 auto}.items .imgph{width:100%;min-height:${imageCfg.h};display:flex;align-items:center;justify-content:center;border:1px dashed #cbd8e5;background:#f8fafc;color:#94a3b8;font-size:7.5px}.desc{font-size:9.5px}.sub{font-size:8.5px;color:#64788c;margin-top:2px}.inline-note{margin-top:5px;font-size:8.5px;line-height:1.35}.inline-note b{font-weight:800}.note-highlight{padding:4px 6px;background:#fffbea;border:1px solid #eadfae;color:#5a4a0a}.note-blue{padding:4px 7px;background:#eef6fd;border-left:3px solid #2684d8;color:#294d6d}.note-minimal{padding:2px 1px;color:#5d7186;font-style:italic}.note-badge{display:flex;align-items:center;gap:6px;color:#415a70}.note-badge span{display:inline-block;background:#2684d8;color:#fff;border-radius:3px;padding:2px 5px;font-size:7px;font-weight:800;letter-spacing:.4px}.note-badge em{font-style:normal}.items td.disc{line-height:1.3}.items .qd-pct{display:block;color:#50657a}.items .qd-amt{display:block}.heading td{background:#eef4fb!important;color:#174b7a!important;font-weight:800!important}.note td{background:#fff!important;color:#475569!important}.standalone-note .inline-note{margin:0}.empty{text-align:center;padding:20px!important;color:#64748b!important}
 .bottom{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:18px;padding:12px 0 10px;break-inside:avoid;page-break-inside:avoid}.terms{border-left:3px solid #174b7a;background:#f7f9fb;padding:9px 12px;font-size:9.5px;line-height:1.5}.terms ul{margin:4px 0 0;padding-left:18px}.terms li{margin:3px 0}.eyebrow{display:block;font-size:9px;letter-spacing:1.2px;font-weight:800;color:#174b7a;margin-bottom:5px}.totals{border:1px solid #cbd8e5}.totals>div{display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #d7e1eb;font-size:10px}.totals .grand{background:#174b7a;color:#fff;border-bottom:0;font-weight:800;font-size:12px}.notesbox{border:1px solid #e6c75a;background:#fffbea;padding:8px 10px;margin:4px 0 12px;font-size:9.5px;line-height:1.45;break-inside:avoid;page-break-inside:avoid}.notesbox strong{color:#17324d}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:42px;margin-top:24mm;break-inside:avoid;page-break-inside:avoid}.sigbox{padding-top:7px;border-top:1.5px solid #174b7a;min-height:0;font-size:8.5px;font-weight:800;color:#5d7186;text-transform:uppercase}.sigbox.authorized{position:relative}.digital-auth{position:absolute;left:2px;bottom:20px;width:270px;height:122px;pointer-events:none}.digital-signature{position:absolute;left:0;bottom:0;width:225px;height:96px;object-fit:contain;object-position:left bottom;z-index:1}.digital-stamp{position:absolute;left:78px;bottom:-8px;width:138px;height:138px;object-fit:contain;object-position:center bottom;opacity:.92;z-index:2}.digital-signer{position:absolute;left:8px;bottom:10px;font-size:7px;color:#64788c;text-transform:none;font-weight:600;white-space:nowrap}.thankyou{text-align:center;font-size:9px;font-style:italic;color:#5c6f83;line-height:1.55;padding:8px 0 14px;break-inside:avoid;page-break-inside:avoid}
 .page-footer{margin-top:auto;border-top:2px solid #174b7a;padding-top:6px;color:#64788c;font-size:8.5px;line-height:1.35}.fixed-footer{display:none}
 .attachment-sheet{width:210mm;min-height:297mm;margin:0 auto;padding:12mm 11mm 18mm;background:#fff;page-break-before:always;break-before:page}.attachment-head{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;border-bottom:2px solid #174b7a;padding-bottom:10px;margin-bottom:12px}.attachment-head .q-logo{max-width:190px;max-height:58px}.attachment-head h1{margin:0;color:#174b7a;font-size:17px;letter-spacing:1.4px;text-align:right}.attachment-head p{margin:4px 0 0;color:#64788c;font-size:9px;text-align:right}.attachment-list{display:block}.attach-card{border:1px solid #cbd8e5;margin:0 0 10px;break-inside:avoid;page-break-inside:avoid;background:#fff}.attach-item-no{background:#f3f7fa;border-bottom:1px solid #cbd8e5;padding:6px 9px;color:#174b7a;font-size:8px;font-weight:800;letter-spacing:.8px}.attach-grid{display:grid;grid-template-columns:68mm 1fr;gap:14px;padding:10px;align-items:start}.attach-image{min-height:54mm;display:flex;align-items:center;justify-content:center}.attach-image img{display:block;max-width:64mm;max-height:52mm;width:auto;height:auto;object-fit:contain;border:1px solid #d6e0e9;padding:3px;background:#fff}.attach-ph{width:64mm;height:52mm;border:1px dashed #cbd8e5;background:#f8fafc;color:#94a3b8;display:flex;align-items:center;justify-content:center;font-size:9px}.attach-copy h3{margin:4px 0 6px;color:#174b7a;font-size:12px}.attach-copy p{margin:0;color:#50657a;font-size:9px;line-height:1.5}.attach-meta{display:flex;gap:18px;margin-top:10px;padding-top:8px;border-top:1px solid #e4ebf2;color:#50657a;font-size:8.5px}.attach-empty{padding:30px;text-align:center;border:1px dashed #cbd8e5;color:#64788c}
@@ -12345,7 +12510,7 @@ function printQuotationProductA4(id, imageVariant){
 <header class="header"><div>${logoHtml}</div><div class="company">${companyDocumentHeaderHtml('quotation')}</div><div><div class="titlebox"><h1>${bilingualMode?'QUOTATION / <span class="ar">عرض سعر</span>':'QUOTATION'}</h1><div><small>Quotation No.</small><strong>${escapeHtml(q.qno)}</strong></div><div class="titlegrid"><div><small>Date</small><strong>${fmtDate(q.date)}</strong></div><div><small>Valid Until</small><strong>${fmtDate(vu)}</strong></div></div>${qRevision?'<div><small>Revision</small><strong>R'+qRevision+'</strong></div>':''}</div></div></header>
 <div class="subtitle">${bilingualMode?'COMMERCIAL OFFER / <span class="ar">عرض تجاري</span>':'COMMERCIAL OFFER'}</div><section class="party"><div class="box"><h3>${bilingualMode?'QUOTATION TO / <span class="ar">عرض السعر إلى</span>':'QUOTATION TO'}</h3><div class="content"><strong>${escapeHtml(q.company||'—')}</strong>${custAddr1?'<p>'+escapeHtml(custAddr1)+'</p>':''}${custAddr2?'<p>'+escapeHtml(custAddr2)+'</p>':''}${custCountry?'<p>'+escapeHtml(custCountry)+'</p>':''}${cust?.vat?'<p>VAT No. '+escapeHtml(cust.vat)+'</p>':''}${q.contact?'<p>Attn: '+escapeHtml(q.contact)+'</p>':''}</div></div><div class="box"><h3>${bilingualMode?'REFERENCE / PROJECT / <span class="ar">المرجع / المشروع</span>':'REFERENCE / PROJECT'}</h3><div class="content"><strong>${escapeHtml(q.ref||'—')}</strong>${q.project?'<p>'+escapeHtml(q.project)+'</p>':''}${lRFQ?'<p>RFQ: '+escapeHtml(lRFQ.rfqNo||'—')+'</p>':''}</div></div></section>
 <section class="refs"><div><small>PAYMENT TERMS</small><strong>${escapeHtml(q.payment||'—')}</strong></div><div><small>DELIVERY TERMS</small><strong>${escapeHtml(q.delivery||'—')}</strong></div><div><small>VAT</small><strong>${savedVat}%</strong></div><div><small>CURRENCY</small><strong>${escapeHtml(settings.currency||settings.baseCurrency||'SAR')}</strong></div></section>
-<table class="items"><thead><tr><th class="c">${bilingualMode?'SL<br><span class="ar">م</span>':'SL'}</th>${imageMode?'<th class="c" style="width:'+imageCfg.col+'">Image Ref</th>':''}<th>Description</th><th class="c">${bilingualMode?'Qty<br><span class="ar">الكمية</span>':'Qty'}</th><th class="c">${bilingualMode?'UOM<br><span class="ar">الوحدة</span>':'UOM'}</th><th class="r">${bilingualMode?'Unit Price<br><span class="ar">سعر الوحدة</span>':'Unit Price'}</th><th class="r">${bilingualMode?'Amount<br><span class="ar">المبلغ</span>':'Amount'}</th></tr></thead><tbody>${rows}</tbody></table>
+<table class="items"><thead><tr><th class="c">${bilingualMode?'SL<br><span class="ar">م</span>':'SL'}</th>${imageMode?'<th class="c" style="width:'+imageCfg.col+'">Image Ref</th>':''}<th>Description</th><th class="c">${bilingualMode?'Qty<br><span class="ar">الكمية</span>':'Qty'}</th><th class="c">${bilingualMode?'UOM<br><span class="ar">الوحدة</span>':'UOM'}</th><th class="r">${bilingualMode?'Unit Price<br><span class="ar">سعر الوحدة</span>':'Unit Price'}</th>${hasDisc?'<th class="r">'+(bilingualMode?'Disc.<br><span class="ar">الخصم</span>':'Disc.')+'</th>':''}<th class="r">${bilingualMode?'Amount<br><span class="ar">المبلغ</span>':'Amount'}</th></tr></thead><tbody>${rows}</tbody></table>
 <section class="bottom"><div class="terms"><span class="eyebrow">${bilingualMode?'TERMS &amp; CONDITIONS / <span class="ar">الشروط والأحكام</span>':'TERMS &amp; CONDITIONS'}</span><ul>${termsHtml}</ul></div><div class="totals"><div><span>Subtotal</span><strong>${qvSummaryMoney(totals.sub)}</strong></div>${totals.disc>0?'<div><span>Discount</span><strong>- '+qvSummaryMoney(totals.disc)+'</strong></div>':''}<div><span>VAT (${savedVat}%)</span><strong>${qvSummaryMoney(totals.vat)}</strong></div><div class="grand"><span>Grand Total</span><strong>${qvGrandTotalMoney(totals.net)}</strong></div></div></section>
 ${notes?'<section class="notesbox"><strong>Notes.</strong> '+escapeHtml(notes)+'</section>':''}
 <section class="signatures"><div class="sigbox">${bilingualMode?'Customer Acceptance &amp; Signature / <span class="ar">اعتماد وتوقيع العميل</span>':'Customer Acceptance &amp; Signature'}</div><div class="sigbox authorized">${quotationAuthorizationHtml()}<div>${bilingualMode?'Authorized Signature / <span class="ar">التوقيع المعتمد</span> — ':'Authorized Signature — '}${escapeHtml(co)}</div></div></section>
@@ -12456,23 +12621,25 @@ function printQuotationErpVariant(id, variant) {
     );
     return (p && p.image) ? p.image : '';
   };
+  const hasDisc=quoteHasLineDiscounts(q);   // V270.2
   function buildVariantRows(mode){
     let no=0; const out=[]; const items=q.items||[];
     for(let i=0;i<items.length;i++){
       const it=items[i];
       if(it.lineType==='heading'){out.push('<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>');continue;}
-      if(it.lineType==='note'){out.push('<tr><td></td><td colspan="98">'+quotationPrintLineNoteHtml(it.text||it.desc||'')+'</td></tr>');continue;}
+      if(it.lineType==='note'){out.push('<tr><td></td><td colspan="98">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it))+'</td></tr>');continue;}
       no++;
       const next=items[i+1], inlineNote=(next&&next.lineType==='note')?String(next.text||next.desc||'').trim():'';
       if(inlineNote)i++;
-      const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
+      const t=quoteLineNet(it);   // V270.2: after the line discount
+      const dcell=hasDisc?'<td class="r disc">'+quoteLineDiscCellHtml(it,pdfLineAmountMoney)+'</td>':'';
       const subline=[it.brand,it.model,it.specs].filter(Boolean).join(' · ');
-      const note=inlineNote?quotationPrintLineNoteHtml(inlineNote):'';
+      const note=inlineNote?quotationPrintLineNoteHtml(inlineNote,quotationEffectiveNoteStyle(q,next)):'';
       if(mode==='image'){
         const img=productImage(it);
-        out.push('<tr><td class="num">'+String(no).padStart(2,'0')+'</td><td class="imgcell">'+(img?'<img src="'+img+'">':'<div class="imgph">No image</div>')+'</td><td><div>'+escapeHtml(it.desc||'')+'</div>'+(subline?'<div class="dsub">'+escapeHtml(subline)+'</div>':'')+note+'</td><td class="c">'+escapeHtml(String(it.qty||''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+pdfLineUnitMoney(it.up)+'</td><td class="r">'+pdfLineAmountMoney(t)+'</td></tr>');
+        out.push('<tr><td class="num">'+String(no).padStart(2,'0')+'</td><td class="imgcell">'+(img?'<img src="'+img+'">':'<div class="imgph">No image</div>')+'</td><td><div>'+escapeHtml(it.desc||'')+'</div>'+(subline?'<div class="dsub">'+escapeHtml(subline)+'</div>':'')+note+'</td><td class="c">'+escapeHtml(String(it.qty||''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+pdfLineUnitMoney(it.up)+'</td>'+dcell+'<td class="r">'+pdfLineAmountMoney(t)+'</td></tr>');
       }else{
-        out.push('<tr><td class="num">'+String(no).padStart(2,'0')+'</td><td><div>'+escapeHtml(it.desc||'')+'</div>'+(subline?'<div class="dsub">'+escapeHtml(subline)+'</div>':'')+note+'</td><td class="c">'+escapeHtml(String(it.qty||''))+'</td><td class="c">'+escapeHtml(it.uom||(mode==='service'?'Service':''))+'</td><td class="r">'+pdfLineUnitMoney(it.up)+'</td><td class="r">'+pdfLineAmountMoney(t)+'</td></tr>');
+        out.push('<tr><td class="num">'+String(no).padStart(2,'0')+'</td><td><div>'+escapeHtml(it.desc||'')+'</div>'+(subline?'<div class="dsub">'+escapeHtml(subline)+'</div>':'')+note+'</td><td class="c">'+escapeHtml(String(it.qty||''))+'</td><td class="c">'+escapeHtml(it.uom||(mode==='service'?'Service':''))+'</td><td class="r">'+pdfLineUnitMoney(it.up)+'</td>'+dcell+'<td class="r">'+pdfLineAmountMoney(t)+'</td></tr>');
       }
     }
     return out.join('');
@@ -12503,16 +12670,16 @@ function printQuotationErpVariant(id, variant) {
   const termsWithAdditional = terms + quotationAdditionalConditionItems(q);
 
   const headNormal = isBi
-    ? '<th style="width:30px">#</th><th>Description / البيان</th><th class="c" style="width:46px">Qty<br>الكمية</th><th class="c" style="width:48px">UOM<br>الوحدة</th><th class="r" style="width:88px">Unit Price<br>السعر</th><th class="r" style="width:92px">Amount<br>المبلغ</th>'
+    ? '<th style="width:30px">#</th><th>Description / البيان</th><th class="c" style="width:46px">Qty<br>الكمية</th><th class="c" style="width:48px">UOM<br>الوحدة</th><th class="r" style="width:88px">Unit Price<br>السعر</th>'+(hasDisc?'<th class="r" style="width:70px">Disc.<br>الخصم</th>':'')+'<th class="r" style="width:92px">Amount<br>المبلغ</th>'
     : (isContracting
-      ? '<th style="width:30px">#</th><th>Scope of Work / Description</th><th class="c" style="width:46px">Qty</th><th class="c" style="width:58px">Unit</th><th class="r" style="width:88px">Rate</th><th class="r" style="width:92px">Amount</th>'
-      : '<th style="width:30px">#</th><th>Description</th><th class="c" style="width:46px">Qty</th><th class="c" style="width:48px">UOM</th><th class="r" style="width:88px">Unit Price</th><th class="r" style="width:92px">Amount</th>');
-  const headImage = '<th style="width:30px">#</th><th class="c" style="width:'+imageSize.col+'">Image Ref</th><th>Description</th><th class="c" style="width:42px">Qty</th><th class="c" style="width:44px">UOM</th><th class="r" style="width:78px">Unit Price</th><th class="r" style="width:84px">Amount</th>';
+      ? '<th style="width:30px">#</th><th>Scope of Work / Description</th><th class="c" style="width:46px">Qty</th><th class="c" style="width:58px">Unit</th><th class="r" style="width:88px">Rate</th>'+(hasDisc?'<th class="r" style="width:70px">Disc.</th>':'')+'<th class="r" style="width:92px">Amount</th>'
+      : '<th style="width:30px">#</th><th>Description</th><th class="c" style="width:46px">Qty</th><th class="c" style="width:48px">UOM</th><th class="r" style="width:88px">Unit Price</th>'+(hasDisc?'<th class="r" style="width:70px">Disc.</th>':'')+'<th class="r" style="width:92px">Amount</th>');
+  const headImage = '<th style="width:30px">#</th><th class="c" style="width:'+imageSize.col+'">Image Ref</th><th>Description</th><th class="c" style="width:42px">Qty</th><th class="c" style="width:44px">UOM</th><th class="r" style="width:78px">Unit Price</th>'+(hasDisc?'<th class="r" style="width:66px">Disc.</th>':'')+'<th class="r" style="width:84px">Amount</th>';
   const tableHead = (isImage && !isImageAttachment) ? headImage : headNormal;
   const tableRows = (isImage && !isImageAttachment) ? imageRows : (isContracting ? serviceRows : normalRows);
   const attachmentRows = (q.items||[]).map(function(it,i){
     if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+escapeHtml(it.text||it.desc||'')+'</td></tr>';
+    if(it.lineType==='note') return '<tr><td></td><td colspan="98">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it))+'</td></tr>';
     const img=productImage(it);
     const subline=[it.brand,it.model,it.specs].filter(Boolean).join(' · ');
     return '<div class="ref-item"><div class="ref-no">Item '+String(i+1).padStart(2,'0')+'</div>'
@@ -12527,7 +12694,7 @@ function printQuotationErpVariant(id, variant) {
 +'@media screen{body{background:#d0d0d0;padding:20px 0}.pw{box-shadow:0 4px 20px rgba(0,0,0,.2)}}'
 +'.fixed-footer{display:none}.ar,[dir="rtl"]{font-family:Tahoma,Arial,sans-serif;direction:rtl;unicode-bidi:isolate}.pw{width:210mm;margin:0 auto;background:#fff;border-collapse:collapse;table-layout:fixed}.pw td{vertical-align:top}.header{padding:14px 12mm 10px;border-bottom:3px solid #1F4E79}.hrow{display:flex;justify-content:space-between;align-items:center}.brand{display:flex;align-items:center;gap:12px}.logo-card{background:#fff;border:1px solid #E2E8F0;border-radius:6px;padding:6px 11px}.co-meta{font-size:9.5px;color:#475569;line-height:1.55}.doc-chip{background:#1F4E79;color:#fff;font-size:14px;letter-spacing:2px;text-transform:uppercase;font-weight:900;padding:5px 12px;border-radius:3px}.doc-chip span{font-family:Tahoma,Arial,sans-serif;font-size:15px;margin-left:8px}.doc-no{font-size:15px;color:#1F4E79;font-weight:900;margin-top:5px;text-align:right}'
 +'.info-wrap{padding:11px 12mm 10px}.variant-title{text-align:center;font-size:16px;letter-spacing:2px;color:#1F4E79;font-weight:900;margin-bottom:10px}.variant-title span{font-family:Tahoma,Arial,sans-serif;font-size:18px;margin-left:10px}.split-panels{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch}.panel{border:1px solid #CBD5E1;border-radius:8px;background:#fff;min-height:92px;padding:11px 13px}.panel-title{font-size:8.5px;text-transform:uppercase;letter-spacing:1.2px;color:#64748B;font-weight:900;margin-bottom:7px}.cust-name{font-size:14px;color:#1F4E79;font-weight:900;margin-bottom:4px}.cust-line{font-size:10.5px;color:#475569;line-height:1.55}.cust-line span{display:inline-block;width:94px;color:#64748B;font-weight:700}.info-row{display:grid;grid-template-columns:130px 1fr;gap:8px;padding:4px 0;border-bottom:1px solid #EEF2F7;font-size:10.5px}.info-row:last-child{border-bottom:none}.info-row span{color:#64748B;font-weight:700}.info-row b{color:#1E293B;font-weight:800}'
-+'.items-wrap{padding:0 12mm}.items{width:100%;border-collapse:collapse}.items thead{display:table-header-group}.items tr{page-break-inside:avoid;break-inside:avoid}.items th{background:#1F4E79;color:#fff;padding:7px 8px;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.4px}.items th.r,.items td.r{text-align:right}.items th.c,.items td.c{text-align:center}.items td{padding:6px 8px;border-bottom:1px solid #EEF2F7;font-size:10.5px;color:#000!important;font-weight:400!important}.items td *{color:#000!important;font-weight:400!important}.items tbody tr:nth-child(even) td{background:#F8FAFC}.num{text-align:center;color:#64748B!important;width:30px}.dsub{font-size:9px;color:#64748B!important;margin-top:2px}.inline-note{margin-top:5px;font-size:8.5px;line-height:1.35}.inline-note b{font-weight:800!important}.note-highlight{padding:4px 6px;background:#fffbea;border:1px solid #eadfae;color:#5a4a0a!important}.note-blue{padding:4px 7px;background:#eef6fd;border-left:3px solid #2684d8;color:#294d6d!important}.note-minimal{padding:2px 1px;color:#5d7186!important;font-style:italic}.note-badge{display:flex;align-items:center;gap:6px;color:#415a70!important}.note-badge span{display:inline-block;background:#2684d8;color:#fff!important;border-radius:3px;padding:2px 5px;font-size:7px;font-weight:800!important;letter-spacing:.4px}.note-badge em{font-style:normal}.imgcell{text-align:center}.imgcell img{width:'+imageSize.w+';height:'+imageSize.h+';object-fit:contain;border:1px solid #CBD5E1;border-radius:4px;background:#fff;padding:2px}.imgph{width:'+imageSize.w+';height:'+imageSize.h+';border:1px dashed #CBD5E1;border-radius:4px;font-size:8px;color:#94A3B8!important;display:flex;align-items:center;justify-content:center;margin:0 auto}.ref-section{margin:10px 12mm 0;page-break-before:auto;page-break-inside:auto}.ref-heading{background:#1F4E79;color:#fff;padding:7px 10px;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.8px;border-radius:4px 4px 0 0}.ref-item{border:1px solid #CBD5E1;border-top:none;padding:9px 10px;page-break-inside:avoid}.ref-no{font-size:9px;color:#64748B;font-weight:900;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}.ref-body{display:grid;grid-template-columns:68mm 1fr;gap:12px;align-items:start}.ref-img img{width:60mm;height:50mm;object-fit:contain;border:1px solid #CBD5E1;border-radius:5px;background:#fff;padding:3px}.ref-ph{width:60mm;height:50mm;border:1px dashed #CBD5E1;border-radius:5px;display:flex;align-items:center;justify-content:center;color:#94A3B8!important;font-size:10px}.ref-title{font-size:12px;font-weight:800;color:#1F4E79!important;margin-bottom:4px}.ref-desc{font-size:10px;color:#475569!important;line-height:1.5}'
++'.items-wrap{padding:0 12mm}.items{width:100%;border-collapse:collapse}.items thead{display:table-header-group}.items tr{page-break-inside:avoid;break-inside:avoid}.items th{background:#1F4E79;color:#fff;padding:7px 8px;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.4px}.items th.r,.items td.r{text-align:right}.items th.c,.items td.c{text-align:center}.items td{padding:6px 8px;border-bottom:1px solid #EEF2F7;font-size:10.5px;color:#000!important;font-weight:400!important}.items td *{color:#000!important;font-weight:400!important}.items tbody tr:nth-child(even) td{background:#F8FAFC}.num{text-align:center;color:#64748B!important;width:30px}.dsub{font-size:9px;color:#64748B!important;margin-top:2px}.items td.disc{line-height:1.3}.items .qd-pct{display:block;color:#64748B!important}.items .qd-amt{display:block}.inline-note{margin-top:5px;font-size:8.5px;line-height:1.35}.inline-note b{font-weight:800!important}.note-highlight{padding:4px 6px;background:#fffbea;border:1px solid #eadfae;color:#5a4a0a!important}.note-blue{padding:4px 7px;background:#eef6fd;border-left:3px solid #2684d8;color:#294d6d!important}.note-minimal{padding:2px 1px;color:#5d7186!important;font-style:italic}.note-badge{display:flex;align-items:center;gap:6px;color:#415a70!important}.note-badge span{display:inline-block;background:#2684d8;color:#fff!important;border-radius:3px;padding:2px 5px;font-size:7px;font-weight:800!important;letter-spacing:.4px}.note-badge em{font-style:normal}.imgcell{text-align:center}.imgcell img{width:'+imageSize.w+';height:'+imageSize.h+';object-fit:contain;border:1px solid #CBD5E1;border-radius:4px;background:#fff;padding:2px}.imgph{width:'+imageSize.w+';height:'+imageSize.h+';border:1px dashed #CBD5E1;border-radius:4px;font-size:8px;color:#94A3B8!important;display:flex;align-items:center;justify-content:center;margin:0 auto}.ref-section{margin:10px 12mm 0;page-break-before:auto;page-break-inside:auto}.ref-heading{background:#1F4E79;color:#fff;padding:7px 10px;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.8px;border-radius:4px 4px 0 0}.ref-item{border:1px solid #CBD5E1;border-top:none;padding:9px 10px;page-break-inside:avoid}.ref-no{font-size:9px;color:#64748B;font-weight:900;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}.ref-body{display:grid;grid-template-columns:68mm 1fr;gap:12px;align-items:start}.ref-img img{width:60mm;height:50mm;object-fit:contain;border:1px solid #CBD5E1;border-radius:5px;background:#fff;padding:3px}.ref-ph{width:60mm;height:50mm;border:1px dashed #CBD5E1;border-radius:5px;display:flex;align-items:center;justify-content:center;color:#94A3B8!important;font-size:10px}.ref-title{font-size:12px;font-weight:800;color:#1F4E79!important;margin-bottom:4px}.ref-desc{font-size:10px;color:#475569!important;line-height:1.5}'
 +'.after{display:grid;grid-template-columns:1fr 270px;gap:18px;padding:12px 12mm 0;page-break-inside:avoid}.terms{background:#F8FAFC;border-left:3px solid #1F4E79;padding:9px 12px}.terms-title{font-size:8.5px;text-transform:uppercase;letter-spacing:1.2px;color:#1F4E79;font-weight:900;margin-bottom:5px}.terms ul{padding-left:15px;color:#475569;font-size:10px;line-height:1.5}.tot{border:1px solid #CBD5E1;border-radius:8px;overflow:hidden}.tot-row{display:flex;justify-content:space-between;padding:6px 11px;border-bottom:1px solid #E2E8F0;font-size:10.5px}.tot-row span{color:#64748B}.tot-row b{font-variant-numeric:tabular-nums}.tot-net{background:#1F4E79;color:#fff;padding:11px;display:flex;justify-content:space-between;align-items:center}.tot-net span{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#DCEBFA;font-weight:900}.tot-net b{font-size:17px;color:#fff;font-weight:900}.notes{margin:9px 12mm 0;padding:8px 12px;background:#FFFBEA;border:1px solid #F0D77B;font-size:10px;color:#5A4A0A}.sig{display:grid;grid-template-columns:1fr 1fr;gap:55px;margin:15mm 12mm 10px;page-break-inside:avoid}.sig div{border-top:1.5px solid #1F4E79;padding-top:6px;font-size:9px;color:#64748B;font-weight:700}.closing{margin:8px 12mm 10px;text-align:center;font-size:10px;line-height:1.5;color:#64748B;font-style:italic;page-break-inside:avoid}.closing span{font-size:9.5px;color:#6B7280}.footer{border-top:1px solid #CBD5E1;padding:6px 12mm 4px;font-size:9.5px;color:#64748B;display:flex;justify-content:space-between;line-height:1.5}'
 +'</style></head><body><div class="fixed-footer">'+footerInfo+'</div><table class="pw"><tfoot><tr><td style="padding:0"><div class="footer">'+footerInfo+'</div></td></tr></tfoot><tbody><tr><td style="padding:0">'
 +'<div class="header"><div class="hrow"><div class="brand"><div class="logo-card">'+logoHtml+'</div><div class="co-meta">'+headerInfo+'</div></div><div><div class="doc-chip">'+docTitle+'</div><div class="doc-no">'+q.qno+'</div></div></div></div>'
