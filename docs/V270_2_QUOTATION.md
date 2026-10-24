@@ -261,3 +261,13 @@ See **docs/V270_2_5_NUMBERING.md** (mockups NUM_1 / NUM_2). Upload list there (`
 
 ## V270.2.6 — RFQ entry screen (24 Oct 2026)
 See **docs/V270_2_6_RFQ_ENTRY.md** (mockup RFQ_2, Layout C). Upload list there (`bizcore-shell-v27026`). No rules change.
+
+## V270.2.7 — the open calendar follows the typed date (24 Oct 2026)
+- In every BizCore date field (js/bc-date.js — one component for the whole app): while the calendar is open, typing or
+  changing the date in the field moves the calendar at once to that month / year and selects the day. Typing stays in
+  the field; the calendar stays open and a day can still be picked.
+- Text that is not a whole date yet (e.g. "15-06-2" or a year of just "20" / "19" while typing 2026) leaves the
+  calendar where it is; an empty field clears the selection. On leaving the field the date is read exactly as before.
+- Tests: tests/browser/date-sync.e2e.mjs.
+- Upload: **index.html, sw.js, js/bc-date.js** (`bizcore-shell-v27027`) — plus the V270.2.6 / V270.2.5 files if not
+  uploaded yet. No rules change.

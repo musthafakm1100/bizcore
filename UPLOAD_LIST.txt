@@ -1,6 +1,8 @@
-BizCore V270.2.6 — copy into C:\BizCore (replace), then upload:
+BizCore V270.2.7 — copy into C:\BizCore (replace), then upload:
   index.html
   sw.js
+  js/bc-date.js
+If V270.2.6 is not uploaded yet, also upload:
   js/app.js
   js/rfq-entry.js        (new)
   css/rfq-entry.css      (new)

@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   V270.1 — BizCore date field (BCDate)
+   V270.1 — BizCore date field (BCDate) · V270.2.7: the open calendar follows what is typed in the field
    One date field for the whole of BizCore. Shows and accepts DD-MM-YYYY (e.g. 22-10-2026); the value behind it is
    always ISO (YYYY-MM-DD), exactly as before, so nothing stored changes.
 
@@ -103,7 +103,7 @@
       else if (e.key === 'Enter') commit();
       else if (e.key === 'Escape' && cal && cal.api === api) { e.preventDefault(); e.stopPropagation(); closeCal(); }
     });
-    input.addEventListener('input', () => input.classList.remove('bcd-invalid'));
+    input.addEventListener('input', () => { input.classList.remove('bcd-invalid'); if (cal && cal.api === api) syncCal(); });   // V270.2.7: typing moves the open calendar
     btn.addEventListener('mousedown', e => e.preventDefault());
     btn.addEventListener('click', () => { if (cal && cal.api === api) closeCal(); else openCal(api); });
     input._bcdate = api;
@@ -130,6 +130,20 @@
     place();
     api.input.setAttribute('aria-expanded', 'true');
     setTimeout(() => root.querySelector('.bcd-day[tabindex="0"]')?.focus({ preventScroll: true }), 0);
+  }
+  /** V270.2.7: while the calendar is open, a date typed in the field is shown at once — its month / year and the day
+      selected. Text that is not (yet) a whole date leaves the calendar where it is; an empty field clears the selection. */
+  function syncCal() {
+    if (!cal) return;
+    const t = String(cal.api.input.value || '').trim();
+    // "15-06-20" / "150620" while typing 2026: the year is not finished yet — wait for it
+    if (/^\d{1,2}[\/\-. ]+\d{1,2}[\/\-. ]+(19|20)$/.test(t) || /^\d{4}(19|20)$/.test(t)) return;
+    const v = parse(t);
+    if (v === null) return;
+    if (v === cal.sel && cal.view === (v || cal.view)) return;
+    cal.sel = v;
+    if (v) { cal.focus = v; cal.view = v.slice(0, 7); }
+    render(); place();
   }
   function closeCal(refocus) {
     if (!cal) return;
