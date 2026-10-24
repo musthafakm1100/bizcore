@@ -809,7 +809,13 @@
     const listed = st.kind === 'buy' ? (window.BizCorePI?.invoices || []).some(p => p.id === id) : quotations.some(q => q.id === id);
     if (!listed && doc && window.BCWin?.addDocs) window.BCWin.addDocs(col, [doc]);   // already read: no second read to open it
     closeDialog();
-    const lift = mid => setTimeout(() => { const el = $(mid); if (el && el.classList.contains('open')) el.style.zIndex = '10030'; }, 60);
+    // raised above Pricing while it is open; V270.2.4: back to normal when it closes (a raised Quotation View hid the Quotation Gallery)
+    const lift = mid => setTimeout(() => {
+      const el = $(mid); if (!el || !el.classList.contains('open')) return;
+      el.style.zIndex = '10030';
+      const mo = new MutationObserver(() => { if (!el.classList.contains('open')) { el.style.zIndex = ''; mo.disconnect(); } });
+      mo.observe(el, { attributes: true, attributeFilter: ['class'] });
+    }, 60);
     if (st.kind === 'buy') { if (typeof openPurchaseInvoiceView === 'function') { openPurchaseInvoiceView(id); lift('pi-view-modal'); } }
     else { setTimeout(() => { viewQuotation(id); lift('view-modal'); }, quotations.some(q => q.id === id) ? 0 : 120); }
   }

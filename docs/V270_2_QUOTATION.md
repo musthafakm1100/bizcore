@@ -244,3 +244,14 @@ Price History; after a reload they did.
 - Tests: tests/browser/pricing-v2702.e2e.mjs (new quotation / purchase invoice listed without a reload, 5-minute
   expiry re-reads, typed quotation line, save message).
 - Upload: **index.html, sw.js, js/app.js, js/pricing-ui.js** (`bizcore-shell-v27023`). No rules change.
+
+## V270.2.4 — Customer Remarks blank, Quotation Gallery in front (24 Oct 2026)
+- **Customer Remarks:** converting a Pricing to a quotation no longer copies the RFQ **Description / Requirements**
+  into Customer Remarks (`convertToQuotation`, the only place it was copied). Customer Remarks start blank and hold only
+  what the user types.
+- **Print / PDF from Quotation View:** a Quotation View opened from Price History is raised above Pricing (z-index
+  10030) and stayed raised after it closed, so the next View hid the Quotation Gallery. Fixed both ways: the Quotation
+  Gallery and the output options (signature / stamp) always open one layer above every open window (`bcRaiseModal`),
+  and the raised View returns to normal when it closes.
+- Tests: tests/browser/quotation-v2704.e2e.mjs (fails on V270.2.3: remarks copied; gallery behind a raised View).
+- Upload: **index.html, sw.js, js/app.js, js/pricing-ui.js** (`bizcore-shell-v27024`). No rules change.

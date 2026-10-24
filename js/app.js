@@ -9724,7 +9724,7 @@ async function convertToQuotation() {
   document.getElementById('f-date').value = todayQuoteDateDisplay();
   document.getElementById('f-status').value = 'Draft';
   document.getElementById('f-validity').value = Math.max(1,Number(activePricingSettings().validity)||7);
-  document.getElementById('f-notes').value = r.desc||'';
+  document.getElementById('f-notes').value = '';   // V270.2.4: Customer Remarks start blank — the RFQ Description / Requirements is not copied
   populateTermsSelect('delivery');
   populateTermsSelect('payment');
   document.getElementById('f-discount').value='';
@@ -12323,6 +12323,14 @@ async function ensureFinalQuotationNumber(qid){
   showValidationDialog('Final number needed', `The final number for ${q.qno} could not be assigned yet (the quotation may still be synchronising). Please try again in a moment.`, '', '');
   return false;
 }
+/** V270.2.4: put a modal in front of every open one (its own z-index cleared first, then one above the highest). Quotation
+ *  View can sit raised (e.g. opened from Price History), which left the Quotation Gallery behind it. */
+function bcRaiseModal(id){
+  const m=document.getElementById(id); if(!m) return;
+  m.style.zIndex='';
+  const z=Math.max(0,...[...document.querySelectorAll('.modal-overlay.open')].filter(e=>e!==m).map(e=>Number(getComputedStyle(e).zIndex)||0));
+  if(z>=(Number(getComputedStyle(m).zIndex)||0)) m.style.zIndex=String(z+1);
+}
 async function openTemplatePicker(qid) {
   if (!(await ensureFinalQuotationNumber(qid))) return;
   _printQID = qid;
@@ -12334,7 +12342,7 @@ async function openTemplatePicker(qid) {
   const search=document.getElementById('template-gallery-search');if(search)search.value='';
   document.querySelectorAll('.template-filter').forEach(b=>b.classList.toggle('active',b.dataset.filter==='all'));
   renderTemplateGallery();
-  openModalWithSize('template-picker-modal');
+  bcRaiseModal('template-picker-modal'); openModalWithSize('template-picker-modal');   // V270.2.4: in front of Quotation View
 }
 
 function selectTemplate(id) {
@@ -12351,7 +12359,7 @@ async function printWithSelectedTemplate() {
   try { localStorage.setItem('dtq_settings', JSON.stringify(settings)); } catch(e){}
   closeModal('template-picker-modal');
   const sig=document.getElementById('qout-signature'), stamp=document.getElementById('qout-stamp');
-  if(sig)sig.checked=false;if(stamp)stamp.checked=false; refreshQuotationOutputOptions(); openModalWithSize('quotation-output-modal');
+  if(sig)sig.checked=false;if(stamp)stamp.checked=false; refreshQuotationOutputOptions(); (bcRaiseModal('quotation-output-modal'),openModalWithSize('quotation-output-modal'));
 }
 function refreshQuotationOutputOptions(){
   const sig=document.getElementById('qout-signature'),stamp=document.getElementById('qout-stamp');
@@ -12364,7 +12372,7 @@ function refreshQuotationOutputOptions(){
 function backToQuotationGallery(){
   closeModal('quotation-output-modal');
   renderTemplateGallery();
-  openModalWithSize('template-picker-modal');
+  bcRaiseModal('template-picker-modal'); openModalWithSize('template-picker-modal');   // V270.2.4: in front of Quotation View
 }
 function quotationAuthorizationHtml(){
   const o=_quotationOutputOptions||{}; if(!o.signature&&!o.stamp)return '';

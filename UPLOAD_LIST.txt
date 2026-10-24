@@ -1,4 +1,4 @@
-BizCore V270.2.3 — copy into C:\BizCore (replace), then upload:
+BizCore V270.2.4 — copy into C:\BizCore (replace), then upload:
   index.html
   sw.js
   js/app.js

@@ -4026,13 +4026,13 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.23';
+      s.src = 'js/app.js?v=270.24';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
         const sv = document.createElement('script'); sv.id = 'bizcore-so-view-script'; sv.src = 'js/so-view.js?v=270.1'; document.body.appendChild(sv);
         // V270.1: the Pricing screen (tabs, line menu, price references, phone cards)
-        const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.23'; document.body.appendChild(pu);
+        const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.24'; document.body.appendChild(pu);
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
         const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=270.21'; document.body.appendChild(qu);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
