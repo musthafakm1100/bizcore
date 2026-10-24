@@ -7862,7 +7862,7 @@ function normalizeRFQDateField(input){ if(!input.value.trim())return; const iso=
 function syncRFQDateFromPicker(textId,picker){ const input=document.getElementById(textId);if(!input)return;input.value=rfqISOToDisplay(picker.value);input.classList.remove('field-invalid');input.dispatchEvent(new Event('input',{bubbles:true})); }
 function openRFQDatePicker(textId,pickerId){ const text=document.getElementById(textId),picker=document.getElementById(pickerId);if(!picker)return;const iso=rfqDisplayToISO(text?.value||'');if(iso)picker.value=iso;if(typeof picker.showPicker==='function')picker.showPicker();else picker.click(); }
 function handleRFQDateKeydown(event,input,pickerId){ if((event.altKey&&event.key==='ArrowDown')||event.key==='F4'){event.preventDefault();openRFQDatePicker(input.id,pickerId);return;} if(event.key==='Enter'){event.preventDefault();normalizeRFQDateField(input);const fields=getRFQEntryTabFields();const idx=fields.indexOf(input);fields[idx+1]?.focus();} }
-function getRFQEntryTabFields(){ return ['rfq-cust-search','rfq-contact','rfq-ref','rfq-channel','rfq-assigned','rfq-date','rfq-due','rfq-desc'].map(id=>document.getElementById(id)).filter(Boolean); }
+function getRFQEntryTabFields(){ return ['rfq-cust-search','rfq-contact','rfq-channel','rfq-assigned','rfq-ref','rfq-date','rfq-due','rfq-desc'].map(id=>document.getElementById(id)).filter(Boolean); }
 function setupRFQEntryKeyboard(){ const modal=document.getElementById('rfq-modal');if(!modal)return;getRFQEntryTabFields().forEach(el=>el.removeAttribute('tabindex'));const attach=modal.querySelector('.rfq-attach-compact');if(attach)attach.setAttribute('tabindex','0');closeRFQCustDD();requestAnimationFrame(()=>{const el=document.getElementById('rfq-cust-search');if(el)el.focus();closeRFQCustDD();}); }
 
 function populateRFQContacts(customer, selectedName='') {
@@ -8122,6 +8122,10 @@ function handleRFQAttach(e) {
   e.target.value='';
 }
 
+let rfqPendingNew=null, rfqSaveNewAfter=false;
+/** V270.2.6: Save & New — the usual checks and confirmation, then a blank form for the next RFQ. */
+function rfqSaveAndNew(){ confirmSaveRFQEntry(!editingRFQId); }
+window.rfqSaveAndNew=rfqSaveAndNew;
 function openNewRFQ() {
   editingRFQId = null;
   rfqAttachment = null;
@@ -8144,10 +8148,10 @@ function openNewRFQ() {
   due.setHours(due.getHours()+(settings.rfqDefaultHours||48));
   const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const receivedISO=fmt(today), dueISO=fmt(due);
-  document.getElementById('rfq-date').value=rfqISOToDisplay(receivedISO);
-  document.getElementById('rfq-due').value=rfqISOToDisplay(dueISO);
-  const receivedPicker=document.getElementById('rfq-date-picker');if(receivedPicker)receivedPicker.value=receivedISO;
-  const duePicker=document.getElementById('rfq-due-picker');if(duePicker)duePicker.value=dueISO;
+  // V270.2.6: standard BizCore date fields; request type, lines and requirements (js/rfq-entry.js)
+  if(window.BCRfq){ BCRfq.setDates(receivedISO,dueISO); BCRfq.load(null); }
+  else { document.getElementById('rfq-date').value=receivedISO; document.getElementById('rfq-due').value=dueISO; }
+  rfqPendingNew=null;
   openModalWithSize('rfq-modal');
   setupRFQEntryKeyboard();
 }
@@ -8248,13 +8252,14 @@ function showRFQFinalSaveConfirmation(){
       message,
       secondary,
       buttons:[
-        {text:'Back',cls:'secondary',action:()=>{}},
+        {text:'Back',cls:'secondary',action:()=>{rfqSaveNewAfter=false;}},
         {text:isEdit?'Update RFQ':'Save RFQ',cls:'primary',action:()=>saveRFQ()}
       ]
     });
   }
 }
-function confirmSaveRFQEntry(){
+function confirmSaveRFQEntry(andNew=false){
+  rfqSaveNewAfter=andNew===true;   // V270.2.6: Save & New
   const custInput=document.getElementById('rfq-cust-search');
   const company=String(custInput?.value||'').trim();
   if(!company){
@@ -8319,17 +8324,24 @@ async function saveRFQ() {
     showValidationDialog('Select a valid customer','The customer must be selected from Customer Master. If this is a new customer, add it to Customer Master first and then select it here.',custSearch);
     return;
   }
-  const receivedISO=rfqDisplayToISO(document.getElementById('rfq-date').value);
-  const dueISO=rfqDisplayToISO(document.getElementById('rfq-due').value);
-  if(!receivedISO){showValidationDialog('Invalid received date','Enter the date as DD/MM/YYYY.',document.getElementById('rfq-date'));return;}
-  if(!dueISO){showValidationDialog('Invalid due date','Enter the date as DD/MM/YYYY.',document.getElementById('rfq-due'));return;}
+  const rfqDates=window.BCRfq?BCRfq.dates():{received:document.getElementById('rfq-date').value,due:document.getElementById('rfq-due').value};
+  const receivedISO=rfqDates.received, dueISO=rfqDates.due;
+  if(!receivedISO){showValidationDialog('Invalid received date','Enter the date as DD-MM-YYYY, or pick it from the calendar.',document.getElementById('rfq-date'));return;}
+  if(!dueISO){showValidationDialog('Invalid due date','Enter the date as DD-MM-YYYY, or pick it from the calendar.',document.getElementById('rfq-due'));return;}
+  if(dueISO<receivedISO){showValidationDialog('Response due before received date','The response due date cannot be earlier than the date the RFQ was received.',document.getElementById('rfq-due'));return;}
+  const lineProblem=window.BCRfq?BCRfq.validate():null;
+  if(lineProblem){showValidationDialog(lineProblem.title,lineProblem.message,lineProblem.focus);return;}
+  const rfqEntry=window.BCRfq?BCRfq.collect():{};
   if (rfqAttachment && rfqAttachment._uploadPromise) { showToast('Finishing attachment upload…','success'); await rfqAttachment._uploadPromise; delete rfqAttachment._uploadPromise; }
   if (rfqAttachment && rfqAttachment._uploadFailed) { showValidationDialog('Attachment upload failed','The RFQ attachment could not be uploaded. Check your connection and try attaching it again, or remove it and save without one.',document.getElementById('rfq-attach-list')); return; }
   showBusyOverlay('rfq-modal', 'Saving RFQ…');
   try {
+  // V270.2.6: a new RFQ whose save failed keeps its id and number for the retry (same received date)
+  const reuse=!editingRFQId&&rfqPendingNew&&rfqPendingNew.date===receivedISO?rfqPendingNew:null;
+  const previousRFQ=editingRFQId?rfqs.find(x=>x.id===editingRFQId):null;
   const r = {
-    id: editingRFQId || ('r'+Date.now().toString(36)),
-    rfqNo: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.rfqNo : await allocateDocumentNumber('rfq',new Date(receivedISO+'T00:00:00')),
+    id: editingRFQId || reuse?.id || ('r'+Date.now().toString(36)),
+    rfqNo: editingRFQId ? previousRFQ?.rfqNo : (reuse?.rfqNo || await allocateDocumentNumber('rfq',new Date(receivedISO+'T00:00:00'))),
     company:selectedCustomer.company, custId:selectedCustomer.id,
     contact: document.getElementById('rfq-contact').value.trim(),
     channel: document.getElementById('rfq-channel').value,
@@ -8339,6 +8351,12 @@ async function saveRFQ() {
     assigned: getEmployeeDisplay(document.getElementById('rfq-assigned').value),
     ref: document.getElementById('rfq-ref').value.trim(),
     desc: document.getElementById('rfq-desc').value.trim(),
+    // V270.2.6: request type, lines (product / service) and requirement details
+    requestType: rfqEntry.requestType || previousRFQ?.requestType || 'product',
+    rfqLines: rfqEntry.rfqLines || previousRFQ?.rfqLines || [],
+    site: rfqEntry.site ?? previousRFQ?.site ?? '',
+    requiredDate: rfqEntry.requiredDate ?? previousRFQ?.requiredDate ?? '',
+    duration: rfqEntry.duration ?? previousRFQ?.duration ?? '',
     status: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.status : 'New',
     attachment: rfqAttachment,
     pricingItems: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.pricingItems||[] : [],
@@ -8356,9 +8374,17 @@ async function saveRFQ() {
     quotedDate: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.quotedDate||null : null,
     created: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.created : new Date().toISOString()
   };
-  if (editingRFQId) { const i=rfqs.findIndex(x=>x.id===editingRFQId); if(i>-1) rfqs[i]=r; }
+  const listIndex=editingRFQId?rfqs.findIndex(x=>x.id===editingRFQId):-1;
+  if (editingRFQId) { if(listIndex>-1) rfqs[listIndex]=r; }
   else rfqs.unshift(r);
-  await saveRFQs();
+  // V270.2.6: success only when Firebase confirms the save; otherwise the form stays open with the entry
+  if (!(await saveRFQs())) {
+    if (editingRFQId) { if(listIndex>-1&&previousRFQ) rfqs[listIndex]=previousRFQ; }
+    else { const k=rfqs.indexOf(r); if(k>-1) rfqs.splice(k,1); rfqPendingNew={id:r.id,rfqNo:r.rfqNo,date:receivedISO}; }
+    showToast(rfqSaveFailedMessage(),'error','RFQ not saved');
+    return;
+  }
+  rfqPendingNew=null;
   const wasEditing=!!editingRFQId;
   const returnIdx=wasEditing ? [...modalNavHistory].map(x=>x.to).lastIndexOf('rfq-modal') : -1;
   const returnEntry=returnIdx>=0 ? modalNavHistory[returnIdx] : null;
@@ -8372,7 +8398,8 @@ async function saveRFQ() {
   }
   showToast(wasEditing?'RFQ updated':'RFQ logged — '+r.rfqNo,'success');
   editingRFQId=null; rfqAttachment=null;
-  } finally { hideBusyOverlay('rfq-modal'); }
+  if(!wasEditing&&rfqSaveNewAfter){ rfqSaveNewAfter=false; setTimeout(()=>openNewRFQ(),80); }
+  } finally { rfqSaveNewAfter=false; hideBusyOverlay('rfq-modal'); }
 }
 
 function toggleRFQDetailSection(titleEl) {
@@ -8414,7 +8441,17 @@ function viewRFQ(id) {
     <div class="rfq-progress-stat info"><span>Suppliers contacted</span><strong>${supplierCount}</strong></div>
     <div class="rfq-progress-bar-wrap"><div><span>Pricing completion</span><strong>${pricingProgress}%</strong></div><div class="rfq-progress-bar"><i style="width:${pricingProgress}%"></i></div></div>
   </div>`;
-  const itemsHtml = reqItems.length ? `<div class="rfq-items-table-wrap"><table class="rfq-items-table"><thead><tr><th>#</th><th>Code</th><th>Description</th><th class="num">Qty</th><th class="num">UOM</th><th>Pricing status</th></tr></thead><tbody>${reqItems.map((i,n)=>`<tr><td>${n+1}</td><td>${i.code||'—'}</td><td>${i.desc||i.description||'—'}</td><td>${i.qty||'—'}</td><td>${i.uom||'—'}</td><td><span class="rfq-line-status ${parseFloat(i.buy)>0||parseFloat(i.sell)>0||i.supplier?'priced':'pending'}">${parseFloat(i.buy)>0||parseFloat(i.sell)>0||i.supplier?'Priced':'Pending'}</span></td></tr>`).join('')}</tbody></table></div>` : `<p class="rfq-view-requirements">${r.desc||'No requirement details entered.'}</p>`;
+  // V270.2.6: before pricing, the RFQ's own lines (with remarks); after, the pricing lines with their status
+  const rfqOwnLines = reqItems.length ? [] : (Array.isArray(r.rfqLines)?r.rfqLines:[]).slice().sort((a,b)=>(Number(a.sortOrder)||0)-(Number(b.sortOrder)||0));
+  const rfqTypeLabel = {product:'Product',service:'Service',mixed:'Mixed (products and services)'}[r.requestType||'product']||'Product';
+  const reqDetails = [[r.requestType==='service'?'Site / location':r.requestType==='mixed'?'Delivery / site location':'Delivery location', r.site],
+    [r.requestType==='service'?'Required start':r.requestType==='mixed'?'Required by':'Required delivery', r.requiredDate?fmtDate(r.requiredDate):''],
+    ['Expected duration', r.requestType==='product'?'':r.duration]].filter(x=>x[1]);
+  const reqDetailsHtml = reqDetails.length ? `<div class="rfq-req-details">${reqDetails.map(([k,v])=>`<div class="detail-row"><span class="dk">${escapeHtml(k)}</span><span>${escapeHtml(v)}</span></div>`).join('')}</div>` : '';
+  const reqNoteTitle = r.requestType==='service'?'Scope of work':r.requestType==='mixed'?'Scope of work / general requirements':'General requirements';
+  const itemsHtml = reqItems.length ? `<div class="rfq-items-table-wrap"><table class="rfq-items-table"><thead><tr><th>#</th><th>Code</th><th>Description</th><th class="num">Qty</th><th class="num">UOM</th><th>Pricing status</th></tr></thead><tbody>${reqItems.map((i,n)=>`<tr><td>${n+1}</td><td>${i.code||'—'}</td><td>${i.desc||i.description||'—'}</td><td>${i.qty||'—'}</td><td>${i.uom||'—'}</td><td><span class="rfq-line-status ${parseFloat(i.buy)>0||parseFloat(i.sell)>0||i.supplier?'priced':'pending'}">${parseFloat(i.buy)>0||parseFloat(i.sell)>0||i.supplier?'Priced':'Pending'}</span></td></tr>`).join('')}</tbody></table></div>`
+    : rfqOwnLines.length ? `<div class="rfq-items-table-wrap"><table class="rfq-items-table"><thead><tr><th>#</th><th>Code</th><th>Description</th><th class="num">Qty</th><th class="num">UOM</th><th>Remarks</th></tr></thead><tbody>${rfqOwnLines.map((i,n)=>`<tr><td>${n+1}</td><td>${escapeHtml(i.code||'—')}</td><td>${escapeHtml(i.desc||'—')}${r.requestType==='mixed'?`<span class="rfq-line-kind">${i.kind==='service'?'Service':'Product'}</span>`:''}</td><td>${formatQuantity?formatQuantity(i.qty):i.qty}</td><td>${escapeHtml(i.uom||'—')}</td><td>${escapeHtml(i.remarks||'')}</td></tr>`).join('')}</tbody></table></div>`
+    : `<p class="rfq-view-requirements">${r.desc?escapeHtml(r.desc):'No requirement details entered.'}</p>`;
 
   let nextTitle='Start pricing', nextCopy='Add supplier cost and proposed selling prices for this RFQ.';
   if (isNoBid) { nextTitle='RFQ closed as No Bid'; nextCopy='Reopen it only when the opportunity becomes active again.'; }
@@ -8430,11 +8467,11 @@ function viewRFQ(id) {
     <div class="rfq-view-grid">
       <div style="display:flex;flex-direction:column;gap:14px">
         <div class="rfq-view-card rfq-section-info"><div class="rfq-view-card-title rfq-collapsible-title" role="button" tabindex="0" aria-expanded="true" onclick="toggleRFQDetailSection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleRFQDetailSection(this)}"><i class="ti ti-building"></i>RFQ information<i class="ti ti-chevron-down rfq-section-chevron"></i></div><div class="rfq-card-content"><div class="rfq-view-info">
-          <div class="detail-row"><span class="dk">Contact</span><span>${r.contact||'—'}</span></div><div class="detail-row"><span class="dk">Channel</span><span>${r.channel||'—'}</span></div>
+          <div class="detail-row"><span class="dk">Request type</span><span>${rfqTypeLabel}</span></div><div class="detail-row"><span class="dk">Contact</span><span>${r.contact||'—'}</span></div><div class="detail-row"><span class="dk">Channel</span><span>${r.channel||'—'}</span></div>
           <div class="detail-row"><span class="dk">Received date</span><span>${fmtDate(r.date)}</span></div><div class="detail-row"><span class="dk">Response due</span><span style="${overdue?'color:var(--red);font-weight:700':''}">${dueStr||'—'}</span></div>
           <div class="detail-row"><span class="dk">Assigned to</span><span>${r.assigned||'—'}</span></div><div class="detail-row"><span class="dk">Current stage</span><span>${getRFQWorkflowStageLabel(displayStatus)}</span></div>
         </div></div></div>
-        <div class="rfq-view-card rfq-items-card"><div class="rfq-view-card-title rfq-collapsible-title" role="button" tabindex="0" aria-expanded="true" onclick="toggleRFQDetailSection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleRFQDetailSection(this)}"><i class="ti ti-list-details"></i>Required Items<i class="ti ti-chevron-down rfq-section-chevron"></i></div><div class="rfq-card-content">${itemsHtml}${reqItems.length&&r.desc?`<div class="rfq-requirement-note"><strong>General requirements</strong><p>${r.desc}</p></div>`:''}</div></div>
+        <div class="rfq-view-card rfq-items-card"><div class="rfq-view-card-title rfq-collapsible-title" role="button" tabindex="0" aria-expanded="true" onclick="toggleRFQDetailSection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleRFQDetailSection(this)}"><i class="ti ti-list-details"></i>Required Items<i class="ti ti-chevron-down rfq-section-chevron"></i></div><div class="rfq-card-content">${itemsHtml}${(reqItems.length||rfqOwnLines.length)&&r.desc?`<div class="rfq-requirement-note"><strong>${reqNoteTitle}</strong><p>${escapeHtml(r.desc)}</p></div>`:''}${reqDetailsHtml}</div></div>
         <div class="rfq-view-card rfq-section-pricing"><div class="rfq-view-card-title rfq-collapsible-title" role="button" tabindex="0" aria-expanded="true" onclick="toggleRFQDetailSection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleRFQDetailSection(this)}"><i class="ti ti-progress-check"></i>Pricing progress<i class="ti ti-chevron-down rfq-section-chevron"></i></div><div class="rfq-card-content">${pricingHtml}</div></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:14px">
@@ -8508,15 +8545,13 @@ function editRFQ(id) {
     contactSelect.value=r.contact||'';
   }
   document.getElementById('rfq-channel').value = r.channel||'Email';
-  document.getElementById('rfq-date').value = rfqISOToDisplay(r.date||'');
-  document.getElementById('rfq-due').value = rfqISOToDisplay(r.due||'');
-  const editDatePicker=document.getElementById('rfq-date-picker');if(editDatePicker)editDatePicker.value=r.date||'';
-  const editDuePicker=document.getElementById('rfq-due-picker');if(editDuePicker)editDuePicker.value=r.due||'';
   populateRFQAssignees(r.assignedEmployeeId||r.assigned||'');
   document.getElementById('rfq-ref').value = r.ref||'';
   document.getElementById('rfq-desc').value = r.desc||'';
   document.getElementById('rfq-attach-list').innerHTML = rfqAttachment
-    ? `<div class="attach-item"><i class="ti ti-paperclip"></i>${rfqAttachment.name}</div>` : '';
+    ? `<div class="attach-item"><i class="ti ti-paperclip"></i>${escapeHtml(rfqAttachment.name||'')}</div>` : '';
+  if(window.BCRfq){ BCRfq.setDates(r.date||'',r.due||''); BCRfq.load(r); }
+  else { document.getElementById('rfq-date').value=r.date||''; document.getElementById('rfq-due').value=r.due||''; }
   openModalWithSize('rfq-modal');
   setupRFQEntryKeyboard();
 }
@@ -8647,6 +8682,12 @@ function pricingDefaultMarkupOnBuy(){
   const ps=activePricingSettings(),t=Number(ps.targetMargin||0);
   return ps.marginMethod==='gross_margin' ? (t>=100?0:t/(100-t)*100) : t;
 }
+/** V270.2.6: RFQ lines → first pricing lines (display order kept; rfqLineId links them back). */
+function rfqLinesForPricing(r){
+  return (Array.isArray(r&&r.rfqLines)?r.rfqLines:[]).filter(l=>l&&String(l.desc||'').trim()&&(r.requestType==='mixed'||!r.requestType||l.kind===(r.requestType||'product')||!l.kind))
+    .slice().sort((a,b)=>(Number(a.sortOrder)||0)-(Number(b.sortOrder)||0))
+    .map((l,i)=>({rfqLineId:l.lineId||'',productId:l.productId||'',code:l.code||'',desc:String(l.desc||'').trim()+(String(l.remarks||'').trim()?' — '+String(l.remarks).trim():''),qty:Number(l.qty)>0?Number(l.qty):1,uom:l.uom||(l.kind==='service'?'Lot':'Pcs'),sortOrder:i+1}));
+}
 function addPricingRow(item={}) {
   const tbody = document.getElementById('pricing-tbody');
   const n = tbody.querySelectorAll('tr:not(.pricing-quick-add-row)').length+1;
@@ -8663,6 +8704,7 @@ function addPricingRow(item={}) {
   tr.dataset.sortOrder = String(Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : n);
   tr.dataset.productId = item.productId || item.itemId || '';
   tr.dataset.supNote = item.supNote || '';
+  if (item.rfqLineId) tr.dataset.rfqLineId = item.rfqLineId;   // V270.2.6
   tr.innerHTML = `
     <td class="pricing-drag-cell pr-no"><div class="pr-nowrap"><span tabindex="-1" class="pricing-drag-handle" draggable="true"
       ondragstart="startPricingRowDrag(event,this)" ondragend="endPricingRowDrag(event)"
@@ -8790,7 +8832,7 @@ function readPricingItemsFromDOM() {
     tr.dataset.sortOrder=String(sortOrder);
     const sellLocked=tr.querySelector('[data-role="sell-lock"]')?.classList.contains('is-locked')||false;
     const supNote=String(tr.dataset.supNote||'').trim();
-    if(desc||buy||code){const lineSupplier=findUniqueMasterByName(suppliers,supplierName);const it={lineId:tr.dataset.lineId||(tr.dataset.lineId='pl'+Date.now().toString(36)+index),productId:tr.dataset.productId||'',sortOrder,code,desc,qty,uom,supplierName,supplierId:lineSupplier?.id||'',supRef,buy,markup,sell,sellLocked};if(supNote)it.supNote=supNote;items.push(it);}
+    if(desc||buy||code){const lineSupplier=findUniqueMasterByName(suppliers,supplierName);const it={lineId:tr.dataset.lineId||(tr.dataset.lineId='pl'+Date.now().toString(36)+index),productId:tr.dataset.productId||'',sortOrder,code,desc,qty,uom,supplierName,supplierId:lineSupplier?.id||'',supRef,buy,markup,sell,sellLocked};if(supNote)it.supNote=supNote;if(tr.dataset.rfqLineId)it.rfqLineId=tr.dataset.rfqLineId;items.push(it);}
   });
   return items;
 }
@@ -9650,9 +9692,14 @@ async function openPricingSheet(rfqId,{closeSource=true,mode='edit',viewVersion=
     .map((it,index)=>({...it,sortOrder:Number.isFinite(Number(it.sortOrder))?Number(it.sortOrder):index+1}))
     .sort((a,b)=>a.sortOrder-b.sortOrder)
     .forEach(it=>{ window.pricingBulkLoading=true; try{ addPricingRow(it); } finally { window.pricingBulkLoading=false; } });
+  // V270.2.6: a first pricing starts from the RFQ lines (product, description, qty, UOM; remarks added to the description).
+  // Only while the RFQ has no pricing at all — saved pricing lines are never replaced.
+  const rfqSeedLines=(!view && !(r.pricingItems||[]).length && !ensurePricingVersions(r).length) ? rfqLinesForPricing(r) : [];
+  rfqSeedLines.forEach(it=>{ window.pricingBulkLoading=true; try{ addPricingRow(it); } finally { window.pricingBulkLoading=false; } });
   ensurePricingQuickAddRow();
   calcPricingSummary();
   setPricingSavedState(!!(r.pricingItems&&r.pricingItems.length));
+  if(rfqSeedLines.length){ markPricingDirty(); showToast(`${rfqSeedLines.length} line${rfqSeedLines.length>1?'s':''} taken from the RFQ — add costs and save the pricing`,'success'); }
   updatePricingActionButtons();
   initMarginGaugeDrag(); updatePricingSettingsRuntimeUI();
   const pm=document.getElementById('pricing-modal'); if(pm&&!pm.dataset.dirtyBound){pm.dataset.dirtyBound='1';pm.addEventListener('input',e=>{if(e.target.matches('input,select,textarea')&&!e.target.closest('#internal-costs-tbody')&&e.target.id!=='pricing-prod-search'&&e.target.id!=='pr-cost-pick')markPricingDirty();});}

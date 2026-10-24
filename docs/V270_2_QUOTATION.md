@@ -258,3 +258,6 @@ Price History; after a reload they did.
 
 ## V270.2.5 — Document Numbering format and reset (24 Oct 2026)
 See **docs/V270_2_5_NUMBERING.md** (mockups NUM_1 / NUM_2). Upload list there (`bizcore-shell-v27025`). No rules change.
+
+## V270.2.6 — RFQ entry screen (24 Oct 2026)
+See **docs/V270_2_6_RFQ_ENTRY.md** (mockup RFQ_2, Layout C). Upload list there (`bizcore-shell-v27026`). No rules change.

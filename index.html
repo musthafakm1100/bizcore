@@ -20,6 +20,7 @@
 <link href="css/masters.css?v=266.5" rel="stylesheet"/>
 <link href="css/administration-typography.css?v=247" rel="stylesheet"/>
 <link href="css/numbering-controls.css?v=270.25" rel="stylesheet"/>
+<link href="css/rfq-entry.css?v=270.26" rel="stylesheet"/>
 <link href="css/invoicing.css?v=266.5" rel="stylesheet"/>
 <link href="css/register-standard.css?v=268.4" rel="stylesheet"/>
 <link href="css/doc-view.css?v=266.5" rel="stylesheet"/>
@@ -1795,65 +1796,64 @@ document.addEventListener('error', function(e) {
 </div></div>
 <!-- NEW RFQ MODAL -->
 <div class="modal-overlay" id="rfq-modal">
-<div class="modal rfq-form-modal">
-<div class="modal-header rfq-form-head">
+<div class="modal rfq-form-modal rq-win">
+<div class="modal-header rfq-form-head rq-hd">
 <div class="rfq-head-main">
-<div class="rfq-head-icon"><i class="ti ti-clipboard-list"></i></div>
 <div class="rfq-head-copy">
 <h2 id="rfq-modal-title">Log new RFQ</h2>
-<div class="rfq-head-meta">
-<span class="rfq-edit-no" id="rfq-edit-no">New record</span>
-
-</div>
+<div class="rfq-head-meta"><span class="rfq-edit-no" id="rfq-edit-no">New record</span><span class="rq-hd-num" id="rfq-num-note">· number assigned on save</span></div>
 </div>
 </div>
 <div class="rfq-header-actions"><button aria-label="Close" class="close-btn" onclick="confirmCancelRFQEntry()">✕</button></div>
 </div>
-<div class="modal-body rfq-form-body" onchange="markDirty('rfq-modal')" oninput="markDirty('rfq-modal')">
-<div class="rfq-form-card">
-<div class="rfq-card-title"><i class="ti ti-building"></i>Customer information</div>
-<div class="rfq-simple-grid">
-<div class="form-group">
-<label>Customer <span class="rfq-required">*</span></label>
+<div class="modal-body rfq-form-body rq-body" onchange="markDirty('rfq-modal')" oninput="markDirty('rfq-modal')">
+<!-- V270.2.6 RFQ entry (RFQ_2, Layout C): header strip + tabs -->
+<div class="rq-strip">
+<div class="rq-fg rq-c5"><label for="rfq-cust-search">Customer <span class="rfq-required">*</span></label>
 <div class="cust-wrap">
 <input autocomplete="off" id="rfq-cust-search" aria-autocomplete="list" aria-controls="rfq-cust-dd" aria-expanded="false" onblur="setTimeout(closeRFQCustDD,200)" onclick="openRFQCustDD()" oninput="handleRFQCustomerInput()" onkeydown="handleRFQCustomerKeydown(event)" placeholder="Search and select customer"/>
 <div class="cust-dropdown" id="rfq-cust-dd"></div>
+</div></div>
+<div class="rq-fg rq-c3"><label for="rfq-contact">Contact person</label><select id="rfq-contact"><option value="">Select customer first</option></select></div>
+<div class="rq-fg rq-c2"><label for="rfq-channel">Received via</label><select id="rfq-channel"><option>Email</option><option>WhatsApp</option><option>Phone</option><option>Portal</option><option>Walk-in</option><option>Other</option></select></div>
+<div class="rq-fg rq-c2"><label for="rfq-assigned">Assigned to</label><select id="rfq-assigned" title="Active employees with the Sales role"><option value="">Select employee</option></select></div>
+<div class="rq-fg rq-c5"><label for="rfq-ref">Customer reference / subject</label><input id="rfq-ref" maxlength="200" placeholder="e.g. RFQ 5512 — Lighting upgrade, Building C"/></div>
+<div class="rq-fg rq-c3"><span class="rq-lbl" id="rfq-type-lbl">Request type</span>
+<div class="rq-seg" role="radiogroup" aria-labelledby="rfq-type-lbl" id="rfq-type-seg">
+<label data-type="product"><input type="radio" name="rfq-type" value="product" onchange="rfqSetType(this.value)">Product</label>
+<label data-type="service"><input type="radio" name="rfq-type" value="service" onchange="rfqSetType(this.value)">Service</label>
+<label data-type="mixed"><input type="radio" name="rfq-type" value="mixed" onchange="rfqSetType(this.value)">Mixed</label>
+</div></div>
+<div class="rq-fg rq-c2"><label for="rfq-date">Date received</label><input id="rfq-date" autocomplete="off"/></div>
+<div class="rq-fg rq-c2"><label for="rfq-due">Response due <span class="rq-aux" id="rfq-due-hint"></span></label><input id="rfq-due" autocomplete="off"/></div>
+</div>
+<div class="rq-tabsrow"><div class="rq-tabs" role="tablist" id="rfq-tabs"></div><span class="rq-note" id="rfq-tab-note"></span></div>
+<div class="rq-pane" id="rfq-pane">
+<div class="rq-panel" id="rfq-panel-product" role="tabpanel"></div>
+<div class="rq-panel" id="rfq-panel-service" role="tabpanel"></div>
+<div class="rq-panel" id="rfq-panel-reqs" role="tabpanel">
+<div class="rq-rq">
+<div class="rq-fg rq-c6"><label for="rfq-site" id="rfq-site-lbl">Delivery location</label><input id="rfq-site" maxlength="200" placeholder="Site, building, city"/></div>
+<div class="rq-fg rq-c3"><label for="rfq-reqdate" id="rfq-reqdate-lbl">Required delivery</label><input id="rfq-reqdate" autocomplete="off"/></div>
+<div class="rq-fg rq-c3" id="rfq-duration-wrap"><label for="rfq-duration">Expected duration</label><input id="rfq-duration" maxlength="60" placeholder="e.g. 3 weeks"/></div>
+<div class="rq-fg rq-full"><label for="rfq-desc"><span id="rfq-desc-lbl">General requirements</span> <span class="rq-aux">· instructions, brands, standards, working hours…</span></label><textarea id="rfq-desc" rows="7" placeholder="General instructions, approved brands, standards, delivery conditions…"></textarea></div>
 </div>
 </div>
-<div class="form-group"><label>Contact person</label><select id="rfq-contact"><option value="">Select customer first</option></select></div>
-<div class="form-group form-full"><label>Customer reference / subject</label><input id="rfq-ref" placeholder="Example: RFQ for maintenance materials"/></div>
-</div>
-</div>
-<div class="rfq-form-card">
-<div class="rfq-card-title"><i class="ti ti-calendar-event"></i>RFQ details</div>
-<div class="rfq-simple-grid">
-<div class="form-group"><label>Received via</label>
-<select id="rfq-channel">
-<option>Email</option><option>WhatsApp</option><option>Phone</option><option>Walk-in</option><option>Other</option>
-</select>
-</div>
-<div class="form-group"><label>Assigned to</label><select id="rfq-assigned"><option value="">Select employee</option></select><span class="field-help rfq-assigned-help">Active employees with the Sales role</span></div>
-<div class="form-group"><label>Date received</label><div class="rfq-date-entry"><input id="rfq-date" type="text" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="DD/MM/YYYY" oninput="formatRFQDateTyping(this)" onblur="normalizeRFQDateField(this)" onkeydown="handleRFQDateKeydown(event,this,'rfq-date-picker')"/><button class="rfq-date-picker-btn" type="button" tabindex="-1" onclick="openRFQDatePicker('rfq-date','rfq-date-picker')" aria-label="Open Date received calendar"><i class="ti ti-calendar"></i></button><input id="rfq-date-picker" class="rfq-native-date-picker" type="date" tabindex="-1" onchange="syncRFQDateFromPicker('rfq-date',this)"/></div></div>
-<div class="form-group"><label>Response due date</label><div class="rfq-date-entry"><input id="rfq-due" type="text" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="DD/MM/YYYY" oninput="formatRFQDateTyping(this)" onblur="normalizeRFQDateField(this)" onkeydown="handleRFQDateKeydown(event,this,'rfq-due-picker')"/><button class="rfq-date-picker-btn" type="button" tabindex="-1" onclick="openRFQDatePicker('rfq-due','rfq-due-picker')" aria-label="Open Response due date calendar"><i class="ti ti-calendar"></i></button><input id="rfq-due-picker" class="rfq-native-date-picker" type="date" tabindex="-1" onchange="syncRFQDateFromPicker('rfq-due',this)"/></div></div>
-<div class="form-group form-full"><label>Description / requirements</label>
-<textarea id="rfq-desc" placeholder="Briefly describe what the customer is requesting" style="height:82px"></textarea>
-</div>
-</div>
-</div>
-<div class="rfq-form-card">
-<div class="rfq-card-title"><i class="ti ti-paperclip"></i>Attachment</div>
+<div class="rq-panel" id="rfq-panel-att" role="tabpanel">
 <div class="rfq-attach-compact" role="button" tabindex="0" onclick="document.getElementById('rfq-attach-input').click()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('rfq-attach-input').click()}">
 <i class="ti ti-cloud-upload"></i>
-<div><strong>Attach supporting file</strong><small>Email screenshot, WhatsApp image or PDF</small></div>
+<div><strong>Attach supporting file</strong><small>The customer's RFQ, BOQ, drawing, email screenshot · PDF or image, up to 10 MB</small></div>
 </div>
-<input accept="image/*,.pdf" id="rfq-attach-input" onchange="handleRFQAttach(event)" style="display:none" type="file"/>
+<input accept="image/*,.pdf" id="rfq-attach-input" onchange="handleRFQAttach(event);rfqRefreshTabs()" style="display:none" type="file"/>
 <div id="rfq-attach-list"></div>
 </div>
 </div>
+</div>
 <div class="modal-footer rfq-form-footer">
-<div class="rfq-footer-hint"><span>Quick save</span><kbd>Ctrl</kbd><span>+</span><kbd>S</kbd></div>
+<div class="rfq-footer-hint"><kbd>Ctrl</kbd><span>+</span><kbd>S</kbd><span>save ·</span><kbd>Alt</kbd><span>+</span><kbd>N</kbd><span>add line ·</span><kbd>Alt</kbd><span>+</span><kbd>1</kbd><span>–</span><kbd>4</kbd><span>tabs</span></div>
 <div class="rfq-footer-actions">
 <button class="btn btn-secondary" onclick="confirmCancelRFQEntry()">Cancel</button>
+<button class="btn btn-secondary" id="rfq-save-new-btn" onclick="rfqSaveAndNew()">Save &amp; New</button>
 <button class="btn btn-primary" id="rfq-save-btn" onclick="confirmSaveRFQEntry()"><i class="ti ti-device-floppy"></i><span id="rfq-save-label">Save RFQ</span></button>
 </div>
 </div>
@@ -4036,7 +4036,7 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.25';
+      s.src = 'js/app.js?v=270.26';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4045,6 +4045,8 @@ onAuthStateChanged(auth, user => {
         const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.24'; document.body.appendChild(pu);
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
         const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=270.21'; document.body.appendChild(qu);
+        // V270.2.6: the RFQ entry screen (request type, product / service lines, requirements)
+        const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=270.26'; document.body.appendChild(rq);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.6'; document.body.appendChild(ds); };
       document.body.appendChild(s);
