@@ -8,6 +8,7 @@
  * Idempotency: document IDs derive from the client operation ID — a retried save is detected.
  * Concurrency: transactions are serialisable, so two users can never apply the same balance twice.
  */
+import { formatSequence, nextSequence } from './numbering.mjs?v=270.25';
 import {
   RECEIPT_COLLECTIONS, RECEIPT_SCHEMA_VERSION, RECEIPT_SETTINGS_PATH, RECEIPT_STATUS, ERR,
   receiptIdForOperation, effectiveReceiptSettings, permitted, checkReceiptHeader, checkAllocations,
@@ -27,7 +28,7 @@ export function createReceiptService(fs, options = {}) {
   ensure(db && typeof doc === 'function' && typeof runTransaction === 'function', ERR.INVALID_INPUT, 'Firestore transaction API required');
   const serverTimestamp = typeof fs.serverTimestamp === 'function' ? fs.serverTimestamp : null;
   const now = options.now || (() => new Date().toISOString());
-  const formatNumber = options.formatNumber || ((prefix, n) => prefix + String(n).padStart(4, '0'));
+  const formatNumber = options.formatNumber || formatSequence;
   const actorOf = () => {
     const a = (options.actor && options.actor()) || {};
     ensure(isSafeId(a.uid), ERR.INVALID_STATE, 'You must be signed in to record receipts');
@@ -121,8 +122,8 @@ export function createReceiptService(fs, options = {}) {
         fail(ERR.DUPLICATE_ZOHO_PAYMENT, `Zoho payment no. ${head.zohoPaymentNo} is already used on ${z.rctNo || 'another receipt'}. Check the number in Zoho Books.`);
       }
       const { allocations } = checkAllocations({ custKey, available: head.amount, allocations: input.allocations || [], invoices: base.invoices, payments: base.payments });
-      const sequence = (Number(counterSnap.exists() ? counterSnap.data().value : 0) || 0) + 1;
-      const rctNo = formatNumber(numbering.displayPrefix, sequence);
+      const sequence = nextSequence(counterSnap.exists() ? counterSnap.data().value : 0, numbering);
+      const rctNo = formatNumber(numbering.displayPrefix, sequence, numbering.digits);
       const totals = receiptTotals(head.amount, allocations);
       const receipt = {
         id: rctId, schemaVersion: RECEIPT_SCHEMA_VERSION, rctNo, custId, customer, custKey, date,

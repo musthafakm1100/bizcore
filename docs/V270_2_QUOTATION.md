@@ -255,3 +255,6 @@ Price History; after a reload they did.
   and the raised View returns to normal when it closes.
 - Tests: tests/browser/quotation-v2704.e2e.mjs (fails on V270.2.3: remarks copied; gallery behind a raised View).
 - Upload: **index.html, sw.js, js/app.js, js/pricing-ui.js** (`bizcore-shell-v27024`). No rules change.
+
+## V270.2.5 — Document Numbering format and reset (24 Oct 2026)
+See **docs/V270_2_5_NUMBERING.md** (mockups NUM_1 / NUM_2). Upload list there (`bizcore-shell-v27025`). No rules change.

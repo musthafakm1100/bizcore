@@ -561,7 +561,7 @@ async function _saveIssueInvoiceCore(m){
   const input = {
     operationId: m._opId, salesOrderId: so.id, type: r.type, date, dueDate: document.getElementById('ii-due').value || '',
     zohoNo: document.getElementById('ii-zoho').value.trim(), notes: document.getElementById('ii-notes').value.trim(),
-    reason: document.getElementById('ii-reason').value.trim(), numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix },
+    reason: document.getElementById('ii-reason').value.trim(), numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix, digits: x.digits, floor: x.floor },
     ...(m._reissueOf ? { reissueOf: m._reissueOf } : {}),
   };
   if (r.type === 'advance') input.advance = r.advance; else { input.lines = r.lines; if (r.limits && r.limits.remaining > 0.004) input.deduction = r.deduction; }
@@ -738,7 +738,7 @@ async function _saveCreditNoteCore(m){
   if (r.errors.length) { showToast(r.errors[0], 'error', 'Check the Credit Note'); return null; }
   const x = docNumberParts('creditNote', new Date(date + 'T00:00:00'));
   const input = { operationId: m._opId, salesOrderId: m._soId, invoiceId: inv.id, date, reason: document.getElementById('cn-reason').value.trim(),
-    expectedRevision: inv.revision, numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix } };
+    expectedRevision: inv.revision, numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix, digits: x.digits, floor: x.floor } };
   if (inv.type === 'advance') input.amount = r.amount; else input.lines = r.lines;
   try {
     const res = await window.BizCoreInv.service.issueCreditNote(input);

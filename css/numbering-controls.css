@@ -1,7 +1,7 @@
 /* V248 — scoped modern controls for Administration > Numbering & Defaults.
    Presentation only: preserve numbering logic, table structure and column sizing. */
 #setup-tab-defaults .numbering-table .docnum-prefix,
-#setup-tab-defaults .numbering-table .docnum-reset {
+#setup-tab-defaults .docnum-ctl {
   box-sizing:border-box;
   height:34px;
   min-height:34px;
@@ -18,8 +18,8 @@
   transition:border-color .15s ease,box-shadow .15s ease;
 }
 #setup-tab-defaults .numbering-table .docnum-prefix {width:90px;}
-#setup-tab-defaults .numbering-table .docnum-reset {
-  width:112px;
+#setup-tab-defaults .docnum-ctl {
+  width:auto;
   padding-right:26px;
   appearance:none;
   -webkit-appearance:none;
@@ -30,12 +30,77 @@
   cursor:pointer;
 }
 #setup-tab-defaults .numbering-table .docnum-prefix:hover,
-#setup-tab-defaults .numbering-table .docnum-reset:hover {border-color:#94a3b8;}
+#setup-tab-defaults .docnum-ctl:hover {border-color:#94a3b8;}
 #setup-tab-defaults .numbering-table .docnum-prefix:focus,
-#setup-tab-defaults .numbering-table .docnum-reset:focus {
+#setup-tab-defaults .docnum-ctl:focus {
   outline:none;
   border-color:var(--c-2563eb);
   box-shadow:0 0 0 3px color-mix(in srgb, var(--c-2563eb) 13%, transparent);
 }
 #setup-tab-defaults .numbering-table .docnum-prefix:focus-visible,
-#setup-tab-defaults .numbering-table .docnum-reset:focus-visible {outline:2px solid transparent;}
+#setup-tab-defaults .docnum-ctl:focus-visible {outline:2px solid transparent;}
+
+/* V270.2.5 — Document Numbering (mockup NUM_2): format and reset set separately. */
+#setup-tab-defaults .numbering-table .docnum-prefix{width:78px;text-transform:uppercase;font-weight:600}
+#setup-tab-defaults .docnum-ctl{min-width:74px}
+#setup-tab-defaults .docnum-ctl.docnum-date{min-width:104px}
+#setup-tab-defaults .docnum-ctl.docnum-sep{min-width:0;width:68px;padding:0 20px 0 8px;background-position:right 6px center}
+#setup-tab-defaults .docnum-ctl.docnum-digits{min-width:0;width:60px}
+#setup-tab-defaults .docnum-ctl.docnum-reset{min-width:104px}
+#setup-tab-defaults .docnum-ctl:disabled{background-color:#f3f5f7;color:#9aa5b1;cursor:default}
+.docnum-actions{display:flex;gap:8px;flex-wrap:wrap}
+.docnum-actions .btn:disabled{opacity:.45;cursor:default}
+.docnum-applybar{display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;padding:8px 12px;margin-bottom:12px;border:1px solid #d6e6ee;border-radius:9px;background:var(--c-f7fbff,#f6fafc);font-size:12.5px;color:#475569}
+.docnum-applybar>strong{color:var(--blue);font-weight:650}
+.docnum-applybar label{display:inline-flex;align-items:center;gap:6px;margin:0;font-weight:500}
+.docnum-applybar .docnum-applynote{color:var(--gray)}
+.docnum-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start;container-type:inline-size}
+.docnum-layout>.numbering-table-wrap{order:2}
+.docnum-layout>.docnum-panel{order:1;display:grid;grid-template-columns:1.1fr 1.2fr 1.3fr;gap:10px;position:static}
+@container (min-width:1180px){.docnum-layout{grid-template-columns:minmax(0,1fr) 290px}.docnum-layout>.numbering-table-wrap{order:1}.docnum-layout>.docnum-panel{order:2;display:flex;flex-direction:column;position:sticky;top:12px}}
+.docnum-table{width:100%;table-layout:auto;border-collapse:collapse}
+.docnum-table th{white-space:nowrap}
+.docnum-table td:first-child{min-width:128px}
+.docnum-table td{padding-top:7px!important;padding-bottom:7px!important}
+.docnum-table td.docnum-seps{white-space:nowrap}
+.docnum-table td.docnum-seps .docnum-ctl+.docnum-ctl{margin-left:4px}
+.docnum-table tr.docnum-group td{background:#f8fafc;color:var(--blue)!important;font-size:11px!important;font-weight:700!important;letter-spacing:.06em;text-transform:uppercase;padding:9px 12px 6px!important}
+.docnum-table tr.docnum-row{cursor:pointer}
+.docnum-table tr.docnum-row:hover td{background:#f8fbfd}
+.docnum-table tr.docnum-row.is-selected td{background:#eef6fb}
+.docnum-table tr.docnum-row.is-selected td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
+.docnum-doc{font-weight:600}
+.docnum-changed{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--st-amber-bg,#fef3c7);color:var(--st-amber-fg,#92400e);font-size:10.5px;font-weight:700;vertical-align:1px}
+.docnum-changed[hidden]{display:none}
+.docnum-format-preview{display:inline-block;white-space:nowrap}
+.docnum-next-no{display:block;margin-top:4px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;font-weight:700!important;white-space:nowrap}
+.docnum-card{border:1px solid var(--border);border-radius:9px;padding:12px 13px;background:#fff}
+.docnum-card-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.docnum-card-head strong{color:var(--blue);font-size:13px}
+.docnum-card-head span,.docnum-card small{color:var(--gray);font-size:11.5px}
+.docnum-big{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:19px;font-weight:700;margin:2px 0 8px;word-break:break-all}
+.docnum-anatomy{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:6px}
+.docnum-anatomy span{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;border-radius:5px;padding:2px 6px}
+.docnum-anatomy .is-sep{color:#94a3b8;padding:2px 1px}
+.is-prefix{background:var(--st-blue-bg,#e8f0fb);color:var(--st-blue-fg,#1e4f86)}
+.is-date{background:var(--st-amber-bg,#fef3c7);color:var(--st-amber-fg,#92400e)}
+.is-seq{background:var(--st-green-bg,#dcfce7);color:var(--st-green-fg,#166534)}
+.docnum-legend{display:flex;gap:6px;flex-wrap:wrap}
+.docnum-legend span{font-size:10.5px;border-radius:999px;padding:1px 7px}
+.docnum-timeline{list-style:none;margin:0;padding:0;font-size:12.5px}
+.docnum-timeline li{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px dashed #e5eaef}
+.docnum-timeline li:last-child{border-bottom:0}
+.docnum-timeline li span{color:var(--gray)}
+.docnum-timeline code{font-weight:600;font-size:12px;background:none;padding:0;white-space:nowrap}
+.docnum-timeline li.is-reset code,.docnum-green{color:var(--st-green-fg,#166534)}
+.docnum-rule{margin:8px 0 0;font-size:11.5px;color:var(--gray);line-height:1.45}
+.docnum-note{border-radius:9px;padding:10px 12px;font-size:12px;line-height:1.5;background:var(--st-green-bg,#ecfdf3);color:var(--st-green-fg,#14532d);display:flex;flex-direction:column;gap:2px}
+.docnum-note.is-change{background:var(--st-amber-bg,#fff7e6);color:var(--st-amber-fg,#7c2d12)}
+.docnum-note code{font-size:11.5px;background:rgba(255,255,255,.6);padding:0 4px;border-radius:4px}
+.docnum-rules{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.docnum-rules>div{display:flex;flex-direction:column;gap:3px;padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:#f8fafc;font-size:12px;color:#475569;line-height:1.45}
+.docnum-rules strong{color:#0f172a;font-size:12.5px}
+.docnum-status{margin-top:10px;font-size:12.5px;color:var(--gray)}
+.docnum-status strong{color:var(--st-amber-fg,#92400e)}
+@media(max-width:900px){.docnum-layout>.docnum-panel{grid-template-columns:1fr}}
+@media(max-width:700px){.docnum-rules{grid-template-columns:1fr}.docnum-table{min-width:760px}}

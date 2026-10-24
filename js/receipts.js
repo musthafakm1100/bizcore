@@ -549,7 +549,7 @@ async function _saveNewReceiptCore(m){
   const input = { operationId: m._opId, customer: r.cust.customer, custId: r.cust.custId || '', date, amount: r.amount,
     method: document.getElementById('rn-method').value, account: r.account, bankCharges: r.charges, reference: document.getElementById('rn-ref').value.trim(),
     zohoPaymentNo: r.zoho, notes: document.getElementById('rn-notes').value.trim(), allocations: r.allocations,
-    numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix } };
+    numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix, digits: x.digits, floor: x.floor } };
   try {
     const res = await window.BizCoreRct.service.createReceipt(input);
     upsertReceiptCache(res.receipt);

@@ -15,6 +15,7 @@
  *   recordSupplierPayment / recordSupplierCashBack / voidSupplierPayment are ONE transaction each:
  *   payment + balanced cash-ledger entry + postings (+ accounts hasEntries) + invoice figures + invoice event.
  */
+import { formatSequence, nextSequence } from './numbering.mjs?v=270.25';
 import {
   PURCHASE_COLLECTIONS as C, PURCHASE_SCHEMA_VERSION, PURCHASE_SETTINGS_PATH, PURCHASE_STATUS,
   effectivePurchaseSettings, validatePurchaseSettings, validatePurchaseInvoice, purchaseIdForOperation,
@@ -41,7 +42,7 @@ export function createPurchaseService(fs, options = {}) {
   const serverTimestamp = typeof fs.serverTimestamp === 'function' ? fs.serverTimestamp : null;
   const stamp = () => (serverTimestamp ? serverTimestamp() : new Date().toISOString());
   const now = options.now || (() => new Date().toISOString());
-  const formatNumber = options.formatNumber || ((prefix, n) => prefix + String(n).padStart(4, '0'));
+  const formatNumber = options.formatNumber || formatSequence;
   const actorOf = () => {
     const a = (options.actor && options.actor()) || {};
     ensure(isSafeId(a.uid), PURCHASE_ERR.INVALID_STATE, 'You must be signed in');
@@ -162,8 +163,8 @@ export function createPurchaseService(fs, options = {}) {
       const payCounters = groups.length ? await readCounters(tx, groups.map(g => g.numbering.counterKey)) : new Map();
 
       // ── writes ──
-      const seq = (Number(counterSnap.exists() ? counterSnap.data().value : 0) || 0) + 1;
-      const piNo = formatNumber(numbering.displayPrefix, seq);
+      const seq = nextSequence(counterSnap.exists() ? counterSnap.data().value : 0, numbering);
+      const piNo = formatNumber(numbering.displayPrefix, seq, numbering.digits);
       const invoice = {
         id, schemaVersion: PURCHASE_SCHEMA_VERSION, piNo, ...val, supplierRefKey: refKey,
         status: PURCHASE_STATUS.posted, revision: 1, lastEventId: eventId, creationOperationId: operationId,
@@ -176,8 +177,8 @@ export function createPurchaseService(fs, options = {}) {
         const pv = validateSupplierPayment({ kind: PAYMENT_KINDS.payment, date: g.date, lines: g.lines, discount: 0 }, { invoice, accounts: payAccounts, advances: payAdvances, today: (todayLocal()) });
         if (!pv.ok) fail(PURCHASE_ERR.INVALID_INPUT, pv.errors.map(e => e.message).join(' '), { errors: pv.errors, field: 'payments' });
         for (const a of pv.value.advanceIds) { ensure(!advSeen.has(a), PURCHASE_ERR.INVALID_INPUT, 'An advance can be used only once on one invoice.'); advSeen.add(a); }
-        const n = payCounters.get(g.numbering.counterKey) + 1; payCounters.set(g.numbering.counterKey, n);
-        const recs = buildSupplierPaymentRecords({ id: paymentIdForOperation(operationId, i + 1), spNo: formatNumber(g.numbering.displayPrefix, n), value: pv.value, invoice, accounts: payAccounts, actor, at, stamp: stamp(), operationId });
+        const n = nextSequence(payCounters.get(g.numbering.counterKey), g.numbering); payCounters.set(g.numbering.counterKey, n);
+        const recs = buildSupplierPaymentRecords({ id: paymentIdForOperation(operationId, i + 1), spNo: formatNumber(g.numbering.displayPrefix, n, g.numbering.digits), value: pv.value, invoice, accounts: payAccounts, actor, at, stamp: stamp(), operationId });
         Object.assign(invoice, applyPaymentToInvoice(invoice, recs.payment, +1));
         invoice.paymentCount += 1;
         payRecs.push(recs);
@@ -287,8 +288,8 @@ export function createPurchaseService(fs, options = {}) {
       const counters = await readCounters(tx, [numbering.counterKey]);
       const pv = validateSupplierPayment({ ...input, kind }, { invoice: pi, accounts, advances, today: todayLocal() });
       if (!pv.ok) fail(PURCHASE_ERR.INVALID_INPUT, pv.errors.map(e => e.message).join(' '), { errors: pv.errors });
-      const seq = counters.get(numbering.counterKey) + 1;
-      const recs = buildSupplierPaymentRecords({ id, spNo: formatNumber(numbering.displayPrefix, seq), value: pv.value, invoice: pi, accounts, actor, at, stamp: stamp(), operationId });
+      const seq = nextSequence(counters.get(numbering.counterKey), numbering);
+      const recs = buildSupplierPaymentRecords({ id, spNo: formatNumber(numbering.displayPrefix, seq, numbering.digits), value: pv.value, invoice: pi, accounts, actor, at, stamp: stamp(), operationId });
       const revision = pi.revision + 1;
       const figures = applyPaymentToInvoice(pi, recs.payment, +1);
       const next = { ...pi, ...figures, paymentCount: (Number(pi.paymentCount) || 0) + 1, revision, lastEventId: eventId, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid };
@@ -383,8 +384,8 @@ export function createPurchaseService(fs, options = {}) {
       const counters = await readCounters(tx, [numbering.counterKey]);
       const pv = validateSupplierPayment({ ...input, kind: PAYMENT_KINDS.advance, discount: 0, lines: (input.lines || []).filter(l => !l.advanceId) }, { accounts, today: todayLocal() });
       if (!pv.ok) fail(PURCHASE_ERR.INVALID_INPUT, pv.errors.map(e => e.message).join(' '), { errors: pv.errors });
-      const seq = counters.get(numbering.counterKey) + 1;
-      const recs = buildSupplierPaymentRecords({ id, spNo: formatNumber(numbering.displayPrefix, seq), value: pv.value, invoice: null, accounts, actor, at, stamp: stamp(), operationId });
+      const seq = nextSequence(counters.get(numbering.counterKey), numbering);
+      const recs = buildSupplierPaymentRecords({ id, spNo: formatNumber(numbering.displayPrefix, seq, numbering.digits), value: pv.value, invoice: null, accounts, actor, at, stamp: stamp(), operationId });
       recs.payment.lastEventId = eventId;
       tx.set(refs.counter(numbering.counterKey), { value: seq, updatedAt: Date.now() });
       writePaymentRecords(tx, recs, accounts, new Map(), actor, at);

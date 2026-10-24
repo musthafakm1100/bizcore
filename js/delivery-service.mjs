@@ -15,6 +15,7 @@
  * losing transaction re-run against fresh data (and fail validation if it no longer fits).
  * Optimistic locking: changes carry `expectedRevision`; a stale screen is rejected.
  */
+import { formatSequence, nextSequence } from './numbering.mjs?v=270.25';
 import {
   COLLECTIONS, SCHEMA_VERSION, LIMITS, ERR, DeliveryError,
   isSafeId, dnIdForOperation, eventIdForOperation, soLineIndex, emptyLedger, applyLedgerDeltas,
@@ -37,7 +38,7 @@ export function createDeliveryService(fs, options = {}) {
     ensure(isSafeId(a.uid), ERR.INVALID_STATE, 'You must be signed in to change Delivery Notes');
     return { name: cleanText(a.name || a.email || a.uid, 200), uid: a.uid };
   };
-  const formatNumber = options.formatNumber || ((prefix, n) => prefix + String(n).padStart(4, '0'));
+  const formatNumber = options.formatNumber || formatSequence;
   // Order lock (ERP-style exclusive editing). When required, every operation verifies inside its
   // transaction that this user/session holds the Sales Order lock; the security rules enforce the
   // same (with server time for expiry), so a stale window or an expired lock cannot write.
@@ -141,8 +142,8 @@ export function createDeliveryService(fs, options = {}) {
       const lines = validateDispatchLines(input.lines, lineIndex);
       const ledger = readLedger(ledgerSnap, salesOrderId);
 
-      const sequence = (Number(counterSnap.exists() ? counterSnap.data().value : 0) || 0) + 1;
-      const dnNo = formatNumber(numbering.displayPrefix, sequence);
+      const sequence = nextSequence(counterSnap.exists() ? counterSnap.data().value : 0, numbering);
+      const dnNo = formatNumber(numbering.displayPrefix, sequence, numbering.digits);
       const items = lines.map(l => { const ref = lineIndex.get(l.lineId); return buildDNItem(ref.line, ref.index, l.qty); });
       const dn = {
         id: dnId, schemaVersion: SCHEMA_VERSION, dnNo, salesOrderId, soNo: so.soNo || '', customer: so.customer || '', custId: so.custId || '',

@@ -504,7 +504,7 @@ function piPayGroups(pays, invDate){
 function piPayNumbering(date){
   const d = /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? new Date(date + 'T00:00:00') : new Date();
   const x = typeof docNumberParts === 'function' ? docNumberParts('supplierPayment', d) : { counterKey: 'doc_supplierPayment_all', displayPrefix: 'SP-' };
-  return { counterKey: x.counterKey, displayPrefix: x.displayPrefix };
+  return { counterKey: x.counterKey, displayPrefix: x.displayPrefix, digits: x.digits, floor: x.floor };
 }
 /** Checks the entry's payments one after the other against what is left of the total. */
 function piCheckPays(groups, total, discountRaw){
@@ -687,7 +687,7 @@ async function savePurchaseInvoice(){
   const x = typeof docNumberParts === 'function' ? docNumberParts('purchaseInvoice', date) : { counterKey: 'doc_purchaseInvoice_all', displayPrefix: 'PI-' };
   btn.disabled = true; err.hidden = true;
   try {
-    let r = await bcBusy('Saving purchase invoice…', () => lib.service.createPurchaseInvoice({ ...input, numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix } }));
+    let r = await bcBusy('Saving purchase invoice…', () => lib.service.createPurchaseInvoice({ ...input, numbering: { counterKey: x.counterKey, displayPrefix: x.displayPrefix, digits: x.digits, floor: x.floor } }));
     // V268.21: the discount at payment typed on the new invoice — saved at once as a discount-only payment
     const disc = s._pay ? s._pay.discount : 0;
     if (disc > 0 && !r.alreadyApplied) {

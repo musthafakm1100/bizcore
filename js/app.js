@@ -1514,34 +1514,165 @@ function validUntil(q) {
 const DOC_NUMBERING_DEFAULTS={
   rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},paymentReceipt:{label:'Payment Receipt',prefix:'RCT',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'},supplierPayment:{label:'Supplier Payment',prefix:'SP',reset:'monthly'}
 };
-function ensureDocumentNumbering(){settings.documentNumbering=settings.documentNumbering||{};Object.entries(DOC_NUMBERING_DEFAULTS).forEach(([k,d])=>{settings.documentNumbering[k]={...d,...(settings.documentNumbering[k]||{})};});return settings.documentNumbering;}
+/* V270.2.5 — Number format and sequence reset are set separately.
+   A number is  PREFIX + sep1 + DATE PART + sep2 + SEQUENCE  (the date part is optional).
+   The DATE PART only labels the number; the RESET decides which counter is used:
+   monthly → one counter per month, yearly → one per year, never → one running counter.
+   Counter keys stay exactly as before (doc_<type>_YYMM / _YY / _all), so unchanged settings keep counting.
+   No duplicates: every allocation starts above the highest existing number that has the same text in front
+   of the sequence (the "floor"), as well as above the counter. */
+const DOC_DATE_FORMATS=['none','YY','YYYY','YYMM','YYMMDD'];
+const DOC_DATE_FORMAT_LABELS={none:'None',YY:'YY',YYYY:'YYYY',YYMM:'YYMM',YYMMDD:'YYMMDD'};
+const DOC_RESETS_FOR_FORMAT={none:['never'],YY:['yearly','never'],YYYY:['yearly','never'],YYMM:['yearly','monthly','never'],YYMMDD:['yearly','monthly','never']};
+const DOC_RESET_LABELS={yearly:'Yearly',monthly:'Monthly',never:'Never'};
+const DOC_SEPARATORS=['-','/','.',''];
+const DOC_DIGITS=[3,4,5,6];
+const DOC_NUMBERING_GROUPS=[['Sales',['rfq','pricing','quotation','salesOrder','deliveryNote','customerInvoice','creditNote','paymentReceipt']],['Purchases',['purchaseOrder','purchaseInvoice','supplierPayment']]];
+function cleanDocPrefix(v){return String(v||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8);}
+function normalizeDocNumberingConfig(type,raw){
+  const d=DOC_NUMBERING_DEFAULTS[type]||{},c={...(raw||{})};
+  c.prefix=cleanDocPrefix(c.prefix)||d.prefix||String(type).toUpperCase();
+  c.reset=DOC_RESET_LABELS[c.reset]?c.reset:(d.reset||'monthly');
+  // Settings saved before V270.2.5 have no date part: it followed the reset (monthly → YYMM, yearly → YY, never → none).
+  if(!DOC_DATE_FORMATS.includes(c.dateFormat))c.dateFormat=c.reset==='monthly'?'YYMM':c.reset==='yearly'?'YY':'none';
+  if(!DOC_RESETS_FOR_FORMAT[c.dateFormat].includes(c.reset))c.reset=DOC_RESETS_FOR_FORMAT[c.dateFormat][0];
+  c.sep1=DOC_SEPARATORS.includes(c.sep1)?c.sep1:'-';
+  c.sep2=DOC_SEPARATORS.includes(c.sep2)?c.sep2:'-';
+  c.digits=DOC_DIGITS.includes(Number(c.digits))?Number(c.digits):4;
+  return c;
+}
+function ensureDocumentNumbering(){settings.documentNumbering=settings.documentNumbering||{};Object.entries(DOC_NUMBERING_DEFAULTS).forEach(([k,d])=>{settings.documentNumbering[k]=normalizeDocNumberingConfig(k,{...d,...(settings.documentNumbering[k]||{})});});return settings.documentNumbering;}
+function docDatePart(fmt,date=new Date()){const y=String(date.getFullYear()),yy=y.slice(2),mm=String(date.getMonth()+1).padStart(2,'0'),dd=String(date.getDate()).padStart(2,'0');return fmt==='YY'?yy:fmt==='YYYY'?y:fmt==='YYMM'?yy+mm:fmt==='YYMMDD'?yy+mm+dd:'';}
+/** Counter scope — unchanged from before V270.2.5 so existing counters carry on. */
 function docPeriod(reset='monthly',date=new Date()){const yy=String(date.getFullYear()).slice(2),mm=String(date.getMonth()+1).padStart(2,'0');return reset==='yearly'?yy:(reset==='never'?'':yy+mm);}
-function docNumberParts(type,date=new Date()){const cfg=ensureDocumentNumbering()[type]||DOC_NUMBERING_DEFAULTS[type];const period=docPeriod(cfg.reset,date);const prefix=String(cfg.prefix||DOC_NUMBERING_DEFAULTS[type]?.prefix||type.toUpperCase()).trim();const displayPrefix=prefix+(period?'-'+period:'')+'-';const counterKey='doc_'+type+'_'+(period||'all');return {cfg,period,prefix,displayPrefix,counterKey};}
-function formatDocSequence(displayPrefix,n){return displayPrefix+String(Number(n)||0).padStart(4,'0');}
+function docPeriodLabel(reset,date=new Date()){return reset==='monthly'?date.toLocaleString('en-GB',{month:'short',year:'numeric'}):reset==='yearly'?String(date.getFullYear()):'Continuous';}
+function docNumberPattern(c){return c.prefix+c.sep1+(c.dateFormat!=='none'?c.dateFormat+c.sep2:'')+'#'.repeat(c.digits);}
+/** Highest sequence among existing numbers that read the same as a new one, ignoring separators
+    (RFQ-2610-0028 and RFQ-26100028 count as the same number). A new number above it can never repeat one.
+    Only sequences up to the chosen digits are counted, so switching e.g. YYMM→YY without separators does not jump. */
+const docNumberPlain=s=>String(s||'').replace(/-R\d+$/,'').replace(/[-/.]/g,'');
+function docNumberFloor(type,displayPrefix,digits=4){const head=docNumberPlain(displayPrefix);let max=0;for(const n of existingDocumentNumbers(type)){const s=docNumberPlain(n);if(!s.startsWith(head))continue;const rest=s.slice(head.length);if(!/^\d+$/.test(rest)||rest.length>digits)continue;const v=parseInt(rest,10);if(v>max)max=v;}return max;}
+function docNumberPartsFor(type,cfg,date=new Date()){
+  const c=normalizeDocNumberingConfig(type,cfg);
+  const datePart=docDatePart(c.dateFormat,date),period=docPeriod(c.reset,date);
+  const displayPrefix=c.prefix+c.sep1+(datePart?datePart+c.sep2:'');
+  const counterKey='doc_'+type+'_'+(period||'all');
+  const floor=docNumberFloor(type,displayPrefix,c.digits);
+  return {cfg:c,period,periodLabel:docPeriodLabel(c.reset,date),datePart,prefix:c.prefix,displayPrefix,counterKey,digits:c.digits,floor,numbering:{counterKey,displayPrefix,digits:c.digits,floor}};
+}
+function docNumberParts(type,date=new Date()){return docNumberPartsFor(type,ensureDocumentNumbering()[type]||DOC_NUMBERING_DEFAULTS[type],date);}
+function formatDocSequence(displayPrefix,n,digits=4){return displayPrefix+String(Number(n)||0).padStart(DOC_DIGITS.includes(Number(digits))?Number(digits):4,'0');}
+/** Offline number — always contains "-OFF-", whatever separators are chosen. */
+function provisionalDocNumber(x){return String(x.displayPrefix).replace(/[-/.]+$/,'')+'-OFF-'+getDeviceTag()+'-'+String(Date.now()).slice(-5);}
 async function allocateDocumentNumber(type,date=new Date()){
   const x=docNumberParts(type,date);
-  if(window.FB&&window.FB.getNextDocSequence&&navigator.onLine){const n=await window.FB.getNextDocSequence(x.counterKey);if(n)return formatDocSequence(x.displayPrefix,n);}
+  if(window.FB&&window.FB.getNextDocSequence&&navigator.onLine){const n=await window.FB.getNextDocSequence(x.counterKey,x.floor);if(n)return formatDocSequence(x.displayPrefix,n,x.digits);}
   // Offline-safe provisional ID. Never silently reuses a permanent sequence.
-  return x.displayPrefix+'OFF-'+getDeviceTag()+'-'+String(Date.now()).slice(-5);
+  return provisionalDocNumber(x);
 }
 function existingDocumentNumbers(type){
   if(type==='rfq')return rfqs.map(x=>x.rfqNo||''); if(type==='quotation')return quotations.map(x=>x.qno||''); if(type==='salesOrder')return salesOrders.map(x=>x.soNo||'');
   if(type==='deliveryNote')return salesOrders.flatMap(s=>(s.deliveries||[]).map(x=>x.dnNo||'')); if(type==='customerInvoice')return salesOrders.flatMap(s=>(s.invoices||[]).map(x=>x.invNo||'')); if(type==='creditNote')return salesOrders.flatMap(s=>(s.creditNotes||[]).map(x=>x.cnNo||'')); if(type==='paymentReceipt')return (typeof receiptsCache!=='undefined'?receiptsCache:[]).map(x=>x.rctNo||''); if(type==='purchaseInvoice')return (window.BizCorePI?window.BizCorePI.invoices:[]).map(x=>x.piNo||''); if(type==='supplierPayment')return (window.BizCorePI?window.BizCorePI.payments:[]).map(x=>x.spNo||''); return [];
 }
-function estimatedNextDocumentNumber(type){const x=docNumberParts(type);const vals=existingDocumentNumbers(type).filter(n=>String(n).startsWith(x.displayPrefix)&&!String(n).includes('-OFF-')).map(n=>parseInt(String(n).slice(x.displayPrefix.length),10)||0);return formatDocSequence(x.displayPrefix,(vals.length?Math.max(...vals):0)+1);}
-function renderDocumentNumbering(){
-  ensureDocumentNumbering();
-  const body=document.getElementById('document-numbering-tbody');if(!body)return;
-  body.innerHTML=Object.entries(DOC_NUMBERING_DEFAULTS).map(([k,d])=>{const c=settings.documentNumbering[k];const fmt=c.reset==='monthly'?`${c.prefix}-YYMM-####`:c.reset==='yearly'?`${c.prefix}-YY-####`:`${c.prefix}-####`;return `<tr><td><strong>${d.label}</strong></td><td><input class="docnum-prefix" data-type="${k}" value="${c.prefix}" maxlength="8" oninput="previewDocumentNumbering()"></td><td><select class="docnum-reset" data-type="${k}" onchange="previewDocumentNumbering()"><option value="monthly" ${c.reset==='monthly'?'selected':''}>Monthly</option><option value="yearly" ${c.reset==='yearly'?'selected':''}>Yearly</option><option value="never" ${c.reset==='never'?'selected':''}>Never</option></select></td><td><span class="docnum-format-preview" data-format-type="${k}">${fmt}</span></td><td><span class="docnum-next"><strong data-next-type="${k}">${estimatedNextDocumentNumber(k)}</strong><small>Allocated atomically on Save</small></span></td></tr>`}).join('');
-  populateSequenceDocumentTypes();
+/* Live counter values read from the cloud for the screen (counterKey → value). */
+const docCounterCache={};
+function knownCounter(key){return Number.isFinite(docCounterCache[key])?docCounterCache[key]:0;}
+async function loadDocCounters(keys){
+  if(!window.FB?.getDocSequence||!navigator.onLine)return false;
+  const todo=[...new Set(keys)].filter(k=>!(k in docCounterCache));if(!todo.length)return false;
+  todo.forEach(k=>{docCounterCache[k]=undefined;});
+  const vals=await Promise.all(todo.map(k=>window.FB.getDocSequence(k).catch(()=>null)));
+  todo.forEach((k,i)=>{const v=Number(vals[i]);if(vals[i]!==null&&Number.isFinite(v))docCounterCache[k]=v;else delete docCounterCache[k];});
+  return true;
 }
-function previewDocumentNumbering(){document.querySelectorAll('.docnum-prefix').forEach(inp=>{const k=inp.dataset.type,reset=document.querySelector(`.docnum-reset[data-type="${k}"]`)?.value||'monthly',prefix=(inp.value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'')||DOC_NUMBERING_DEFAULTS[k].prefix),fmt=reset==='monthly'?`${prefix}-YYMM-####`:reset==='yearly'?`${prefix}-YY-####`:`${prefix}-####`;const f=document.querySelector(`[data-format-type="${k}"]`);if(f)f.textContent=fmt;});}
-async function saveDocumentNumbering(){ensureDocumentNumbering();document.querySelectorAll('.docnum-prefix').forEach(e=>{const v=e.value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(v)settings.documentNumbering[e.dataset.type].prefix=v;});document.querySelectorAll('.docnum-reset').forEach(e=>settings.documentNumbering[e.dataset.type].reset=e.value);await saveSettings();renderDocumentNumbering();showToast('Document numbering settings saved','success');}
-function switchNumberingSection(name){['numbering','defaults','sequences'].forEach(k=>{const s=document.getElementById('numbering-section-'+k),b=document.getElementById('numtab-'+k);if(s)s.style.display=k===name?'block':'none';if(b)b.classList.toggle('active',k===name);});if(name==='sequences')refreshSequenceManager();}
-function populateSequenceDocumentTypes(){const sel=document.getElementById('sequence-doc-type');if(!sel)return;const current=sel.value;sel.innerHTML=Object.entries(DOC_NUMBERING_DEFAULTS).map(([k,d])=>`<option value="${k}">${d.label}</option>`).join('');if(current&&DOC_NUMBERING_DEFAULTS[current])sel.value=current;refreshSequenceManager();}
-function maxExistingSequence(type){const x=docNumberParts(type);const vals=existingDocumentNumbers(type).filter(n=>String(n).startsWith(x.displayPrefix)&&!String(n).includes('-OFF-')).map(n=>parseInt(String(n).slice(x.displayPrefix.length),10)||0);return vals.length?Math.max(...vals):0;}
-async function refreshSequenceManager(){const sel=document.getElementById('sequence-doc-type');if(!sel)return;const type=sel.value||'rfq',x=docNumberParts(type),localMax=maxExistingSequence(type);let current=localMax;if(window.FB?.getDocSequence&&navigator.onLine){const cloud=await window.FB.getDocSequence(x.counterKey);if(Number.isFinite(Number(cloud)))current=Math.max(current,Number(cloud));}const period=document.getElementById('sequence-current-period'),counter=document.getElementById('sequence-current-counter'),next=document.getElementById('sequence-next-number'),input=document.getElementById('sequence-adjust-value');if(period)period.textContent=x.period||(x.cfg.reset==='never'?'Continuous':'—');if(counter)counter.textContent=String(current).padStart(4,'0');if(next)next.textContent=formatDocSequence(x.displayPrefix,current+1);if(input)input.value=current;}
-async function requestSequenceAdjustment(){const type=document.getElementById('sequence-doc-type')?.value||'rfq',value=Number(document.getElementById('sequence-adjust-value')?.value);if(!Number.isInteger(value)||value<0){showToast('Enter a valid whole-number counter','error');return;}const x=docNumberParts(type),min=maxExistingSequence(type),label=DOC_NUMBERING_DEFAULTS[type].label;if(value<min){showToast(`Counter cannot be below ${String(min).padStart(4,'0')} because that sequence already exists`,'error');return;}if(!navigator.onLine||!window.FB?.setDocSequence){showToast('Cloud connection is required to adjust a document sequence','error');return;}const first=await showConfirmAsync({icon:'⚠️',title:'Adjust document sequence?',message:`Change the current ${label} counter for this period?`,details:{Document:label,'Current period':x.period||'Continuous','New current counter':String(value).padStart(4,'0'),'Next document':formatDocSequence(x.displayPrefix,value+1)},confirmText:'Continue',cancelText:'Cancel',confirmClass:'btn-danger'});if(!first)return;const second=await showConfirmAsync({icon:'🔒',title:'Final confirmation',message:'This changes the live cloud counter used for future document numbers. Existing issued documents will not be renumbered.',details:{Document:label,'Counter will become':String(value).padStart(4,'0')},confirmText:'Yes, adjust sequence',cancelText:'Go back',confirmClass:'btn-danger'});if(!second)return;const result=await window.FB.setDocSequence(x.counterKey,value,min);if(result?.ok){showToast(`${label} sequence updated`,'success');await refreshSequenceManager();renderDocumentNumbering();}else showToast(result?.message||'Could not update document sequence','error');}
+function estimatedNextSequence(x){return Math.max(knownCounter(x.counterKey),x.floor)+1;}
+function estimatedNextDocumentNumber(type){const x=docNumberParts(type);return formatDocSequence(x.displayPrefix,estimatedNextSequence(x),x.digits);}
+
+/* ── Document Numbering screen (NUM_2) ── */
+let docNumDraft=null,docNumDirty=false,docNumSelected='rfq';
+function docNumSaved(){return ensureDocumentNumbering();}
+function docNumChanged(k){const a=docNumDraft[k],b=docNumSaved()[k];return ['prefix','sep1','dateFormat','sep2','digits','reset'].some(f=>a[f]!==b[f]);}
+function docNumOptions(map,val,allowed){return Object.entries(map).filter(([v])=>!allowed||allowed.includes(v)).map(([v,t])=>`<option value="${v}" ${v===val?'selected':''}>${t}</option>`).join('');}
+function docNumSepOptions(val){return DOC_SEPARATORS.map(s=>`<option value="${s}" ${s===val?'selected':''}>${s||'none'}</option>`).join('');}
+function docNumDigitOptions(val){return DOC_DIGITS.map(n=>`<option value="${n}" ${n===val?'selected':''}>${n}</option>`).join('');}
+function renderDocumentNumbering(){
+  const body=document.getElementById('document-numbering-tbody');if(!body)return;
+  if(!docNumDraft||!docNumDirty){docNumDraft=JSON.parse(JSON.stringify(docNumSaved()));docNumDirty=false;}
+  body.innerHTML=DOC_NUMBERING_GROUPS.map(([g,keys])=>`<tr class="docnum-group"><td colspan="7">${g}</td></tr>`+keys.filter(k=>docNumDraft[k]).map(k=>{const c=docNumDraft[k];return `<tr class="docnum-row${k===docNumSelected?' is-selected':''}" data-type="${k}" onclick="selectDocNumRow('${k}')">
+<td><span class="docnum-doc">${DOC_NUMBERING_DEFAULTS[k].label}</span><span class="docnum-changed" data-changed-type="${k}"${docNumChanged(k)?'':' hidden'}>Changed</span></td>
+<td><input class="docnum-prefix" data-type="${k}" value="${c.prefix}" maxlength="8" aria-label="${DOC_NUMBERING_DEFAULTS[k].label} prefix" oninput="setDocNumField('${k}','prefix',this.value,true)" onblur="if(!cleanDocPrefix(this.value)){this.value=docNumDraft['${k}'].prefix;}"></td>
+<td><select class="docnum-ctl docnum-date" data-type="${k}" aria-label="Date part" onchange="setDocNumField('${k}','dateFormat',this.value)">${docNumOptions(DOC_DATE_FORMAT_LABELS,c.dateFormat)}</select></td>
+<td class="docnum-seps"><select class="docnum-ctl docnum-sep" data-type="${k}" data-sep="1" title="After prefix" aria-label="Separator after prefix" onchange="setDocNumField('${k}','sep1',this.value)">${docNumSepOptions(c.sep1)}</select><select class="docnum-ctl docnum-sep" data-type="${k}" data-sep="2" title="After date" aria-label="Separator after date" ${c.dateFormat==='none'?'disabled':''} onchange="setDocNumField('${k}','sep2',this.value)">${docNumSepOptions(c.sep2)}</select></td>
+<td><select class="docnum-ctl docnum-digits" data-type="${k}" aria-label="Digits" onchange="setDocNumField('${k}','digits',Number(this.value))">${docNumDigitOptions(c.digits)}</select></td>
+<td><select class="docnum-ctl docnum-reset" data-type="${k}" aria-label="Sequence reset" onchange="setDocNumField('${k}','reset',this.value)">${docNumOptions(DOC_RESET_LABELS,c.reset,DOC_RESETS_FOR_FORMAT[c.dateFormat])}</select></td>
+<td><span class="docnum-format-preview" data-format-type="${k}">${docNumberPattern(c)}</span><strong class="docnum-next-no" data-next-type="${k}"></strong></td></tr>`}).join('')).join('');
+  if(!document.getElementById('docnum-all-date')?.options.length)fillDocNumApplyAll();
+  refreshDocNumPreviews();
+  if(!document.getElementById('sequence-doc-type')?.options.length)populateSequenceDocumentTypes(false);
+  // Cloud counters are read only while the screen is open (not at every start-up / settings update).
+  if(!document.getElementById('numbering-section-numbering')?.offsetParent)return;
+  const keys=Object.keys(docNumDraft).flatMap(k=>[docNumberPartsFor(k,docNumDraft[k]).counterKey,docNumberParts(k).counterKey]);
+  loadDocCounters(keys).then(changed=>{if(changed)refreshDocNumPreviews();});
+}
+function refreshDocNumPreviews(){
+  if(!docNumDraft)return;
+  Object.keys(docNumDraft).forEach(k=>{const c=normalizeDocNumberingConfig(k,docNumDraft[k]),x=docNumberPartsFor(k,c);const f=document.querySelector(`[data-format-type="${k}"]`);if(f)f.textContent=docNumberPattern(c);const n=document.querySelector(`[data-next-type="${k}"]`);if(n)n.textContent=formatDocSequence(x.displayPrefix,estimatedNextSequence(x),x.digits);const b=document.querySelector(`[data-changed-type="${k}"]`);if(b)b.hidden=!docNumChanged(k);});
+  renderDocNumPanel();
+  const n=Object.keys(docNumDraft).filter(docNumChanged).length;
+  const st=document.getElementById('docnum-status');if(st)st.innerHTML=n?`<strong>${n} document type${n>1?'s':''} changed</strong> — not saved yet`:'No unsaved changes';
+  const sv=document.getElementById('docnum-save-btn'),ds=document.getElementById('docnum-discard-btn');if(sv)sv.disabled=!n;if(ds)ds.disabled=!n;
+}
+function setDocNumField(k,f,v,typing){
+  const c=docNumDraft[k];if(!c)return;docNumDirty=true;
+  if(f==='prefix'){const p=cleanDocPrefix(v);if(!p)return;c.prefix=p;}else c[f]=v;
+  docNumSelected=k;
+  if(f==='dateFormat'){if(!DOC_RESETS_FOR_FORMAT[v].includes(c.reset))c.reset=DOC_RESETS_FOR_FORMAT[v][0];renderDocumentNumbering();return;}
+  document.querySelectorAll('.docnum-row').forEach(r=>r.classList.toggle('is-selected',r.dataset.type===k));
+  loadDocCounters([docNumberPartsFor(k,c).counterKey]).then(changed=>{if(changed)refreshDocNumPreviews();});
+  refreshDocNumPreviews();
+}
+function selectDocNumRow(k){if(docNumSelected===k)return;docNumSelected=k;document.querySelectorAll('.docnum-row').forEach(r=>r.classList.toggle('is-selected',r.dataset.type===k));renderDocNumPanel();}
+function renderDocNumPanel(){
+  const host=document.getElementById('docnum-panel');if(!host||!docNumDraft)return;
+  const k=docNumSelected,c=normalizeDocNumberingConfig(k,docNumDraft[k]),label=DOC_NUMBERING_DEFAULTS[k].label;
+  const now=new Date(),x=docNumberPartsFor(k,c,now),seq=estimatedNextSequence(x),pad=n=>String(n).padStart(c.digits,'0');
+  const nextMonth=new Date(now.getFullYear(),now.getMonth()+1,3),newYear=new Date(now.getFullYear()+1,0,5);
+  const fmtAt=(d,s)=>{const p=docNumberPartsFor(k,c,d);return formatDocSequence(p.displayPrefix,s,c.digits);};
+  const day=d=>d.toLocaleString('en-GB',{day:'numeric',month:'short'});
+  const steps=[[`Today · ${day(now)}`,fmtAt(now,seq),false],[`Next month · ${day(nextMonth)}`,fmtAt(nextMonth,c.reset==='monthly'?1:seq+1),c.reset==='monthly'],[`New year · ${day(newYear)} ${newYear.getFullYear()}`,fmtAt(newYear,c.reset==='never'?seq+2:1),c.reset!=='never']];
+  const one=pad(1),rule=c.reset==='never'?'The counter never resets — it keeps running.':c.reset==='yearly'?`The counter goes back to ${one} on 1 January.`:`The counter goes back to ${one} on the 1st of each month.`;
+  let impact;
+  if(docNumChanged(k)){const old=docNumSaved()[k],oldX=docNumberParts(k,now);
+    const cont=x.counterKey===oldX.counterKey?'The current counter carries on.':`A ${c.reset==='never'?'running':c.reset} counter is used from now on.`;
+    const guard=x.floor>=knownCounter(x.counterKey)&&x.floor>0?` ${label} numbers up to ${formatDocSequence(x.displayPrefix,x.floor,c.digits)} already exist, so numbering continues at <strong>${pad(seq)}</strong> — no number is repeated.`:'';
+    impact=`<div class="docnum-note is-change"><strong>Change on Save</strong><span>Was <code>${docNumberPattern(old)}</code> · ${DOC_RESET_LABELS[old.reset]}. ${cont}${guard} Existing documents keep their numbers.</span></div>`;}
+  else impact=`<div class="docnum-note"><strong>No change</strong><span>${label} uses <code>${docNumberPattern(c)}</code> with a ${DOC_RESET_LABELS[c.reset].toLowerCase()} reset.</span></div>`;
+  host.innerHTML=`<div class="docnum-card"><div class="docnum-card-head"><strong>${label}</strong><span>Selected</span></div>
+<small>Next number</small><div class="docnum-big">${formatDocSequence(x.displayPrefix,seq,c.digits)}</div>
+<div class="docnum-anatomy"><span class="is-prefix">${c.prefix}</span>${c.sep1?`<span class="is-sep">${c.sep1}</span>`:''}${x.datePart?`<span class="is-date">${x.datePart}</span>${c.sep2?`<span class="is-sep">${c.sep2}</span>`:''}`:''}<span class="is-seq">${pad(seq)}</span></div>
+<div class="docnum-legend"><span class="is-prefix">Prefix</span>${x.datePart?'<span class="is-date">Date part</span>':''}<span class="is-seq">Sequence</span></div></div>
+<div class="docnum-card"><div class="docnum-card-head"><strong>How the sequence runs</strong></div><ul class="docnum-timeline">${steps.map(([w,n,r])=>`<li class="${r?'is-reset':''}"><span>${w}</span><code>${n}</code></li>`).join('')}</ul><p class="docnum-rule">${rule} <span class="docnum-green">Green</span> = counter reset.</p></div>${impact}`;
+}
+function fillDocNumApplyAll(){const d=document.getElementById('docnum-all-date');if(!d)return;d.innerHTML=docNumOptions(DOC_DATE_FORMAT_LABELS,'YYMM');document.getElementById('docnum-all-sep1').innerHTML=docNumSepOptions('-');document.getElementById('docnum-all-sep2').innerHTML=docNumSepOptions('-');document.getElementById('docnum-all-digits').innerHTML=docNumDigitOptions(4);syncDocNumApplyAllReset();}
+function syncDocNumApplyAllReset(){const d=document.getElementById('docnum-all-date')?.value||'YYMM',r=document.getElementById('docnum-all-reset');if(r)r.innerHTML=docNumOptions(DOC_RESET_LABELS,DOC_RESETS_FOR_FORMAT[d][0],DOC_RESETS_FOR_FORMAT[d]);const s2=document.getElementById('docnum-all-sep2');if(s2)s2.disabled=d==='none';}
+function applyDocNumToAll(){const g=id=>document.getElementById(id)?.value;const dateFormat=g('docnum-all-date'),reset=g('docnum-all-reset'),sep1=g('docnum-all-sep1'),sep2=g('docnum-all-sep2'),digits=Number(g('docnum-all-digits'));docNumDirty=true;Object.keys(docNumDraft).forEach(k=>{Object.assign(docNumDraft[k],{dateFormat,reset,sep1,digits},dateFormat==='none'?{}:{sep2});});renderDocumentNumbering();showToast('Applied to all documents — review and Save Numbering','success');}
+function previewDocumentNumbering(){refreshDocNumPreviews();}
+function discardDocumentNumbering(){docNumDraft=null;docNumDirty=false;renderDocumentNumbering();}
+async function saveDocumentNumbering(){
+  if(!docNumDraft)return;
+  const changed=Object.keys(docNumDraft).filter(docNumChanged);if(!changed.length){showToast('No numbering changes to save','success');return;}
+  const details={};changed.forEach(k=>{const o=docNumSaved()[k],n=normalizeDocNumberingConfig(k,docNumDraft[k]);details[DOC_NUMBERING_DEFAULTS[k].label]=`${docNumberPattern(o)} · ${DOC_RESET_LABELS[o.reset]}  →  ${docNumberPattern(n)} · ${DOC_RESET_LABELS[n.reset]}`;});
+  const ok=await new Promise(res=>showConfirm({icon:'🔢',title:'Save document numbering?',message:'New documents will use these formats. Existing documents keep their numbers and no number is repeated.',details,confirmText:'Save Numbering',cancelText:'Cancel',confirmClass:'btn-primary',onConfirm:()=>res(true),onCancel:()=>res(false)}));
+  if(!ok)return;
+  const next={};Object.keys(docNumDraft).forEach(k=>{next[k]=normalizeDocNumberingConfig(k,docNumDraft[k]);});
+  settings.documentNumbering=next;
+  await saveSettings();docNumDraft=null;docNumDirty=false;renderDocumentNumbering();showToast('Document numbering settings saved','success');
+}
+function maxExistingSequence(type){return docNumberParts(type).floor;}
+async function refreshSequenceManager(){const sel=document.getElementById('sequence-doc-type');if(!sel)return;const type=sel.value||'rfq',x=docNumberParts(type),localMax=x.floor;let current=localMax;if(window.FB?.getDocSequence&&navigator.onLine){const cloud=await window.FB.getDocSequence(x.counterKey);if(cloud!==null&&Number.isFinite(Number(cloud))){docCounterCache[x.counterKey]=Number(cloud);current=Math.max(current,Number(cloud));}}const period=document.getElementById('sequence-current-period'),counter=document.getElementById('sequence-current-counter'),next=document.getElementById('sequence-next-number'),input=document.getElementById('sequence-adjust-value');if(period)period.textContent=x.periodLabel;if(counter)counter.textContent=String(current).padStart(x.digits,'0');if(next)next.textContent=formatDocSequence(x.displayPrefix,current+1,x.digits);if(input)input.value=current;}
+async function requestSequenceAdjustment(){const type=document.getElementById('sequence-doc-type')?.value||'rfq',value=Number(document.getElementById('sequence-adjust-value')?.value);if(!Number.isInteger(value)||value<0){showToast('Enter a valid whole-number counter','error');return;}const x=docNumberParts(type),min=x.floor,label=DOC_NUMBERING_DEFAULTS[type].label,pad=n=>String(n).padStart(x.digits,'0');if(value<min){showToast(`Counter cannot be below ${pad(min)} because ${formatDocSequence(x.displayPrefix,min,x.digits)} already exists`,'error');return;}if(!navigator.onLine||!window.FB?.setDocSequence){showToast('Cloud connection is required to adjust a document sequence','error');return;}const first=await showConfirmAsync({icon:'⚠️',title:'Adjust document sequence?',message:`Change the current ${label} counter for this period?`,details:{Document:label,'Current period':x.periodLabel,'New current counter':pad(value),'Next document':formatDocSequence(x.displayPrefix,value+1,x.digits)},confirmText:'Continue',cancelText:'Cancel',confirmClass:'btn-danger'});if(!first)return;const second=await showConfirmAsync({icon:'🔒',title:'Final confirmation',message:'This changes the live cloud counter used for future document numbers. Existing issued documents will not be renumbered.',details:{Document:label,'Counter will become':pad(value)},confirmText:'Yes, adjust sequence',cancelText:'Go back',confirmClass:'btn-danger'});if(!second)return;const result=await window.FB.setDocSequence(x.counterKey,value,min);if(result?.ok){delete docCounterCache[x.counterKey];showToast(`${label} sequence updated`,'success');await refreshSequenceManager();renderDocumentNumbering();}else showToast(result?.message||'Could not update document sequence','error');}
+function switchNumberingSection(name){['numbering','defaults','sequences'].forEach(k=>{const s=document.getElementById('numbering-section-'+k),b=document.getElementById('numtab-'+k);if(s)s.style.display=k===name?'block':'none';if(b)b.classList.toggle('active',k===name);});if(name==='sequences')refreshSequenceManager();if(name==='numbering')renderDocumentNumbering();}
+function populateSequenceDocumentTypes(refresh=true){const sel=document.getElementById('sequence-doc-type');if(!sel)return;const current=sel.value;sel.innerHTML=Object.entries(DOC_NUMBERING_DEFAULTS).map(([k,d])=>`<option value="${k}">${d.label}</option>`).join('');if(current&&DOC_NUMBERING_DEFAULTS[current])sel.value=current;if(refresh)refreshSequenceManager();}
 
 /* ── Quotation numbering ──
    Online: uses Firestore atomic counter — guarantees no two users
@@ -1583,15 +1714,15 @@ async function reserveQNoForForm(fieldId) {
 }
 
 /* ── Async, collision-safe version — use this when creating NEW documents ── */
-async function nextQNoSafe() {
-  const t=new Date();
+async function nextQNoSafe(dateISO) {
+  // V270.2.5: the date part comes from the quotation date (today when none is given).
+  const t=/^\d{4}-\d{2}-\d{2}/.test(String(dateISO||''))?new Date(String(dateISO).slice(0,10)+'T00:00:00'):new Date();
   const x=docNumberParts('quotation',t);
   if(window.FB&&window.FB.getNextDocSequence&&navigator.onLine){
-    const n=await window.FB.getNextDocSequence(x.counterKey);
-    if(n)return {qno:formatDocSequence(x.displayPrefix,n),isProvisional:false};
+    const n=await window.FB.getNextDocSequence(x.counterKey,x.floor);
+    if(n)return {qno:formatDocSequence(x.displayPrefix,n,x.digits),isProvisional:false};
   }
-  const deviceTag=getDeviceTag();
-  return {qno:x.displayPrefix+'OFF-'+deviceTag+'-'+String(Date.now()).slice(-5),isProvisional:true};
+  return {qno:provisionalDocNumber(x),isProvisional:true};
 }
 
 /* ── Small stable per-device identifier (persisted in localStorage) ──
@@ -1631,7 +1762,7 @@ async function finalizeProvisionalNumbers(){
         const t = new Date(String(d.date || '').slice(0, 10) + 'T00:00:00');
         const x = docNumberParts(sp.type, isNaN(t) ? new Date() : t);
         let r;
-        try { r = await window.FB.finalizeProvisionalNumber({ col: sp.col, id: d.id, field: sp.field, counterKey: x.counterKey, displayPrefix: x.displayPrefix }); }
+        try { r = await window.FB.finalizeProvisionalNumber({ col: sp.col, id: d.id, field: sp.field, ...x.numbering }); }
         catch (e) { console.warn('[BizCore] Final number not assigned yet for', d[sp.field], e.message); problems.push(d[sp.field]); continue; }
         if (r.status === 'missing') continue;                       // not yet in the database: the offline save is still syncing
         // Read back from the server: this also refreshes the copy BizCore compares against when saving.
@@ -3053,7 +3184,7 @@ function switchSetupTab(tab) {
   if (tab === 'billing' && typeof renderBillingSettings === 'function') renderBillingSettings();
   if (tab === 'billing' && typeof renderReceiptSettings === 'function') renderReceiptSettings();
   if (tab === 'locks' && typeof startLocksScreen === 'function') startLocksScreen();
-  if (tab === 'defaults') { renderSetupTermsList('delivery'); renderSetupTermsList('payment'); }
+  if (tab === 'defaults') { renderSetupTermsList('delivery'); renderSetupTermsList('payment'); renderDocumentNumbering(); }
   if (tab === 'payment-accounts' && typeof renderPaymentAccounts === 'function') renderPaymentAccounts();
   if (tab === 'users' && typeof renderCustodianLogins === 'function') renderCustodianLogins();   // V267.2
   if (tab === 'purchase-settings' && typeof renderPurchaseSettings === 'function') renderPurchaseSettings();   // V268.1
@@ -5526,7 +5657,7 @@ async function saveQuotation(mode='save', opts={}) {
     resolvedRevision=resolvePendingQuotationRevision();
     finalQno=String(resolvedRevision?.qno||'').trim();
   } else {
-    const numberResult=await nextQNoSafe();
+    const numberResult=await nextQNoSafe(quoteDateISOFromDisplay(document.getElementById('f-date')?.value||''));
     finalQno=String(numberResult?.qno||'').trim();
     finalQnoIsProvisional=!!numberResult?.isProvisional;
   }
@@ -11353,7 +11484,7 @@ async function _saveIndependentDispatch(m,so,date,items,operationId,deliveredBy)
  }
  const x=docNumberParts('deliveryNote',new Date(date+'T00:00:00'));
  try{
-  const r=await window.BizCoreDN.service.dispatch({operationId,salesOrderId:so.id,date,vehicle:document.getElementById('dn-vehicle').value.trim(),deliveredBy:deliveredBy||null,remarks:document.getElementById('dn-remarks').value.trim(),lines,numbering:{counterKey:x.counterKey,displayPrefix:x.displayPrefix},accessToken:createDeliveryAccessToken()});
+  const r=await window.BizCoreDN.service.dispatch({operationId,salesOrderId:so.id,date,vehicle:document.getElementById('dn-vehicle').value.trim(),deliveredBy:deliveredBy||null,remarks:document.getElementById('dn-remarks').value.trim(),lines,numbering:x.numbering,accessToken:createDeliveryAccessToken()});
   upsertDeliveryNoteCache(r.dn);
   const latest=salesOrders.find(s=>s.id===so.id);const position=(latest?.deliveries||[]).findIndex(d=>d.id===r.dn.id);
   closeModal('so-delivery-modal');
