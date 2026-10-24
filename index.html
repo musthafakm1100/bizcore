@@ -20,7 +20,7 @@
 <link href="css/masters.css?v=266.5" rel="stylesheet"/>
 <link href="css/administration-typography.css?v=247" rel="stylesheet"/>
 <link href="css/numbering-controls.css?v=270.25" rel="stylesheet"/>
-<link href="css/rfq-entry.css?v=270.26" rel="stylesheet"/>
+<link href="css/rfq-entry.css?v=270.28" rel="stylesheet"/>
 <link href="css/invoicing.css?v=266.5" rel="stylesheet"/>
 <link href="css/register-standard.css?v=268.4" rel="stylesheet"/>
 <link href="css/doc-view.css?v=266.5" rel="stylesheet"/>
@@ -1203,7 +1203,7 @@ document.addEventListener('error', function(e) {
 <section class="numbering-section admin-master-width" id="numbering-section-defaults" style="display:none">
 <div class="defaults-intro"><div><strong>Document Defaults</strong><span>These values pre-fill new transactions. Users can change them on an individual document where the workflow allows.</span></div><button class="btn btn-primary btn-sm" onclick="saveSetup()"><i class="ti ti-device-floppy"></i>Save Defaults</button></div>
 <div class="numbering-default-grid">
-<div class="setup-card default-setting-card"><h4><i class="ti ti-file-settings"></i>General Defaults</h4><p>Standard timing values for new documents and the week used by date filters.</p><div class="default-fields"><div class="form-group"><label>Default quotation validity</label><div class="field-with-suffix"><input id="s-validity" min="1" type="number" value="7"/><span>Days</span></div></div><div class="form-group"><label>RFQ response due</label><div class="field-with-suffix"><input id="s-rfqhours" min="1" type="number" value="48"/><span>Hours</span></div></div><div class="form-group"><label for="s-weekstart">Week starts on</label><select id="s-weekstart"><option value="sunday">Sunday</option><option value="monday">Monday</option></select><div style="font-size:11.5px;color:var(--gray);margin-top:4px">Used by the "This Week" date filter on every register.</div></div></div></div>
+<div class="setup-card default-setting-card"><h4><i class="ti ti-file-settings"></i>General Defaults</h4><p>Standard timing values for new documents and the week used by date filters.</p><div class="default-fields"><div class="form-group"><label>Default quotation validity</label><div class="field-with-suffix"><input id="s-validity" min="1" type="number" value="7"/><span>Days</span></div></div><div class="form-group"><label>RFQ response due</label><div class="field-with-suffix"><input id="s-rfqhours" min="1" type="number" value="48"/><span>Hours</span></div></div><div class="form-group"><label>RFQ backdate allowed</label><div class="field-with-suffix"><input id="s-rfqbackdays" min="0" max="365" type="number" value="30"/><span>Days</span></div><div style="font-size:11.5px;color:var(--gray);margin-top:4px">How far back the RFQ “Date received” may go. Future dates are never allowed.</div></div><div class="form-group"><label for="s-weekstart">Week starts on</label><select id="s-weekstart"><option value="sunday">Sunday</option><option value="monday">Monday</option></select><div style="font-size:11.5px;color:var(--gray);margin-top:4px">Used by the "This Week" date filter on every register.</div></div></div></div>
 <div class="setup-card default-setting-card"><h4><i class="ti ti-truck"></i>Delivery Terms</h4><p>Click a term to make it the default for new documents.</p><div id="setup-delivery-list" class="default-term-list"></div><div class="default-term-add"><input id="setup-delivery-new" onkeydown="if(event.key==='Enter') addSetupTerm('delivery')" placeholder="Add delivery term…"/><button class="btn btn-secondary btn-sm" onclick="addSetupTerm('delivery')"><i class="ti ti-plus"></i>Add</button></div></div>
 <div class="setup-card default-setting-card"><h4><i class="ti ti-credit-card"></i>Payment Terms</h4><p>Click a term to make it the default for new documents.</p><div id="setup-payment-list" class="default-term-list"></div><div class="default-term-add"><input id="setup-payment-new" onkeydown="if(event.key==='Enter') addSetupTerm('payment')" placeholder="Add payment term…"/><button class="btn btn-secondary btn-sm" onclick="addSetupTerm('payment')"><i class="ti ti-plus"></i>Add</button></div></div>
 </div>
@@ -4036,7 +4036,7 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.26';
+      s.src = 'js/app.js?v=270.28';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4046,7 +4046,7 @@ onAuthStateChanged(auth, user => {
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
         const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=270.21'; document.body.appendChild(qu);
         // V270.2.6: the RFQ entry screen (request type, product / service lines, requirements)
-        const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=270.26'; document.body.appendChild(rq);
+        const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=270.28'; document.body.appendChild(rq);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.6'; document.body.appendChild(ds); };
       document.body.appendChild(s);

@@ -1134,6 +1134,7 @@ function applySettings() {
   const map={coname:'coname',conameAr:'coname-ar',tagline:'tagline',cr:'cr',building:'building',street:'street',secondary:'secondary',district:'district',postal:'postal',city:'city',country:'country',pobox:'pobox',phone:'phone',mobile:'mobile',email:'email',vat:'vat',website:'website',closingMessage:'closing-message',signatoryName:'signatory-name',signatoryDesignation:'signatory-designation'};
   Object.entries(map).forEach(([key,id])=>{const node=document.getElementById('s-'+id);if(node)node.value=settings[key]||'';});
   const vh=document.getElementById('s-rfqhours');if(vh)vh.value=settings.rfqDefaultHours||48;
+  const vb=document.getElementById('s-rfqbackdays');if(vb)vb.value=rfqBackdateDays();
   const vl=document.getElementById('s-validity');if(vl)vl.value=settings.validity||7;
   const vw=document.getElementById('s-weekstart');if(vw)vw.value=settings.weekStart==='monday'?'monday':'sunday';
   const dl=document.getElementById('s-delivery');if(dl)dl.value=settings.delivery||'';
@@ -1257,6 +1258,7 @@ async function saveSetup() {
   saveDocumentDisplayDraft();
   const validity=document.getElementById('s-validity');if(validity)settings.validity=parseInt(validity.value)||7;
   const rfq=document.getElementById('s-rfqhours');if(rfq)settings.rfqDefaultHours=parseInt(rfq.value)||48;
+  const rfqBack=document.getElementById('s-rfqbackdays');if(rfqBack){const n=parseInt(rfqBack.value,10);settings.rfqBackdateDays=Number.isInteger(n)&&n>=0?Math.min(n,365):30;}   // V270.2.8
   const wk=document.getElementById('s-weekstart');if(wk)settings.weekStart=wk.value==='monday'?'monday':'sunday';
   await saveSettings();applySettings();showToast('Company settings saved','success');
 }
@@ -8123,6 +8125,10 @@ function handleRFQAttach(e) {
 }
 
 let rfqPendingNew=null, rfqSaveNewAfter=false;
+/** V270.2.8: RFQ Date received — no future date; at most N days back (Administration → Document Defaults, default 30). */
+function rfqBackdateDays(){const n=Number(settings&&settings.rfqBackdateDays);return Number.isInteger(n)&&n>=0?n:30;}
+function rfqResponseHours(){const h=Number(settings&&settings.rfqDefaultHours);return h>0?h:48;}
+window.rfqBackdateDays=rfqBackdateDays;window.rfqResponseHours=rfqResponseHours;
 /** V270.2.6: Save & New — the usual checks and confirmation, then a blank form for the next RFQ. */
 function rfqSaveAndNew(){ confirmSaveRFQEntry(!editingRFQId); }
 window.rfqSaveAndNew=rfqSaveAndNew;
@@ -8450,7 +8456,7 @@ function viewRFQ(id) {
   const reqDetailsHtml = reqDetails.length ? `<div class="rfq-req-details">${reqDetails.map(([k,v])=>`<div class="detail-row"><span class="dk">${escapeHtml(k)}</span><span>${escapeHtml(v)}</span></div>`).join('')}</div>` : '';
   const reqNoteTitle = r.requestType==='service'?'Scope of work':r.requestType==='mixed'?'Scope of work / general requirements':'General requirements';
   const itemsHtml = reqItems.length ? `<div class="rfq-items-table-wrap"><table class="rfq-items-table"><thead><tr><th>#</th><th>Code</th><th>Description</th><th class="num">Qty</th><th class="num">UOM</th><th>Pricing status</th></tr></thead><tbody>${reqItems.map((i,n)=>`<tr><td>${n+1}</td><td>${i.code||'—'}</td><td>${i.desc||i.description||'—'}</td><td>${i.qty||'—'}</td><td>${i.uom||'—'}</td><td><span class="rfq-line-status ${parseFloat(i.buy)>0||parseFloat(i.sell)>0||i.supplier?'priced':'pending'}">${parseFloat(i.buy)>0||parseFloat(i.sell)>0||i.supplier?'Priced':'Pending'}</span></td></tr>`).join('')}</tbody></table></div>`
-    : rfqOwnLines.length ? `<div class="rfq-items-table-wrap"><table class="rfq-items-table"><thead><tr><th>#</th><th>Code</th><th>Description</th><th class="num">Qty</th><th class="num">UOM</th><th>Remarks</th></tr></thead><tbody>${rfqOwnLines.map((i,n)=>`<tr><td>${n+1}</td><td>${escapeHtml(i.code||'—')}</td><td>${escapeHtml(i.desc||'—')}${r.requestType==='mixed'?`<span class="rfq-line-kind">${i.kind==='service'?'Service':'Product'}</span>`:''}</td><td>${formatQuantity?formatQuantity(i.qty):i.qty}</td><td>${escapeHtml(i.uom||'—')}</td><td>${escapeHtml(i.remarks||'')}</td></tr>`).join('')}</tbody></table></div>`
+    : rfqOwnLines.length ? `<div class="rfq-items-table-wrap"><table class="rfq-items-table"><thead><tr><th>#</th><th>Description</th><th class="num">Qty</th><th class="num">UOM</th><th>Remarks</th></tr></thead><tbody>${rfqOwnLines.map((i,n)=>`<tr><td>${n+1}</td><td>${escapeHtml(i.desc||'—')}${r.requestType==='mixed'?`<span class="rfq-line-kind">${i.kind==='service'?'Service':'Product'}</span>`:''}</td><td>${formatQuantity?formatQuantity(i.qty):i.qty}</td><td>${escapeHtml(i.uom||'—')}</td><td>${escapeHtml(i.remarks||'')}</td></tr>`).join('')}</tbody></table></div>`
     : `<p class="rfq-view-requirements">${r.desc?escapeHtml(r.desc):'No requirement details entered.'}</p>`;
 
   let nextTitle='Start pricing', nextCopy='Add supplier cost and proposed selling prices for this RFQ.';

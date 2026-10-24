@@ -14,8 +14,8 @@
   'use strict';
   if (window.BCRfq) return;
   const KIND = {
-    product: { tab: 'Items', add: 'Add Line', col: 'Item / Product', desc: 'Description', uom: 'UOM', rem: 'Remarks / Specs', ph: 'Search code / name or type…', descPh: 'Description', uomDefault: 'Pcs' },
-    service: { tab: 'Services', add: 'Add Service', col: 'Service', desc: 'Description / scope', uom: 'Unit', rem: 'Remarks', ph: 'Search service or type…', descPh: 'What is required', uomDefault: 'Lot' },
+    product: { tab: 'Items', add: 'Add Line', col: 'Item / Product', desc: 'Item / Description', uom: 'UOM', rem: 'Remarks / Specs', ph: 'Search code / name or type…', descPh: 'Search the Item Master or type a description…', uomDefault: 'Pcs' },
+    service: { tab: 'Services', add: 'Add Service', col: 'Service', desc: 'Service / scope', uom: 'Unit', rem: 'Remarks', ph: 'Search service or type…', descPh: 'Search a service or type what is required…', uomDefault: 'Lot' },
   };
   const PRODUCT_UOMS = ['Pcs', 'Nos', 'Set', 'Box', 'Pkt', 'Pair', 'Roll', 'Mtr', 'Kg', 'Ltr', 'EA'];
   const SERVICE_UOMS = ['Lot', 'Job', 'Visit', 'Hour', 'Day', 'Week', 'Month', 'Year', 'LS'];
@@ -34,8 +34,25 @@
   /* ── dates (the standard BizCore date field) ── */
   function setupDates() {
     if (S.datesReady || !window.BCDate) return;
-    ['rfq-date', 'rfq-due', 'rfq-reqdate'].forEach(id => { const el = $(id); if (el) BCDate.attach(el, { allowEmpty: id === 'rfq-reqdate' }); });
+    // V270.2.8: Date received — never in the future, at most N days back (Administration → Document Defaults);
+    // an RFQ being edited keeps its own older date. Response due — not before Date received.
+    BCDate.attach($('rfq-date'), { allowEmpty: false, min: receivedMin, max: () => BCDate.today(), onCommit: iso => { if (iso) recalcDue(); } });
+    BCDate.attach($('rfq-due'), { allowEmpty: false, min: () => getDate('rfq-date') || '' });
+    BCDate.attach($('rfq-reqdate'), { allowEmpty: true });
+    // the due date follows the received date at once (typed, picked or Today / Yesterday)
+    $('rfq-date').addEventListener('input', () => { const iso = window.BCDate.parse($('rfq-date').value); if (iso && inReceivedRange(iso)) recalcDue(); });
     S.datesReady = true;
+  }
+  const backDays = () => (typeof window.rfqBackdateDays === 'function' ? window.rfqBackdateDays() : 30);
+  const respHours = () => (typeof window.rfqResponseHours === 'function' ? window.rfqResponseHours() : 48);
+  function addDaysISO(iso, n) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); if (!m) return ''; const d = new Date(+m[1], +m[2] - 1, +m[3] + n, 12); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+  function receivedMin() { const lim = addDaysISO(BCDate.today(), -backDays()); return S.origReceived && S.origReceived < lim ? S.origReceived : lim; }
+  function inReceivedRange(iso) { return !!iso && iso >= receivedMin() && iso <= BCDate.today(); }
+  /** Response due = Date received + the response period (hours, rounded up to whole days). */
+  function recalcDue() {
+    const rec = getDate('rfq-date'); if (!rec) return;
+    const due = addDaysISO(rec, Math.max(1, Math.ceil(respHours() / 24)));
+    if (due && due !== getDate('rfq-due')) { setDate('rfq-due', due); dirty(); }
   }
   function setDate(id, iso) { const el = $(id); if (!el) return; if (window.BCDate) BCDate.setISO(el, iso || ''); else el.value = iso || ''; }
   function getDate(id) { const el = $(id); if (!el) return ''; return window.BCDate ? (BCDate.getISO(el) || '') : String(el.value || ''); }
@@ -60,7 +77,9 @@
     if (site) site.value = (r && r.site) || '';
     if (dur) dur.value = (r && r.duration) || '';
     setDate('rfq-reqdate', (r && r.requiredDate) || '');
-    const hint = $('rfq-due-hint'); if (hint) { const h = Number((typeof settings !== 'undefined' && settings.rfqDefaultHours) || 48); hint.textContent = r ? '' : `· +${h} h`; }
+    S.origReceived = (r && r.date) || '';
+    const hint = $('rfq-due-hint'); if (hint) hint.textContent = `· +${respHours()} h`;
+    const rd = $('rfq-date'); if (rd) rd.title = `Today or up to ${backDays()} days back`;
     const note = $('rfq-num-note'); if (note) note.hidden = !!r;
     const sn = $('rfq-save-new-btn'); if (sn) sn.hidden = !!r;
     S.tab = kinds()[0];
@@ -80,6 +99,9 @@
   }
   /** First problem as { title, message, focus } or null. */
   function validate() {
+    const rec = getDate('rfq-date'), today = window.BCDate ? BCDate.today() : '';
+    if (rec && today && rec > today) return { title: 'Date received is in the future', message: 'The RFQ cannot be received after today. Enter today’s date or an earlier one.', focus: $('rfq-date') };
+    if (rec && rec < receivedMin()) return { title: 'Date received is too far back', message: `RFQs can be entered up to ${backDays()} days back (from ${window.BCDate.format(receivedMin())}). The allowance is set in Administration → Numbering & Defaults → Document Defaults.`, focus: $('rfq-date') };
     if (S.locked) return null;
     for (const k of kinds()) {
       const rows = ofKind(k);
@@ -159,8 +181,7 @@
     return `<tr data-line="${l.lineId}" class="rq-lr"${S.locked ? '' : ' draggable="false"'}>
 <td class="rq-h">${S.locked ? '' : '<span class="rq-drag" draggable="true" title="Drag to reorder (or Alt+↑ / Alt+↓)" aria-hidden="true">⋮⋮</span>'}</td>
 <td class="rq-sl">${i + 1}</td>
-<td class="rq-pc"><span class="rq-src ${src}" title="${src === 'm' ? 'From Item Master' : src === 'f' ? 'Not in Item Master — kept on this RFQ only' : ''}"></span><input data-f="code" value="${esc(l.productId ? l.code : (l.code || ''))}" placeholder="${S.locked ? '' : esc(K.ph)}" autocomplete="off" aria-label="${esc(K.col)}"${ro}></td>
-<td class="rq-ds"><input data-f="desc" value="${esc(l.desc)}" placeholder="${S.locked ? '' : esc(K.descPh)}" maxlength="500" aria-label="${esc(K.desc)}"${ro}></td>
+<td class="rq-ds"><span class="rq-src ${src}" title="${src === 'm' ? 'From Item Master' + (l.code ? ' · ' + esc(l.code) : '') : src === 'f' ? 'Not in Item Master — kept on this RFQ only' : ''}"></span><input data-f="desc" value="${esc(l.desc)}" placeholder="${S.locked ? '' : esc(K.descPh)}" maxlength="500" autocomplete="off" aria-label="${esc(K.desc)}"${ro}></td>
 <td class="rq-q"><input data-f="qty" type="text" inputmode="decimal" value="${esc(l.qty)}" aria-label="Quantity"${ro}></td>
 <td class="rq-u"><input data-f="uom" value="${esc(l.uom)}" list="rfq-uoms-${kind}" maxlength="12" aria-label="${esc(K.uom)}"${ro}></td>
 <td class="rq-r"><input data-f="remarks" value="${esc(l.remarks)}" placeholder="${S.locked ? '' : 'Optional'}" maxlength="300" aria-label="${esc(K.rem)}"${ro}></td>
@@ -171,7 +192,7 @@
     const K = KIND[kind], rows = ofKind(kind), uoms = kind === 'service' ? SERVICE_UOMS : PRODUCT_UOMS;
     const foot = S.locked ? `<div class="rq-foot"><span class="rq-legend">${rows.length ? '' : 'No lines were entered on this RFQ.'}</span></div>`
       : `<div class="rq-foot"><button type="button" class="btn btn-secondary btn-sm" data-act="add">+ ${esc(K.add)}</button>${kind === 'product' ? '<button type="button" class="btn btn-sm rq-link" data-act="paste" title="Copy rows from Excel (description · qty · UOM) and paste">Paste from Excel</button>' : ''}<span class="rq-legend"><span><i class="rq-src m"></i>Item Master</span><span><i class="rq-src f"></i>Not in master (this RFQ only)</span><span>Enter on Qty adds the next line</span></span></div>`;
-    host.innerHTML = `<table class="rq-lines" data-kind="${kind}"><thead><tr><th></th><th class="rq-sl">SL</th><th>${esc(K.col)}</th><th>${esc(K.desc)}</th><th class="rq-q">Qty</th><th>${esc(K.uom)}</th><th>${esc(K.rem)}</th><th></th></tr></thead>
+    host.innerHTML = `<table class="rq-lines" data-kind="${kind}"><thead><tr><th></th><th class="rq-sl">SL</th><th>${esc(K.desc)}</th><th class="rq-q">Qty</th><th>${esc(K.uom)}</th><th>${esc(K.rem)}</th><th></th></tr></thead>
 <tbody>${rows.map((l, i) => lineRow(l, i, kind)).join('')}</tbody></table>${foot}<datalist id="rfq-uoms-${kind}">${uoms.map(u => `<option value="${u}"></option>`).join('')}</datalist>`;
     host.classList.toggle('is-locked', S.locked);
   }
@@ -180,7 +201,7 @@
   function addLine(kind, focus = true) {
     if (S.locked) return;
     S.lines.push(blank(kind)); S.tab = kind; render(); dirty();
-    if (focus) { const rows = document.querySelectorAll(`#rfq-panel-${kind} tr[data-line]`); const last = rows[rows.length - 1]; last?.querySelector('[data-f="code"]')?.focus(); last?.scrollIntoView({ block: 'nearest' }); }
+    if (focus) { const rows = document.querySelectorAll(`#rfq-panel-${kind} tr[data-line]`); const last = rows[rows.length - 1]; last?.querySelector('[data-f="desc"]')?.focus(); last?.scrollIntoView({ block: 'nearest' }); }
   }
   function deleteLine(l) {
     if (S.locked || !l) return;
@@ -227,25 +248,25 @@
     if (!q) { closeDD(); return; }
     const words = q.split(/\s+/).filter(Boolean);
     ddList = masterProducts().filter(p => p && !p.deleted && words.every(w => `${p.code || ''} ${p.name || ''} ${p.brand || ''} ${p.model || ''}`.toLowerCase().includes(w))).slice(0, 8);
-    ddIdx = 0; ddLine = l; ddInput = input;
+    ddIdx = -1; ddLine = l; ddInput = input;
     if (!dd) { dd = document.createElement('div'); dd.className = 'rq-dd'; dd.setAttribute('role', 'listbox'); document.body.appendChild(dd); dd.addEventListener('mousedown', e => { e.preventDefault(); const it = e.target.closest('[data-i]'); if (it) choose(Number(it.dataset.i)); }); }
-    dd.innerHTML = ddList.map((p, i) => `<div class="rq-ddi${i === 0 ? ' on' : ''}" data-i="${i}" role="option"><span class="rq-ddc">${esc(p.code || '—')}</span><span class="rq-ddn">${esc(p.name || '')}${p.brand ? ` <small>· ${esc(p.brand)}</small>` : ''}</span><small>${esc(p.uom || '')}</small></div>`).join('')
-      + `<div class="rq-ddi rq-ddfree${ddList.length ? '' : ' on'}" data-i="-1" role="option">Use “${esc(input.value.trim())}” — not in Item Master</div>`;
+    // V270.2.8: the first choice keeps the typed text (Enter); ↓ moves to the Item Master matches
+    dd.innerHTML = `<div class="rq-ddi rq-ddfree on" data-i="-1" role="option">Keep “${esc(input.value.trim())}” as typed <small>· not in Item Master</small></div>`
+      + (ddList.length ? '<div class="rq-ddh">Item Master</div>' : '')
+      + ddList.map((p, i) => `<div class="rq-ddi" data-i="${i}" role="option"><span class="rq-ddn">${esc(p.name || '')}${p.brand ? ` <small>· ${esc(p.brand)}</small>` : ''}</span><small>${esc(p.uom || '')}</small></div>`).join('');
     const r = input.getBoundingClientRect();
     dd.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 400)) + 'px';
     const below = window.innerHeight - r.bottom > 260;
     dd.style.top = below ? (r.bottom + 2) + 'px' : ''; dd.style.bottom = below ? '' : (window.innerHeight - r.top + 2) + 'px';
-    if (!ddList.length) ddIdx = -1;
   }
-  function highlight() { if (!dd) return; [...dd.children].forEach(el => el.classList.toggle('on', Number(el.dataset.i) === ddIdx)); }
+  function highlight() { if (!dd) return; [...dd.querySelectorAll('[data-i]')].forEach(el => { const on = Number(el.dataset.i) === ddIdx; el.classList.toggle('on', on); if (on) el.scrollIntoView({ block: 'nearest' }); }); }
   function choose(i) {
     const l = ddLine, input = ddInput; if (!l) return;
     if (i >= 0 && ddList[i]) {
       const p = ddList[i];
       Object.assign(l, { productId: String(p.id || ''), code: p.code || '', desc: p.name || '', uom: p.uom || l.uom || KIND[l.kind].uomDefault });
     } else {
-      const typed = String(input?.value || '').trim();
-      Object.assign(l, { productId: '', code: '', desc: l.desc && l.desc !== typed ? l.desc : typed });
+      Object.assign(l, { productId: '', code: '', desc: String(input?.value || '').trim() });
     }
     closeDD(); renderLines(l.kind); refreshTabs(); dirty();
     const q = document.querySelector(`#rfq-pane tr[data-line="${l.lineId}"] [data-f="qty"]`); q?.focus(); q?.select?.();
@@ -257,26 +278,24 @@
     pane.addEventListener('input', e => {
       const f = e.target.dataset && e.target.dataset.f; if (!f) { if (e.target.closest('#rfq-panel-reqs')) refreshTabs(); return; }
       const l = lineOf(e.target); if (!l || S.locked) return;
-      if (f === 'code') {
-        // typing in the item cell starts a search; a line picked from the master stops being "from master" once its code is changed
-        if (l.productId) { l.productId = ''; l.code = ''; }
-        l.code = e.target.value; openDD(e.target);
-      } else l[f] = e.target.value;
-      if (f === 'desc' || f === 'code') { const src = e.target.closest('tr').querySelector('.rq-src'); if (src) { src.className = 'rq-src ' + (l.productId ? 'm' : (filled(l) ? 'f' : '')); } refreshTabs(); }
+      l[f] = e.target.value;
+      if (f === 'desc') {
+        // V270.2.8: the description is also the Item Master search. A line taken from the master keeps its link while
+        // its description is edited; clearing the description removes the link (then typing searches again).
+        if (!String(l.desc).trim()) { l.productId = ''; l.code = ''; closeDD(); }
+        else if (!l.productId) { if (String(l.desc).trim().length >= 2) openDD(e.target); else closeDD(); }
+      }
+      if (f === 'desc') { const src = e.target.closest('tr').querySelector('.rq-src'); if (src) { src.className = 'rq-src ' + (l.productId ? 'm' : (filled(l) ? 'f' : '')); } refreshTabs(); }
     });
     pane.addEventListener('focusout', e => {
-      if (e.target.dataset && e.target.dataset.f === 'code') { const el = e.target; setTimeout(() => { if (ddInput === el && document.activeElement !== el) closeDD(); }, 120); }
-      if (e.target.dataset && e.target.dataset.f === 'code') {
-        // a typed text that wasn't chosen from the list becomes the description (free item) if the line has none yet
-        const l = lineOf(e.target); if (l && !l.productId && l.code && !String(l.desc || '').trim()) { l.desc = l.code; l.code = ''; renderLines(l.kind); refreshTabs(); }
-      }
+      if (e.target.dataset && e.target.dataset.f === 'desc') { const el = e.target; setTimeout(() => { if (ddInput === el && document.activeElement !== el) closeDD(); }, 120); }
     });
     pane.addEventListener('keydown', e => {
       const t = e.target, f = t.dataset && t.dataset.f, l = f ? lineOf(t) : null;
-      if (f === 'code' && dd) {
+      if (f === 'desc' && dd) {
         const n = ddList.length;
-        if (e.key === 'ArrowDown') { e.preventDefault(); ddIdx = ddIdx >= n - 1 ? -1 : ddIdx + 1; if (ddIdx === -1 && !n) ddIdx = -1; highlight(); return; }
-        if (e.key === 'ArrowUp') { e.preventDefault(); ddIdx = ddIdx === -1 ? n - 1 : Math.max(0, ddIdx - 1); highlight(); return; }
+        if (e.key === 'ArrowDown') { e.preventDefault(); ddIdx = Math.min(n - 1, ddIdx + 1); highlight(); return; }
+        if (e.key === 'ArrowUp') { e.preventDefault(); ddIdx = Math.max(-1, ddIdx - 1); highlight(); return; }
         if (e.key === 'Enter') { e.preventDefault(); choose(ddIdx); return; }
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeDD(); return; }
       }
@@ -285,7 +304,7 @@
       if (f === 'qty' && e.key === 'Enter') {
         e.preventDefault();
         const same = ofKind(l.kind), i = same.indexOf(l);
-        if (i === same.length - 1) addLine(l.kind); else document.querySelector(`#rfq-pane tr[data-line="${same[i + 1].lineId}"] [data-f="code"]`)?.focus();
+        if (i === same.length - 1) addLine(l.kind); else document.querySelector(`#rfq-pane tr[data-line="${same[i + 1].lineId}"] [data-f="desc"]`)?.focus();
       }
     });
     pane.addEventListener('click', e => {
@@ -299,7 +318,7 @@
       else if (act === 'paste') pasteFromClipboard(kind);
     });
     pane.addEventListener('paste', e => {
-      const t = e.target; if (!t.dataset || !['code', 'desc'].includes(t.dataset.f) || S.locked) return;
+      const t = e.target; if (!t.dataset || !['desc', 'remarks'].includes(t.dataset.f) || S.locked) return;
       const text = e.clipboardData && e.clipboardData.getData('text/plain');
       if (text && (text.includes('\t') || text.trim().includes('\n'))) { e.preventDefault(); const n = pasteRows(text, lineOf(t)?.kind || 'product'); if (n && typeof showToast === 'function') showToast(`${n} line${n > 1 ? 's' : ''} pasted`, 'success'); }
     });

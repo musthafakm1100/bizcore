@@ -69,3 +69,21 @@ Approved mockup **RFQ_2 — Layout C** (header strip + tabs), with the dark head
   opens as Product; Save & New; a refused save keeps the form open with no success message.
 
 No security-rule change.
+
+## V270.2.8 — dates, description-only lines, automatic response due (24 Oct 2026)
+- **Date received:** never in the future; at most **N days back** — Administration → Numbering & Defaults → Document
+  Defaults → **RFQ backdate allowed** (days, default 30, `settings.rfqBackdateDays`). The calendar greys out the days
+  outside; Save explains ("…can be entered up to N days back (from DD-MM-YYYY)…"). An RFQ being edited keeps its own
+  older received date.
+- **Response due = Date received + the response period** (Administration → RFQ response due, hours, rounded up to whole
+  days; default 48 h = 2 days). Recalculated at once whenever the received date changes — typed, picked or Today /
+  Yesterday. It can still be changed by hand afterwards, and may not be before the received date.
+- **Lines without item codes:** the Item / Product column is gone. **Item / Description** is the search field (Item
+  Master by name, brand, model or code — the code is never shown, only kept with the line). While typing, the first
+  choice **"Keep … as typed"** is highlighted — Enter keeps the text (not in master); ↓ then Enter takes an Item
+  Master item (description and UOM filled). A line taken from the master keeps its link when its description is
+  edited; clearing the description removes the link. Description and Remarks are wider. The RFQ view's line table has
+  no Code column either.
+- Tests: tests/browser/rfq-entry.e2e.mjs (dates, due recalculation, backdate setting, search / keep-as-typed),
+  tests/browser/date-sync.e2e.mjs (now on the required date).
+- Upload: **index.html, sw.js, js/app.js, js/rfq-entry.js, css/rfq-entry.css** (`bizcore-shell-v27028`).
