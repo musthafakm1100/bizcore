@@ -496,3 +496,20 @@
 #view-modal td.qv-disc{line-height:1.3;white-space:nowrap}
 #view-modal .qd-pct{display:block;color:#64748b}
 #view-modal .qd-amt{display:block}
+
+/* ═════ V270.2.2 — tabs: segmented control (approved TB_3) ═════ */
+#quote-modal .qt-tabs{border-bottom:0;padding-top:2px}
+#quote-modal .qt-track{display:inline-flex;gap:2px;padding:3px;background:#eef2f6;border-radius:10px;min-width:0;max-width:100%}
+#quote-modal .qt-tb{padding:6px 14px;border:0;border-radius:8px;margin:0;color:#475569;font-weight:500}
+#quote-modal .qt-tb:hover{color:var(--qt-navy);background:rgba(255,255,255,.6)}
+#quote-modal .qt-tb.on{background:#fff;color:var(--qt-navy);font-weight:600;box-shadow:0 1px 2px rgba(15,23,42,.12),0 0 0 1px rgba(15,23,42,.05)}
+#quote-modal .qt-tb:focus-visible{outline:2px solid var(--qt-focus);outline-offset:1px}
+#quote-modal .qt-tb .qt-n{background:#dfe5ec;color:#475569}
+#quote-modal .qt-tb.on .qt-n{background:var(--qt-navy);color:#fff}
+#quote-modal .qt-seg{margin-bottom:0}
+@media (max-width:900px){ #quote-modal .qt-tb{padding:8px 12px} }
+@media (max-width:760px){
+  #quote-modal .qt-track{display:flex;flex:1 1 auto}
+  #quote-modal .qt-tabs .qt-sp{display:none}
+  #quote-modal .qt-tb{flex:1;justify-content:center;padding:9px 4px;font-size:13.5px}
+}

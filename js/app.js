@@ -5173,7 +5173,7 @@ function addSpecialQuoteRow(type='note', text='', opts={}){
   }
   tbody.appendChild(tr); renumberQuoteItemRows(); calcTotals();
   if(typeof qtPaintNotes==='function') qtPaintNotes();
-  if(opts.focus!==false) setTimeout(()=>tr.querySelector('input')?.focus(),0);
+  if(opts.focus!==false) tr.querySelector('input')?.focus();   // V270.2.1: at once — a key typed straight after the click must go into the new line, not press the button again
   return tr;
 }
 function handleSpecialQuoteRowKey(event,input){
@@ -7155,15 +7155,17 @@ async function saveSuppliers() {
 async function saveRFQs() {
   try { void 0 /* V269.4: no browser copy of rfqs */; } catch(e) {}
   if (!window.FB) return true;
-  let ok = true; const failed = [];
+  let ok = true; const failed = []; let firstError = null;
   if (window.FB.fbSaveRecordWith) for (const r of rfqs) {
     if (!r || r.id == null) continue;
     const extras = pvPrepareSave(r);
     if (!extras || !extras.length) continue;
     if (await window.FB.fbSaveRecordWith('rfqs', r, extras)) pvLegacy.delete(String(r.id));
-    else { ok = false; failed.push(String(r.id)); }
+    else { ok = false; failed.push(String(r.id)); firstError = firstError || (window.BizCoreStorageDiagnostics && window.BizCoreStorageDiagnostics.lastSaveError); }
   }
   const rest = await window.FB.fbSave('rfqs', rfqs, failed.length ? { skipIds: failed } : {});
+  // V270.2.1: the save after a failed one cleared the reason — keep it so the message can show it
+  if (firstError && window.BizCoreStorageDiagnostics && !window.BizCoreStorageDiagnostics.lastSaveError) window.BizCoreStorageDiagnostics.lastSaveError = firstError;
   return ok && rest !== false;
 }
 
@@ -8657,7 +8659,7 @@ function readPricingItemsFromDOM() {
     tr.dataset.sortOrder=String(sortOrder);
     const sellLocked=tr.querySelector('[data-role="sell-lock"]')?.classList.contains('is-locked')||false;
     const supNote=String(tr.dataset.supNote||'').trim();
-    if(desc||buy||code){const lineSupplier=findUniqueMasterByName(suppliers,supplierName);const it={lineId:tr.dataset.lineId,productId:tr.dataset.productId||'',sortOrder,code,desc,qty,uom,supplierName,supplierId:lineSupplier?.id||'',supRef,buy,markup,sell,sellLocked};if(supNote)it.supNote=supNote;items.push(it);}
+    if(desc||buy||code){const lineSupplier=findUniqueMasterByName(suppliers,supplierName);const it={lineId:tr.dataset.lineId||(tr.dataset.lineId='pl'+Date.now().toString(36)+index),productId:tr.dataset.productId||'',sortOrder,code,desc,qty,uom,supplierName,supplierId:lineSupplier?.id||'',supRef,buy,markup,sell,sellLocked};if(supNote)it.supNote=supNote;items.push(it);}
   });
   return items;
 }
@@ -9196,7 +9198,7 @@ function readInternalCosts(materialCost,totalSell) {
     const cell=tr.querySelector('[data-cost-role="amount"]');if(cell)cell.textContent=f(amount);
     const howCell=tr.querySelector('[data-cost-role="how"]');if(howCell)howCell.textContent=how;
     const no=tr.querySelector('.pr-cno');if(no)no.textContent=index+1;
-    if(name||value)costs.push({masterId:tr.dataset.masterId||undefined,seq:Number(tr.dataset.seq)||index+1,name,method,value,amount,locked:tr.dataset.locked==='true',fromMaster:!!tr.dataset.masterId});
+    if(tr.dataset.masterId||value){const c={seq:Number(tr.dataset.seq)||index+1,name,method,value,amount,locked:tr.dataset.locked==='true',fromMaster:!!tr.dataset.masterId};if(tr.dataset.masterId)c.masterId=tr.dataset.masterId;costs.push(c);}   // V270.2.1: no masterId field on a custom cost (undefined is refused by Firebase) · V270.2.2: a Custom cost with no value is not saved
   });
   return {costs,total};
 }

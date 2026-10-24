@@ -34,8 +34,8 @@
 <link href="css/so-register.css?v=269.2" rel="stylesheet"/>
 <link href="css/so-view.css?v=269.72" rel="stylesheet"/>
 <link href="css/bc-date.css?v=270.1" rel="stylesheet"/>
-<link href="css/pricing.css?v=270.13" rel="stylesheet"/>
-<link href="css/quotation.css?v=270.2" rel="stylesheet"/>
+<link href="css/pricing.css?v=270.22" rel="stylesheet"/>
+<link href="css/quotation.css?v=270.22" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
 <script src="js/responsive.js?v=269.7" defer></script>
@@ -1487,10 +1487,10 @@ document.addEventListener('error', function(e) {
 <button type="button" class="qt-detcard" id="qt-detcard" onclick="qtDetails(true)"></button>
 <div class="qt-work">
 <div class="qt-main">
-<div class="qt-tabs" role="tablist" id="qt-tabs">
-<button type="button" class="qt-tb on" role="tab" aria-selected="true" data-tab="items" onclick="qtShowTab('items')">Items <span class="qt-n" id="qt-n-items">0</span></button>
+<div class="qt-tabs" id="qt-tabs">
+<div class="qt-track" role="tablist" aria-label="Quotation sections"><button type="button" class="qt-tb on" role="tab" aria-selected="true" data-tab="items" onclick="qtShowTab('items')">Items <span class="qt-n" id="qt-n-items">0</span></button>
 <button type="button" class="qt-tb" role="tab" aria-selected="false" data-tab="remarks" onclick="qtShowTab('remarks')"><span class="qt-tl">Remarks &amp; Conditions</span><span class="qt-ts">Remarks</span> <i class="qt-dot qt-dot-g" id="qt-remarks-dot" hidden title="Has text — prints on the quotation"></i></button>
-<button type="button" class="qt-tb" role="tab" aria-selected="false" data-tab="internal" onclick="qtShowTab('internal')"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="qt-tl">Internal Notes</span><span class="qt-ts">Internal</span> <i class="qt-dot" id="qt-internal-dot" hidden title="Has a note — never printed"></i></button>
+<button type="button" class="qt-tb" role="tab" aria-selected="false" data-tab="internal" onclick="qtShowTab('internal')"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="qt-tl">Internal Notes</span><span class="qt-ts">Internal</span> <i class="qt-dot" id="qt-internal-dot" hidden title="Has a note — never printed"></i></button></div>
 <div class="qt-sp"></div>
 <div class="qt-seg" id="qt-template" role="group" aria-label="Template"><button type="button" id="type-btn-product" onclick="setQuoteType('product')">Products</button><button type="button" id="type-btn-contracting" onclick="setQuoteType('contracting')">Services</button></div>
 </div>
@@ -1901,7 +1901,7 @@ document.addEventListener('error', function(e) {
 <thead><tr><th class="pr-no">#</th><th>Cost Item</th><th>Method</th><th class="pr-r">Value</th><th class="pr-r">Amount (<span data-pr-cur>SAR</span>)</th><th class="pr-how">How It Is Worked Out</th><th></th></tr></thead>
 <tbody id="internal-costs-tbody"></tbody>
 <tfoot>
-<tr class="pr-cadd"><td class="pr-no">+</td><td colspan="2"><div class="pr-cadd-in"><select id="pr-cost-pick" onchange="prAddCostFromPick(this)" aria-label="Add cost from Cost Master"></select><button type="button" class="pr-btn" onclick="prAddDefaultCosts()">+ Add All Default Costs</button></div></td><td colspan="4"></td></tr>
+<tr class="pr-cadd"><td class="pr-no">+</td><td colspan="5"><div class="pr-cadd-in"><select id="pr-cost-pick" onchange="prAddCostFromPick(this)" aria-label="Add cost from Cost Master"></select><button type="button" class="pr-btn pr-cdef" onclick="prAddDefaultCosts()">+ Add All Default Costs</button><button type="button" class="pr-btn pr-crem" onclick="prRemoveUnlockedCosts()">Remove Unlocked Costs</button></div></td><td></td></tr>
 <tr class="pr-totrow"><td></td><td class="pr-b">Total Additional Costs</td><td></td><td></td><td class="pr-r pr-b" id="internal-costs-total">0.00</td><td class="pr-how pr-muted" id="internal-costs-count"></td><td></td></tr>
 </tfoot>
 </table>
@@ -2276,7 +2276,7 @@ import { createNumbering } from './js/numbering.mjs?v=266.0';
 import * as RctCore from './js/receipt-core.mjs?v=266.4';
 import { createReceiptService } from './js/receipt-service.mjs?v=266.4';
 import * as AccCore from './js/account-core.mjs?v=268.2';
-import { createAccountService } from './js/account-service.mjs?v=268.2';
+import { createAccountService } from './js/account-service.mjs?v=270.21';
 import * as LedgerCore from './js/ledger-core.mjs?v=269.3';
 import { createLedgerService } from './js/ledger-service.mjs?v=269.3';
 import { wrapTransaction, rebuildBalance, BALANCE_COLLECTION, LAST_PRICE_COLLECTION } from './js/running-totals.mjs?v=269.3';
@@ -2703,6 +2703,7 @@ async function fbSave(col, arr, opts = {}) {
     const tooLarge = [];   // V269.6
     const only = Array.isArray(opts.onlyIds) ? new Set(opts.onlyIds.map(String)) : null;
     const skip = Array.isArray(opts.skipIds) ? new Set(opts.skipIds.map(String)) : null;   // V269: records whose own save failed — not written, not deleted
+    for (const record of (arr || [])) _bcStripUndefined(record);   // V270.2.1: Firebase refuses "undefined" fields
     for (const record of (arr || [])) {
       if (!record || record.id == null) continue;
       const docId = _docIdFor(col, record);
@@ -2801,11 +2802,20 @@ async function fbLoad(col) {
 /* ── V269: one record together with its sub-documents, in ONE batch (both or neither) ──
    Used for an RFQ and its pricing versions (rfqs/{id}/pricingVersions/v{N}). extras: [{ path: [segments…], data, merge }].
    Only this record is written — never the whole list, never an implicit delete. */
+/** V270.2.1: Firebase refuses a record with an "undefined" value anywhere in it ("Unsupported field value: undefined") and
+   the whole save fails. Such a value means "no value": drop the field (in an object) or store null (in a list), in place,
+   so the caller's record keeps matching what was saved. */
+function _bcStripUndefined(v) {
+  if (Array.isArray(v)) { for (let i = 0; i < v.length; i++) { if (v[i] === undefined) v[i] = null; else _bcStripUndefined(v[i]); } }
+  else if (v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) { for (const k of Object.keys(v)) { if (v[k] === undefined) delete v[k]; else _bcStripUndefined(v[k]); } }
+  return v;
+}
 async function fbSaveRecordWith(col, record, extras = []) {
   try {
     window.BizCoreStorageDiagnostics.lastSaveError = null;
     if (!record || record.id == null) return false;
     if (_EMBEDDED_IMAGE_COLLECTIONS.has(col)) { _stripEmbeddedImages(record); extras.forEach(x => _stripEmbeddedImages(x.data)); }
+    _bcStripUndefined(record); extras.forEach(x => _bcStripUndefined(x.data));   // V270.2.1: Firebase refuses "undefined" fields
     await _migrateCollectionIfNeeded(col);
     if (_BC_REF_STAMP[col]) _BC_REF_STAMP[col](record);   // V269.1
     const docId = _docIdFor(col, record), json = JSON.stringify(record);
@@ -4016,15 +4026,15 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.2';
+      s.src = 'js/app.js?v=270.22';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
         const sv = document.createElement('script'); sv.id = 'bizcore-so-view-script'; sv.src = 'js/so-view.js?v=270.1'; document.body.appendChild(sv);
         // V270.1: the Pricing screen (tabs, line menu, price references, phone cards)
-        const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.2'; document.body.appendChild(pu);
+        const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.22'; document.body.appendChild(pu);
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
-        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=270.2'; document.body.appendChild(qu);
+        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=270.21'; document.body.appendChild(qu);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.6'; document.body.appendChild(ds); };
       document.body.appendChild(s);

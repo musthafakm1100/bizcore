@@ -306,8 +306,8 @@
     afterRows(); markChanged();
     if (!tr) return;
     if (isPhone()) { const card = document.querySelector(`#qt-cards [data-k="${tr.dataset.lineKey}"]`); card?.scrollIntoView({ block: 'nearest' }); if (tr.dataset.lineType === 'item') qtEditLine(tr); else card?.querySelector('input')?.focus(); return; }
+    (tr.querySelector('textarea[data-f="desc"]') || tr.querySelector('.quote-special-text'))?.focus();   // at once (V270.2.1)
     tr.scrollIntoView({ block: 'nearest' });
-    setTimeout(() => (tr.querySelector('textarea[data-f="desc"]') || tr.querySelector('.quote-special-text'))?.focus(), 20);
   }
   function qtMoreMenu(btn) {
     if (pop && pop.anchor === btn) { closePop(); return; }

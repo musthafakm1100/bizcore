@@ -79,9 +79,9 @@ export function createAccountService(fs, options = {}) {
         ledgerAccountId: existing ? (existing.ledgerAccountId ?? null) : null,
         hasEntries: existing ? !!existing.hasEntries : false,
         revision,
-        createdAt: existing ? existing.createdAt : at,
-        createdByUid: existing ? existing.createdByUid : actor.uid,
-        createdByName: existing ? existing.createdByName : actor.name,
+        createdAt: existing ? (existing.createdAt ?? at) : at,   // V270.2.1: an older record without these never blocks the save
+        createdByUid: existing ? (existing.createdByUid ?? actor.uid) : actor.uid,
+        createdByName: existing ? (existing.createdByName ?? actor.name) : actor.name,
         updatedAt: stamp(), updatedByUid: actor.uid, updatedByName: actor.name,
       };
       tx.set(refs.account(accountId), account);
@@ -89,7 +89,7 @@ export function createAccountService(fs, options = {}) {
       if (!codeKeySnap.exists()) tx.set(refs.key(codeKeyId), { id: codeKeyId, kind: 'code', accountId, createdByUid: actor.uid });
       if (existing && existing.nameKey && existing.nameKey !== val.nameKey) tx.delete(refs.key(keyDocId('name', existing.nameKey)));
       if (existing && existing.codeKey && existing.codeKey !== val.codeKey) tx.delete(refs.key(keyDocId('code', existing.codeKey)));
-      const pick = a => a ? { code: a.code, name: a.name, type: a.type, custodianName: a.custodianName, custodianUid: a.custodianUid, linkedBankAccountId: a.linkedBankAccountId || '', zohoName: a.zohoName, openingBalance: a.openingBalance, openingDate: a.openingDate, active: a.active } : null;
+      const pick = a => a ? { code: a.code ?? '', name: a.name ?? '', type: a.type ?? '', custodianName: a.custodianName ?? '', custodianUid: a.custodianUid ?? '', linkedBankAccountId: a.linkedBankAccountId || '', zohoName: a.zohoName ?? '', openingBalance: a.openingBalance ?? 0, openingDate: a.openingDate ?? '', active: a.active ?? true } : null;   // V270.2.1: no undefined (refused by Firebase)
       const chgId = 'chg-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
       tx.set(refs.change(accountId, chgId), { id: chgId, accountId, toRevision: revision, before: pick(existing), after: pick(account), actorUid: actor.uid, actorName: actor.name, recordedAt: stamp() });
       return account;

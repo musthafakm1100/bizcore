@@ -230,7 +230,7 @@
   function prShowLineRef(tr) {
     const el = tr?.querySelector('.pr-lref'); if (!el) return;
     const ref = val(tr, 'supref'), note = tr.dataset.supNote || '', view = (typeof pricingViewMode !== 'undefined' && pricingViewMode);
-    const refHtml = ref ? `<button type="button" class="pr-lref-ref" title="${view ? 'Supplier quote ref.' : 'Edit the supplier quote ref. of this line'}"${view ? ' disabled' : ''}>Ref ${esc(ref)}</button>`
+    const refHtml = ref ? `<button type="button" class="pr-lref-ref" title="${esc('Ref ' + ref + (view ? '' : ' — click to edit'))}"${view ? ' disabled' : ''}>Ref ${esc(ref)}</button>`
       : (view ? '' : '<button type="button" class="pr-lref-ref pr-lref-add" title="Add the supplier quote ref. of this line">+ Ref</button>');
     el.innerHTML = [refHtml, note ? `<span class="pr-notei" title="${esc('Note: ' + note)}">✎ Note</span>` : ''].filter(Boolean).join('<span class="pr-sep"> · </span>');
     el.hidden = !refHtml && !note;
@@ -422,9 +422,37 @@
   function fillCostPick() {
     const present = new Set(costRows().map(r => r.dataset.masterId).filter(Boolean));
     const comps = (typeof readStoredCostComponents === 'function' ? readStoredCostComponents() : []).filter(c => c.enabled !== false && !present.has(c.id));
-    const html = '<option value="">🔍 Add cost from Cost Master…</option>' + comps.map(c => `<option value="${esc(c.id)}">${esc(c.name)}${c.type === '%' ? ` — ${Number(c.value) || 0}% of ${esc(c.base || '')}` : ` — ${fmt(c.value)}`}</option>`).join('') + '<option value="__custom">Other (Custom Cost)</option>';
+    const html = '<option value="">🔍 Add cost from Cost Master…</option>' + comps.map(c => `<option value="${esc(c.id)}">${esc(c.name)}${c.type === '%' ? ` — ${Number(c.value) || 0}% of ${esc(c.base || '')}` : ` — ${fmt(c.value)}`}</option>`).join('')
+      + (comps.length ? '' : '<option value="" disabled>All active Cost Master items are already added</option>')   // V270.2.2
+      + '<option value="__custom">Other (Custom Cost)</option>';
     document.querySelectorAll('#pr-cost-pick, .pr-cpick-m').forEach(s => { s.innerHTML = html; s.value = ''; });
+    /* V270.2.2: Add All Default Costs only when one is missing; Remove Unlocked Costs only when there is one */
+    const missing = getEnabledMasterPricingCosts().filter(c => !present.has(c.masterId)).length, unlocked = costRows().filter(r => r.dataset.locked !== 'true').length;
+    document.querySelectorAll('.pr-cdef').forEach(b => { b.disabled = !missing; b.title = missing ? `Add the ${missing} missing default cost${missing === 1 ? '' : 's'}` : 'All default costs are already on this pricing'; });
+    document.querySelectorAll('.pr-crem').forEach(b => { b.disabled = !unlocked; b.title = unlocked ? 'Remove every unlocked cost (locked costs stay)' : 'No unlocked costs to remove'; });
   }
+  /* V270.2.2: remove every unlocked cost (Custom and unlocked Cost Master); locked ones stay */
+  function prRemoveUnlockedCosts() {
+    const rows = costRows().filter(r => r.dataset.locked !== 'true'); if (!rows.length) return;
+    const n = rows.length, word = n === 1 ? 'Cost' : 'Costs';
+    dialog({ title: `Remove ${n} Unlocked ${word}?`, html: '<p>Locked costs stay. Totals, line shares, Profit, Markup % and Margin % are worked out again. Nothing is saved until you press Save.</p>',
+      buttons: [{ text: 'Cancel' }, { text: `Remove ${word}`, cls: 'pr-danger', default: true, action: () => { rows.forEach(r => r.remove()); markPricingDirty(); calcPricingSummary(); fillCostPick(); renderCostCards(); toast(`${n} unlocked ${word.toLowerCase()} removed`); } }] });
+  }
+  /* V270.2.2: an active Cost Master item chosen in a Custom row turns the row into that Cost Master cost */
+  function onCostName(tr) {
+    if (!tr || tr.dataset.masterId) return;
+    const sel = tr.querySelector('[data-cost-role="name"]'); if (!sel) return;
+    const name = sel.value, prev = tr.dataset.cname || 'Other';
+    const c = readStoredCostComponents().find(x => x.enabled !== false && x.name === name);
+    if (!c) { tr.dataset.cname = name; return; }
+    if (costRows().some(r => r.dataset.masterId === c.id)) { sel.value = prev; toast(`${c.name} is already on this pricing.`); syncCostCards(); return; }
+    addAdditionalCostRow(costComponentToPricingCost(c), true);
+    const nr = costRows().pop(); tr.before(nr); tr.remove();
+    markPricingDirty(); calcPricingSummary(); fillCostPick(); renderCostCards();
+    toast(`${c.name} taken from the Cost Master`);
+    setTimeout(() => nr.querySelector('[data-cost-role="value"]:not([disabled])')?.focus(), 30);
+  }
+  document.addEventListener('change', e => { if (e.target.matches?.('#internal-costs-tbody select[data-cost-role="name"]')) onCostName(e.target.closest('tr')); });
   function prAddCostFromPick(sel) {
     const v = sel.value; sel.value = ''; if (!v) return;
     if (v === '__custom') addAdditionalCostRow({ name: 'Other', method: 'fixed', value: 0 }, true);
@@ -473,7 +501,7 @@
     const box = $('pr-ccards'); if (!box) return;
     if (!isPhone()) { if (box.childElementCount) box.innerHTML = ''; return; }
     box.innerHTML = costRows().map(costCardHtml).join('')
-      + `<div class="pr-pc pr-cadd-m"><select class="pr-fi pr-cpick-m" onchange="prAddCostFromPick(this)" aria-label="Add cost from Cost Master"></select><button type="button" class="pr-btn" onclick="prAddDefaultCosts()">+ Add All Default Costs</button></div>
+      + `<div class="pr-pc pr-cadd-m"><select class="pr-fi pr-cpick-m" onchange="prAddCostFromPick(this)" aria-label="Add cost from Cost Master"></select><button type="button" class="pr-btn pr-cdef" onclick="prAddDefaultCosts()">+ Add All Default Costs</button><button type="button" class="pr-btn pr-crem" onclick="prRemoveUnlockedCosts()">Remove Unlocked Costs</button></div>
          <div class="pr-pc pr-ctotal"><div class="pr-pc-t"><div class="pr-pc-d pr-b">Total Additional Costs<small id="pr-ctot-sub"></small></div><b id="pr-ctot-amt"></b></div></div>`;
     fillCostPick(); syncCostCards();
     if ((typeof pricingViewMode !== 'undefined' && pricingViewMode)) box.querySelectorAll('[data-cproxy]').forEach(i => { i.disabled = true; });
@@ -496,6 +524,7 @@
     const card = el.closest('[data-cost]'), tr = card && costByKey(card.dataset.cost); if (!tr) return;
     const t = tr.querySelector(`[data-cost-role="${el.dataset.cproxy}"]`); if (!t) return;
     t.value = el.value; t.dispatchEvent(new Event('input', { bubbles: true }));
+    if (el.dataset.cproxy === 'name' && e.type === 'change') onCostName(tr);
   };
   document.addEventListener('input', costProxy); document.addEventListener('change', e => { if (e.target.matches?.('#pr-ccards select[data-cproxy]')) costProxy(e); });
 
@@ -687,6 +716,16 @@
     });
     return out;
   }
+  /* V270.2.2: Selling history also lists matching quotations already loaded on screen that the Firebase search cannot find
+     (saved before V270.1.3, so without itemKeys) — or all of them when the search fails (indexes not set up). No reads. */
+  function localSell(st, c) {
+    if (st.kind !== 'sell' || typeof quotations === 'undefined' || !Array.isArray(quotations)) return { rows: [], n: 0 };
+    const from = periodFrom(st.period), stats = st.status === 'all' ? QSTAT : [st.status], have = new Set((c.docs || []).map(d => d.id));
+    const list = quotations.filter(q => q && !have.has(q.id) && (c.error || !Array.isArray(q.itemKeys)) && stats.includes(q.status)
+      && (st.cust !== 'this' || q.custId === st.custId) && (!from || String(q.date || '') >= from));
+    const rows = rowsOf(st, list);
+    return { rows, n: new Set(rows.map(r => r.id)).size };
+  }
   async function loadPage(st) {
     const q = histQuery(st), ck = st.kind + '|' + JSON.stringify(q);
     let c = histCache.get(ck); if (!c) { c = { docs: [], cursor: null, done: false }; histCache.set(ck, c); }
@@ -714,13 +753,13 @@
   }
   function paintHist(st) {
     const body = $('pr-hbody'); if (!body) return;
-    const c = st.cache || { docs: [] }, rows = rowsOf(st, c.docs), docT = st.kind === 'buy' ? 'Purchase Invoice' : 'Quotation', party = st.kind === 'buy' ? 'Supplier' : 'Customer';
+    const c = st.cache || { docs: [] }, local = localSell(st, c), rows = [...rowsOf(st, c.docs), ...local.rows].sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))), docT = st.kind === 'buy' ? 'Purchase Invoice' : 'Quotation', party = st.kind === 'buy' ? 'Supplier' : 'Customer';
     const pill = s => `<span class="pr-st pr-st-${esc(low(s).replace(/\s+/g, '-'))}">${esc(s)}</span>`;
-    body.innerHTML = c.error ? `<div class="pr-rf-empty">${esc(c.error)}</div>`
-      : rows.length ? `<div class="pr-hgrid"><div class="pr-hrow pr-hh"><div>Date</div><div>${docT}</div><div>${party}</div><div class="pr-r">Qty</div><div class="pr-r">Unit Price</div><div>Status</div></div>${rows.map(x => `<div class="pr-hrow"><div class="pr-hd-date">${esc(dmy(x.date))}</div><div class="pr-hd-no"><button type="button" class="pr-lnk pr-hdoc" data-id="${esc(x.id)}">${esc(x.no)}</button></div><div class="pr-hd-party">${esc(x.party)}${st.kind === 'sell' && st.cust !== 'this' && x.same ? ' <span class="pr-muted pr-small">(This Customer)</span>' : ''}</div><div class="pr-r pr-hd-qty">${esc(formatQuantity(Number(x.qty) || 0))} ${esc(x.uom)}</div><div class="pr-r pr-num pr-hd-price">${esc(fmt(x.price))}</div><div class="pr-hd-st">${pill(x.status)}</div></div>`).join('')}</div>`
+    body.innerHTML = c.error && !rows.length ? `<div class="pr-rf-empty">${esc(c.error)}</div>`
+      : rows.length ? (c.error ? `<div class="pr-rf-empty pr-small">${esc(c.error)} Showing the quotations already loaded on this screen.</div>` : '') + `<div class="pr-hgrid"><div class="pr-hrow pr-hh"><div>Date</div><div>${docT}</div><div>${party}</div><div class="pr-r">Qty</div><div class="pr-r">Unit Price</div><div>Status</div></div>${rows.map(x => `<div class="pr-hrow"><div class="pr-hd-date">${esc(dmy(x.date))}</div><div class="pr-hd-no"><button type="button" class="pr-lnk pr-hdoc" data-id="${esc(x.id)}">${esc(x.no)}</button></div><div class="pr-hd-party">${esc(x.party)}${st.kind === 'sell' && st.cust !== 'this' && x.same ? ' <span class="pr-muted pr-small">(This Customer)</span>' : ''}</div><div class="pr-r pr-hd-qty">${esc(formatQuantity(Number(x.qty) || 0))} ${esc(x.uom)}</div><div class="pr-r pr-num pr-hd-price">${esc(fmt(x.price))}</div><div class="pr-hd-st">${pill(x.status)}</div></div>`).join('')}</div>`
       : `<div class="pr-rf-empty">${st.busy ? 'Loading…' : c.done ? 'No ' + (st.kind === 'buy' ? 'purchases' : 'quotations') + ' of this item for these filters.' : 'Loading…'}</div>`;
     const more = $('pr-hmore'); if (more) { more.hidden = !!(c.done || c.error); more.disabled = !!st.busy; more.textContent = st.busy ? 'Loading…' : 'Load 5 More'; }
-    const info = $('pr-hinfo'); if (info) info.textContent = c.error ? '' : `${c.docs.length} ${c.docs.length === 1 ? 'document' : 'documents'} · newest first${c.done ? ' · that is all' : ''} · click a number to open it`;
+    const info = $('pr-hinfo'); const nd = c.docs.length + local.n; if (info) info.textContent = c.error ? '' : `${nd} ${nd === 1 ? 'document' : 'documents'} · newest first${c.done ? ' · that is all' : ''} · click a number to open it`;
   }
   /* V270.2: also opened from a quotation line — opts = { key, desc, code, custId, company } instead of a Pricing row */
   async function prOpenHistory(tr, kind, opts) {
@@ -757,7 +796,7 @@
 
   Object.assign(window, {
     prShowTab, prUpdateNoteMarks, prConfirmLeave, prRequestBack, prRowMenu, prOpenRef, prRefreshRefs, prShowLineRef, prAfterCalc,
-    prAfterRowsChange, prAfterCostsChange, prAddCostFromPick, prAddDefaultCosts, prCostMenu, prRemoveVendorQuote, prVendorQuoteMenu,
+    prAfterRowsChange, prAfterCostsChange, prAddCostFromPick, prAddDefaultCosts, prRemoveUnlockedCosts, prCostMenu, prRemoveVendorQuote, prVendorQuoteMenu,
     prCheckPrimarySupplier, prRefreshSupplierOptions, prApplyMenu, prOnOpen, prAfterOpen, prApplyMode, prEditFromView, prOpenHistory,
     prHistCache: histCache,
     prDebug: { paidHistory, quoteHistory, rowItem, confirmDelete, deleteLine, insertAbove, duplicate, move, saveNow, closePop, closeDialog, isOpen: () => ({ pop: !!pop, dlg: !!dlg }) },

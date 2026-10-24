@@ -454,3 +454,24 @@
   .pr-hd-date{grid-area:date;color:#64748b;font-size:12px}.pr-hd-no{grid-area:no;text-align:right}.pr-hd-party{grid-area:party}
   .pr-hd-qty{grid-area:qty;text-align:left!important;color:#64748b}.pr-hd-price{grid-area:price;font-weight:600}.pr-hd-st{grid-area:st}
 }
+
+/* ═════ V270.2.2 ═════ */
+/* Additional Costs: disabled buttons look disabled */
+#pricing-modal .pr-btn:disabled{opacity:.5;cursor:not-allowed}
+/* line quote ref.: it keeps its own room; the supplier name shortens instead */
+#pricing-modal .pr-lref{flex:0 0 auto;max-width:24ch}
+#pricing-modal .pr-lref-ref{display:inline-block;max-width:14ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+/* tabs: segmented control (approved TB_3) */
+#pricing-modal .pr-tabs{display:inline-flex;align-self:flex-start;max-width:100%;gap:2px;padding:3px;background:#eef2f6;border:0;border-radius:10px;margin-top:2px}
+#pricing-modal .pr-tb{padding:6px 14px;border:0;border-radius:8px;margin:0;color:#475569;font-weight:500}
+#pricing-modal .pr-tb:hover{color:var(--pr-navy);background:rgba(255,255,255,.6)}
+#pricing-modal .pr-tb.on{background:#fff;color:var(--pr-navy);font-weight:600;box-shadow:0 1px 2px rgba(15,23,42,.12),0 0 0 1px rgba(15,23,42,.05)}
+#pricing-modal .pr-tb:focus-visible{outline:2px solid #2e75b6;outline-offset:1px}
+#pricing-modal .pr-tb .pr-n{background:#dfe5ec;color:#475569}
+#pricing-modal .pr-tb.on .pr-n{background:var(--pr-navy);color:#fff}
+@media (max-width:900px){ #pricing-modal .pr-tb{padding:8px 12px} }
+@media (max-width:760px){
+  #pricing-modal .pr-tabs{display:flex;align-self:stretch;overflow-x:auto;justify-content:flex-start}
+  #pricing-modal .pr-tb{flex:1 1 auto;justify-content:center;padding:9px 6px;gap:4px}
+}
+#pricing-modal .pr-cadd-in select{flex:0 1 320px;min-width:200px}

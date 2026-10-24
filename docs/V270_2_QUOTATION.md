@@ -175,3 +175,52 @@ lines (folded, sticky header / totals), 1112, 834 and 390 (cards, line sheet, de
 ## Going live
 Upload: **index.html, sw.js, js/app.js, js/pricing-ui.js, js/quotation-ui.js, css/quotation.css**.
 Also upload V269.4 – V270.1.3 if not uploaded yet (docs/HANDOVER.md). No rules, no settings to save.
+
+## V270.2.1 — "Pricing not saved" fix (24 Oct 2026)
+**Reported by Musthafa:** saving a Pricing showed "Pricing not saved — The database did not confirm the change". The
+console: `invalid-argument — Function Transaction.set() called with invalid data. Unsupported field value: undefined
+(found in document rfqs/…)`.
+- **Cause (already in V270.1.3, not from V270.2):** an Additional Cost typed by hand (not from the Cost Master) was
+  stored with `masterId: undefined`. Firebase refuses a record with an undefined value anywhere, so the whole RFQ save
+  failed.
+- **Fixed:**
+  - a custom cost has no `masterId` field at all; a pricing line without a line id gets one once;
+  - **guard:** every record save (`fbSaveRecordWith`, `fbSave`) first removes undefined values (a field is dropped, a list
+    entry becomes null), so one empty field can never block a save again;
+  - the message now keeps the real reason when several RFQs are saved together (it was cleared by the next save).
+- Tests: the test Firestore now refuses undefined values like the real one (tests/browser/fake-sdk/firebase-firestore.js).
+  Reproduced on V270.1.3 (RFQ-2610-0022 with a "Bank Charges" custom cost → "Pricing not saved"); saves on V270.2.1.
+- **Same kind, found by the stricter tests:** linking a custodian login to a cash account wrote `createdAt: undefined`
+  when the account record had no creation time (js/account-service.mjs now falls back, and the change history never
+  holds undefined).
+- **Quotation Entry:** after **Heading / Note / + Blank Item** the cursor now moves into the new line at once (a fast
+  space could press the button again and add extra headings).
+- Upload: **index.html, sw.js, js/app.js, js/quotation-ui.js, js/account-service.mjs** (`bizcore-shell-v27021`).
+  No rules change.
+
+## V270.2.2 — Pricing fixes and segmented tabs (24 Oct 2026)
+Agreed with Musthafa after testing V270.2.1.
+- **Additional Costs (Pricing):**
+  1. "Add cost from Cost Master…" shows a greyed line "All active Cost Master items are already added" when nothing is
+     left to add (it looked broken when empty).
+  2. Choosing an **active** Cost Master item in a Custom row turns the row into that Cost Master cost (method, value,
+     lock). If it is already on the pricing, the row keeps its old name. Inactive names (Transport, Freight, …) stay
+     usable as labels for a Custom cost.
+  3. A Custom cost with no value is not saved (Cost Master costs are always kept, even at 0).
+  4. **+ Add All Default Costs** is greyed out when no active default cost is missing (tip: "All default costs are
+     already on this pricing").
+  5. New **Remove Unlocked Costs** button beside it: removes every unlocked cost (Custom and unlocked Cost Master),
+     locked ones stay; asks first with the count; nothing is saved until Save; greyed when there are none. Phone: under
+     the cost cards.
+- **Line quote ref. (Pricing lines):** the supplier dropdown is as wide as the longest supplier name in the Supplier
+  Master, so it squeezed the ref to "…" and the edit box opened in that space. The ref now keeps its own room (long refs
+  shorten, full ref on hover); the supplier name shortens instead.
+- **Selling Price History:** the Firebase search finds only quotations saved from V270.1.3 on (they carry `itemKeys`).
+  The list now also shows matching quotations already loaded on screen without `itemKeys` (older ones) — and all loaded
+  matches when the search fails because the indexes are not set up, with that message above. No extra reads.
+- **Tabs:** Pricing and Quotation Entry tabs are a segmented control (approved mockup TB_3): grey track, the active tab
+  a raised white button, its count navy. Quotation tabs are wrapped in `.qt-track`. Phone: the track fills the width.
+- Tests: tests/browser/pricing-v2702.e2e.mjs (costs, ref at 1280 with a long supplier name, Selling history with an
+  older quotation, tab look on both screens).
+- Upload: **index.html, sw.js, js/app.js, js/pricing-ui.js, css/pricing.css, css/quotation.css**
+  (`bizcore-shell-v27022`). No rules change.
