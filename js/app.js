@@ -9637,7 +9637,10 @@ async function savePricing() {
   version.updated = new Date().toISOString();
   version.supplierName=r.supplierName; version.supplierId=r.supplierId||''; version.supRef=r.supRef; version.supDate=r.supDate;
   if (r.status==='New') r.status='Pricing';
+  // V270.2.3: Custom costs with no value are not saved (readInternalCosts) — they leave the screen too, with a message
+  const blankCustom=[...document.querySelectorAll('#internal-costs-tbody tr')].filter(tr=>!tr.dataset.masterId&&!(parseFloat(String(tr.querySelector('[data-cost-role="value"]')?.value||'').replace(/,/g,''))||0));
   if (!(await saveRFQs())) { showToast(rfqSaveFailedMessage(),'error','Pricing not saved'); return false; }
+  if (blankCustom.length) { blankCustom.forEach(tr=>tr.remove()); calcPricingSummary(); if(typeof prFillCostPick==='function') prFillCostPick(); if(typeof prAfterCostsChange==='function') prAfterCostsChange(); }
   setPricingSavedState(true);
   { const sp=document.getElementById('pr-status-pill'); if(sp && sp.textContent==='Draft') sp.textContent='Saved'; }   // V270.1
   // Synchronize the global safe-close/autosave system with the successful Pricing save.
@@ -9647,7 +9650,7 @@ async function savePricing() {
     el.setAttribute('aria-invalid','false');
   });
   // Show above the full-screen Pricing modal after persistence and confirmation cleanup.
-  setTimeout(()=>showToast('Pricing saved successfully.','success','Saved'),80);
+  setTimeout(()=>showToast('Pricing saved successfully.'+(blankCustom.length?` ${blankCustom.length} Custom cost${blankCustom.length===1?'':'s'} with no value ${blankCustom.length===1?'was':'were'} not saved.`:''),'success','Saved'),80);
   return true;
   } finally { hideBusyOverlay('pricing-modal'); }
 }

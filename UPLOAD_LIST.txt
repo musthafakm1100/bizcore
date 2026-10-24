@@ -1,0 +1,12 @@
+BizCore V270.2.3 — copy into C:\BizCore (replace), then upload:
+  index.html
+  sw.js
+  js/app.js
+  js/pricing-ui.js
+If V270.2.2 is not uploaded yet, also upload:
+  css/pricing.css
+  css/quotation.css
+If V270.2.1 is not uploaded yet, also upload:
+  js/account-service.mjs
+  js/quotation-ui.js
+No Firebase rules change.

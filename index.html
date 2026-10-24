@@ -1901,7 +1901,7 @@ document.addEventListener('error', function(e) {
 <thead><tr><th class="pr-no">#</th><th>Cost Item</th><th>Method</th><th class="pr-r">Value</th><th class="pr-r">Amount (<span data-pr-cur>SAR</span>)</th><th class="pr-how">How It Is Worked Out</th><th></th></tr></thead>
 <tbody id="internal-costs-tbody"></tbody>
 <tfoot>
-<tr class="pr-cadd"><td class="pr-no">+</td><td colspan="5"><div class="pr-cadd-in"><select id="pr-cost-pick" onchange="prAddCostFromPick(this)" aria-label="Add cost from Cost Master"></select><button type="button" class="pr-btn pr-cdef" onclick="prAddDefaultCosts()">+ Add All Default Costs</button><button type="button" class="pr-btn pr-crem" onclick="prRemoveUnlockedCosts()">Remove Unlocked Costs</button></div></td><td></td></tr>
+<tr class="pr-cadd"><td class="pr-no">+</td><td colspan="5"><div class="pr-cadd-in"><select id="pr-cost-pick" onchange="prAddCostFromPick(this)" aria-label="Add cost"></select><button type="button" class="pr-btn pr-cdef" onclick="prAddDefaultCosts()">+ Add All Default Costs</button><button type="button" class="pr-btn pr-crem" onclick="prRemoveUnlockedCosts()">Remove Unlocked Costs</button></div></td><td></td></tr>
 <tr class="pr-totrow"><td></td><td class="pr-b">Total Additional Costs</td><td></td><td></td><td class="pr-r pr-b" id="internal-costs-total">0.00</td><td class="pr-how pr-muted" id="internal-costs-count"></td><td></td></tr>
 </tfoot>
 </table>
@@ -4026,13 +4026,13 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.22';
+      s.src = 'js/app.js?v=270.23';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
         const sv = document.createElement('script'); sv.id = 'bizcore-so-view-script'; sv.src = 'js/so-view.js?v=270.1'; document.body.appendChild(sv);
         // V270.1: the Pricing screen (tabs, line menu, price references, phone cards)
-        const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.22'; document.body.appendChild(pu);
+        const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.23'; document.body.appendChild(pu);
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
         const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=270.21'; document.body.appendChild(qu);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)

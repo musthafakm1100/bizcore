@@ -224,3 +224,23 @@ Agreed with Musthafa after testing V270.2.1.
   older quotation, tab look on both screens).
 - Upload: **index.html, sw.js, js/app.js, js/pricing-ui.js, css/pricing.css, css/quotation.css**
   (`bizcore-shell-v27022`). No rules change.
+
+## V270.2.3 — Price History up to date, cost wording (24 Oct 2026)
+**Reported by Musthafa:** a purchase invoice and a quotation created today showed in Last Paid / Last Quoted but not in
+Price History; after a reload they did.
+- **Cause:** History kept each Firebase answer for the whole session; an answer read before the new documents existed
+  ("no documents · that is all") was shown again.
+- **Fixed:**
+  1. History (Buying and Selling) also lists the matching documents already loaded on screen — inside the range the
+     loaded pages cover, or all of them once the list is complete or the search failed. New documents show at once and
+     History agrees with Last Paid / Last Quoted. No extra reads.
+  2. A remembered History answer expires after 5 minutes; then Firebase is asked again (at most 5 reads a page).
+  3. Selling History matches quotation lines like Last Quoted: the item key, or — when one side has no product id —
+     the same code or description (lines typed without the Item Master).
+- **Additional Costs wording:** the picker reads **+ Add Cost…**, the Cost Master items under "From Cost Master", and
+  **Custom Cost (this pricing only)**.
+- **Blank Custom costs:** on Save they leave the screen too and the message says so ("1 Custom cost with no value was
+  not saved.").
+- Tests: tests/browser/pricing-v2702.e2e.mjs (new quotation / purchase invoice listed without a reload, 5-minute
+  expiry re-reads, typed quotation line, save message).
+- Upload: **index.html, sw.js, js/app.js, js/pricing-ui.js** (`bizcore-shell-v27023`). No rules change.

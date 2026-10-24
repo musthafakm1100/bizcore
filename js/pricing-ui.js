@@ -422,9 +422,10 @@
   function fillCostPick() {
     const present = new Set(costRows().map(r => r.dataset.masterId).filter(Boolean));
     const comps = (typeof readStoredCostComponents === 'function' ? readStoredCostComponents() : []).filter(c => c.enabled !== false && !present.has(c.id));
-    const html = '<option value="">🔍 Add cost from Cost Master…</option>' + comps.map(c => `<option value="${esc(c.id)}">${esc(c.name)}${c.type === '%' ? ` — ${Number(c.value) || 0}% of ${esc(c.base || '')}` : ` — ${fmt(c.value)}`}</option>`).join('')
+    // V270.2.3 wording: "+ Add Cost…", the Cost Master items in their own group, "Custom Cost (this pricing only)"
+    const html = '<option value="">+ Add Cost…</option><optgroup label="From Cost Master">' + comps.map(c => `<option value="${esc(c.id)}">${esc(c.name)}${c.type === '%' ? ` — ${Number(c.value) || 0}% of ${esc(c.base || '')}` : ` — ${fmt(c.value)}`}</option>`).join('')
       + (comps.length ? '' : '<option value="" disabled>All active Cost Master items are already added</option>')   // V270.2.2
-      + '<option value="__custom">Other (Custom Cost)</option>';
+      + '</optgroup><option value="__custom">Custom Cost (this pricing only)</option>';
     document.querySelectorAll('#pr-cost-pick, .pr-cpick-m').forEach(s => { s.innerHTML = html; s.value = ''; });
     /* V270.2.2: Add All Default Costs only when one is missing; Remove Unlocked Costs only when there is one */
     const missing = getEnabledMasterPricingCosts().filter(c => !present.has(c.masterId)).length, unlocked = costRows().filter(r => r.dataset.locked !== 'true').length;
@@ -501,7 +502,7 @@
     const box = $('pr-ccards'); if (!box) return;
     if (!isPhone()) { if (box.childElementCount) box.innerHTML = ''; return; }
     box.innerHTML = costRows().map(costCardHtml).join('')
-      + `<div class="pr-pc pr-cadd-m"><select class="pr-fi pr-cpick-m" onchange="prAddCostFromPick(this)" aria-label="Add cost from Cost Master"></select><button type="button" class="pr-btn pr-cdef" onclick="prAddDefaultCosts()">+ Add All Default Costs</button><button type="button" class="pr-btn pr-crem" onclick="prRemoveUnlockedCosts()">Remove Unlocked Costs</button></div>
+      + `<div class="pr-pc pr-cadd-m"><select class="pr-fi pr-cpick-m" onchange="prAddCostFromPick(this)" aria-label="Add cost"></select><button type="button" class="pr-btn pr-cdef" onclick="prAddDefaultCosts()">+ Add All Default Costs</button><button type="button" class="pr-btn pr-crem" onclick="prRemoveUnlockedCosts()">Remove Unlocked Costs</button></div>
          <div class="pr-pc pr-ctotal"><div class="pr-pc-t"><div class="pr-pc-d pr-b">Total Additional Costs<small id="pr-ctot-sub"></small></div><b id="pr-ctot-amt"></b></div></div>`;
     fillCostPick(); syncCostCards();
     if ((typeof pricingViewMode !== 'undefined' && pricingViewMode)) box.querySelectorAll('[data-cproxy]').forEach(i => { i.disabled = true; });
@@ -689,7 +690,7 @@
      Buying: purchase invoices whose itemKeys contain the item (voided ones skipped). Selling: quotations Sent / Won /
      Lost / Expired. Pages are kept for the session (same item + filters → no second read); a document opened from the
      list joins the loaded records, so opening it reads nothing more. Nothing is written. */
-  const histCache = new Map(), PAGE = 5;
+  const histCache = new Map(), PAGE = 5, HIST_TTL = 5 * 60 * 1000;
   const QSTAT = ['Sent', 'Won', 'Lost', 'Expired'];
   function itemKeyOfRow(tr) { const lib = window.BizCorePI; try { return lib && lib.core ? lib.core.itemKeyOf({ productId: tr.dataset.productId, code: val(tr, 'code'), desc: val(tr, 'desc'), uom: val(tr, 'uom') }) : ''; } catch (_) { return ''; } }
   function periodFrom(p) { if (p === 'all') return ''; const d = new Date(); d.setHours(12, 0, 0, 0); d.setMonth(d.getMonth() - Number(p)); return d.toISOString().slice(0, 10); }
@@ -709,26 +710,45 @@
       } else {
         (d.items || []).forEach(it => {
           if (it.lineType && it.lineType !== 'item') return;
-          let k = ''; try { k = window.BizCorePI.core.itemKeyOf({ productId: it.prodId, code: it.code, desc: it.desc, uom: it.uom }); } catch (_) {}
-          if (k === st.key && netUp(it) > 0) out.push({ id: d.id, date: d.date, no: d.qno || d.id, party: d.company || '', qty: it.qty, uom: it.uom || '', price: netUp(it), status: d.status, same: st.custId && d.custId === st.custId });
+          if (sellHit(st, it) && netUp(it) > 0) out.push({ id: d.id, date: d.date, no: d.qno || d.id, party: d.company || '', qty: it.qty, uom: it.uom || '', price: netUp(it), status: d.status, same: st.custId && d.custId === st.custId });
         });
       }
     });
     return out;
   }
-  /* V270.2.2: Selling history also lists matching quotations already loaded on screen that the Firebase search cannot find
-     (saved before V270.1.3, so without itemKeys) — or all of them when the search fails (indexes not set up). No reads. */
-  function localSell(st, c) {
-    if (st.kind !== 'sell' || typeof quotations === 'undefined' || !Array.isArray(quotations)) return { rows: [], n: 0 };
-    const from = periodFrom(st.period), stats = st.status === 'all' ? QSTAT : [st.status], have = new Set((c.docs || []).map(d => d.id));
-    const list = quotations.filter(q => q && !have.has(q.id) && (c.error || !Array.isArray(q.itemKeys)) && stats.includes(q.status)
-      && (st.cust !== 'this' || q.custId === st.custId) && (!from || String(q.date || '') >= from));
+  /* V270.2.3: a quotation line is the item when its key matches, or — as Last Quoted does — when one side has no product id
+     and the code or description is the same (lines typed without the Item Master) */
+  function sellHit(st, it) {
+    let k = ''; try { k = window.BizCorePI.core.itemKeyOf({ productId: it.prodId, code: it.code, desc: it.desc, uom: it.uom }); } catch (_) {}
+    if (k && k === st.key) return true;
+    if (String(st.key).startsWith('p_') && it.prodId) return false;
+    const code = low(st.code), desc = low(st.descRaw);
+    return !!((code && low(it.code) === code) || (desc && low(it.desc) === desc));
+  }
+  /* V270.2.2 → V270.2.3: History also lists the matching documents already loaded on screen (Buying and Selling) — new
+     ones at once, older quotations the Firebase search cannot find (no itemKeys), and all of them when the search fails
+     (indexes not set up). So History always agrees with Last Paid / Last Quoted. No reads. */
+  function localDocs(st, c) {
+    // only inside the range the loaded pages cover (all of it once the list is complete or the search failed), so
+    // "Load 5 More" still pages through the older ones
+    const docs = c.docs || [], have = new Set(docs.map(d => d.id)), from = periodFrom(st.period);
+    const floor = c.error || c.done ? '' : docs.length ? docs.reduce((m, d) => (String(d.date || '') < m ? String(d.date || '') : m), '\uffff') : null;
+    if (floor === null) return { rows: [], n: 0 };
+    const inPeriod = d => (!from || String(d.date || '') >= from) && (!floor || String(d.date || '') >= floor);
+    let list = [];
+    if (st.kind === 'buy') list = (window.BizCorePI?.invoices || []).filter(d => d && d.id && !have.has(d.id) && d.status !== 'Voided' && (!st.supplierId || d.supplierId === st.supplierId) && inPeriod(d));
+    else if (typeof quotations !== 'undefined' && Array.isArray(quotations)) {
+      const stats = st.status === 'all' ? QSTAT : [st.status];
+      list = quotations.filter(q => q && q.id && !have.has(q.id) && stats.includes(q.status) && (st.cust !== 'this' || q.custId === st.custId) && inPeriod(q));
+    }
     const rows = rowsOf(st, list);
     return { rows, n: new Set(rows.map(r => r.id)).size };
   }
   async function loadPage(st) {
     const q = histQuery(st), ck = st.kind + '|' + JSON.stringify(q);
-    let c = histCache.get(ck); if (!c) { c = { docs: [], cursor: null, done: false }; histCache.set(ck, c); }
+    let c = histCache.get(ck);
+    if (c && !st.more && Date.now() - (c.at || 0) > HIST_TTL) c = null;   // V270.2.3: a remembered answer expires after 5 minutes
+    if (!c) { c = { docs: [], cursor: null, done: false, at: Date.now() }; histCache.set(ck, c); }
     st.cache = c;
     if (c.done || (c.docs.length && !st.more)) return;
     if (!window.BCWin || typeof window.BCWin.page !== 'function') { c.error = 'Price history is not available in this version of the page — reload it.'; return; }
@@ -753,7 +773,7 @@
   }
   function paintHist(st) {
     const body = $('pr-hbody'); if (!body) return;
-    const c = st.cache || { docs: [] }, local = localSell(st, c), rows = [...rowsOf(st, c.docs), ...local.rows].sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))), docT = st.kind === 'buy' ? 'Purchase Invoice' : 'Quotation', party = st.kind === 'buy' ? 'Supplier' : 'Customer';
+    const c = st.cache || { docs: [] }, local = localDocs(st, c), rows = [...rowsOf(st, c.docs), ...local.rows].sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))), docT = st.kind === 'buy' ? 'Purchase Invoice' : 'Quotation', party = st.kind === 'buy' ? 'Supplier' : 'Customer';
     const pill = s => `<span class="pr-st pr-st-${esc(low(s).replace(/\s+/g, '-'))}">${esc(s)}</span>`;
     body.innerHTML = c.error && !rows.length ? `<div class="pr-rf-empty">${esc(c.error)}</div>`
       : rows.length ? (c.error ? `<div class="pr-rf-empty pr-small">${esc(c.error)} Showing the quotations already loaded on this screen.</div>` : '') + `<div class="pr-hgrid"><div class="pr-hrow pr-hh"><div>Date</div><div>${docT}</div><div>${party}</div><div class="pr-r">Qty</div><div class="pr-r">Unit Price</div><div>Status</div></div>${rows.map(x => `<div class="pr-hrow"><div class="pr-hd-date">${esc(dmy(x.date))}</div><div class="pr-hd-no"><button type="button" class="pr-lnk pr-hdoc" data-id="${esc(x.id)}">${esc(x.no)}</button></div><div class="pr-hd-party">${esc(x.party)}${st.kind === 'sell' && st.cust !== 'this' && x.same ? ' <span class="pr-muted pr-small">(This Customer)</span>' : ''}</div><div class="pr-r pr-hd-qty">${esc(formatQuantity(Number(x.qty) || 0))} ${esc(x.uom)}</div><div class="pr-r pr-num pr-hd-price">${esc(fmt(x.price))}</div><div class="pr-hd-st">${pill(x.status)}</div></div>`).join('')}</div>`
@@ -764,8 +784,8 @@
   /* V270.2: also opened from a quotation line — opts = { key, desc, code, custId, company } instead of a Pricing row */
   async function prOpenHistory(tr, kind, opts) {
     const r = opts ? { custId: opts.custId || '', company: opts.company || '' } : (rfqs.find(x => x.id === pricingRFQId) || {});
-    const st = opts ? { kind, key: opts.key || '', desc: opts.desc || 'Item', code: opts.code || '', supplierId: '', cust: 'all', custId: r.custId || '', company: r.company || '', status: 'all', period: '12' }
-      : { kind, key: itemKeyOfRow(tr), desc: val(tr, 'desc') || 'Item', code: val(tr, 'code'), supplierId: '', cust: 'all', custId: r.custId || '', company: r.company || '', status: 'all', period: '12' };
+    const st = opts ? { kind, key: opts.key || '', desc: opts.desc || 'Item', descRaw: opts.desc || '', code: opts.code || '', supplierId: '', cust: 'all', custId: r.custId || '', company: r.company || '', status: 'all', period: '12' }
+      : { kind, key: itemKeyOfRow(tr), desc: val(tr, 'desc') || 'Item', descRaw: val(tr, 'desc'), code: val(tr, 'code'), supplierId: '', cust: 'all', custId: r.custId || '', company: r.company || '', status: 'all', period: '12' };
     if (!st.key) { toast('Price history needs the item (choose it from the Item Master).'); return; }
     closeDialog(); closePop();
     const dim = document.createElement('div'); dim.className = 'pr-dim';
@@ -796,7 +816,7 @@
 
   Object.assign(window, {
     prShowTab, prUpdateNoteMarks, prConfirmLeave, prRequestBack, prRowMenu, prOpenRef, prRefreshRefs, prShowLineRef, prAfterCalc,
-    prAfterRowsChange, prAfterCostsChange, prAddCostFromPick, prAddDefaultCosts, prRemoveUnlockedCosts, prCostMenu, prRemoveVendorQuote, prVendorQuoteMenu,
+    prAfterRowsChange, prAfterCostsChange, prAddCostFromPick, prAddDefaultCosts, prRemoveUnlockedCosts, prFillCostPick: fillCostPick, prCostMenu, prRemoveVendorQuote, prVendorQuoteMenu,
     prCheckPrimarySupplier, prRefreshSupplierOptions, prApplyMenu, prOnOpen, prAfterOpen, prApplyMode, prEditFromView, prOpenHistory,
     prHistCache: histCache,
     prDebug: { paidHistory, quoteHistory, rowItem, confirmDelete, deleteLine, insertAbove, duplicate, move, saveNow, closePop, closeDialog, isOpen: () => ({ pop: !!pop, dlg: !!dlg }) },
