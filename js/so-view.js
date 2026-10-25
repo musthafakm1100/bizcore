@@ -634,8 +634,12 @@ function sovRender(soId, opts = {}){
   if (!opts.refreshOnly && !same) { modal._sovTab = 'overview'; modal._sovPView = 'summary'; modal._sovOpenLines = new Set(); }
   if (!opts.refreshOnly && same && !modal.classList.contains('open')) { modal._sovTab = 'overview'; modal._sovOpenLines = new Set(); }
   if (!modal._sovOpenLines) modal._sovOpenLines = new Set();
-  const canProfit = sovCanSeeProfit();
-  if (modal._sovTab === 'profit' && !canProfit) modal._sovTab = 'overview';
+  // V270.4.2: tabs follow the role — Purchasing needs Purchase Invoices (View), Finance needs Customer Invoices (View),
+  // Profit also needs the purchases
+  const permOk = m => typeof window.bcCan !== 'function' || window.bcCan(m, 'v');
+  const canPur = permOk('purchaseInvoice') || permOk('supplierPayment'), canFin = permOk('invoice') || permOk('receipt');
+  const canProfit = sovCanSeeProfit() && canPur;
+  if ((modal._sovTab === 'profit' && !canProfit) || (modal._sovTab === 'purchasing' && !canPur) || (modal._sovTab === 'finance' && !canFin)) modal._sovTab = 'overview';
   const tab = modal._sovTab || 'overview';
   if (window.BizCorePI && !modal._sovPiHooked) { modal._sovPiHooked = true; try { window.BizCorePI.start(); window.BizCorePI.onChange(() => { const mm = sovModal(); if (mm && mm.classList.contains('open') && typeof refreshOpenSalesOrderView === 'function') refreshOpenSalesOrderView(); }); } catch (e) {} }
   modal.classList.add('sov-on');
@@ -653,7 +657,7 @@ function sovRender(soId, opts = {}){
   // the old pipeline bar is not used by this view
   const bar = document.getElementById('so-pipeline-bar'); if (bar) { bar.innerHTML = ''; bar.hidden = true; }
 
-  const tabs = SOV_TABS.filter(([k]) => k !== 'profit' || canProfit).map(([k, label]) => `<button type="button" role="tab" class="sov-tab${k === tab ? ' on' : ''}" data-tab="${k}" aria-selected="${k === tab}">${label}${k === 'profit' ? ' <span aria-label="restricted">🔒</span>' : ''}</button>`).join('');
+  const tabs = SOV_TABS.filter(([k]) => (k !== 'profit' || canProfit) && (k !== 'purchasing' || canPur) && (k !== 'finance' || canFin)).map(([k, label]) => `<button type="button" role="tab" class="sov-tab${k === tab ? ' on' : ''}" data-tab="${k}" aria-selected="${k === tab}">${label}${k === 'profit' ? ' <span aria-label="restricted">🔒</span>' : ''}</button>`).join('');
   const panel = (k, html) => `<div class="sov-panel" role="tabpanel" data-panel="${k}"${k === tab ? '' : ' hidden'}>${html}</div>`;
   const body = document.getElementById('so-view-body');
   const safe = (fn, label) => { try { return fn(); } catch (e) { console.error('[BizCore] Sales Order view — ' + label, e); return `<div class="sov-empty">This part could not be shown (${sovEsc(e && e.message || 'error')}).</div>`; } };
@@ -661,8 +665,8 @@ function sovRender(soId, opts = {}){
     <div class="sov-panels">
       ${panel('overview', safe(() => sovOverview(m), 'overview'))}
       ${panel('items', safe(() => sovItems(m, modal._sovOpenLines), 'items'))}
-      ${panel('purchasing', safe(() => sovPurchasing(m), 'purchasing'))}
-      ${panel('finance', safe(() => sovFinance(m), 'finance'))}
+      ${canPur ? panel('purchasing', safe(() => sovPurchasing(m), 'purchasing')) : ''}
+      ${canFin ? panel('finance', safe(() => sovFinance(m), 'finance')) : ''}
       ${canProfit ? panel('profit', safe(() => sovProfit(m, modal._sovPView), 'profit')) : ''}
       ${panel('activity', safe(() => sovActivity(m), 'activity'))}
     </div>`;

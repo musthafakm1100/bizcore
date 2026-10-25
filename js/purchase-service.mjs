@@ -15,7 +15,7 @@
  *   recordSupplierPayment / recordSupplierCashBack / voidSupplierPayment are ONE transaction each:
  *   payment + balanced cash-ledger entry + postings (+ accounts hasEntries) + invoice figures + invoice event.
  */
-import { accessWithRole } from './user-core.mjs?v=270.41';
+import { accessWithRole } from './user-core.mjs?v=270.42';
 import { formatSequence, nextSequence } from './numbering.mjs?v=270.25';
 import {
   PURCHASE_COLLECTIONS as C, PURCHASE_SCHEMA_VERSION, PURCHASE_SETTINGS_PATH, PURCHASE_STATUS,

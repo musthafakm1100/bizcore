@@ -17,7 +17,7 @@ export const USER_EVENTS = 'events';
 export const USER_SCHEMA_VERSION = 1;
 export const DEFAULT_COMPANY = 'default';
 
-/** Built-in roles. Their permissions come in V270.4.2; until then every staff role keeps today's access. */
+/** Built-in roles (their permissions: js/role-core.mjs). V270.4.2: administrators can add roles (roles/{id}). */
 export const ROLES = Object.freeze([
   { id: 'administrator', label: 'Administrator', builtIn: true },
   { id: 'manager', label: 'Manager' },
@@ -27,7 +27,10 @@ export const ROLES = Object.freeze([
   { id: 'store', label: 'Store / Delivery' },
 ]);
 export const CUSTODIAN_ROLE = Object.freeze({ id: 'cashCustodian', label: 'Cash Custodian', builtIn: true });
-export const roleLabel = id => (ROLES.find(r => r.id === id) || (id === CUSTODIAN_ROLE.id ? CUSTODIAN_ROLE : null) || { label: id || '—' }).label;
+const _customLabels = new Map();
+/** V270.4.2: names of the roles administrators added (roles/{id}). */
+export function setRoleLabels(list = []) { _customLabels.clear(); for (const r of list) if (r && r.id && r.label) _customLabels.set(r.id, r.label); }
+export const roleLabel = id => (ROLES.find(r => r.id === id) || (id === CUSTODIAN_ROLE.id ? CUSTODIAN_ROLE : null) || { label: _customLabels.get(id) || id || '—' }).label;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const clean = (v, max) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max);
@@ -48,7 +51,7 @@ export function validateUserInput(input = {}, opts = {}) {
     if (password.length < 8) errors.push({ field: 'password', message: 'The temporary password needs at least 8 characters.' });
   }
   if (!role) errors.push({ field: 'role', message: 'Choose a role.' });
-  else if (role !== CUSTODIAN_ROLE.id && !ROLES.some(r => r.id === role)) errors.push({ field: 'role', message: 'Choose a role from the list.' });
+  else if (role !== CUSTODIAN_ROLE.id && !(opts.roleIds || ROLES.map(r => r.id)).includes(role)) errors.push({ field: 'role', message: 'Choose a role from the list.' });
   return {
     ok: errors.length === 0, errors,
     value: {
@@ -60,7 +63,9 @@ export function validateUserInput(input = {}, opts = {}) {
 }
 
 /** The record to write. prev = the stored record (or null for a new user). */
-export function buildUserRecord(prev, value, { uid, actor, stamp, now }) {
+/** V270.4.2: the user record carries a copy of its role's permission lists (perm), so the security rules read only the
+ *  user record (Firebase allows at most 10 record reads per checked document). Kept in step by js/role-service.mjs. */
+export function buildUserRecord(prev, value, { uid, actor, stamp, now, perm }) {
   return {
     uid,
     name: value.name,
@@ -71,6 +76,7 @@ export function buildUserRecord(prev, value, { uid, actor, stamp, now }) {
     ...(prev && prev.passwordChangedAt ? { passwordChangedAt: prev.passwordChangedAt } : {}),
     companyRoles: { ...((prev && prev.companyRoles) || {}), [DEFAULT_COMPANY]: value.role },
     defaultCompany: (prev && prev.defaultCompany) || DEFAULT_COMPANY,
+    ...(perm ? { perm } : prev && prev.perm ? { perm: prev.perm } : {}),
     revision: prev ? (Number(prev.revision) || 0) + 1 : 1,
     createdAt: prev ? prev.createdAt : stamp, createdByUid: prev ? prev.createdByUid : actor.uid, createdByName: prev ? (prev.createdByName || '') : actor.name,
     updatedAt: stamp, updatedByUid: actor.uid, updatedByName: actor.name,

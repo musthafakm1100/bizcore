@@ -38,7 +38,7 @@
 <link href="css/pricing.css?v=270.22" rel="stylesheet"/>
 <link href="css/quotation.css?v=270.22" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
-<link href="css/users.css?v=270.41" rel="stylesheet"/>
+<link href="css/users.css?v=270.42" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
 <script src="js/responsive.js?v=269.7" defer></script>
 <script src="js/bc-date.js?v=270.27" defer></script>
@@ -2290,19 +2290,21 @@ import { createDeliveryService, loadDeliveryEvents } from './js/delivery-service
 import * as DNCore from './js/delivery-core.mjs?v=266.0';
 import * as LockCore from './js/lock-service.mjs?v=266.0';
 import * as InvCore from './js/invoice-core.mjs?v=266.0';
-import { createInvoiceService } from './js/invoice-service.mjs?v=270.41';
+import { createInvoiceService } from './js/invoice-service.mjs?v=270.42';
 import { createNumbering, nextSequence, formatSequence } from './js/numbering.mjs?v=270.25';
 import * as RctCore from './js/receipt-core.mjs?v=266.4';
-import { createReceiptService } from './js/receipt-service.mjs?v=270.41';
+import { createReceiptService } from './js/receipt-service.mjs?v=270.42';
 import * as AccCore from './js/account-core.mjs?v=268.2';
-import { createAccountService } from './js/account-service.mjs?v=270.41';
+import { createAccountService } from './js/account-service.mjs?v=270.42';
 import * as LedgerCore from './js/ledger-core.mjs?v=269.3';
 import { createLedgerService } from './js/ledger-service.mjs?v=270.41';
 import { wrapTransaction, rebuildBalance, BALANCE_COLLECTION, LAST_PRICE_COLLECTION } from './js/running-totals.mjs?v=269.3';
 import * as PurchaseCore from './js/purchase-core.mjs?v=269.7';
-import { createPurchaseService } from './js/purchase-service.mjs?v=270.41';
-import * as UserCore from './js/user-core.mjs?v=270.41';
-import { createUserService } from './js/user-service.mjs?v=270.41';
+import { createPurchaseService } from './js/purchase-service.mjs?v=270.42';
+import * as UserCore from './js/user-core.mjs?v=270.42';
+import { createUserService } from './js/user-service.mjs?v=270.42';
+import * as RoleCore from './js/role-core.mjs?v=270.42';
+import { createRoleService } from './js/role-service.mjs?v=270.42';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile, updatePassword, sendPasswordResetEmail }
@@ -2651,10 +2653,93 @@ function _bcStampLines(record, lines) {
   record.productIds = _bcIds(lines.map(it => it && (it.prodId || it.productId || it.itemId)));
   record.productCodes = _bcCodes(lines.map(it => it && it.code));
 }
+/* ═══════════════════════════════════════════════════
+   V270.4.2 PERMISSIONS — the signed-in user's role (roles/{id}, Administration → Roles & Permissions).
+   The data layer never asks for records the role can't see (the security rules would refuse them), and for
+   "Own records only" it asks only for the user's own records (ownerUid). Screens use window.BCPerm (js/permissions-ui.js).
+═══════════════════════════════════════════════════ */
+let _bcPerm = RoleCore.permissionsFor(null, { admin: false });
+let _bcRoleUnsub = null, _bcPermStamp = '';
+const _bcPermListeners = new Set();
+function _bcReadable(col) { const mods = RoleCore.READ_MODULES[col]; return !mods || _bcPerm.canAny(mods, 'v'); }
+function _bcOwnUid(col) { const m = RoleCore.OWN_COLLECTIONS[col]; return m && _bcPerm.ownOnly(m) && auth.currentUser ? auth.currentUser.uid : ''; }
+function _bcSetPerm(role, admin) {
+  _bcPerm = RoleCore.permissionsFor(role, { admin });
+  _bcPermListeners.forEach(fn => { try { fn(_bcPerm); } catch (e) { console.error(e); } });
+}
+window.BCPerm = {
+  core: RoleCore,
+  get current() { return _bcPerm; },
+  get admin() { return _bcPerm.admin; },
+  get roleLabel() { return _bcPerm.roleLabel; },
+  can: (m, a = 'v') => _bcPerm.can(m, a),
+  canAny: (mods, a = 'v') => _bcPerm.canAny(mods, a),
+  ownOnly: m => _bcPerm.ownOnly(m),
+  readable: col => _bcReadable(col),
+  onChange(fn) { _bcPermListeners.add(fn); return () => _bcPermListeners.delete(fn); },
+};
+const _bcPermKey = (role, admin) => admin ? 'admin' : role ? JSON.stringify([role.id, role.revision, role.perms]) : 'none';
+/** At sign-in, before any data is read: the role's permissions. Administrators create the built-in roles once. */
+async function _bcLoadPermissions(user, gate) {
+  const admin = !!(gate.owner || (_myUser && _myUser.active !== false && UserCore.roleOfUser(_myUser) === 'administrator'));
+  if (admin) {
+    _bcSetPerm(null, true); _bcPermStamp = 'admin';
+    try { await roleService.ensureBuiltInRoles(); } catch (e) { console.warn('[BizCore] Built-in roles not created:', e.code || '', e.message); }
+    // every user record carries its role's lists (what the rules read) — repair any that differ, in the background
+    setTimeout(() => roleService.syncUserPerms().then(f => { if (f.length) console.info('[BizCore] permissions refreshed for', f.length, 'user(s)'); }).catch(e => console.warn('[BizCore] permission sync:', e.message)), 2500);
+    return { ok: true };
+  }
+  if (gate.unchecked) { _bcSetPerm(null, true); return { ok: true }; }   // offline at start: the database still checks every change
+  const roleId = UserCore.roleOfUser(_myUser);
+  let snap;
+  try { snap = await getDoc(doc(db, RoleCore.ROLE_COLLECTION, roleId)); }
+  catch (e) { console.warn('[BizCore] Role not read (offline?):', e.message); const b = RoleCore.builtInRole(roleId); _bcSetPerm(b, false); return { ok: true }; }
+  if (!snap.exists()) return { ok: false, reason: 'norole' };
+  _bcSetPerm(snap.data(), false); _bcPermStamp = _bcPermKey(snap.data(), false);
+  // A change made by an administrator while this user works: ask to reload (the loaded data follows the old role).
+  if (!_bcRoleUnsub) _bcRoleUnsub = onSnapshot(doc(db, RoleCore.ROLE_COLLECTION, roleId), r => {
+    if (r.metadata && r.metadata.fromCache) return;
+    const key = r.exists() ? _bcPermKey(r.data(), false) : 'none';
+    if (key !== _bcPermStamp) { _bcPermStamp = key; _bcAskReload('An administrator changed what your role may do.'); }
+  }, err => console.warn('[BizCore] Role listener:', err.message));
+  return { ok: true };
+}
+function _bcAskReload(why) {
+  if (document.getElementById('bc-perm-reload')) return;
+  const bar = document.createElement('div');
+  bar.id = 'bc-perm-reload'; bar.className = 'bc-perm-reload'; bar.setAttribute('role', 'alert');
+  bar.innerHTML = `<span>🔄 ${why} Reload BizCore to use the new access.</span><button type="button" class="btn btn-primary btn-sm" onclick="location.reload()">Reload</button>`;
+  document.body.appendChild(bar);
+}
+window._bcAskReload = _bcAskReload;
+/** "Own records only": who a new RFQ / quotation / Sales Order belongs to (ownerUid). */
+function _bcWinFind(col, ref) {
+  const st = _win[col]; if (!st || ref == null || ref === '') return null;
+  const m = _winMerged(st), id = String(ref);
+  if (m.has(id)) return m.get(id);
+  const no = st.spec && st.spec.no; if (no) for (const d of m.values()) if (String(d[no] || '') === id) return d;
+  return null;
+}
+function _bcStampOwner(col, r) {
+  const me = auth.currentUser ? auth.currentUser.uid : '';
+  if (!r || !me) return;
+  if (col === 'rfqs') {   // the assigned salesperson's login, when the employee is linked to a user
+    const u = r.assignedEmployeeId ? _users.find(x => x && x.employeeId === r.assignedEmployeeId && x.active !== false) : null;
+    if (u) { r.ownerUid = u.uid; return; }
+    if (!r.ownerUid) r.ownerUid = me;
+    return;
+  }
+  if (r.ownerUid) return;
+  const from = col === 'quotations' ? (_bcWinFind('rfqs', r.rfqId) || _bcWinFind('quotations', r.revisionOf))
+    : col === 'salesOrders' ? _bcWinFind('quotations', r.quotationId) : null;
+  r.ownerUid = (from && from.ownerUid) || me;
+}
+
 const _BC_REF_STAMP = {
-  quotations: r => _bcStampLines(r, r.items || []),
-  salesOrders: r => _bcStampLines(r, r.items || []),
+  quotations: r => { _bcStampLines(r, r.items || []); _bcStampOwner('quotations', r); },   // V270.4.2: + owner
+  salesOrders: r => { _bcStampLines(r, r.items || []); _bcStampOwner('salesOrders', r); },
   rfqs: r => {
+    _bcStampOwner('rfqs', r);
     _bcStampLines(r, [...(r.items || []), ...(r.pricingItems || []), ...(r.pricingProductRefs || [])]);
     const sup = [r.supplierId, ...(r.pricingItems || []).map(x => x && x.supplierId), ...(r.vendorQuotes || []).map(x => x && x.supplierId)];
     (r.pricingIndex || []).forEach(e => { sup.push(e && e.supplierId); (e && e.supplierRefs || []).forEach(x => sup.push(x && x.supplierId)); });
@@ -2806,6 +2891,7 @@ async function fbSave(col, arr, opts = {}) {
 
 async function fbLoad(col) {
   try {
+    if (!_bcReadable(col)) return [];   // V270.4.2: the role can't see this collection
     if (BC_WIN_SPECS[col]) return await _winLoad(col);   // V269.1: open + recent only
     await _migrateCollectionIfNeeded(col);
     const snap = await getDocs(collection(db, col));
@@ -3060,6 +3146,7 @@ function _winNotify(st, quiet = true) {
 }
 function _winQueryFor(st, kind, cfg) {
   const c = collection(db, st.col);
+  if (kind === 'own') return query(c, where('ownerUid', '==', _bcOwnUid(st.col)));   // V270.4.2: own records only (all of them)
   if (kind === 'recent') return query(c, where(st.spec.date, '>=', cfg.cutoff));
   const [f, op, v] = st.spec.open[Number(kind.slice(4))];
   return query(c, where(f, op, v));
@@ -3070,8 +3157,12 @@ async function _winStart(col) {
   st.started = true;
   st.ready = (async () => {
     const cfg = await _winConfig();
+    // V270.4.2: a collection the role can't see is not read at all; "Own records only" reads just the user's own records
+    if (!_bcReadable(col)) { st.denied = true; st.live = true; st.olderFrom = ''; return st; }
     await _migrateCollectionIfNeeded(col);
-    const kinds = ['recent', ...st.spec.open.map((_, i) => 'open' + i)];
+    const own = _bcOwnUid(col);
+    if (own) st.olderFrom = '';
+    const kinds = own ? ['own'] : ['recent', ...st.spec.open.map((_, i) => 'open' + i)];
     await Promise.all(kinds.map(kind => new Promise(resolve => {
       let first = true;
       const unsub = onSnapshot(_winQueryFor(st, kind, cfg), snap => {
@@ -3149,6 +3240,7 @@ async function _winResolveLinks() {
         if (!st.started) continue;
         for (const d of _winMerged(st).values()) for (const n of _winLinksOf(st.col, d, cfg.cutoff)) {
           const t = _win[n.col]; if (!t || !t.started) continue;
+          if (t.denied || _bcOwnUid(n.col)) continue;   // V270.4.2: not readable / own records are all loaded already
           if (n.field) { const k = n.col + ':' + n.field + ':' + n.value; if (t.children.has(k)) continue; t.children.add(k); needs.push(n); continue; }
           if (_winHas(t, n.ref)) continue;
           if (t.spec.no) { let found = false; for (const x of _winMerged(t).values()) if (String(x[t.spec.no] || '') === n.ref) { found = true; break; } if (found) continue; }
@@ -3194,6 +3286,7 @@ window.BCWin = {
     await Promise.all([].concat(cols).map(async col => {
       if (!BC_WIN_SPECS[col]) return;
       const st = await _winStart(col);
+      if (st.denied || _bcOwnUid(col)) return;   // V270.4.2
       if (window.BCWin.hasOlder(col, from)) return;
       if (from && from >= cfg.cutoff) return;
       const cons = [where(st.spec.date, '<', cfg.cutoff)]; if (from) cons.unshift(where(st.spec.date, '>=', from));
@@ -3209,6 +3302,7 @@ window.BCWin = {
   async findNumber(col, text) {
     const spec = BC_WIN_SPECS[col]; const t = String(text || '').trim(); if (!spec || !spec.no || t.length < 3) return 0;
     const st = await _winStart(col);
+    if (st.denied || _bcOwnUid(col)) return 0;   // V270.4.2: own records are all loaded already
     const docs = []; for (const v of new Set([t, t.toUpperCase()])) { const s = await getDocs(query(collection(db, col), where(spec.no, '>=', v), where(spec.no, '<=', v + ''))); s.forEach(x => docs.push(x.data())); }
     const n = _winAddExtra(col, docs); if (n) _winNotify(st);
     await window.BCWin.idle();
@@ -3218,7 +3312,9 @@ window.BCWin = {
   async loadWhere(col, field, value) {
     if (!BC_WIN_SPECS[col]) return 0;
     const st = await _winStart(col);
-    const s = await getDocs(query(collection(db, col), where(field, '==', value))); const docs = []; s.forEach(x => docs.push(x.data()));
+    if (st.denied) return 0;   // V270.4.2
+    const own = _bcOwnUid(col);
+    const s = await getDocs(query(collection(db, col), where(field, '==', value), ...(own ? [where('ownerUid', '==', own)] : []))); const docs = []; s.forEach(x => docs.push(x.data()));
     const n = _winAddExtra(col, docs); if (n) _winNotify(st);
     await window.BCWin.idle();
     return n;
@@ -3227,6 +3323,7 @@ window.BCWin = {
   async loadContains(col, field, value) {
     if (!BC_WIN_SPECS[col]) return 0;
     const st = await _winStart(col);
+    if (st.denied || _bcOwnUid(col)) return 0;   // V270.4.2
     const s = await getDocs(query(collection(db, col), where(field, 'array-contains', value))); const docs = []; s.forEach(x => docs.push(x.data()));
     const n = _winAddExtra(col, docs); if (n) _winNotify(st);
     await window.BCWin.idle();
@@ -3236,6 +3333,15 @@ window.BCWin = {
    *  records, continuing after `cursor` (the last snapshot of the previous page). Needs the composite indexes in
    *  firestore.indexes.json. Reads = the records returned (at most `size`). → { rows, cursor, done } */
   async page(col, filters, orderField, size, cursor) {
+    // V270.4.2: not readable → nothing; own records only → from the (complete) loaded own records
+    if (!_bcReadable(col)) return { rows: [], cursor, done: true };
+    if (_bcOwnUid(col)) {
+      const st = await _winStart(col);
+      const ok = d => filters.every(([f, op, v]) => { const x = d[f]; return op === '==' ? x === v : op === 'in' ? (v || []).includes(x) : op === '>=' ? x >= v : op === '<=' ? x <= v : op === '>' ? x > v : op === '<' ? x < v : op === 'array-contains' ? Array.isArray(x) && x.includes(v) : true; });
+      const all = [..._winMerged(st).values()].filter(d => !d._deletedAt && ok(d)).sort((a, b) => String(b[orderField] || '').localeCompare(String(a[orderField] || '')));
+      const start = Number(cursor) || 0;
+      return { rows: all.slice(start, start + size), cursor: start + size, done: start + size >= all.length };
+    }
     const cons = filters.map(([f, op, v]) => where(f, op, v));
     cons.push(orderBy(orderField, 'desc'));
     if (cursor) cons.push(startAfter(cursor));
@@ -3252,6 +3358,8 @@ window.BCWin = {
   },
   /** Is there ANY record (loaded or not) with field <op> value? One small read. Used before deleting masters. */
   async anyWhere(col, field, op, value) {
+    // V270.4.2: a role that can't see every record of the collection can't answer "is it used anywhere?"
+    if (!_bcReadable(col) || _bcOwnUid(col)) { const e = new Error('Your role can\'t see all ' + col + ' to check this.'); e.code = 'bc-no-permission'; throw e; }
     const s = await getDocs(query(collection(db, col), where(field, op, value), limit(1)));
     return !s.empty;
   },
@@ -3272,6 +3380,7 @@ async function _winLoad(col) {
 }
 
 function fbListen(col, onUpdate) {
+  if (!_bcReadable(col)) { setTimeout(() => { try { onUpdate([]); } catch (e) { console.error(e); } }, 0); return () => {}; }   // V270.4.2
   if (BC_WIN_SPECS[col]) return _winListen(col, onUpdate);   // V269.1: open + recent only
   const colRef = collection(db, col);
   return onSnapshot(colRef, snap => {
@@ -3772,7 +3881,9 @@ window.BizCoreCash = {
    The security rules refuse everything else; the screen below only explains it.
 ═══════════════════════════════════════════════════ */
 const userService = createUserService({ db, doc, getDoc, getDocs, setDoc, updateDoc, collection, runTransaction, serverTimestamp }, { actor: _lockActor });
+const roleService = createRoleService({ db, doc, getDoc, getDocs, collection, query, where, runTransaction, serverTimestamp }, { actor: _lockActor });   // V270.4.2
 let _users = [], _usersUnsub = null, _myUser = null, _myUserUnsub = null, _usersLoaded = false;
+let _roles = [], _rolesUnsub = null, _rolesLoaded = false, _usersCashWired = false;   // V270.4.2
 const _userListeners = new Set();
 const _usersFire = () => _userListeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } });
 function _recomputeAdministrator() {
@@ -3797,13 +3908,27 @@ window.BizCoreUsers = {
   get isAdministrator() { return _isAdministrator; },
   get isOwner() { const u = auth.currentUser; return !!(u && _adminUids.includes(u.uid)); },
   onChange(fn) { _userListeners.add(fn); return () => _userListeners.delete(fn); },
-  /** Administration → Users: the list (small collection) + the login directory and custodians. */
-  start() {
+  /** The users list (small collection): names, linked employees (owner of new RFQs), roles. Every staff login. */
+  startList() {
     if (!_usersUnsub) _usersUnsub = onSnapshot(collection(db, UserCore.USER_COLLECTION), snap => {
       const out = []; snap.forEach(d => out.push(d.data())); _users = out; _usersLoaded = true; _usersFire();
     }, err => console.warn('[BizCore] Users unavailable:', err.message));
-    if (window.BizCoreCash) { window.BizCoreCash.startDirectory(); window.BizCoreCash.onChange(_usersFire); }
   },
+  /** Administration → Users: the list + the login directory and custodians + the roles. */
+  start() {
+    window.BizCoreUsers.startList();
+    if (!_rolesUnsub) _rolesUnsub = onSnapshot(collection(db, RoleCore.ROLE_COLLECTION), snap => {
+      const out = []; snap.forEach(d => out.push(d.data())); _roles = out; _rolesLoaded = true; _usersFire();
+    }, err => console.warn('[BizCore] Roles unavailable:', err.message));
+    if (window.BizCoreCash && !_usersCashWired) { _usersCashWired = true; window.BizCoreCash.startDirectory(); window.BizCoreCash.onChange(_usersFire); }
+  },
+  /** V270.4.2: roles (Administration → Roles & Permissions). */
+  roleCore: RoleCore,
+  get roles() { return _roles; },
+  get rolesLoaded() { return _rolesLoaded; },
+  ensureBuiltInRoles() { return roleService.ensureBuiltInRoles(); },
+  saveRole(input, opts) { return roleService.saveRole(input, opts); },
+  loadRoleChanges(id) { return roleService.loadChanges(id); },
   /** Administrators: create the Firebase login (second app instance, so this browser stays signed in) and the record. */
   async createUser(input) {
     const v = UserCore.validateUserInput(input, { creating: true });
@@ -3866,9 +3991,9 @@ function _bcShowNoAccess(user, reason) {
   const box = document.createElement('div');
   box.id = 'bc-no-access'; box.className = 'bc-noacc';
   box.innerHTML = `<div class="bc-noacc-box" role="alertdialog" aria-labelledby="bc-noacc-t"><div class="bc-noacc-ic">🔒</div>
-    <h2 id="bc-noacc-t">${reason === 'inactive' ? 'Your access has been switched off' : 'No access to BizCore yet'}</h2>
-    <p>You're signed in as <b>${esc(user.email || user.uid)}</b>, ${reason === 'inactive' ? 'but an administrator has deactivated this login.' : "but an administrator hasn't given this login access."}</p>
-    <p>Ask your administrator ${reason === 'inactive' ? 'to reactivate you' : 'to add you'} in Administration → Users.</p>
+    <h2 id="bc-noacc-t">${reason === 'inactive' ? 'Your access has been switched off' : reason === 'norole' ? 'Your role is not set up yet' : 'No access to BizCore yet'}</h2>
+    <p>You're signed in as <b>${esc(user.email || user.uid)}</b>, ${reason === 'inactive' ? 'but an administrator has deactivated this login.' : reason === 'norole' ? "but your role's permissions don't exist yet." : "but an administrator hasn't given this login access."}</p>
+    <p>${reason === 'norole' ? 'Ask your administrator to open BizCore once (this creates the roles), or to check your role in Administration → Users.' : `Ask your administrator ${reason === 'inactive' ? 'to reactivate you' : 'to add you'} in Administration → Users.`}</p>
     <div class="bc-noacc-actions"><button class="btn btn-secondary" type="button" id="bc-noacc-out"><i class="ti ti-logout"></i>Sign Out</button></div></div>`;
   document.body.appendChild(box);
   box.querySelector('#bc-noacc-out').onclick = () => signOut(auth).then(() => { location.href = 'login.html'; });
@@ -3882,9 +4007,11 @@ function _bcWatchMyUser(user) {
     const rec = snap.exists() ? snap.data() : null;
     const owner = _adminUids.includes(user.uid);
     if (snap.metadata && snap.metadata.fromCache && !rec) return;
+    const prevRole = _myUser ? UserCore.roleOfUser(_myUser) : null;
     _myUser = rec;
     _recomputeAdministrator();
-    if (!owner && (!rec || rec.active === false)) _bcShowNoAccess(user, rec ? 'inactive' : 'none');
+    if (!owner && (!rec || rec.active === false)) { _bcShowNoAccess(user, rec ? 'inactive' : 'none'); return; }
+    if (rec && prevRole !== null && UserCore.roleOfUser(rec) !== prevRole) _bcAskReload('An administrator changed your role.');   // V270.4.2
   }, err => console.warn('[BizCore] Own user record unavailable:', err.message));
 }
 /** Change password (forced after a temporary password, or from the user menu). */
@@ -4120,6 +4247,10 @@ onAuthStateChanged(auth, async user => {
   const gate = await _bcResolveAccess(user);
   if (gate.custodian) { location.replace('mycash.html'); return; }
   if (!gate.ok) { _bcShowNoAccess(user, gate.reason); return; }
+  // V270.4.2: the role's permissions before any data is read; the users list (owner of new RFQs)
+  const perm = await _bcLoadPermissions(user, gate);
+  if (!perm.ok) { _bcShowNoAccess(user, perm.reason); return; }
+  window.BizCoreUsers.startList();
   _bcWatchMyUser(user);
   if (_myUser && _myUser.mustChangePassword) setTimeout(() => bcOpenPasswordDialog(true), 600);
   startDeliveryNoteModeListener();
@@ -4205,11 +4336,11 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.41';
+      s.src = 'js/app.js?v=270.42';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
-        const sv = document.createElement('script'); sv.id = 'bizcore-so-view-script'; sv.src = 'js/so-view.js?v=270.1'; document.body.appendChild(sv);
+        const sv = document.createElement('script'); sv.id = 'bizcore-so-view-script'; sv.src = 'js/so-view.js?v=270.42'; document.body.appendChild(sv);
         // V270.1: the Pricing screen (tabs, line menu, price references, phone cards)
         const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.24'; document.body.appendChild(pu);
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
@@ -4219,7 +4350,9 @@ onAuthStateChanged(auth, async user => {
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.6'; document.body.appendChild(ds);
         // V270.4.1: Administration → Users, Roles & Permissions
-        const us = document.createElement('script'); us.id = 'bizcore-users-script'; us.src = 'js/users.js?v=270.41'; document.body.appendChild(us); };
+        const us = document.createElement('script'); us.id = 'bizcore-users-script'; us.src = 'js/users.js?v=270.42'; document.body.appendChild(us);
+        // V270.4.2: what the screens show for the role (sidebar, guarded actions)
+        const pm = document.createElement('script'); pm.id = 'bizcore-permissions-script'; pm.src = 'js/permissions-ui.js?v=270.42'; document.body.appendChild(pm); };
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js

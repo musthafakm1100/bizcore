@@ -11,7 +11,7 @@
  * Concurrency: transactions are serialisable; together with the order lock no two users can bill
  * the same order at the same moment, and the ledger checks hold even if they could.
  */
-import { accessWithRole } from './user-core.mjs?v=270.41';
+import { accessWithRole } from './user-core.mjs?v=270.42';
 import { formatSequence, nextSequence } from './numbering.mjs?v=270.25';
 import {
   INVOICE_COLLECTIONS, INVOICE_SCHEMA_VERSION, INVOICE_TYPES, ERR, BILLING_SETTINGS_PATH, PERMISSION_LEVELS,

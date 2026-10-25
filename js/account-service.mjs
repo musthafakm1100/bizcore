@@ -7,7 +7,7 @@
  * Two administrators saving the same name at the same moment can't both succeed (the key document is
  * read inside the transaction). Accounts are never deleted — only made inactive.
  */
-import { accessWithRole } from './user-core.mjs?v=270.41';
+import { accessWithRole } from './user-core.mjs?v=270.42';
 import {
   ACCOUNT_COLLECTIONS, ACCOUNT_SCHEMA_VERSION, validateAccount, keyDocId,
 } from './account-core.mjs?v=268.2';

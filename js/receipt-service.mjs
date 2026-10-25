@@ -8,7 +8,7 @@
  * Idempotency: document IDs derive from the client operation ID — a retried save is detected.
  * Concurrency: transactions are serialisable, so two users can never apply the same balance twice.
  */
-import { accessWithRole } from './user-core.mjs?v=270.41';
+import { accessWithRole } from './user-core.mjs?v=270.42';
 import { formatSequence, nextSequence } from './numbering.mjs?v=270.25';
 import {
   RECEIPT_COLLECTIONS, RECEIPT_SCHEMA_VERSION, RECEIPT_SETTINGS_PATH, RECEIPT_STATUS, ERR,

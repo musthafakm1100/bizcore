@@ -15300,7 +15300,7 @@ async function bcOlderDependencies(type, records){
         if (await any('purchaseInvoices', 'supplierId', '==', rec.id)) deps.push('purchase invoices');   // V269.4
         if (await any('supplierPayments', 'supplierId', '==', rec.id)) deps.push('supplier payments');
       }
-    } catch (e) { deps.push('records that could not be checked (' + (navigator.onLine === false ? 'offline' : 'no connection') + ') — try again'); }
+    } catch (e) { deps.push(e && e.code === 'bc-no-permission' ? 'records your role can\'t see (ask an administrator to delete it)' : 'records that could not be checked (' + (navigator.onLine === false ? 'offline' : 'no connection') + ') — try again'); }
     if (deps.length) out.push({ record: rec, dependencies: deps });
   }
   return out;

@@ -10,9 +10,10 @@
  * The security rules (firestore.rules → "V270.4.1 Users") enforce the same limits.
  */
 import {
-  USER_COLLECTION as COL, USER_EVENTS, CUSTODIAN_ROLE, validateUserInput, buildUserRecord, describeUserChange, roleOfUser,
-} from './user-core.mjs?v=270.41';
+  USER_COLLECTION as COL, USER_EVENTS, CUSTODIAN_ROLE, ROLES, validateUserInput, buildUserRecord, describeUserChange, roleOfUser,
+} from './user-core.mjs?v=270.42';
 import { DeliveryError, ERR, isSafeId } from './delivery-core.mjs?v=266.0';
+import { builtInRole, userPermFrom } from './role-core.mjs?v=270.42';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
 const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, details); };
@@ -52,7 +53,9 @@ export function createUserService(fs, options = {}) {
   async function saveUser(uid, input, opts = {}) {
     const actor = actorOf();
     ensure(isSafeId(uid), ERR.INVALID_INPUT, 'Invalid login');
-    const v = validateUserInput(input, { creating: !!opts.creating });
+    // V270.4.2: a custom role (roles/{id}) is accepted when its record exists (checked in the transaction)
+    const custom = /^r-[a-zA-Z0-9_-]{1,38}$/.test(String(input.role || ''));
+    const v = validateUserInput(input, { creating: !!opts.creating, roleIds: [...ROLES.map(r => r.id), ...(custom ? [String(input.role)] : [])] });
     if (!v.ok) fail(ERR.INVALID_INPUT, v.errors.map(e => e.message).join(' '), { errors: v.errors });
     ensure(v.value.role !== CUSTODIAN_ROLE.id, USER_ERR.CUSTODIAN, 'Cash custodian logins are created with the custodian form.');
     return runTransaction(db, async tx => {
@@ -61,11 +64,15 @@ export function createUserService(fs, options = {}) {
       ensure(!who.owners.includes(uid) || uid === actor.uid, USER_ERR.OWNER, "Only the owner can change the owner's record.");
       const cust = await tx.get(refs.custodian(uid));
       ensure(!cust.exists(), USER_ERR.CUSTODIAN, 'This login is a cash custodian login (My Cash only).');
+      // V270.4.2: the role's permission lists are copied onto the user record (what the rules read)
+      const rs = await tx.get(doc(db, 'roles', v.value.role));
+      if (custom) ensure(rs.exists(), ERR.INVALID_INPUT, 'That role no longer exists.');
+      const perm = userPermFrom(rs.exists() ? rs.data() : builtInRole(v.value.role));
       const s = await tx.get(refs.user(uid));
       const prev = s.exists() ? s.data() : null;
       if (opts.expectedRevision != null && prev) ensure(Number(prev.revision) === Number(opts.expectedRevision), USER_ERR.CONFLICT, 'Someone else changed this user meanwhile. Close and open it again.');
       if (uid === actor.uid && !who.isOwner) ensure(v.value.active && v.value.role === 'administrator', USER_ERR.SELF, "You can't switch off or change your own administrator access.");
-      const rec = buildUserRecord(prev, v.value, { uid, actor, stamp: stamp() });
+      const rec = buildUserRecord(prev, v.value, { uid, actor, stamp: stamp(), perm });
       tx.set(refs.user(uid), rec);
       const note = describeUserChange(prev, rec) + (opts.note ? ` · ${opts.note}` : '');
       addEvent(tx, uid, actor, prev ? (prev.active !== rec.active ? (rec.active ? 'reactivated' : 'deactivated') : 'edited') : 'created', note || 'No change');
@@ -108,7 +115,7 @@ export function createUserService(fs, options = {}) {
       const s = await tx.get(refs.user(actor.uid));
       if (s.exists()) return s.data();
       const rec = buildUserRecord(null, { name: actor.name, email: String(actor.email || '').toLowerCase(), role: 'administrator', active: true, mustChangePassword: false, employeeId: '', employeeName: '' },
-        { uid: actor.uid, actor, stamp: stamp() });
+        { uid: actor.uid, actor, stamp: stamp(), perm: userPermFrom(builtInRole('administrator')) });
       tx.set(refs.user(actor.uid), rec);
       addEvent(tx, actor.uid, actor, 'created', 'Owner record created automatically at sign-in');
       return rec;
