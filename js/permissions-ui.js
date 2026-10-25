@@ -52,7 +52,20 @@
     openEmployeeForm: args => ['employees', args[0] ? 'e' : 'c'], editEmployeeFromView: ['employees', 'e'], deleteEmployee: ['employees', 'x'],
     openImportModal: args => { const m = MASTER_OF(args[0]); return m ? [m, 'c'] : null; },
     deleteSelectedMasterRecords: args => { const m = MASTER_OF(args[0]); return m ? [m, 'x'] : null; },
+    // V270.4.3 Special Rights: Excel export, print / PDF of customer documents
+    openQuotationExcelExportDialog: ['@', 'exportExcel'], openPricingExcelExportDialog: ['@', 'exportExcel'],
+    exportQuotationRegisterExcel: ['@', 'exportExcel'], exportPricingRegisterExcel: ['@', 'exportExcel'],
+    printQuotation: ['@', 'printDocs'], printWithSelectedTemplate: ['@', 'printDocs'], printCustomerInvoice: ['@', 'printDocs'],
+    printCreditNote: ['@', 'printDocs'], printDeliveryNote: ['@', 'printDocs'], printReceipt: ['@', 'printDocs'],
+    invPrintDocument: ['@', 'printDocs'], cbPrintStatement: ['@', 'printDocs'],
   };
+  const RIGHT_LABEL = id => { const r = P() && P().core.RIGHTS && P().core.RIGHTS.find(x => x.id === id); return r ? r.label : id; };
+  window.bcRight = window.bcRight || (id => !P() || P().admin || (typeof P().right === 'function' && P().right(id)));
+  function denyRight(id) {
+    const msg = `${roleName()} doesn't have the Special Right “${RIGHT_LABEL(id)}”. Ask an administrator if you need it.`;
+    if (typeof showToast === 'function') showToast(msg, 'error', 'Not allowed for your role'); else alert(msg);
+    return false;
+  }
   function wrapAll() {
     let n = 0;
     for (const [name, rule] of Object.entries(GUARDS)) {
@@ -60,7 +73,8 @@
       if (typeof fn !== 'function' || fn.__bcGuarded) continue;
       const g = function (...args) {
         const r = typeof rule === 'function' ? rule(args) : rule;
-        if (r && !window.bcCan(r[0], r[1])) { deny(r[0], r[1]); return undefined; }
+        if (r && r[0] === '@') { if (!window.bcRight(r[1])) { denyRight(r[1]); return undefined; } }
+        else if (r && !window.bcCan(r[0], r[1])) { deny(r[0], r[1]); return undefined; }
         return fn.apply(this, args);
       };
       g.__bcGuarded = true; g.__bcOriginal = fn;
@@ -89,6 +103,8 @@
     ['customers', 'suppliers', 'products', 'employees'].forEach(t => {
       const b = document.getElementById('mtab-' + t); if (b) b.classList.toggle('bc-perm-hidden', !window.bcCan(t, 'v'));
     });
+    // V270.4.3: Excel export buttons follow the Special Right
+    ['quotation-export-excel-btn', 'pricing-export-excel-btn'].forEach(id => { const b = document.getElementById(id); if (b) b.classList.toggle('bc-perm-hidden', !window.bcRight('exportExcel')); });
     applyNewButtons();
   }
   function applyNewButtons(root) {
@@ -141,5 +157,5 @@
   try { mo.observe(document.querySelector('.content') || document.body, { childList: true, subtree: true }); } catch (e) {}
   window.bcApplyPermissions = apply;
   window.bcPermGuards = GUARDS;
-  console.log('Permissions V270.4.2 ✅');
+  console.log('Permissions V270.4.3 ✅');
 })();

@@ -36,6 +36,11 @@ body{font-family:Arial,Helvetica,sans-serif;background:linear-gradient(135deg,#0
 .loading .spinner{display:block}
 .loading .btn-text{display:none}
 @keyframes spin{to{transform:rotate(360deg)}}
+.forgot{text-align:center;margin-top:12px}
+.forgot-link{background:none;border:0;color:#1d63d8;font-weight:600;font-size:13px;font-family:inherit;cursor:pointer;padding:4px 6px}
+.forgot-link:hover{text-decoration:underline}
+.ok-box{background:#ECFDF3;border:1px solid #A6F4C5;border-radius:8px;padding:10px 14px;font-size:13px;color:#067647;margin-top:12px;display:none;align-items:center;gap:8px}
+.ok-box.show{display:flex}
 .error{background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:13px;color:#DC2626;margin-top:12px;display:none;align-items:center;gap:8px}
 .error.show{display:flex}
 .footer{text-align:center;margin-top:22px;font-size:11px;color:#8B98A8}
@@ -104,13 +109,17 @@ body{font-family:Arial,Helvetica,sans-serif;background:linear-gradient(135deg,#0
     <span id="err-msg">Invalid email or password.</span>
   </div>
 
+  <!-- V270.4.3: forgot password → Firebase sends a reset link to the email -->
+  <div class="forgot"><button type="button" class="forgot-link" id="btn-forgot" onclick="doForgot()">Forgot password?</button></div>
+  <div class="ok-box" id="ok-box"><i class="ti ti-mail-check" style="flex-shrink:0"></i><span id="ok-msg"></span></div>
+
   <div class="footer"><b>BizCore</b> &nbsp;·&nbsp; Downtown Trading Est. &nbsp;·&nbsp; Riyadh, KSA</div>
 </div>
 
 <script type="module">
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, connectAuthEmulator }
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, connectAuthEmulator, sendPasswordResetEmail }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, connectFirestoreEmulator }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -175,6 +184,28 @@ async function loadLogo() {
   } catch(e) { /* logo load failed silently */ }
 }
 loadLogo();
+
+// V270.4.3: Forgot password — the same answer whether or not the email has a login (nothing is given away)
+window.doForgot = async function() {
+  var email = document.getElementById('inp-email').value.trim();
+  var err = document.getElementById('err-box'), msg = document.getElementById('err-msg');
+  var ok = document.getElementById('ok-box'), okMsg = document.getElementById('ok-msg');
+  err.classList.remove('show'); ok.classList.remove('show');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    msg.textContent = 'Enter your email above first, then click Forgot password.';
+    err.classList.add('show'); document.getElementById('inp-email').focus(); return;
+  }
+  var b = document.getElementById('btn-forgot'); b.disabled = true;
+  try {
+    await sendPasswordResetEmail(auth, email);
+  } catch (e) {
+    if (e.code === 'auth/too-many-requests') { msg.textContent = 'Too many attempts. Please wait a few minutes and try again.'; err.classList.add('show'); b.disabled = false; return; }
+    if (e.code === 'auth/network-request-failed') { msg.textContent = 'No connection. Check the internet and try again.'; err.classList.add('show'); b.disabled = false; return; }
+    /* user-not-found etc.: same message as success */
+  }
+  okMsg.textContent = 'If ' + email + ' has a BizCore login, a link to choose a new password is on its way. Check the inbox (and the spam folder).';
+  ok.classList.add('show'); b.disabled = false;
+};
 
 // Login
 window.doLogin = async function() {

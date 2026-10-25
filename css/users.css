@@ -138,7 +138,7 @@
 .ur-foot2{display:flex;gap:8px;justify-content:flex-end;align-items:center;padding:12px 16px;border-top:1px solid #edf1f5;background:#fbfcfe;flex-wrap:wrap}
 .ur-foot2 .note{margin-right:auto;font-size:12px;color:#64748b;flex:1;min-width:220px}
 
-/* ── V270.4.2 permissions on screens ── */
+.bc-perm-hidden,:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-perm-hidden.bc-perm-hidden{display:none!important}   /* V270.4.3: stronger than the register toolbars' display rules */
 .bc-perm-hidden{display:none!important}
 .bc-perm-reload{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + var(--sa-bottom,0px));z-index:99980;background:#0f172a;color:#fff;border-radius:12px;padding:10px 12px 10px 16px;display:flex;gap:12px;align-items:center;font-size:13px;box-shadow:0 12px 32px rgba(15,23,42,.3);max-width:calc(100vw - 32px)}
 
@@ -164,3 +164,18 @@
   .ur-user small{word-break:break-all}
   .ur-alert-row span{min-width:0;flex-basis:100%}
 }
+
+/* ── V270.4.3 Special Rights (UR_4) ── */
+.ur-rights{padding:4px 16px 12px}
+.ur-rsec{margin-top:14px}
+.ur-right{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f1f5f9;cursor:pointer}
+.ur-right b{font-weight:600;color:#0f172a;font-size:13px;display:block}
+.ur-right small{color:#64748b;font-size:12px}
+.ur-was{font-size:11px;color:var(--st-purple-fg);background:var(--st-purple-bg);border-radius:6px;padding:1px 6px;margin-left:6px;font-weight:600;white-space:nowrap}
+.ur-sw{margin-left:auto;appearance:none;-webkit-appearance:none;width:36px;height:20px;border-radius:999px;background:#cbd5e1;position:relative;flex:none;cursor:pointer;transition:background .15s}
+.ur-sw::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:left .15s}
+.ur-sw:checked{background:var(--blue)}
+.ur-sw:checked::after{left:18px}
+.ur-sw:disabled{opacity:.55;cursor:not-allowed}
+.ur-sw:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.ur-rnote2{font-size:12px;color:#64748b;padding:12px 0 2px;line-height:1.5}

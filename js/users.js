@@ -333,7 +333,7 @@
 
   /* ═════════ Roles & Permissions (UR_3): role list + permission grid ═════════ */
   const RC = () => U().roleCore;
-  let selRole = 'sales', draft = null, draftOf = null, rTab = 'modules';
+  let selRole = 'sales', draft = null, draftRights = null, draftOf = null, rTab = 'modules';
   /** Built-in roles first (fixed order), then the added ones by name. The stored record wins over the starting set. */
   function roleList() {
     const stored = new Map((U().roles || []).map(r => [r.id, r]));
@@ -344,7 +344,7 @@
   function roleUsers(id) {
     return rows().filter(r => r.status !== 'inactive' && (id === 'cashCustodian' ? r.kind === 'custodian' : r.kind === 'user' && (r.owner && r.role !== 'administrator' ? 'administrator' : r.role) === id));
   }
-  const dirty = () => { if (!draft || !draftOf) return false; const r = roleList().find(x => x.id === draftOf); return !!r && JSON.stringify(RC().normalizePerms(draft)) !== JSON.stringify(RC().normalizePerms(r.perms || {})); };
+  const dirty = () => { if (!draft || !draftOf) return false; const r = roleList().find(x => x.id === draftOf); return !!r && (JSON.stringify(RC().normalizePerms(draft)) !== JSON.stringify(RC().normalizePerms(r.perms || {})) || JSON.stringify(RC().normalizeRights(draftRights)) !== JSON.stringify(RC().normalizeRights(r.rights))); };
   function when(t) { const m = ms(t); if (!m) return ''; const d = new Date(m); return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`; }
 
   function renderRolesScreen() {
@@ -355,7 +355,7 @@
     const list = roleList();
     if (selRole !== 'cashCustodian' && !list.some(r => r.id === selRole)) selRole = 'sales';
     const role = list.find(r => r.id === selRole);
-    if (role && draftOf !== role.id) { draft = JSON.parse(JSON.stringify(RC().normalizePerms(role.perms || {}))); draftOf = role.id; }
+    if (role && draftOf !== role.id) { draft = JSON.parse(JSON.stringify(RC().normalizePerms(role.perms || {}))); draftRights = RC().normalizeRights(role.rights); draftOf = role.id; }
     const cnt = id => roleUsers(id).length;
     const side = `<div class="ur-rlist"><div class="h">Roles<button type="button" class="btn btn-primary btn-sm" data-ur="role-new"><i class="ti ti-plus"></i>New</button></div>
       ${list.map(r => `<button type="button" class="ur-r${r.id === selRole ? ' on' : ''}" data-ur="role-pick" data-role="${esc(r.id)}">${r.locked ? '🔒 ' : ''}${esc(r.label)}<small>${cnt(r.id)} user${cnt(r.id) === 1 ? '' : 's'}</small></button>`).join('')}
@@ -375,8 +375,15 @@
         <button type="button" class="btn btn-secondary btn-sm" data-ur="role-changes"${role.stored ? '' : ' disabled title="No changes yet"'}><i class="ti ti-history"></i>Changes</button></div></div>`;
       const tabs = `<div class="ur-tabs" role="tablist"><button type="button" role="tab" class="ur-tab${rTab === 'modules' ? ' on' : ''}" data-ur="role-tab" data-tab="modules">Modules</button><button type="button" role="tab" class="ur-tab${rTab === 'rights' ? ' on' : ''}" data-ur="role-tab" data-tab="rights">Special Rights</button></div>`;
       let body;
-      if (rTab === 'rights') {
-        body = `<div class="ur-rbody">Special Rights come in the next step (V270.4.3, mockup UR_4): see cost and profit, approve below-margin pricing, bill ahead / advance invoices / credit notes, edit after the time limit, full edit, force-release locks, backdating, Excel export and print. Until then these follow the current Administration settings.</div>`;
+      if (rTab === 'rights') {   // V270.4.3 Special Rights (UR_4)
+        const R = locked ? RC().builtInRole('administrator').rights : RC().normalizeRights(draftRights);
+        let lastG = '';
+        body = `<div class="ur-rights">${RC().RIGHTS.map(r => {
+          const g = r.group !== lastG ? (lastG = r.group, `<div class="ur-sec ur-rsec">${esc(r.group)}</div>`) : '';
+          return g + `<label class="ur-right"><span><b>${esc(r.label)}${r.was ? `<span class="ur-was">Was: ${esc(r.was)}</span>` : ''}</b>${r.hint ? `<small>${esc(r.hint)}</small>` : ''}</span>
+            <input type="checkbox" class="ur-sw" role="switch" data-ur="right" data-right="${r.id}"${R[r.id] ? ' checked' : ''}${locked ? ' disabled' : ''} aria-label="${esc(r.label)}"></label>`;
+        }).join('')}
+          <div class="ur-rnote2">Record / void payment receipts: the Payment Receipts module's <b>Create</b> and <b>Cancel</b> on the Modules tab.</div></div>`;
       } else {
         const P = locked ? RC().normalizePerms(RC().builtInRole('administrator').perms) : draft;
         let lastGroup = '';
@@ -397,10 +404,10 @@
       }
       const isDirty = dirty();
       const foot = locked ? `<div class="ur-foot2"><span class="note">🔒 The Administrator role always has every right, including Administration and the security settings.</span></div>`
-        : `<div class="ur-foot2"><span class="note">Records “Own” = only the RFQs, quotations and orders the user created or is assigned to. Unticking View hides the module.</span>
+        : `<div class="ur-foot2"><span class="note">${rTab === 'rights' ? '“Was” = where this choice lived before. Those settings moved here; Billing Settings keep only On / Off.' : 'Records “Own” = only the RFQs, quotations and orders the user created or is assigned to. Unticking View hides the module.'}</span>
           <button type="button" class="btn btn-secondary" data-ur="role-discard"${isDirty ? '' : ' disabled'}>Discard</button>
           <button type="button" class="btn btn-primary" data-ur="role-save"${isDirty || !role.stored ? '' : ' disabled title="No changes to save"'}><i class="ti ti-device-floppy"></i>Save Role</button></div>`;
-      card = `<div class="ur-rcard">${head}${tabs}${body}${rTab === 'modules' ? foot : ''}</div>`;
+      card = `<div class="ur-rcard">${head}${tabs}${body}${foot}</div>`;
     }
     host.innerHTML = `<div class="ur-roles">${side}${card}</div>`;
   }
@@ -422,13 +429,13 @@
   async function saveRoleDraft() {
     const role = roleList().find(r => r.id === selRole); if (!role || role.locked) return;
     const users = roleUsers(role.id);
-    const change = RC().describePermChange(role.perms || {}, draft) || (role.stored ? '' : 'Starting permissions');
+    const change = RC().describePermChange(role.perms || {}, draft, role.rights, draftRights) || (role.stored ? '' : 'Starting permissions');
     if (!change) { toast('No changes to save', 'info'); return; }
     const ok = await confirmAsync({ icon: '🛡️', title: `Save the ${role.label} role?`, message: users.length ? `${users.length} user${users.length === 1 ? ' gets' : 's get'} the new access at their next action (they are asked to reload).` : 'No user has this role yet.',
       details: change.split(' · ').slice(0, 12).map(x => { const i = x.indexOf(': '); return [x.slice(0, i), x.slice(i + 2)]; }).filter(x => x[0]), confirmText: 'Save Role' });
     if (!ok) return;
     try {
-      await busy('Saving the role…', () => U().saveRole({ id: role.id, label: role.label, perms: draft }, { creating: !role.stored, expectedRevision: role.stored ? role.revision : null }));
+      await busy('Saving the role…', () => U().saveRole({ id: role.id, label: role.label, perms: draft, rights: draftRights }, { creating: !role.stored, expectedRevision: role.stored ? role.revision : null }));
       draftOf = null; toast(`${role.label} saved`); renderRolesScreen();
     } catch (e) { toast(e.message || String(e), 'error'); }
   }
@@ -443,10 +450,10 @@
   async function createRole() {
     const label = val('ur-rname'), from = val('ur-rfrom');
     const src = from ? roleList().find(r => r.id === from) : null;
-    const v = RC().validateRoleInput({ label, perms: src ? src.perms : {} }, { creating: true, existingIds: roleList().map(r => r.id) });
+    const v = RC().validateRoleInput({ label, perms: src ? src.perms : {}, rights: src ? RC().normalizeRights(src.rights) : RC().defaultRights() }, { creating: true, existingIds: roleList().map(r => r.id) });
     if (!v.ok) { err('ur-rnew', v.errors.map(e => e.message).join(' ')); return; }
     try {
-      const rec = await busy('Creating the role…', () => U().saveRole({ id: v.value.id, label: v.value.label, perms: v.value.perms }, { creating: true, existingIds: roleList().map(r => r.id), copyOf: src ? src.label : '' }));
+      const rec = await busy('Creating the role…', () => U().saveRole({ id: v.value.id, label: v.value.label, perms: v.value.perms, rights: v.value.rights }, { creating: true, existingIds: roleList().map(r => r.id), copyOf: src ? src.label : '' }));
       closeModal('ur-rnew'); selRole = rec.id; draftOf = null; rTab = 'modules'; toast(`${rec.label} created — tick its permissions and Save Role`); renderRolesScreen();
     } catch (e) { err('ur-rnew', e.message || String(e)); }
   }
@@ -484,6 +491,7 @@
     else if (act === 'role-pick') pickRole(b.dataset.role);
     else if (act === 'role-tab') { rTab = b.dataset.tab; renderRolesScreen(); }
     else if (act === 'perm') setPerm(b.dataset.mod, b.dataset.act, b.checked);
+    else if (act === 'right') { if (draftRights) { draftRights[b.dataset.right] = !!b.checked; renderRolesScreen(); } }
     else if (act === 'own') { if (draft && draft[b.dataset.mod]) { draft[b.dataset.mod].own = b.dataset.own === '1'; renderRolesScreen(); } }
     else if (act === 'role-discard') { draftOf = null; renderRolesScreen(); }
     else if (act === 'role-save') saveRoleDraft();
@@ -513,5 +521,5 @@
   window.renderUsersScreen = renderUsersScreen;
   window.renderRolesScreen = renderRolesScreen;
   window.openUserForm = openUserForm;
-  console.log('Users V270.4.1 ✅');
+  console.log('Users V270.4.3 ✅');
 })();

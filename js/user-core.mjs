@@ -129,6 +129,17 @@ export async function accessWithRole(tx, doc, db, uid) {
   const list = Array.isArray(base.adminUids) ? base.adminUids.slice() : [];
   const d = u && u.exists() ? u.data() : null;
   if (uid && d && d.active !== false && roleOfUser(d) === 'administrator' && !list.includes(uid)) list.push(uid);
-  const data = { ...base, adminUids: list };
+  // V270.4.3: the actor's own permission lists (the copy on the user record) — Special Rights and module boxes
+  const perm = d && d.active !== false && d.perm ? d.perm : {};
+  const data = { ...base, adminUids: list, actorPerm: { rightMods: perm.rightMods || [], createMods: perm.createMods || [], cancelMods: perm.cancelMods || [] } };
   return { exists: () => !!(a && a.exists()) || list.length > 0, data: () => data };
+}
+/** V270.4.3: may the actor do this? (an accessWithRole snapshot) — administrators: everything.
+ *  right: a Special Right id; or { mod, act: 'c' | 'x' } for a module box. */
+export function actorMay(accessSnap, uid, what) {
+  const d = accessSnap && accessSnap.exists() ? accessSnap.data() : {};
+  if ((d.adminUids || []).includes(uid)) return true;
+  const p = d.actorPerm || {};
+  if (typeof what === 'string') return (p.rightMods || []).includes(what);
+  return ((what.act === 'x' ? p.cancelMods : p.createMods) || []).includes(what.mod);
 }

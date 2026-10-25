@@ -11,7 +11,7 @@
  * Concurrency: transactions are serialisable; together with the order lock no two users can bill
  * the same order at the same moment, and the ledger checks hold even if they could.
  */
-import { accessWithRole } from './user-core.mjs?v=270.42';
+import { accessWithRole, actorMay } from './user-core.mjs?v=270.43';
 import { formatSequence, nextSequence } from './numbering.mjs?v=270.25';
 import {
   INVOICE_COLLECTIONS, INVOICE_SCHEMA_VERSION, INVOICE_TYPES, ERR, BILLING_SETTINGS_PATH, PERMISSION_LEVELS,
@@ -92,7 +92,9 @@ export function createInvoiceService(fs, options = {}) {
     ensure(ledger.salesOrderId === soId, ERR.INCONSISTENT, 'Fulfillment ledger does not belong to this Sales Order');
     const settings = effectiveBillingSettings(ctx.settingsSnap.exists() ? ctx.settingsSnap.data() : null);
     const admins = ctx.accessSnap.exists() && Array.isArray(ctx.accessSnap.data().adminUids) ? ctx.accessSnap.data().adminUids : [];
-    return { so, ledger, settings, isAdmin: admins.includes(actor.uid) };
+    // V270.4.3: Special Rights (administrators: every right)
+    const may = what => actorMay(ctx.accessSnap, actor.uid, what);
+    return { so, ledger, settings, isAdmin: admins.includes(actor.uid), may, editRights: { full: may('fullEdit'), afterLimit: may('editAfterLimit') } };
   }
   function ledgerRecord(ledger, soId, { invoiceId, eventId, at, actor }) {
     const rec = {
@@ -136,11 +138,11 @@ export function createInvoiceService(fs, options = {}) {
         const z = zohoSnap.data() || {};
         ensure(false, ERR.DUPLICATE_ZOHO, `Zoho invoice no. ${zohoNo} is already used on ${z.invNo || 'another invoice'}${z.soNo ? ' (' + z.soNo + ')' : ''}. Check the number in Zoho Books.`);
       }
-      const { so, ledger, settings, isAdmin } = checkContext(ctx, salesOrderId, actor);
+      const { so, ledger, settings, may } = checkContext(ctx, salesOrderId, actor);
       const level = permissionFor(type, settings);
-      ensure(permitted(level, isAdmin), ERR.PERMISSION,
+      ensure(permitted(level, type === INVOICE_TYPES.order ? may('orderInvoices') : type === INVOICE_TYPES.advance ? may('advanceInvoices') : true), ERR.PERMISSION,
         level === PERMISSION_LEVELS.none ? `${type === INVOICE_TYPES.order ? 'Order' : 'Advance'} invoices are switched off in Billing Settings.`
-          : `Only an administrator may issue ${type === INVOICE_TYPES.order ? 'order (bill-ahead)' : 'advance'} invoices (Billing Settings).`);
+          : `Issuing ${type === INVOICE_TYPES.order ? 'order (bill-ahead)' : 'advance'} invoices needs the Special Right (Administration → Roles & Permissions).`);
 
       let lines = [], deductions = [], advance = null, totals;
       if (type === INVOICE_TYPES.advance) {
@@ -202,8 +204,8 @@ export function createInvoiceService(fs, options = {}) {
         ensure(existing.creationOperationId === operationId, ERR.ID_COLLISION, 'Credit note ID already used by another operation');
         return { alreadyApplied: true, creditNote: existing };
       }
-      const { ledger, settings, isAdmin } = checkContext(ctx, salesOrderId, actor);
-      ensure(permitted(settings.allowCreditNotes, isAdmin), ERR.PERMISSION, 'Only an administrator may issue credit notes (Billing Settings).');
+      const { ledger, settings, may } = checkContext(ctx, salesOrderId, actor);
+      ensure(permitted(settings.allowCreditNotes, may('creditNotes')), ERR.PERMISSION, 'Issuing credit notes needs the Special Right (Administration → Roles & Permissions).');
       ensure(invSnap.exists(), ERR.NOT_FOUND, 'Invoice not found');
       const invoice = invSnap.data();
       ensure(invoice.salesOrderId === salesOrderId, ERR.INVALID_INPUT, 'The invoice does not belong to this Sales Order');
@@ -261,9 +263,9 @@ export function createInvoiceService(fs, options = {}) {
       const inv = invSnap.data();
       if (evSnap.exists()) return { alreadyApplied: true, invoice: inv };
       ensure(inv.salesOrderId === salesOrderId, ERR.INVALID_INPUT, 'The invoice does not belong to this Sales Order');
-      const { isAdmin } = checkContext(ctx, salesOrderId, actor);
+      const { editRights } = checkContext(ctx, salesOrderId, actor);
       if (input.expectedRevision != null) ensure(inv.revision === input.expectedRevision, ERR.STALE_REVISION, `${inv.invNo} was changed meanwhile. The latest version has been loaded — please review and try again.`);
-      const rights = invoiceEditRights(inv, effectiveReceiptSettings(esSnap.exists() ? esSnap.data() : null), isAdmin, today);
+      const rights = invoiceEditRights(inv, effectiveReceiptSettings(esSnap.exists() ? esSnap.data() : null), editRights, today);
       ensure(rights.ok, ERR.PERMISSION, rights.why);
       const nv = {
         dueDate: ch.dueDate === undefined ? (inv.dueDate || '') : (ch.dueDate ? requireDate(ch.dueDate) : ''),

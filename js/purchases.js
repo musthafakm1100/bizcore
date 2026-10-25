@@ -23,7 +23,7 @@ const piAddDays = (iso, d) => { const t = new Date(iso + 'T00:00:00'); t.setDate
 const piDate = iso => (typeof fmtDate === 'function' ? fmtDate(iso) : iso);
 const piSettings = () => (piLib() ? piLib().settings : null) || (piCore() ? piCore().effectivePurchaseSettings(null) : {});
 const piIsAdmin = () => !!(piLib() && piLib().isAdministrator);
-const piCanSeeProfit = () => piIsAdmin() || piSettings().profitVisibility === 'everyone';
+const piCanSeeProfit = () => (typeof window.bcRight === 'function' ? window.bcRight('seeCost') : piIsAdmin() || piSettings().profitVisibility === 'everyone');   // V270.4.3
 const piInvoices = () => (piLib() ? piLib().invoices : []);
 const piLedgerOf = soId => {
   const base = (piLib() ? piLib().ledgers.get(soId) : null) || { lines: {} };
@@ -1005,7 +1005,7 @@ async function piDoCancelPay(){
    Limited (staff, within the edit days): numbers, dates and the reasons for a higher cost — the figures stay.
    Full (administrators, Administration → Purchase Settings): the normal invoice screen with every field open —
    only while the invoice has no payments. Same PI number; the reason and before → after are kept in its history. */
-function piEditRight(doc){ const C = piCore(); return C && doc ? C.editRightOf(doc, { settings: piSettings(), isAdmin: piIsAdmin(), nowMs: Date.now() }) : { right: null, why: '' }; }
+function piEditRight(doc){ const C = piCore(); return C && doc ? C.editRightOf(doc, { settings: piSettings(), isAdmin: piIsAdmin(), rights: typeof window.bcRight === 'function' ? { full: window.bcRight('fullEdit'), afterLimit: window.bcRight('editAfterLimit') } : null, nowMs: Date.now() }) : { right: null, why: '' }; }
 const PI_LOCK_MODALS = ['pi-new-modal', 'pi-edit-modal', 'sp-edit-modal'];
 /** Runs open() while this user holds the document lock; the lock stays with the screen that open() shows. */
 async function piWithLock(docType, id, label, activity, open){
@@ -1128,9 +1128,9 @@ function renderPurchaseSettings(){
     <div class="form-group"><label for="ps-disc">Supplier discount</label><select id="ps-disc"${dis}><option value="invoice"${s.discountMode === 'invoice' ? ' selected' : ''}>On the whole invoice</option><option value="line"${s.discountMode === 'line' ? ' selected' : ''}>Per line</option><option value="both"${s.discountMode === 'both' ? ' selected' : ''}>Both</option></select></div>
     <div class="form-group"><label for="ps-round">Rounding limit (SAR, ±)</label><input id="ps-round" inputmode="decimal" value="${s.roundingLimit}"${dis}><small>Largest accepted difference between BizCore's total and the supplier's invoice total.</small></div>
     <div class="form-group"><label for="ps-vat">VAT rate (%)</label><input id="ps-vat" inputmode="decimal" value="${s.vatRate}"${dis}></div>
-    <div class="form-group"><label for="ps-profit">Profit on orders is shown to</label><select id="ps-profit"${dis}><option value="admins"${s.profitVisibility === 'admins' ? ' selected' : ''}>Administrators only</option><option value="everyone"${s.profitVisibility === 'everyone' ? ' selected' : ''}>Everyone</option></select></div>
-    <div class="form-group"><label for="ps-edit">Edit purchase invoices &amp; supplier payments</label><select id="ps-edit"${dis}>${[['off', 'Off — cancel and enter again'], ['limited', 'Limited for everyone'], ['limited-admin', 'Limited for staff, full for administrators'], ['full', 'Full for everyone']].map(([v, t]) => `<option value="${v}"${s.editMode === v ? ' selected' : ''}>${t}</option>`).join('')}</select><small>Limited: numbers, dates, references and reasons. Full: lines, amounts and accounts.</small></div>
-    <div class="form-group"><label for="ps-edit-days">Edit time limit (days)</label><input id="ps-edit-days" inputmode="numeric" value="${s.editDays}"${dis}><small>After that only administrators edit; others cancel and enter again.</small></div>
+    <div class="form-group"><label>Profit on orders is shown to</label><div style="font-size:12.5px;color:var(--gray);padding:8px 0">Roles with the Special Right <b>See cost, margin and profit</b> (Administration → Roles &amp; Permissions).</div><input type="hidden" id="ps-profit" value="${piEsc(s.profitVisibility)}"></div>
+    <div class="form-group"><label for="ps-edit">Edit purchase invoices &amp; supplier payments</label><select id="ps-edit"${dis}>${[['off', 'Off — cancel and enter again'], ['limited', 'Limited for everyone'], ['limited-admin', 'Limited for all, full with the Full edit right'], ['full', 'Full for everyone']].map(([v, t]) => `<option value="${v}"${s.editMode === v ? ' selected' : ''}>${t}</option>`).join('')}</select><small>Limited: numbers, dates, references and reasons. Full: lines, amounts and accounts.</small></div>
+    <div class="form-group"><label for="ps-edit-days">Edit time limit (days)</label><input id="ps-edit-days" inputmode="numeric" value="${s.editDays}"${dis}><small>After that only roles with the Special Right “Edit after the edit time limit” edit; others cancel and enter again.</small></div>
     <div class="form-group"><label for="ps-newprod">+ New Product on a purchase invoice</label><select id="ps-newprod"${dis}>${[['everyone', 'Everyone'], ['admins', 'Administrators only']].map(([v, t]) => `<option value="${v}"${s.newProductRight === v ? ' selected' : ''}>${t}</option>`).join('')}</select><small>An item for stock must be a product. This decides who may add a missing one from the invoice.</small></div>
     <div class="form-group"><label for="ps-est-flag">Sales Order profit: flag cost above estimate by (%)</label><input id="ps-est-flag" inputmode="decimal" value="${s.estimateFlagPct}"${dis}><small>Sales Order → Profit → Estimate vs Actual marks a line whose cost is more than this above its Pricing estimate.</small></div>
     <div class="form-group"><label for="ps-edit-paid">Full edit of an invoice with payments</label><select id="ps-edit-paid" disabled><option>Not allowed — cancel the payments first</option></select></div>

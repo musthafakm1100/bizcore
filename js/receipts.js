@@ -30,7 +30,8 @@ const rctToday = () => { const t = new Date(), p = n => String(n).padStart(2, '0
 const rctDaysUntil = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); if (!m) return null; const t = new Date(); return Math.round((new Date(+m[1], +m[2] - 1, +m[3]) - new Date(t.getFullYear(), t.getMonth(), t.getDate())) / 86400000); };
 const rctSettings = () => (window.BizCoreRct ? window.BizCoreRct.settings : { zohoPaymentNo: 'mandatory', allowRecord: 'all', allowVoid: 'admin', accounts: [] });
 const rctIsAdmin = () => !!(window.BizCoreRct && window.BizCoreRct.isAdministrator);
-const rctCan = what => { const lvl = rctSettings()[what]; return lvl === 'all' || (lvl === 'admin' && rctIsAdmin()); };
+// V270.4.3: record / apply / void = the Payment Receipts module's Create / Cancel (Administration → Roles & Permissions)
+const rctCan = what => (typeof window.bcCan === 'function' ? window.bcCan('receipt', what === 'allowVoid' ? 'x' : 'c') : rctIsAdmin());
 
 /* ───────────── read model ───────────── */
 function rctPaymentOf(invoiceId){ return invoicePaymentsCache.get(invoiceId) || null; }
@@ -263,7 +264,7 @@ function receiptCustomerOptions(){
 }
 async function openNewReceipt(opts = {}){
   if (!receiptsActive()) { showToast('Payment Receipts become available after the invoice migration.', 'warning', 'Not Available'); return; }
-  if (!rctCan('allowRecord')) { showToast('Only an administrator may record receipts (Administration → Billing Settings).', 'warning', 'Not Allowed'); return; }
+  if (!rctCan('allowRecord')) { showToast('Your role may not record payment receipts (Administration → Roles & Permissions).', 'warning', 'Not Allowed'); return; }
   if (!navigator.onLine) { showToast('Receipts are saved directly to the cloud database. Please reconnect and try again.', 'error', 'Offline'); return; }
   const C = rctLib(), m = ensureNewReceiptModal();
   m._opId = 'rct-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
@@ -786,16 +787,15 @@ function renderReceiptSettings(){
     ${isAdmin ? '' : `<div style="background:#FFFBEA;border:1px solid #F0D77B;border-radius:8px;padding:10px 12px;font-size:12.5px;color:#7A5A00;margin-bottom:14px"><i class="ti ti-shield-lock" style="margin-right:6px"></i>Only an administrator can change these settings.</div>`}
     <div class="form-grid">
       <div class="form-group"><label for="rs-zoho">Zoho payment no. on receipts</label>${sel('rs-zoho', s.zohoPaymentNo, [['mandatory', 'Mandatory'], ['optional', 'Optional']])}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">When given, a Zoho payment no. can be used only once, whatever this setting.</div></div>
-      <div class="form-group"><label for="rs-record">Who may record receipts</label>${sel('rs-record', s.allowRecord, who)}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Also applies to applying unapplied money later.</div></div>
-      <div class="form-group"><label for="rs-void">Who may void receipts</label>${sel('rs-void', s.allowVoid, who)}</div>
-      <div class="form-group"><label for="rs-edit-rct">Editing receipts</label>${sel('rs-edit-rct', s.editReceipts, [['none', 'Nobody — corrections by Void only'], ['limited', 'Limited edit for all users'], ['limited-admin-full', 'Limited for all users, full for administrators'], ['full', 'Full edit for all users']])}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Limited: reference, notes, account, method, Zoho no. and the invoices applied. Full: also customer, date, amount and bank charges.</div></div>
+      <div class="form-group"><label>Who may record / void receipts</label><div style="font-size:12.5px;color:var(--gray);padding:8px 0">Moved to <b>Administration → Roles &amp; Permissions</b>: the Payment Receipts module's Create (record, apply) and Cancel (void).</div><input type="hidden" id="rs-record" value="${rctEsc(s.allowRecord)}"><input type="hidden" id="rs-void" value="${rctEsc(s.allowVoid)}"></div>
+      <div class="form-group"><label for="rs-edit-rct">Editing receipts</label>${sel('rs-edit-rct', s.editReceipts, [['none', 'Nobody — corrections by Void only'], ['limited', 'Limited edit for all users'], ['limited-admin-full', 'Limited for all users, full with the Full edit right'], ['full', 'Full edit for all users']])}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Limited: reference, notes, account, method, Zoho no. and the invoices applied. Full: also customer, date, amount and bank charges.</div></div>
       <div class="form-group"><label for="rs-edit-limit">Edit time limit (receipts and invoices)</label><div style="display:flex;gap:8px;align-items:center">${sel('rs-edit-limit', s.editLimit, [['month', 'Current month only'], ['days', 'Within a number of days'], ['none', 'No limit']]).replace('<select', '<select onchange="document.getElementById(\'rs-edit-days-wrap\').hidden=this.value!==\'days\'"')}<span id="rs-edit-days-wrap" ${s.editLimit === 'days' ? '' : 'hidden'}><input id="rs-edit-days" type="number" min="1" max="365" step="1" value="${s.editDays}" ${dis} style="width:80px"/> days</span></div>
-        <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-weight:500;text-transform:none;letter-spacing:0"><input type="checkbox" id="rs-admin-after" ${s.adminsAfterLimit ? 'checked' : ''} ${dis}/> Administrators may still edit after the limit</label>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-weight:500;text-transform:none;letter-spacing:0"><input type="checkbox" id="rs-admin-after" ${s.adminsAfterLimit ? 'checked' : ''} ${dis}/> Roles with the Special Right “Edit after the edit time limit” may still edit after the limit</label>
         <div style="font-size:11.5px;color:var(--gray);margin-top:4px">Counted from the receipt / invoice date. After the limit: Void (receipt) or credit note (invoice).</div></div>
       <div class="form-group"><label for="rs-accounts">Deposit accounts (one per line)</label><textarea id="rs-accounts" ${dis} rows="4" placeholder="e.g. SNB Current ••4410&#10;Al Rajhi ••2201&#10;Cash box">${rctEsc((s.accounts || []).join('\n'))}</textarea><div style="font-size:11.5px;color:var(--gray);margin-top:4px">When the list is filled, "Deposited to" is a mandatory choice on every receipt. Leave empty to keep it optional free text.</div></div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;flex-wrap:wrap">
-      <div style="font-size:12px;color:var(--gray)">${stored && stored.updatedByName ? 'Last changed by ' + rctEsc(stored.updatedByName) + (stored.updatedAt && window.BizCoreLocks ? ' · ' + new Date(window.BizCoreLocks.core.toMillis(stored.updatedAt)).toLocaleString() : '') : 'Using the default values (Zoho payment no. mandatory; all users record; administrators void).'}</div>
+      <div style="font-size:12px;color:var(--gray)">${stored && stored.updatedByName ? 'Last changed by ' + rctEsc(stored.updatedByName) + (stored.updatedAt && window.BizCoreLocks ? ' · ' + new Date(window.BizCoreLocks.core.toMillis(stored.updatedAt)).toLocaleString() : '') : 'Using the default values (Zoho payment no. mandatory; limited editing, full with the Full edit right; edit limit: current month).'}</div>
       ${isAdmin ? '<button class="btn btn-primary" id="rs-save" onclick="saveReceiptSettings()"><i class="ti ti-device-floppy"></i>Save settings</button>' : ''}
     </div>`;
 }
@@ -830,7 +830,7 @@ async function rctWithLock(id, activity, open){
     return res;
   } finally { if (typeof endScreenTransition === 'function') endScreenTransition(); }
 }
-function rctEditRightsOf(r){ return rctLib().receiptEditRights(r, rctSettings(), rctIsAdmin(), rctToday()); }
+function rctEditRightsOf(r){ return rctLib().receiptEditRights(r, rctSettings(), typeof window.bcRight === 'function' ? { full: window.bcRight('fullEdit'), afterLimit: window.bcRight('editAfterLimit') } : rctIsAdmin(), rctToday()); }   // V270.4.3
 function rctEditClick(id){ const r = receiptsCache.find(x => x.id === id); return rctWithLock(id, 'Editing ' + (r ? r.rctNo : 'the receipt'), () => openEditReceipt(id)); }
 function rctApplyClick(id){ return rctWithLock(id, 'Applying unapplied money', () => openApplyReceipt(id)); }
 function rctVoidClick(id){ return rctWithLock(id, 'Voiding the receipt', () => openVoidReceipt(id)); }

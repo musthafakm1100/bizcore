@@ -352,10 +352,20 @@ function pricingCtx(){
   } catch (e) { return null; }
 }
 function approvalsFor(c){ const S = shared(); return ((S && S.approvals) || []).filter(a => a.kind === 'pricing' && a.rfqId === c.r.id && Number(a.version) === c.version).sort((a, b) => String(b.id).localeCompare(String(a.id))); }
+/** V270.4.3: who may decide pricing approvals — the owner(s) and every active user whose role has the Special Right
+ *  "Approve pricing below the minimum margin" (the Administrator role has every right). */
+const canApprove = () => (typeof window.bcRight === 'function' ? window.bcRight('approveMargin') : isAdmin());
 function adminList(){
   const S = shared(); if (!S) return [];
   const dir = S.profiles || [];
-  return S.adminUids.map(uid => { const p = dir.find(x => x.uid === uid); return { uid, name: (p && (p.name || p.email)) || 'Administrator (' + uid.slice(0, 6) + '…)' }; });
+  const users = (window.BizCoreUsers && window.BizCoreUsers.users) || [];
+  const out = S.adminUids.map(uid => { const p = dir.find(x => x.uid === uid) || users.find(x => x.uid === uid); return { uid, name: (p && (p.name || p.email)) || 'Administrator (' + uid.slice(0, 6) + '…)' }; });
+  for (const u of users) {
+    if (!u || u.active === false || out.some(o => o.uid === u.uid)) continue;
+    const role = (u.companyRoles || {}).default, rights = (u.perm && u.perm.rightMods) || [];
+    if (role === 'administrator' || rights.includes('approveMargin')) out.push({ uid: u.uid, name: u.name || u.email || u.uid });
+  }
+  return out;
 }
 const whenIso = ts => { try { return ts && ts.toDate ? ts.toDate().toISOString() : new Date().toISOString(); } catch (e) { return new Date().toISOString(); } };
 
@@ -363,7 +373,7 @@ const whenIso = ts => { try { return ts && ts.toDate ? ts.toDate().toISOString()
 async function bcPricingApproval(){
   const c = pricingCtx(); if (!c) { toast('Open the pricing first.', 'error'); return null; }
   const me = (window.currentUser && window.currentUser.name) || 'Administrator';
-  if (isAdmin()) return { by: me, at: new Date().toISOString(), id: 'admin-self' };
+  if (isAdmin() || (typeof window.bcRight === 'function' && window.bcRight('sellBelowMargin'))) return { by: me, at: new Date().toISOString(), id: isAdmin() ? 'admin-self' : 'right-self' };   // V270.4.3
   const list = approvalsFor(c);
   const ok = list.find(a => a.status === 'Approved' && Number(a.marginPct) <= c.pct + 0.005);
   if (ok) return { by: ok.decidedBy || '', at: whenIso(ok.decidedAt), id: ok.id };
@@ -381,7 +391,7 @@ function openAsk(c, declined, resolve){
     <div class="modal-header"><div><h2 id="dsa-title">Manager Approval Needed</h2><div class="so-create-subtitle">Margin ${c.pct.toFixed(1)}% is below the minimum ${c.minMargin.toFixed(1)}% · ${esc(c.ref)}</div></div><button class="close-btn" type="button" onclick="bcAskClose()" aria-label="Close">✕</button></div>
     <div class="modal-body">
       ${declined ? `<div class="pi-match bad"><i class="ti ti-circle-x"></i><span>Declined by ${esc(declined.decidedBy || 'an administrator')}${declined.decisionNote ? ': “' + esc(declined.decisionNote) + '”' : ''}. You can change the prices or ask again.</span></div>` : ''}
-      <div class="form-group"><label for="dsa-admin">Ask an administrator *</label><select id="dsa-admin">${admins.length ? admins.map(a => `<option value="${esc(a.uid)}">${esc(a.name)}</option>`).join('') : '<option value="">No administrator found</option>'}</select></div>
+      <div class="form-group"><label for="dsa-admin">Ask an approver *</label><select id="dsa-admin">${admins.length ? admins.map(a => `<option value="${esc(a.uid)}">${esc(a.name)}</option>`).join('') : '<option value="">No approver found</option>'}</select></div>
       <div class="form-group"><label for="dsa-note">Note <em>Optional</em></label><input id="dsa-note" maxlength="300" placeholder="e.g. Competitor price, long-term customer"></div>
       <div class="pi-match adv ds-info"><i class="ti ti-info-circle"></i><span>The administrator gets a notification and approves or declines from their own login (PC or phone). The pricing can be saved once approved — recorded with their name and time.</span></div>
       <div class="inv-error" id="dsa-err" hidden></div>
@@ -412,7 +422,7 @@ function onApprovals(list){
   const uid = myUid(), weekAgo = Date.now() - 7 * 864e5;
   (list || []).forEach(a => {
     if (a.kind !== 'pricing') return;
-    if (a.status === 'Pending' && isAdmin() && (!a.approverUid || a.approverUid === uid)) {
+    if (a.status === 'Pending' && canApprove() && (!a.approverUid || a.approverUid === uid)) {
       addBizCoreNotification({ id: 'apr:' + a.id, type: 'approval', approvalId: a.id, title: 'Approval needed: ' + (a.ref || ''), message: (a.requestedBy || '') + ' · margin ' + Number(a.marginPct || 0).toFixed(1) + '% (min. ' + Number(a.minMargin || 0).toFixed(1) + '%)' + (a.customer ? ' · ' + a.customer : ''), severity: 'attention', actor: a.requestedBy || '' });
     }
     if ((a.status === 'Approved' || a.status === 'Declined') && a.requestedByUid === uid) {
@@ -426,7 +436,7 @@ function onApprovals(list){
 function bcOpenApproval(id){
   const S = shared(), a = ((S && S.approvals) || []).find(x => x.id === id);
   if (!a) { toast('This request is no longer available.', 'info'); return; }
-  const canDecide = isAdmin() && a.status === 'Pending';
+  const canDecide = canApprove() && a.status === 'Pending';
   const m = modalEl('ds-dec-modal'); m._id = id;
   const row = (k, v) => `<div class="ds-kv"><span>${k}</span><b>${v}</b></div>`;
   m.innerHTML = `<div class="modal pi-paym" role="dialog" aria-modal="true" aria-labelledby="dsd-title" style="--pi-w:520px">
@@ -437,7 +447,7 @@ function bcOpenApproval(id){
       ${a.note ? row('Note', '“' + esc(a.note) + '”') : ''}
       ${a.status !== 'Pending' ? row(a.status + ' by', esc(a.decidedBy || '') + ' · ' + esc(fmtWhen(a.decidedAt)) + (a.decisionNote ? ' · “' + esc(a.decisionNote) + '”' : '')) : ''}
       ${canDecide ? `<div class="form-group" style="margin-top:12px"><label for="dsd-note">Note <em>Optional</em></label><input id="dsd-note" maxlength="300" placeholder="e.g. OK for this customer only"></div>` : ''}
-      ${a.status === 'Pending' && !isAdmin() ? '<p class="ds-note">Waiting for the administrator.</p>' : ''}
+      ${a.status === 'Pending' && !canApprove() ? '<p class="ds-note">Waiting for the approver.</p>' : ''}
       <div class="inv-error" id="dsd-err" hidden></div>
     </div>
     <div class="modal-footer">${canDecide ? '<button class="btn btn-secondary" type="button" onclick="bcDecClose()">Later</button><span style="flex:1"></span><button class="btn btn-danger" type="button" onclick="bcDecide(\'Declined\')"><i class="ti ti-x"></i>Decline</button><button class="btn btn-primary" type="button" onclick="bcDecide(\'Approved\')"><i class="ti ti-check"></i>Approve</button>' : '<button class="btn btn-secondary" type="button" onclick="bcDecClose()">Close</button>'}</div></div>`;

@@ -3,15 +3,17 @@
  *   ensureBuiltInRoles  administrators: create the built-in role records that don't exist yet (at sign-in)
  *   saveRole            administrators: create / edit a role (+ a change record), in one transaction
  *   loadChanges         the change history of one role
+ *   migrateRights       administrators, once (V270.4.3): roles without Special Rights get the rights that give the same
+ *                       effect as the Administration settings they replace (billing levels, receipts, profit visibility)
  *   syncUserPerms       administrators: every user record carries its role's lists (users/{uid}.perm) — repair any
  *                       record that differs (at sign-in). saveRole updates the role's users in the same commit.
  * The security rules (firestore.rules → "V270.4.2 Roles") enforce the same limits.
  */
 import {
   ROLE_COLLECTION as COL, ROLE_CHANGES, BUILT_IN_ROLES, builtInRole, validateRoleInput, buildRoleRecord, describePermChange,
-  userPermFrom, samePerm,
-} from './role-core.mjs?v=270.42';
-import { accessWithRole } from './user-core.mjs?v=270.42';
+  userPermFrom, samePerm, normalizeRights, normalizePerms, RIGHTS,
+} from './role-core.mjs?v=270.43';
+import { accessWithRole } from './user-core.mjs?v=270.43';
 import { DeliveryError, ERR, isSafeId } from './delivery-core.mjs?v=266.0';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
@@ -43,6 +45,40 @@ export function createRoleService(fs, options = {}) {
     return snap.docs.map(d => d.id);
   }
   const withPerm = (u, perm, actor) => ({ ...u, perm, revision: (Number(u.revision) || 0) + 1, updatedAt: stamp(), updatedByUid: actor.uid, updatedByName: actor.name });
+
+  /**
+   * V270.4.3, once per role: a role saved before Special Rights existed gets them, with the same effect as today's settings.
+   * settings = { billing, receipts, purchasing } as stored (missing → the old defaults).
+   *  • order / advance invoices, credit notes: "all" → roles that may create invoices; "admin" → nobody (administrators have every right)
+   *  • receipts: "who may record / void" → the Payment Receipts module's Create / Cancel (admin → off for the roles)
+   *  • profit visibility "everyone" → See cost, margin and profit for every role
+   */
+  async function migrateRights(settings = {}) {
+    const actor = actorOf();
+    const { getDocs, collection } = fs;
+    if (typeof getDocs !== 'function') return [];
+    const snap = await getDocs(collection(db, COL));
+    const todo = snap.docs.map(d => d.data()).filter(r => r && !r.locked && (r.rights === undefined || r.rights === null));
+    const b = settings.billing || {}, rc = settings.receipts || {}, pu = settings.purchasing || {};
+    const done = [];
+    for (const r of todo) {
+      const perms = normalizePerms(r.perms || {});
+      const canInvoice = perms.invoice.c;
+      const rights = normalizeRights({
+        orderInvoices: (b.allowOrderInvoices || 'admin') === 'all' && canInvoice,
+        advanceInvoices: (b.allowAdvanceInvoices || 'admin') === 'all' && canInvoice,
+        creditNotes: (b.allowCreditNotes || 'admin') === 'all' && canInvoice,
+        seeCost: pu.profitVisibility === 'everyone',
+      });
+      perms.receipt.c = perms.receipt.c && (rc.allowRecord || 'all') === 'all';
+      perms.receipt.x = perms.receipt.x && (rc.allowVoid || 'admin') === 'all';
+      try {
+        await saveRole({ id: r.id, label: r.label, perms, rights }, { expectedRevision: r.revision, note: 'Special Rights added — same effect as the Administration settings before V270.4.3' });
+        done.push(r.id);
+      } catch (e) { console.warn('[BizCore] rights not added to role', r.id, e.code || '', e.message); }
+    }
+    return done;
+  }
 
   /** Every user record carries its role's lists; records that differ are repaired (e.g. made before V270.4.2). */
   async function syncUserPerms() {
@@ -116,10 +152,11 @@ export function createRoleService(fs, options = {}) {
       tx.set(ref(rec.id), rec);
       const perm = userPermFrom(rec);
       for (const u of users) if ((u.companyRoles || {}).default === rec.id && !samePerm(u.perm, perm)) tx.set(doc(db, 'users', u.uid), withPerm(u, perm, actor));
-      const note = prev ? (describePermChange(prev.perms, rec.perms) || (prev.label !== rec.label ? `Renamed: ${prev.label} → ${rec.label}` : 'No change'))
+      const note = prev ? (describePermChange(prev.perms, rec.perms, prev.rights, rec.rights) || (prev.label !== rec.label ? `Renamed: ${prev.label} → ${rec.label}` : 'No change'))
         : `Created${opts.copyOf ? ' as a copy of ' + opts.copyOf : ''}`;
+      const fullNote = opts.note ? `${opts.note}${note && note !== 'No change' ? ' · ' + note : ''}` : note;
       const cid = newId();
-      tx.set(changeRef(rec.id, cid), { id: cid, note: note.slice(0, 2000), byUid: actor.uid, byName: actor.name, at: stamp() });
+      tx.set(changeRef(rec.id, cid), { id: cid, note: fullNote.slice(0, 2000), byUid: actor.uid, byName: actor.name, at: stamp() });
       return rec;
     });
   }
@@ -132,5 +169,5 @@ export function createRoleService(fs, options = {}) {
     return snap.docs.map(d => d.data()).sort((a, b) => ms(b.at) - ms(a.at));
   }
 
-  return { ensureBuiltInRoles, saveRole, loadChanges, syncUserPerms };
+  return { ensureBuiltInRoles, saveRole, loadChanges, syncUserPerms, migrateRights };
 }

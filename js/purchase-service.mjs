@@ -15,7 +15,7 @@
  *   recordSupplierPayment / recordSupplierCashBack / voidSupplierPayment are ONE transaction each:
  *   payment + balanced cash-ledger entry + postings (+ accounts hasEntries) + invoice figures + invoice event.
  */
-import { accessWithRole } from './user-core.mjs?v=270.42';
+import { accessWithRole, actorMay } from './user-core.mjs?v=270.43';
 import { formatSequence, nextSequence } from './numbering.mjs?v=270.25';
 import {
   PURCHASE_COLLECTIONS as C, PURCHASE_SCHEMA_VERSION, PURCHASE_SETTINGS_PATH, PURCHASE_STATUS,
@@ -324,7 +324,8 @@ export function createPurchaseService(fs, options = {}) {
   async function roleOf(tx, uid) {
     const [accessSnap, settingsSnap] = await Promise.all([accessWithRole(tx, doc, db, actorOf().uid), tx.get(refs.settings())]);
     const admins = accessSnap.exists() && Array.isArray(accessSnap.data().adminUids) ? accessSnap.data().adminUids : [];
-    return { isAdmin: admins.includes(uid), settings: effectivePurchaseSettings(settingsSnap.exists() ? settingsSnap.data() : null) };
+    return { isAdmin: admins.includes(uid), settings: effectivePurchaseSettings(settingsSnap.exists() ? settingsSnap.data() : null),
+      rights: { full: actorMay(accessSnap, uid, 'fullEdit'), afterLimit: actorMay(accessSnap, uid, 'editAfterLimit') } };   // V270.4.3
   }
 
   /** Cancel a payment / cash back / advance: it stays (void, with the reason); the ledger entry, the invoice and any advance go back. */
@@ -410,7 +411,7 @@ export function createPurchaseService(fs, options = {}) {
       if (pay.lastEventId === eventId) return { alreadyApplied: true, payment: pay };
       if (input.expectedRevision != null) ensure(pay.revision === input.expectedRevision, PURCHASE_ERR.STALE, `${pay.spNo} was changed meanwhile. Please open it again.`);
       const role = await roleOf(tx, actor.uid);
-      const right = editRightOf(pay, { settings: role.settings, isAdmin: role.isAdmin, nowMs: Date.parse(at) });
+      const right = editRightOf(pay, { settings: role.settings, rights: role.rights, nowMs: Date.parse(at) });
       ensure(right.right, PURCHASE_ERR.NOT_ALLOWED, right.why || 'You can\'t edit this payment.');
       const revision = pay.revision + 1;
       if (mode !== 'full') {
@@ -479,7 +480,7 @@ export function createPurchaseService(fs, options = {}) {
       if (pi.lastEventId === eventId) return { alreadyApplied: true, invoice: pi };
       if (input.expectedRevision != null) ensure(pi.revision === input.expectedRevision, PURCHASE_ERR.STALE, `${pi.piNo} was changed meanwhile. Please open it again.`);
       const role = await roleOf(tx, actor.uid);
-      const right = editRightOf(pi, { settings: role.settings, isAdmin: role.isAdmin, nowMs: Date.parse(at) });
+      const right = editRightOf(pi, { settings: role.settings, rights: role.rights, nowMs: Date.parse(at) });
       ensure(right.right, PURCHASE_ERR.NOT_ALLOWED, right.why || 'You can\'t edit this invoice.');
       const revision = pi.revision + 1;
       if (mode !== 'full') {

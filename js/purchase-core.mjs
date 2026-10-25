@@ -598,15 +598,18 @@ const toMs = v => (v && typeof v === 'object' && typeof v.toMillis === 'function
  * Who may edit this document now: 'full' | 'limited' | null, and why not.
  *   doc: invoice or payment (recordedAt / created) ; settings: effective purchase settings
  */
-export function editRightOf(doc, { settings = DEFAULT_PURCHASE_SETTINGS, isAdmin = false, nowMs = Date.now() } = {}) {
+/** V270.4.3: rights = { full, afterLimit } (Special Rights "Full edit" / "Edit after the edit time limit"); the old
+ *  isAdmin: true still means both. */
+export function editRightOf(doc, { settings = DEFAULT_PURCHASE_SETTINGS, isAdmin = false, rights = null, nowMs = Date.now() } = {}) {
   if (!doc || doc.status !== PURCHASE_STATUS.posted) return { right: null, why: 'It is cancelled.' };
+  const rt = rights || { full: !!isAdmin, afterLimit: !!isAdmin };
   const mode = settings.editMode || 'limited-admin';
   if (mode === 'off') return { right: null, why: 'Editing is switched off in Administration → Purchase Settings.' };
   const since = toMs(doc.recordedAt) || toMs(doc.created);
   const days = Number(settings.editDays);
   const expired = since && Number.isFinite(days) && nowMs - since > days * 86400000;
-  if (expired && !isAdmin) return { right: null, why: `The ${days}-day edit time is over — only administrators can edit it now; or cancel it and enter it again.` };
-  const full = mode === 'full' || (mode === 'limited-admin' && isAdmin);
+  if (expired && !rt.afterLimit) return { right: null, why: `The ${days}-day edit time is over — only roles with the Special Right “Edit after the edit time limit” can edit it now; or cancel it and enter it again.` };
+  const full = mode === 'full' || (mode === 'limited-admin' && rt.full);
   return { right: full ? 'full' : 'limited', why: '', until: since && Number.isFinite(days) ? new Date(since + days * 86400000).toISOString().slice(0, 10) : '' };
 }
 /** Limited edit of an invoice: numbers, dates and the reasons for a higher cost — the figures don't change. */

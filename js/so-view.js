@@ -50,6 +50,7 @@ const sovPill = (text, tone) => `<span class="sov-pill t-${SOV_TONES[tone] ? ton
 /* ───────────────────────── permissions / settings ───────────────────────── */
 function sovCanSeeProfit(){
   const lib = window.BizCorePI; if (!lib) return false;
+  if (typeof window.bcRight === 'function') return window.bcRight('seeCost');   // V270.4.3 Special Right
   return !!lib.isAdministrator || (lib.settings && lib.settings.profitVisibility === 'everyone');
 }
 function sovPricingSettings(){
@@ -552,7 +553,7 @@ function sovProfit(m, view){
         <tr class="sov-total-row"><td></td><td><b>Total</b>${exNote ? `<small>Excl. ${exNote.replace(' Left Out', '')}</small>` : ''}</td><td></td><td>${none ? '—' : sovMoney(t.selling)}</td><td>${none ? '—' : sovMoney(t.cost)}</td><td>${none ? '—' : `<b class="${t.profit < 0 ? 'sov-red' : 'sov-done'}">${sovMoney(t.profit)}</b>`}</td><td class="sov-pct">${none ? '—' : pctCell(t.profit, t.cost, t.selling)}</td><td></td></tr></tbody></table></div>
       <div class="sov-two">
         <section class="sov-box"><h3>Markup Or Margin?</h3><div class="sov-kv"><span>Markup = Profit ÷ Cost</span><b>${sovMoney(t.profit)} ÷ ${sovMoney(t.cost)} = ${sovPct(sovMarkup(t.profit, t.cost))}</b></div><div class="sov-kv"><span>Margin = Profit ÷ Selling</span><b>${sovMoney(t.profit)} ÷ ${sovMoney(t.selling)} = ${sovPct(sovMargin(t.profit, t.selling))}</b></div><div class="sov-small">The main % follows the Pricing Settings method; the other is shown small — like the Pricing screen.</div></section>
-        <section class="sov-box"><h3>Who Sees This Tab</h3><div class="sov-kv"><span>Setting</span><b>Purchase Settings → Profit Visibility</b></div><div class="sov-kv"><span>Now</span><b>${window.BizCorePI && window.BizCorePI.settings.profitVisibility === 'everyone' ? 'Everyone' : 'Administrators'}</b></div><div class="sov-small">Later: role permission "Can see cost &amp; profit" (Users &amp; Roles).</div></section>
+        <section class="sov-box"><h3>Who Sees This Tab</h3><div class="sov-kv"><span>Setting</span><b>Roles &amp; Permissions → See cost, margin and profit</b></div><div class="sov-kv"><span>Now</span><b>${window.BizCorePI && window.BizCorePI.settings.profitVisibility === 'everyone' ? 'Everyone' : 'Administrators'}</b></div><div class="sov-small">Later: role permission "Can see cost &amp; profit" (Users &amp; Roles).</div></section>
       </div>`;
   }
   const flag = sovFlagPct();

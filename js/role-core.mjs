@@ -36,6 +36,33 @@ export const MODULES = Object.freeze([
 ]);
 export const MODULE_IDS = MODULES.map(m => m.id);
 export const ACTS = Object.freeze([['v', 'View'], ['c', 'Create'], ['e', 'Edit'], ['x', 'Cancel']]);
+
+/** V270.4.3 Special Rights (approved mockup UR_4). was: where the choice lived before; dflt: the starting value of a role.
+ *  The Administrator role always has every right. Record / void payment receipts are the Payment Receipts module's
+ *  Create / Cancel boxes (they moved there from Billing Settings). */
+export const RIGHTS = Object.freeze([
+  { id: 'seeCost', label: 'See cost, margin and profit', hint: 'Profit tab on Sales Orders, Selling → P/L on purchase invoices', group: 'Pricing & profit', was: 'Purchase Settings' },
+  { id: 'approveMargin', label: 'Approve pricing below the minimum margin', hint: 'Decides the approval requests (can be chosen as approver)', group: 'Pricing & profit', was: 'admin only' },
+  { id: 'sellBelowMargin', label: 'Sell below the minimum margin without approval', group: 'Pricing & profit', was: 'admin only' },
+  { id: 'orderInvoices', label: 'Issue order invoices (bill before delivery)', group: 'Billing', was: 'Billing Settings' },
+  { id: 'advanceInvoices', label: 'Issue advance invoices', group: 'Billing', was: 'Billing Settings' },
+  { id: 'creditNotes', label: 'Issue credit notes, cancel & re-issue invoices', group: 'Billing', was: 'Billing Settings' },
+  { id: 'editAfterLimit', label: 'Edit after the edit time limit', hint: 'Receipts, invoices, purchase invoices, supplier payments', group: 'Editing & locks', was: 'admin only' },
+  { id: 'fullEdit', label: 'Full edit (figures), not only limited edit', hint: 'Where the setting is “Limited for all, full with the right”', group: 'Editing & locks', was: 'admin only' },
+  { id: 'forceRelease', label: "Force-release another user's lock", group: 'Editing & locks', was: 'admin only' },
+  { id: 'backdate', label: 'Backdate beyond the backdate limit', hint: 'RFQ date received (Administration → Numbering & Defaults)', group: 'Editing & locks' },
+  { id: 'exportExcel', label: 'Export to Excel', group: 'Data', dflt: true },
+  { id: 'printDocs', label: 'Print / PDF customer documents', hint: 'Quotations, delivery notes, invoices, credit notes, receipts, statements', group: 'Data', dflt: true },
+]);
+export const RIGHT_IDS = RIGHTS.map(r => r.id);
+export const defaultRights = () => Object.fromEntries(RIGHTS.map(r => [r.id, !!r.dflt]));
+/** Only known rights, true / false; a missing one → its starting value. */
+export function normalizeRights(input) {
+  const d = defaultRights();
+  if (!input || typeof input !== 'object') return d;
+  return Object.fromEntries(RIGHTS.map(r => [r.id, typeof input[r.id] === 'boolean' ? input[r.id] : d[r.id]]));
+}
+const ALL_RIGHTS = () => Object.fromEntries(RIGHT_IDS.map(id => [id, true]));
 const modOf = id => MODULES.find(m => m.id === id);
 
 /** The built-in roles and their starting permissions (agreed 25 Oct 2026). */
@@ -46,7 +73,7 @@ function build(spec) {
   return out;
 }
 export const BUILT_IN_ROLES = Object.freeze([
-  { id: 'administrator', label: 'Administrator', locked: true, perms: build(Object.fromEntries(MODULES.map(m => [m.id, ALL]))) },
+  { id: 'administrator', label: 'Administrator', locked: true, perms: build(Object.fromEntries(MODULES.map(m => [m.id, ALL]))), rights: ALL_RIGHTS() },
   { id: 'manager', label: 'Manager', perms: build(Object.fromEntries(MODULES.filter(m => m.id !== 'administration').map(m => [m.id, ALL]))) },
   { id: 'sales', label: 'Sales', perms: build({ rfq: ALL, pricing: VCE, quotation: ALL, salesOrder: VCE, deliveryNote: V, invoice: V,
     stock: V, customers: VCE, suppliers: V, products: VCE, employees: V, reports: V }) },
@@ -70,19 +97,20 @@ export function normalizePerms(input = {}) {
   return out;
 }
 /** The lists the security rules read (one hasAny check instead of many). */
-export function derivedLists(perms) {
-  const p = normalizePerms(perms);
+export function derivedLists(perms, rights) {
+  const p = normalizePerms(perms), r = normalizeRights(rights);
   const pick = f => MODULE_IDS.filter(id => f(p[id]));
   return {
     viewMods: pick(x => x.v), createMods: pick(x => x.c), editMods: pick(x => x.e), cancelMods: pick(x => x.x),
     writeMods: pick(x => x.c || x.e || x.x), ownMods: pick(x => x.own),
+    rightMods: RIGHT_IDS.filter(id => r[id]),   // V270.4.3
   };
 }
 
 /** V270.4.2: the copy of a role's lists kept on each user record (users/{uid}.perm) — what the security rules read. */
 export function userPermFrom(role) {
-  if (!role) return { roleId: '', viewMods: [], createMods: [], editMods: [], cancelMods: [], writeMods: [], ownMods: [] };
-  return { roleId: role.id || '', ...derivedLists(role.perms || {}) };
+  if (!role) return { roleId: '', viewMods: [], createMods: [], editMods: [], cancelMods: [], writeMods: [], ownMods: [], rightMods: [] };
+  return { roleId: role.id || '', ...derivedLists(role.perms || {}, role.rights) };
 }
 export const samePerm = (a, b) => JSON.stringify(a || null) === JSON.stringify(b || null);
 
@@ -96,23 +124,25 @@ export function validateRoleInput(input = {}, { existingIds = [], creating = fal
     if (!/^[a-zA-Z0-9_-]{2,40}$/.test(id) || id === 'cashCustodian') errors.push({ field: 'label', message: 'Use letters or numbers in the role name.' });
     else if (existingIds.includes(id)) errors.push({ field: 'label', message: 'A role with this name already exists.' });
   }
-  return { ok: errors.length === 0, errors, value: { id, label, perms: normalizePerms(input.perms || {}) } };
+  return { ok: errors.length === 0, errors, value: { id, label, perms: normalizePerms(input.perms || {}), rights: input.rights === undefined ? undefined : normalizeRights(input.rights) } };
 }
 
 /** The record to write. */
 export function buildRoleRecord(prev, value, { actor, stamp, builtIn = false, locked = false }) {
-  const perms = locked ? builtInRole('administrator').perms : normalizePerms(value.perms);
+  const isLocked = prev ? !!prev.locked : !!locked;
+  const perms = isLocked ? builtInRole('administrator').perms : normalizePerms(value.perms);
+  const rights = isLocked ? builtInRole('administrator').rights : normalizeRights(value.rights !== undefined ? value.rights : prev && prev.rights);
   return {
     id: value.id, label: prev && (prev.builtIn || prev.locked) ? prev.label : value.label,
-    builtIn: prev ? !!prev.builtIn : !!builtIn, locked: prev ? !!prev.locked : !!locked,
-    perms, ...derivedLists(perms),
+    builtIn: prev ? !!prev.builtIn : !!builtIn, locked: isLocked,
+    perms, rights, ...derivedLists(perms, rights),
     revision: prev ? (Number(prev.revision) || 0) + 1 : 1,
     updatedAt: stamp, updatedByUid: actor.uid, updatedByName: actor.name, schemaVersion: ROLE_SCHEMA_VERSION,
   };
 }
 
 /** "Quotations: + Cancel · Sales Orders: Records All → Own" */
-export function describePermChange(before, after) {
+export function describePermChange(before, after, rightsBefore, rightsAfter) {
   const a = normalizePerms(before || {}), b = normalizePerms(after || {});
   const names = { v: 'View', c: 'Create', e: 'Edit', x: 'Cancel' };
   const out = [];
@@ -121,6 +151,10 @@ export function describePermChange(before, after) {
     for (const k of 'vcex') if (p[k] !== q[k]) bits.push((q[k] ? '+ ' : '− ') + names[k]);
     if (p.own !== q.own) bits.push(`Records ${p.own ? 'Own' : 'All'} → ${q.own ? 'Own' : 'All'}`);
     if (bits.length) out.push(`${m.label}: ${bits.join(', ')}`);
+  }
+  if (rightsAfter !== undefined) {   // V270.4.3
+    const ra = normalizeRights(rightsBefore), rb = normalizeRights(rightsAfter);
+    for (const r of RIGHTS) if (ra[r.id] !== rb[r.id]) out.push(`${r.label}: ${rb[r.id] ? 'On' : 'Off'}`);
   }
   return out.join(' · ');
 }
@@ -133,6 +167,7 @@ export function permissionsFor(role, { admin = false } = {}) {
     admin: !!admin, known: !!(admin || role), roleId: role ? role.id : admin ? 'administrator' : '', roleLabel: role ? role.label : admin ? 'Administrator' : '',
     can, ownOnly: m => !admin && !!(p && p[m] && p[m].own),
     canAny: (mods, a = 'v') => mods.some(m => can(m, a)),
+    right: id => !!admin || !!(role && normalizeRights(role.rights)[id]),   // V270.4.3 Special Rights
   };
 }
 

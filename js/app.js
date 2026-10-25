@@ -14737,7 +14737,7 @@ window.addEventListener('pagehide', function() {
 /* ── conflict dialog ── */
 function showLockConflict(docType, docId, docLabel, holder) {
   closeLockConflict();
-  const isAdmin = !!(window.BizCoreLocks && window.BizCoreLocks.isAdministrator);
+  const isAdmin = (typeof window.bcRight === 'function' ? window.bcRight('forceRelease') : !!(window.BizCoreLocks && window.BizCoreLocks.isAdministrator));   // V270.4.3 Special Right
   const label = docLabel || (lockTypeLabel(docType) + ' ' + docId);
   const idleMin = holder.heartbeatMs ? Math.max(0, Math.floor((Date.now() - holder.heartbeatMs) / 60000)) : 0;
   const modal = document.createElement('div');
@@ -14797,7 +14797,7 @@ async function promptLockReleaseReason(label, holderName){
   });
 }
 async function forceReleaseLock(docType, docId, label, holderName){
-  if (!window.BizCoreLocks || !window.BizCoreLocks.isAdministrator) { showToast('Only an administrator can release another user\'s lock.', 'error'); return false; }
+  if (!window.BizCoreLocks || !(typeof window.bcRight === 'function' ? window.bcRight('forceRelease') : !!(window.BizCoreLocks && window.BizCoreLocks.isAdministrator))) { showToast('Releasing another user\'s lock needs the Special Right “Force-release another user\'s lock”.', 'error'); return false; }
   const reason = await promptLockReleaseReason(label || (lockTypeLabel(docType) + ' ' + docId), holderName);
   if (!reason) return false;
   try {
@@ -15052,7 +15052,7 @@ function startLocksScreen(){
 function renderLocksScreen(){
   const body = document.getElementById('locks-table-body'); if (!body) return;
   const L = window.BizCoreLocks; if (!L) { body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--gray);padding:24px">Not connected.</td></tr>'; return; }
-  const isAdmin = L.isAdministrator, now = Date.now();
+  const isAdmin = (typeof window.bcRight === 'function' ? window.bcRight('forceRelease') : !!(window.BizCoreLocks && window.BizCoreLocks.isAdministrator)), now = Date.now();   // V270.4.3
   const rows = _locksScreenData.filter(l => L.core.lockIsLive(l, now)).map(l => L.core.describeLock(l)).sort((a, b) => b.sinceMs - a.sinceMs);
   const note = document.getElementById('locks-admin-note'); if (note) note.style.display = isAdmin ? 'none' : 'block';
   body.innerHTML = rows.length ? rows.map(r => `<tr>

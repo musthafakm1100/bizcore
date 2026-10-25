@@ -124,12 +124,16 @@ export function editLimitText(settings) {
   return settings.editLimit === 'none' ? 'no time limit' : settings.editLimit === 'month' ? 'during the month of the document date' : `within ${settings.editDays} day${settings.editDays === 1 ? '' : 's'} of the document date`;
 }
 /** → { limited, full, why } for a receipt. */
+/** V270.4.3: the 3rd argument is { full, afterLimit } (the Special Rights "Full edit" / "Edit after the edit time limit";
+ *  administrators have both) — a plain true / false still means "administrator" (both or neither). */
+const rightsOf = r => (r && typeof r === 'object') ? { full: !!r.full, afterLimit: !!r.afterLimit } : { full: !!r, afterLimit: !!r };
 export function receiptEditRights(receipt, settings, isAdmin, today) {
+  const rt = rightsOf(isAdmin);
   const lvl = settings.editReceipts;
-  let limited = lvl !== 'none', full = lvl === 'full' || (lvl === 'limited-admin-full' && !!isAdmin);
+  let limited = lvl !== 'none', full = lvl === 'full' || (lvl === 'limited-admin-full' && rt.full);
   let why = lvl === 'none' ? 'Editing receipts is switched off (Administration → Billing Settings).' : '';
   if (receipt && receipt.status === RECEIPT_STATUS.voided) return { limited: false, full: false, why: 'A voided receipt cannot be edited.' };
-  if ((limited || full) && !withinEditLimit(receipt?.date, settings, today) && !(isAdmin && settings.adminsAfterLimit)) {
+  if ((limited || full) && !withinEditLimit(receipt?.date, settings, today) && !(rt.afterLimit && settings.adminsAfterLimit)) {
     limited = full = false; why = `Receipts can be edited only ${editLimitText(settings)}. Void it and record a new receipt instead.`;
   }
   return { limited, full, why };
@@ -138,11 +142,12 @@ export function receiptEditRights(receipt, settings, isAdmin, today) {
  *  limited = the limited edit (Zoho no., due date, PO no., description, notes);
  *  full    = may use Cancel and re-issue (a full credit note + a new invoice). Figures are never edited in place. */
 export function invoiceEditRights(invoice, settings, isAdmin, today) {
+  const rt = rightsOf(isAdmin);
   const lvl = invoiceLevelOf(settings.editInvoices) || RECEIPT_DEFAULTS.editInvoices;
-  let limited = lvl !== 'none', full = lvl === 'full' || (lvl === 'limited-admin-full' && !!isAdmin);
+  let limited = lvl !== 'none', full = lvl === 'full' || (lvl === 'limited-admin-full' && rt.full);
   let why = limited ? '' : 'Editing invoices is switched off (Administration → Billing Settings → Invoicing rules).';
-  let fullWhy = full ? '' : lvl === 'none' ? why : 'Only an administrator may cancel and re-issue invoices (Administration → Billing Settings → Invoicing rules).';
-  if ((limited || full) && !withinEditLimit(invoice?.date, settings, today) && !(isAdmin && settings.adminsAfterLimit)) {
+  let fullWhy = full ? '' : lvl === 'none' ? why : 'Cancel and re-issue needs the Special Right “Full edit” (Administration → Roles & Permissions).';
+  if ((limited || full) && !withinEditLimit(invoice?.date, settings, today) && !(rt.afterLimit && settings.adminsAfterLimit)) {
     limited = full = false; why = fullWhy = `Invoices can be edited only ${editLimitText(settings)}. Use a credit note instead.`;
   }
   return { ok: limited, limited, full, why, fullWhy };

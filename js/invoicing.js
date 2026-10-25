@@ -246,7 +246,7 @@ async function openIssueInvoice(soId, opts = {}){
   const m = ensureIssueInvoiceModal();
   const settings = window.BizCoreInv.settings, isAdmin = !!window.BizCoreInv.isAdministrator;
   Object.assign(m, { _soId: soId, _ledger: ledger, _states: C.invoiceLineStates(so, ledger), _settings: settings, _opId: newDeliveryOperationId('invoice', soId), _dedTouched: false, _type: null,
-    _allowed: { delivery: { ok: true, why: '' }, order: permState(settings.allowOrderInvoices, isAdmin), advance: permState(settings.allowAdvanceInvoices, isAdmin) } });
+    _allowed: { delivery: { ok: true, why: '' }, order: permState(settings.allowOrderInvoices, (typeof window.bcRight === 'function' ? window.bcRight('orderInvoices') : !!window.BizCoreInv.isAdministrator)), advance: permState(settings.allowAdvanceInvoices, (typeof window.bcRight === 'function' ? window.bcRight('advanceInvoices') : !!window.BizCoreInv.isAdministrator)) } });   // V270.4.3 Special Rights
   document.getElementById('ii-title').textContent = 'Create Invoice — ' + so.soNo;
   document.getElementById('ii-subtitle').textContent = [so.customer, so.poNo ? 'Customer PO ' + so.poNo : ''].filter(Boolean).join(' · ');
   const today = new Date().toISOString().split('T')[0], due = new Date(); due.setDate(due.getDate() + 14);
@@ -298,7 +298,7 @@ function issueInvoiceFromDN(m, so, dnId){
 }
 function permState(level, isAdmin){
   if (level === 'all') return { ok: true, why: '' };
-  if (level === 'admin') return isAdmin ? { ok: true, why: '' } : { ok: false, why: 'Only administrators may issue this type (Administration → Billing Settings).' };
+  if (level === 'admin') return isAdmin ? { ok: true, why: '' } : { ok: false, why: 'Your role doesn\'t have the Special Right for this (Administration → Roles & Permissions).' };   // V270.4.3: isAdmin = has the right
   return { ok: false, why: 'Switched off in Administration → Billing Settings.' };
 }
 function issueInvoiceSnapshot(m){
@@ -628,7 +628,7 @@ async function openIssueCreditNote(soId, invoiceId){
   if (!invIndependentMode()) return false;
   const inv = invoicesCache.find(i => i.id === invoiceId); if (!inv) { showToast('Invoice not found', 'error'); return false; }
   const settings = window.BizCoreInv.settings, isAdmin = !!window.BizCoreInv.isAdministrator;
-  const p = permState(settings.allowCreditNotes, isAdmin);
+  const p = permState(settings.allowCreditNotes, (typeof window.bcRight === 'function' ? window.bcRight('creditNotes') : !!window.BizCoreInv.isAdministrator));
   if (!p.ok) { showToast('Only an administrator may issue credit notes (Administration → Billing Settings).', 'warning', 'Not Allowed'); return false; }
   if (inv.status === 'Credited') { showToast(inv.invNo + ' is already fully credited.', 'info'); return false; }
   if (!navigator.onLine) { showToast('Credit notes are saved directly to the cloud database. Please reconnect and try again.', 'error', 'Offline'); return false; }
@@ -781,7 +781,7 @@ function soBillingSummaryHtml(so){
 }
 function soInvoicesSectionHtml(so){
   const invs = invoicesForSO(so.id), cns = creditNotesForSO(so.id);
-  const settings = window.BizCoreInv.settings, canCredit = permState(settings.allowCreditNotes, !!window.BizCoreInv.isAdministrator).ok;
+  const settings = window.BizCoreInv.settings, canCredit = permState(settings.allowCreditNotes, (typeof window.bcRight === 'function' ? window.bcRight('creditNotes') : !!window.BizCoreInv.isAdministrator)).ok;
   const cards = invs.map(inv => {
     const idx = (so.invoices || []).findIndex(x => x.id === inv.id);
     const ded = (inv.deductions || []).map(d => `Less advance ${invEsc(d.advanceInvNo)} (${fmtDate(d.advanceDate)}): ${invMoney(d.subtotal)}`).join(' · ');
@@ -812,7 +812,7 @@ function soCanIssueInvoice(so){
     const invoiced = (so.invoices || []).filter(x => x.type !== 'advance').reduce((s, x) => s + (x.items || []).filter(l => l.soLineId === it.lineId).reduce((a, l) => a + invNum(l.qty), 0), 0);
     return invNum(it.qty) - invoiced > 0.000001;
   });
-  return (goodsLeft && permState(settings.allowOrderInvoices, isAdmin).ok) || (room && permState(settings.allowAdvanceInvoices, isAdmin).ok);
+  return (goodsLeft && permState(settings.allowOrderInvoices, (typeof window.bcRight === 'function' ? window.bcRight('orderInvoices') : !!window.BizCoreInv.isAdministrator)).ok) || (room && permState(settings.allowAdvanceInvoices, (typeof window.bcRight === 'function' ? window.bcRight('advanceInvoices') : !!window.BizCoreInv.isAdministrator)).ok);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1036,7 +1036,7 @@ function renderInvoiceView(doc, kind){
   m.querySelector('.modal').classList.remove('inv-view-rct');
   document.getElementById('inv-view-title').textContent = cn ? `${doc.cnNo} — Credit Note` : `${doc.invNo} — ${invTypeLabel(doc.type)}`;
   document.getElementById('inv-view-body').innerHTML = `<div class="dn-view-workspace inv-view-workspace"><div class="dn-view-document">${invoiceDocumentHtml(doc, kind, true)}</div>${panel}</div>`;
-  const canCredit = !cn && permState(window.BizCoreInv.settings.allowCreditNotes, !!window.BizCoreInv.isAdministrator).ok && doc.status !== 'Credited';
+  const canCredit = !cn && permState(window.BizCoreInv.settings.allowCreditNotes, (typeof window.bcRight === 'function' ? window.bcRight('creditNotes') : !!window.BizCoreInv.isAdministrator)).ok && doc.status !== 'Credited';
   const b = [];
   b.push('<div class="dn-view-actionbar-spacer"></div>');
   b.push(`<button class="btn btn-secondary" onclick="closeViewWithReturn('inv-view-modal')"><i class="ti ti-x"></i><span>Close</span></button>`);
@@ -1097,21 +1097,24 @@ function renderBillingSettings(){
   const R = window.BizCoreRct && window.BizCoreRct.settings ? window.BizCoreRct : null;   // V266.4: invoice editing is stored with the receipt settings
   const s = B.settings, stored = B.storedSettings, isAdmin = !!B.isAdministrator, dis = isAdmin ? '' : 'disabled';
   const sel = (id, value, opts) => `<select id="${id}" ${dis}>${opts.map(([v, l]) => `<option value="${v}" ${v === value ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
-  const who = [['all', 'All users'], ['admin', 'Administrators only'], ['none', 'Nobody (switched off)']];
+  // V270.4.3: who may = the Special Rights in Roles & Permissions; here only On / Off ("All users" stays only while it is stored)
+  const legacyAll = [s.allowOrderInvoices, s.allowAdvanceInvoices, s.allowCreditNotes].includes('all') ? [['all', 'All users (old setting — choose On)']] : [];
+  const who = [['admin', 'On — roles with the Special Right'], ['none', 'Off (switched off)'], ...legacyAll];
   box.innerHTML = `
     ${isAdmin ? '' : `<div style="background:#FFFBEA;border:1px solid #F0D77B;border-radius:8px;padding:10px 12px;font-size:12.5px;color:#7A5A00;margin-bottom:14px"><i class="ti ti-shield-lock" style="margin-right:6px"></i>Only an administrator can change these settings.</div>`}
+    <div style="font-size:12px;color:var(--gray);margin-bottom:10px"><i class="ti ti-shield-lock" style="margin-right:4px"></i>Who may issue order / advance invoices and credit notes: <b>Administration → Roles &amp; Permissions → Special Rights</b>.</div>
     <div style="font-size:12px;color:var(--gray);margin-bottom:10px">Invoice storage: <strong>${invEsc(B.mode)}</strong>${B.mode !== 'independent' ? ' — these settings apply after the administrator completes the invoice migration.' : ''}</div>
     <div class="form-grid">
       <div class="form-group"><label for="bs-ded">Advance deduction on later invoices</label>${sel('bs-ded', s.deductionMethod, [['auto-editable', 'Automatic proposal — user may change it'], ['auto-fixed', 'Automatic — fixed'], ['manual', 'Entered by the user']])}
         <div style="font-size:11.5px;color:var(--gray);margin-top:4px">Automatic = the advance % of the order applied to each invoice (50% advance → 50% of each invoice's goods). Whatever the setting: the invoice that completes the order always deducts the whole remaining advance, and the customer is never billed more than the order value.</div></div>
-      <div class="form-group"><label for="bs-order">Who may issue order invoices (bill ahead of delivery)</label>${sel('bs-order', s.allowOrderInvoices, who)}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Delivery invoices (accepted goods) are always allowed.</div></div>
-      <div class="form-group"><label for="bs-adv">Who may issue advance invoices</label>${sel('bs-adv', s.allowAdvanceInvoices, who)}</div>
-      <div class="form-group"><label for="bs-cn">Who may issue credit notes</label>${sel('bs-cn', s.allowCreditNotes, who.slice(0, 2))}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Corrections must stay possible, so credit notes cannot be switched off.</div></div>
-      ${R ? `<div class="form-group"><label for="bs-edit-inv">Editing invoices</label>${sel('bs-edit-inv', R.settings.editInvoices, [['none', 'Nobody — corrections by credit note only'], ['limited', 'Limited edit for all users'], ['limited-admin-full', 'Limited for all users, full for administrators'], ['full', 'Full edit for all users']])}
+      <div class="form-group"><label for="bs-order">Order invoices (bill ahead of delivery)</label>${sel('bs-order', s.allowOrderInvoices, who)}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Delivery invoices (accepted goods) are always allowed.</div></div>
+      <div class="form-group"><label for="bs-adv">Advance invoices</label>${sel('bs-adv', s.allowAdvanceInvoices, who)}</div>
+      <div class="form-group"><label for="bs-cn">Credit notes</label>${sel('bs-cn', s.allowCreditNotes, who.filter(w => w[0] !== 'none'))}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Corrections must stay possible, so credit notes cannot be switched off.</div></div>
+      ${R ? `<div class="form-group"><label for="bs-edit-inv">Editing invoices</label>${sel('bs-edit-inv', R.settings.editInvoices, [['none', 'Nobody — corrections by credit note only'], ['limited', 'Limited edit for all users'], ['limited-admin-full', 'Limited for all users, full with the Full edit right'], ['full', 'Full edit for all users']])}
         <div style="font-size:11.5px;color:var(--gray);margin-top:4px">Limited: Zoho no., payment due date, customer PO no., description and notes. Full: also <strong>Cancel and re-issue</strong> (a full credit note and a corrected new invoice) — the figures of an issued invoice are never changed (ZATCA). Cancel and re-issue also needs the credit-note permission above. The edit time limit is set under Payment receipts.</div></div>` : ''}
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;flex-wrap:wrap">
-      <div style="font-size:12px;color:var(--gray)">${stored && stored.updatedByName ? 'Last changed by ' + invEsc(stored.updatedByName) + (stored.updatedAt ? ' · ' + new Date(window.BizCoreLocks.core.toMillis(stored.updatedAt)).toLocaleString() : '') : 'Using the default values (deduction: automatic proposal; order/advance invoices and credit notes: administrators only).'}</div>
+      <div style="font-size:12px;color:var(--gray)">${stored && stored.updatedByName ? 'Last changed by ' + invEsc(stored.updatedByName) + (stored.updatedAt ? ' · ' + new Date(window.BizCoreLocks.core.toMillis(stored.updatedAt)).toLocaleString() : '') : 'Using the default values (deduction: automatic proposal; order / advance invoices and credit notes: On, for roles with the Special Right).'}</div>
       ${isAdmin ? '<button class="btn btn-primary" id="bs-save" onclick="saveBillingSettings()"><i class="ti ti-device-floppy"></i>Save settings</button>' : ''}
     </div>
     <div style="margin-top:18px"><button class="btn btn-secondary" onclick="showBillingHistory()"><i class="ti ti-history"></i>Change history</button></div>
@@ -1135,7 +1138,7 @@ async function saveBillingSettings(){
 async function showBillingHistory(){
   const box = document.getElementById('billing-history'); if (!box) return;
   box.innerHTML = '<div style="color:var(--gray);font-size:12px">Loading…</div>';
-  const lbl = { 'auto-editable': 'auto (editable)', 'auto-fixed': 'auto (fixed)', manual: 'manual', all: 'all', admin: 'admins', none: 'off' };
+  const lbl = { 'auto-editable': 'auto (editable)', 'auto-fixed': 'auto (fixed)', manual: 'manual', all: 'all', admin: 'on (right)', none: 'off' };
   const f = x => x ? `deduction ${lbl[x.deductionMethod] || x.deductionMethod} · order ${lbl[x.allowOrderInvoices]} · advance ${lbl[x.allowAdvanceInvoices]} · credit ${lbl[x.allowCreditNotes]}` : 'defaults';
   try {
     const rows = await window.BizCoreInv.loadSettingsHistory();
@@ -1223,7 +1226,7 @@ function renderInvoiceRegister(){
 function invoiceEditRightsOf(inv){
   const R = window.BizCoreRct; if (!R) return { shown: false, ok: false, why: '' };
   const t = new Date(), today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
-  const r = R.core.invoiceEditRights(inv, R.settings, !!R.isAdministrator, today);
+  const r = R.core.invoiceEditRights(inv, R.settings, typeof window.bcRight === 'function' ? { full: window.bcRight('fullEdit'), afterLimit: window.bcRight('editAfterLimit') } : !!R.isAdministrator, today);   // V270.4.3
   return { shown: R.settings.editInvoices !== 'none', ok: r.limited, full: r.full, why: r.why, fullWhy: r.fullWhy };
 }
 function ensureInvoiceEditModal(){

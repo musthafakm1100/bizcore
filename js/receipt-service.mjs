@@ -8,7 +8,7 @@
  * Idempotency: document IDs derive from the client operation ID — a retried save is detected.
  * Concurrency: transactions are serialisable, so two users can never apply the same balance twice.
  */
-import { accessWithRole } from './user-core.mjs?v=270.42';
+import { accessWithRole, actorMay } from './user-core.mjs?v=270.43';
 import { formatSequence, nextSequence } from './numbering.mjs?v=270.25';
 import {
   RECEIPT_COLLECTIONS, RECEIPT_SCHEMA_VERSION, RECEIPT_SETTINGS_PATH, RECEIPT_STATUS, ERR,
@@ -80,7 +80,10 @@ export function createReceiptService(fs, options = {}) {
     ids.forEach((id, i) => { if (invSnaps[i].exists()) invoices.set(id, invSnaps[i].data()); if (paySnaps[i].exists()) payments.set(id, paySnaps[i].data()); });
     const settings = effectiveReceiptSettings(settingsSnap.exists() ? settingsSnap.data() : null);
     const admins = accessSnap.exists() && Array.isArray(accessSnap.data().adminUids) ? accessSnap.data().adminUids : [];
-    return { settings, invoices, payments, rest, isAdminOf: uid => admins.includes(uid) };
+    // V270.4.3: record / apply / void = the Payment Receipts module's Create / Cancel; edits follow the Special Rights
+    const may = (uid, what) => actorMay(accessSnap, uid, what);
+    return { settings, invoices, payments, rest, isAdminOf: uid => admins.includes(uid), may,
+      editRightsOf: uid => ({ full: may(uid, 'fullEdit'), afterLimit: may(uid, 'editAfterLimit') }) };
   }
   const idsOf = list => (Array.isArray(list) ? list : []).filter(a => a && r2(a.amount) > MONEY_EPSILON).map(a => a.invoiceId).filter(isSafeId);
   function writePayments(tx, receipt, allocations, sign, at, base) {
@@ -116,7 +119,7 @@ export function createReceiptService(fs, options = {}) {
         ensure(existing.creationOperationId === operationId, ERR.ID_COLLISION, 'Receipt ID already used by another operation');
         return { alreadyApplied: true, receipt: existing };
       }
-      ensure(permitted(base.settings.allowRecord, base.isAdminOf(actor.uid)), ERR.PERMISSION, 'Only an administrator may record payment receipts (Billing Settings).');
+      ensure(base.may(actor.uid, { mod: 'receipt', act: 'c' }), ERR.PERMISSION, 'Your role may not record payment receipts (Administration → Roles & Permissions).');
       const head = checkReceiptHeader(input, base.settings);
       if (zohoSnap && zohoSnap.exists()) {
         const z = zohoSnap.data() || {};
@@ -163,7 +166,7 @@ export function createReceiptService(fs, options = {}) {
       checkLock(lockSnap, rct, actor);
       ensure(rct.status === RECEIPT_STATUS.posted, ERR.INVALID_STATE, `${rct.rctNo} is voided`);
       if (input.expectedRevision != null) ensure(rct.revision === input.expectedRevision, ERR.STALE_REVISION, `${rct.rctNo} was changed meanwhile. The latest version has been loaded — please review and try again.`);
-      ensure(permitted(base.settings.allowRecord, base.isAdminOf(actor.uid)), ERR.PERMISSION, 'Only an administrator may apply receipts (Billing Settings).');
+      ensure(base.may(actor.uid, { mod: 'receipt', act: 'c' }), ERR.PERMISSION, 'Your role may not apply receipts (Administration → Roles & Permissions).');
       const { allocations, total } = checkAllocations({ custKey: rct.custKey || customerKeyOf(rct), available: rct.unapplied, allocations: input.allocations || [], invoices: base.invoices, payments: base.payments });
       ensure(total > MONEY_EPSILON, ERR.INVALID_INPUT, 'Enter an amount to apply');
       const merged = mergeAllocations(rct.allocations, allocations);
@@ -195,7 +198,7 @@ export function createReceiptService(fs, options = {}) {
       if (input.expectedRevision != null) ensure(rct.revision === input.expectedRevision, ERR.STALE_REVISION, `${rct.rctNo} was changed meanwhile. The latest version has been loaded — please review and try again.`);
       const base = await readBase(tx, (rct.allocations || []).map(a => a.invoiceId), lockRefs(receiptId));
       checkLock(base.rest[0], rct, actor);
-      ensure(permitted(base.settings.allowVoid, base.isAdminOf(actor.uid)), ERR.PERMISSION, 'Only an administrator may void receipts (Billing Settings).');
+      ensure(base.may(actor.uid, { mod: 'receipt', act: 'x' }), ERR.PERMISSION, 'Your role may not void payment receipts (Administration → Roles & Permissions).');
       const revision = rct.revision + 1;
       const next = { ...rct, status: RECEIPT_STATUS.voided, voidReason: reason, voidedAt: at, voidedBy: actor.name, voidedByUid: actor.uid,
         revision, lastEventId: eventId, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid };
@@ -250,7 +253,7 @@ export function createReceiptService(fs, options = {}) {
       if (!sameAlloc) changes.push({ field: 'allocations', label: FIELD_LABELS.allocations,
         before: (rct.allocations || []).map(a => `${a.invNo} ${r2(a.amount).toFixed(2)}`).join(', ') || '—', after: null });
       ensure(changes.length > 0, ERR.INVALID_INPUT, 'Nothing was changed.');
-      const rights = receiptEditRights(rct, base.settings, base.isAdminOf(actor.uid), today);
+      const rights = receiptEditRights(rct, base.settings, base.editRightsOf(actor.uid), today);
       const fullChanged = changes.some(c => RECEIPT_FULL_FIELDS.includes(c.field));
       ensure(rights.limited || rights.full, ERR.PERMISSION, rights.why || 'You may not edit this receipt.');
       ensure(!fullChanged || rights.full, ERR.PERMISSION, 'Only an administrator may change the customer, date, amount or bank charges of a receipt (Administration → Billing Settings).');
