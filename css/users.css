@@ -1,0 +1,134 @@
+/* BizCore V270.4.1 — Users (Administration → Users), sign-in gate, change password. Approved mockups UR_1 – UR_5. */
+
+/* ── no access (UR_5) ── */
+.bc-noacc{position:fixed;inset:0;z-index:100000;background:#f4f7fb;display:flex;align-items:center;justify-content:center;padding:16px}
+.bc-noacc-box{width:min(440px,100%);background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:30px 26px;text-align:center;box-shadow:0 12px 40px rgba(15,23,42,.08)}
+.bc-noacc-ic{width:56px;height:56px;border-radius:50%;background:var(--st-amber-bg,#fef3c7);display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 14px}
+.bc-noacc h2{font-size:18px;margin:0 0 8px;color:#0f172a}
+.bc-noacc p{font-size:13px;color:#64748b;line-height:1.55;margin:0 0 6px}
+.bc-noacc-actions{margin-top:18px;display:flex;gap:8px;justify-content:center}
+
+/* ── change password ── */
+.bc-pw-dim{position:fixed;inset:0;z-index:99990;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px}
+.bc-pw-box{width:min(420px,100%);background:#fff;border-radius:14px;box-shadow:0 24px 60px rgba(15,23,42,.3);padding:18px 20px;display:flex;flex-direction:column;gap:6px;font-size:13px}
+.bc-pw-head{display:flex;align-items:center;margin-bottom:4px}
+.bc-pw-head h3{margin:0;font-size:16px;color:#0f172a}
+.bc-pw-x{margin-left:auto;border:0;background:none;font-size:16px;color:#64748b;cursor:pointer}
+.bc-pw-info{background:var(--blue-pale,#eef3fb);border-radius:8px;padding:9px 11px;color:#334155;line-height:1.5;margin:0 0 6px}
+.bc-pw-box label{font-size:12px;font-weight:600;color:#475569;margin-top:4px}
+.bc-pw-box input{height:36px;border:1px solid #d5dde7;border-radius:8px;padding:0 11px;font-size:13px}
+.bc-pw-err{color:var(--st-red-fg,#991b1b);font-size:12.5px;min-height:16px}
+.bc-pw-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+
+/* ── Users screen (UR_1) ── */
+.ur-wrap{max-width:1180px}
+.ur-alert{display:flex;gap:10px;align-items:flex-start;background:#fffbeb;border:1px solid #f5c26b;border-radius:10px;padding:10px 14px;margin:0 0 12px;font-size:12.5px;color:#78350f}
+.ur-alert-ic{font-size:16px}
+.ur-alert-txt{flex:1;min-width:220px;line-height:1.5}
+.ur-alert-list{display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
+.ur-alert-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ur-alert-row span{flex:1;min-width:200px}
+.ur-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.ur-tile{background:#fff;border:1px solid var(--border,#e2e8f0);border-radius:12px;padding:11px 14px;min-height:82px}
+.ur-tile .l{font-size:11.5px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.02em}
+.ur-tile .v{font-size:22px;font-weight:700;color:#0f172a;margin-top:2px;font-variant-numeric:tabular-nums}
+.ur-tile .s{font-size:11.5px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ur-tile.warn{border-color:#f5c26b;background:#fffbeb}.ur-tile.warn .v{color:#b45309}
+.ur-user{display:flex;gap:10px;align-items:center;min-width:190px}
+#ur-table td:last-child{width:44px;padding-left:4px;padding-right:12px}
+#ur-table td{padding-top:9px;padding-bottom:9px}
+.ur-av{width:32px;height:32px;border-radius:50%;background:var(--blue-pale,#e8eef8);color:var(--blue);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex:none}
+.ur-user b{display:block;font-weight:600;color:#0f172a;font-size:13.5px}
+.ur-user small{color:#64748b;font-size:12px}
+.ur-pill{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.ur-pill.sm{height:19px;font-size:10.5px;margin-left:4px;vertical-align:1px}
+.ur-st-green{background:var(--st-green-bg);color:var(--st-green-fg)}
+.ur-st-neutral{background:var(--st-neutral-bg);color:var(--st-neutral-fg)}
+.ur-st-amber{background:var(--st-amber-bg);color:var(--st-amber-fg)}
+.ur-st-purple{background:var(--st-purple-bg);color:var(--st-purple-fg)}
+.ur-co{font-size:12.5px;line-height:1.55;color:#334155}
+.ur-co-n{color:#64748b}
+.ur-co b{font-weight:600}
+.ur-muted{color:#94a3b8}
+.ur-nowrap{white-space:nowrap}
+.ur-dots{width:30px;height:30px;border:1px solid #d8e0ea;border-radius:8px;background:#fff;color:#475569;display:inline-flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;cursor:pointer}
+.ur-dots:hover{background:#f8fafc}
+.ur-menu{position:fixed;z-index:10050;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,.16);padding:5px;min-width:220px}
+.ur-menu button{display:flex;width:100%;align-items:center;gap:8px;border:0;background:none;text-align:left;padding:8px 10px;border-radius:7px;font:500 13px Inter,system-ui,sans-serif;color:#0f172a;cursor:pointer}
+.ur-menu button:hover{background:#f1f5f9}
+.ur-menu button[disabled]{color:#94a3b8;cursor:not-allowed;background:none}
+.ur-menu .sep{height:1px;background:#edf1f5;margin:4px 2px}
+.ur-menu .danger{color:var(--st-red-fg,#991b1b)}
+.ur-note{margin-top:10px}
+.ur-locked{background:#fff;border:1px solid var(--border,#e2e8f0);border-radius:12px;padding:22px;color:#475569;font-size:13px;display:flex;gap:10px;align-items:center}
+
+/* ── New / Edit User (UR_2) ── */
+.ur-mtitle{flex-direction:column;align-items:flex-start!important;gap:2px}
+.ur-mtitle p{margin:0;font-size:12px;opacity:.85;font-weight:400}
+.ur-modal .modal-body{padding:16px 18px}
+.ur-sec{font-size:11.5px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin:4px 0 8px}
+.ur-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin-bottom:16px}
+.ur-f label{display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:4px}
+.ur-f input,.ur-f select{width:100%;height:36px;border:1px solid #d5dde7;border-radius:8px;padding:0 11px;font-size:13px;background:#fff;color:#0f172a;box-sizing:border-box}
+.ur-f input[readonly]{background:#f8fafc;color:#475569}
+.ur-f small{display:block;font-size:11.5px;color:#94a3b8;margin-top:4px;line-height:1.45}
+.ur-pwrow{position:relative}
+.ur-pwrow input{padding-right:92px}
+.ur-gen{position:absolute;right:6px;top:5px;height:26px;border:0;background:none;color:var(--blue);font-weight:600;font-size:12px;cursor:pointer;padding:0 6px}
+.ur-check{display:flex;gap:8px;align-items:center;font-size:12.5px;color:#334155;margin-top:8px;cursor:pointer}
+.ur-check input{width:16px;height:16px;accent-color:var(--blue)}
+.ur-ctable{width:100%;border-collapse:separate;border-spacing:0;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:6px;font-size:13px}
+.ur-ctable th{background:#f8fafc;font-size:11.5px;color:#536273;text-transform:uppercase;font-weight:600;text-align:left;padding:8px 10px;border-bottom:1px solid #e2e8f0}
+.ur-ctable td{padding:8px 10px;vertical-align:middle}
+.ur-ctable td small{display:block;font-size:11.5px;color:#64748b}
+.ur-ctable select{height:32px;border:1px solid #d5dde7;border-radius:8px;padding:0 10px;min-width:170px;font-size:13px;background:#fff}
+.ur-ctable select[disabled]{background:#f8fafc;color:#94a3b8}
+.ur-later{font-size:10.5px;font-weight:700;color:var(--st-purple-fg);background:var(--st-purple-bg);border-radius:6px;padding:1px 6px;margin-left:6px}
+.ur-hint{font-size:11.5px;color:#94a3b8;margin-bottom:14px;line-height:1.5}
+.ur-accs{display:flex;flex-direction:column;gap:6px;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.ur-accs label{display:flex;gap:8px;align-items:center;font-size:13px}
+.ur-accs small{margin-left:auto;color:#94a3b8;font-size:11.5px}
+.ur-info{background:var(--blue-pale,#eef3fb);border-radius:8px;padding:9px 11px;color:#334155;font-size:12.5px;line-height:1.5;margin-bottom:12px}
+.ur-err{color:var(--st-red-fg,#991b1b);font-size:12.5px;margin-top:6px}
+.ur-foot{display:flex;align-items:center;gap:8px;width:100%}
+.ur-ready{font-size:12px;color:var(--st-green-fg,#15803d);display:flex;gap:6px;align-items:center;margin-right:auto}
+.ur-ready.todo{color:#b45309}
+
+/* ── Activity ── */
+.ur-ev{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
+.ur-ev:last-child{border-bottom:0}
+.ur-ev i.dot{width:8px;height:8px;border-radius:50%;background:var(--blue);margin-top:6px;flex:none}
+.ur-ev small{display:block;color:#64748b;font-size:12px}
+
+/* ── Roles & Permissions (V270.4.1: list only; the permission grid is V270.4.2) ── */
+.ur-roles{display:grid;grid-template-columns:250px minmax(0,1fr);gap:14px;align-items:start}
+.ur-rlist{background:#fff;border:1px solid var(--border,#e2e8f0);border-radius:12px;overflow:hidden}
+.ur-rlist .h{padding:11px 14px;border-bottom:1px solid #edf1f5;font-weight:700;color:var(--blue);font-size:13.5px}
+.ur-r{display:flex;align-items:center;gap:9px;padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#334155}
+.ur-r:last-child{border-bottom:0}
+.ur-r small{margin-left:auto;color:#94a3b8;font-size:12px}
+.ur-rcard{background:#fff;border:1px solid var(--border,#e2e8f0);border-radius:12px;padding:18px;font-size:13px;color:#334155;line-height:1.6}
+.ur-rcard h3{margin:0 0 6px;font-size:15px;color:#0f172a}
+
+@media (max-width:900px){
+  .ur-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ur-grid{grid-template-columns:1fr}
+  .ur-roles{grid-template-columns:1fr}
+}
+/* phone: one card per user (UI standards §9) */
+@media (max-width:760px){
+  #ur-table thead{display:none}
+  #ur-table,#ur-table tbody{display:block;width:100%}
+  #ur-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;padding:12px 14px;border-bottom:1px solid #edf1f5}
+  #ur-table tr:last-child{border-bottom:0}
+  #ur-table td{display:block;padding:0!important;border:0;width:auto!important;background:transparent!important}
+  #ur-table tr{background:#fff!important}
+  #ur-table td:nth-child(1){grid-column:1;grid-row:1}
+  #ur-table td:nth-child(6){grid-column:2;grid-row:1;align-self:center}
+  #ur-table td:nth-child(3){grid-column:1 / -1;padding-left:42px!important}
+  #ur-table td:nth-child(4){grid-column:1 / -1;padding-left:42px!important}
+  #ur-table td:nth-child(2),#ur-table td:nth-child(5){display:none}
+  .ur-user{min-width:0}
+  .ur-user small{word-break:break-all}
+  .ur-alert-row span{min-width:0;flex-basis:100%}
+}

@@ -7,6 +7,7 @@
  * Two administrators saving the same name at the same moment can't both succeed (the key document is
  * read inside the transaction). Accounts are never deleted — only made inactive.
  */
+import { accessWithRole } from './user-core.mjs?v=270.41';
 import {
   ACCOUNT_COLLECTIONS, ACCOUNT_SCHEMA_VERSION, validateAccount, keyDocId,
 } from './account-core.mjs?v=268.2';
@@ -42,7 +43,7 @@ export function createAccountService(fs, options = {}) {
     ensure(isSafeId(accountId), ERR.INVALID_INPUT, 'Invalid account');
     return runTransaction(db, async tx => {
       // ── reads ──
-      const access = await tx.get(refs.access());
+      const access = await accessWithRole(tx, doc, db, actorOf().uid);
       const admins = access.exists() ? (access.data().adminUids || []) : [];
       ensure(admins.includes(actor.uid), ACCOUNT_ERR.NOT_ADMIN, 'Only administrators can manage payment accounts.');
       const snap = await tx.get(refs.account(accountId));

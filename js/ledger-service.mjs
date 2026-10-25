@@ -47,7 +47,11 @@ export function createLedgerService(fs, options = {}) {
     const access = await tx.get(refs.access());
     const cust = await tx.get(refs.custodian(uid));
     const admins = access.exists() ? (access.data().adminUids || []) : [];
-    return { isAdmin: admins.includes(uid), cashOnly: cust.exists(), active: cust.exists() ? cust.data().active !== false : true };
+    // V270.4.1: an active user with the Administrator role is an administrator too
+    const u = await tx.get(doc(db, 'users', uid));
+    const ud = u.exists() ? u.data() : null;
+    const roleAdmin = !!(ud && ud.active !== false && ud.companyRoles && ud.companyRoles.default === 'administrator');
+    return { isAdmin: admins.includes(uid) || roleAdmin, cashOnly: cust.exists(), active: cust.exists() ? cust.data().active !== false : true };
   }
   const staffOnly = role => ensure(!role.cashOnly, LEDGER_ERR.CASH_ONLY, 'Only office staff can do this.');
   const accountOf = async (tx, id, label) => {

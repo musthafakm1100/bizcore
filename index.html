@@ -38,6 +38,7 @@
 <link href="css/pricing.css?v=270.22" rel="stylesheet"/>
 <link href="css/quotation.css?v=270.22" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
+<link href="css/users.css?v=270.41" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
 <script src="js/responsive.js?v=269.7" defer></script>
 <script src="js/bc-date.js?v=270.27" defer></script>
@@ -203,7 +204,7 @@ document.addEventListener('error', function(e) {
 <span class="topbar-avatar" id="topbar-user-avatar">U</span><span class="topbar-user-copy"><strong id="topbar-user-name">User</strong><small id="topbar-admin-badge" style="display:none">Administrator</small></span><i class="ti ti-chevron-down"></i>
 </button>
 <div class="topbar-dropdown user-dropdown" id="user-menu">
-<button onclick="openAdministration('users','Users',document.querySelector('[data-nav-page=setup]'));closeTopbarMenus()" type="button"><i class="ti ti-user"></i>My Profile</button>
+<button onclick="closeTopbarMenus();window.bcOpenPasswordDialog&&window.bcOpenPasswordDialog(false)" type="button"><i class="ti ti-key"></i>Change Password</button>
 <button onclick="openAdministration('preferences','System Preferences',document.querySelector('[data-nav-page=setup]'));closeTopbarMenus()" type="button"><i class="ti ti-adjustments"></i>Preferences</button>
 <button onclick="showPage('setup');closeTopbarMenus()" type="button"><i class="ti ti-building"></i>Company Settings</button>
 <div class="topbar-dropdown-separator"></div>
@@ -1032,6 +1033,7 @@ document.addEventListener('error', function(e) {
 <div class="setup-nav-group">
 <div class="setup-nav-group-title">Security</div>
 <button class="setup-tab" id="stab-users" onclick="switchSetupTab('users')"><i class="ti ti-user-cog"></i><span class="tab-copy"><span class="tab-title">Users</span></span></button>
+<button class="setup-tab" id="stab-roles" onclick="switchSetupTab('roles')"><i class="ti ti-shield-lock"></i><span class="tab-copy"><span class="tab-title">Roles &amp; Permissions</span></span></button>
 <button class="setup-tab" id="stab-locking" onclick="switchSetupTab('locking')"><i class="ti ti-lock-cog"></i><span class="tab-copy"><span class="tab-title">Document Locking</span></span></button>
 <button class="setup-tab" id="stab-locks" onclick="switchSetupTab('locks')"><i class="ti ti-lock-access"></i><span class="tab-copy"><span class="tab-title">Active Locks</span></span></button>
 <button class="setup-tab" id="stab-billing" onclick="switchSetupTab('billing')"><i class="ti ti-file-invoice"></i><span class="tab-copy"><span class="tab-title">Billing Settings</span></span></button>
@@ -1219,8 +1221,16 @@ document.addEventListener('error', function(e) {
 </div>
 <!-- TAB: Users -->
 <div class="setup-tab-content" id="setup-tab-users" style="display:none">
-<div class="setup-page-head"><div><h2>Users</h2><p>Logins for cash custodians. Staff and administrators sign in with their Firebase login.</p></div><span class="phase-badge">Firebase logins</span></div>
-<div class="card" id="cc-card" style="margin-top:14px"><div class="card-header page-command-header"><h3><i class="ti ti-wallet" style="margin-right:6px"></i>Cash custodian logins</h3><button class="btn btn-primary btn-sm page-primary-command" id="cc-new-btn" type="button" onclick="openCustodianLoginForm()"><i class="ti ti-user-plus"></i>New cash custodian login</button></div><div class="card-body"><p class="cl-sub" style="margin:0 0 4px">A cash custodian login opens only <b>My Cash</b>: the linked cash account(s), confirm or query lines, hand over cash. The database refuses everything else. Logins are never deleted — deactivate instead.</p><div id="cc-list"></div></div></div>
+<div class="ur-wrap">
+<div class="setup-page-head"><div><h2><i class="ti ti-users" style="margin-right:7px"></i>Users</h2><p>Everyone who can sign in to BizCore, with their role in each company. Logins are never deleted — deactivate instead.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" type="button" data-ur="roles"><i class="ti ti-shield-lock"></i>Roles &amp; Permissions</button><button class="btn btn-primary btn-sm" id="ur-new-btn" type="button" data-ur="new"><i class="ti ti-user-plus"></i>New User</button></div></div>
+<div id="ur-users-host"></div>
+</div>
+</div>
+<div class="setup-tab-content" id="setup-tab-roles" style="display:none">
+<div class="ur-wrap">
+<div class="setup-page-head"><div><h2><i class="ti ti-shield-lock" style="margin-right:7px"></i>Roles &amp; Permissions</h2><p>What each role may do. A user gets one role per company.</p></div></div>
+<div id="ur-roles-host"></div>
+</div>
 </div>
 <!-- TAB: Pricing and business configuration placeholders -->
 <div class="setup-tab-content" id="setup-tab-purchase-settings" style="display:none">
@@ -2280,22 +2290,24 @@ import { createDeliveryService, loadDeliveryEvents } from './js/delivery-service
 import * as DNCore from './js/delivery-core.mjs?v=266.0';
 import * as LockCore from './js/lock-service.mjs?v=266.0';
 import * as InvCore from './js/invoice-core.mjs?v=266.0';
-import { createInvoiceService } from './js/invoice-service.mjs?v=270.25';
+import { createInvoiceService } from './js/invoice-service.mjs?v=270.41';
 import { createNumbering, nextSequence, formatSequence } from './js/numbering.mjs?v=270.25';
 import * as RctCore from './js/receipt-core.mjs?v=266.4';
-import { createReceiptService } from './js/receipt-service.mjs?v=270.25';
+import { createReceiptService } from './js/receipt-service.mjs?v=270.41';
 import * as AccCore from './js/account-core.mjs?v=268.2';
-import { createAccountService } from './js/account-service.mjs?v=270.21';
+import { createAccountService } from './js/account-service.mjs?v=270.41';
 import * as LedgerCore from './js/ledger-core.mjs?v=269.3';
-import { createLedgerService } from './js/ledger-service.mjs?v=269.3';
+import { createLedgerService } from './js/ledger-service.mjs?v=270.41';
 import { wrapTransaction, rebuildBalance, BALANCE_COLLECTION, LAST_PRICE_COLLECTION } from './js/running-totals.mjs?v=269.3';
 import * as PurchaseCore from './js/purchase-core.mjs?v=269.7';
-import { createPurchaseService } from './js/purchase-service.mjs?v=270.25';
+import { createPurchaseService } from './js/purchase-service.mjs?v=270.41';
+import * as UserCore from './js/user-core.mjs?v=270.41';
+import { createUserService } from './js/user-service.mjs?v=270.41';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile }
+import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile, updatePassword, sendPasswordResetEmail }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, getDoc as _fsGetDoc, getDocFromServer, setDoc, onSnapshot as _fsOnSnapshot, deleteDoc,
+import { getFirestore, doc, getDoc as _fsGetDoc, getDocFromServer, setDoc, updateDoc, onSnapshot as _fsOnSnapshot, deleteDoc,
          collection, getDocs as _fsGetDocs, query, where, limit, orderBy, startAfter, writeBatch,
          initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
          runTransaction, serverTimestamp, increment, deleteField, getCountFromServer, connectFirestoreEmulator }
@@ -3443,8 +3455,9 @@ function startLockingListeners() {
   }, err => console.warn('[BizCore] Locking settings unavailable (defaults used):', err.message));
   if (!_accessUnsub) _accessUnsub = onSnapshot(doc(db, 'system', 'accessControl'), snap => {
     const uid = auth.currentUser && auth.currentUser.uid;
-    _isAdministrator = !!(uid && snap.exists() && Array.isArray(snap.data().adminUids) && snap.data().adminUids.includes(uid));
+    // V270.4.1: the owner (adminUids) or an active user with the Administrator role
     _adminUids = snap.exists() && Array.isArray(snap.data().adminUids) ? snap.data().adminUids.slice() : [];
+    _isAdministrator = !!(uid && (_adminUids.includes(uid) || (_myUser && _myUser.active !== false && UserCore.roleOfUser(_myUser) === 'administrator')));
     _accessKnown = true;
     if (typeof window.syncTopbarUserIdentity === 'function') { try { window.syncTopbarUserIdentity(); } catch (e) {} }
     _lockSettingsListeners.forEach(fn => { try { fn(_lockSettings, _lockSettingsStored); } catch (e) { console.error(e); } });
@@ -3754,6 +3767,157 @@ window.BizCoreCash = {
   },
 };
 /* ═══════════════════════════════════════════════════
+   V270.4.1 USERS — users/{uid} (js/user-core.mjs, js/user-service.mjs); Administration → Users (js/users.js).
+   A login works in BizCore only with an active users record (the owner in system/accessControl always does).
+   The security rules refuse everything else; the screen below only explains it.
+═══════════════════════════════════════════════════ */
+const userService = createUserService({ db, doc, getDoc, getDocs, setDoc, updateDoc, collection, runTransaction, serverTimestamp }, { actor: _lockActor });
+let _users = [], _usersUnsub = null, _myUser = null, _myUserUnsub = null, _usersLoaded = false;
+const _userListeners = new Set();
+const _usersFire = () => _userListeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } });
+function _recomputeAdministrator() {
+  const uid = auth.currentUser && auth.currentUser.uid;
+  const owner = !!(uid && _adminUids.includes(uid));
+  const roleAdmin = !!(_myUser && _myUser.active !== false && UserCore.roleOfUser(_myUser) === 'administrator');
+  const was = _isAdministrator;
+  _isAdministrator = owner || roleAdmin;
+  if (was !== _isAdministrator) {
+    if (typeof window.syncTopbarUserIdentity === 'function') { try { window.syncTopbarUserIdentity(); } catch (e) {} }
+    _lockSettingsListeners.forEach(fn => { try { fn(_lockSettings, _lockSettingsStored); } catch (e) { console.error(e); } });
+  }
+}
+window.BizCoreUsers = {
+  core: UserCore,
+  service: userService,
+  get users() { return _users; },
+  get loaded() { return _usersLoaded; },
+  get me() { return _myUser; },
+  get ownerUids() { return _adminUids.slice(); },
+  get uid() { return auth.currentUser ? auth.currentUser.uid : null; },
+  get isAdministrator() { return _isAdministrator; },
+  get isOwner() { const u = auth.currentUser; return !!(u && _adminUids.includes(u.uid)); },
+  onChange(fn) { _userListeners.add(fn); return () => _userListeners.delete(fn); },
+  /** Administration → Users: the list (small collection) + the login directory and custodians. */
+  start() {
+    if (!_usersUnsub) _usersUnsub = onSnapshot(collection(db, UserCore.USER_COLLECTION), snap => {
+      const out = []; snap.forEach(d => out.push(d.data())); _users = out; _usersLoaded = true; _usersFire();
+    }, err => console.warn('[BizCore] Users unavailable:', err.message));
+    if (window.BizCoreCash) { window.BizCoreCash.startDirectory(); window.BizCoreCash.onChange(_usersFire); }
+  },
+  /** Administrators: create the Firebase login (second app instance, so this browser stays signed in) and the record. */
+  async createUser(input) {
+    const v = UserCore.validateUserInput(input, { creating: true });
+    if (!v.ok) { const e = new Error(v.errors.map(x => x.message).join(' ')); e.code = 'invalid-input'; e.details = { errors: v.errors }; throw e; }
+    if (!_isAdministrator) { const e = new Error('Only administrators can create users.'); e.code = 'not-admin'; throw e; }
+    const secApp = initializeApp(cfg, 'user-' + Date.now());
+    const secAuth = getAuth(secApp);
+    if (BIZCORE_EMULATOR) connectAuthEmulator(secAuth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    let uid;
+    try {
+      const cred = await createUserWithEmailAndPassword(secAuth, v.value.email, v.value.password);
+      uid = cred.user.uid;
+      try { await updateProfile(cred.user, { displayName: v.value.name }); } catch (e) {}
+    } catch (e) {
+      const m = { 'auth/email-already-in-use': 'This email already has a BizCore login. If it is listed under "Logins without access", use Give Access there.', 'auth/invalid-email': 'Enter a valid email address.', 'auth/weak-password': 'The temporary password is too weak (at least 8 characters).', 'auth/operation-not-allowed': 'Email/password logins are switched off in Firebase (Authentication → Sign-in method).', 'auth/admin-restricted-operation': 'Firebase refuses new logins: Authentication → Settings → User actions → "Enable create (sign-up)" must stay ticked for BizCore to create users.' }[e.code];
+      const err = new Error(m || ('The login could not be created: ' + (e.message || e.code))); err.code = e.code; throw err;
+    } finally { try { await signOut(secAuth); } catch (e) {} }
+    return userService.saveUser(uid, v.value, { creating: true });
+  },
+  /** Administrators: give an existing login (signed in, no record) access. */
+  async giveAccess(uid, input) { return userService.saveUser(uid, { ...input, password: 'not-used-here' }, { creating: true }); },
+  async saveUser(uid, input, expectedRevision) { return userService.saveUser(uid, input, { expectedRevision }); },
+  async setActive(uid, active, reason) { return userService.setActive(uid, active, reason); },
+  async sendReset(uid, email) { await sendPasswordResetEmail(auth, email); try { await userService.logResetSent(uid, email); } catch (e) { console.warn('[BizCore] reset not logged:', e.message); } },
+  loadEvents(uid) { return userService.loadEvents(uid); },
+  async changeMyPassword(pw) {
+    await updatePassword(auth.currentUser, pw);
+    if (_myUser && _myUser.mustChangePassword) await userService.markPasswordChanged();
+  },
+};
+
+/** Sign-in gate: custodian → My Cash; owner → in (own record made once); active record → in; otherwise "No access". */
+async function _bcResolveAccess(user) {
+  let cust, acc, me;
+  try {
+    [cust, acc, me] = await Promise.all([
+      getDoc(doc(db, LedgerCore.LEDGER_COLLECTIONS.custodians, user.uid)),
+      getDoc(doc(db, 'system', 'accessControl')),
+      getDoc(doc(db, UserCore.USER_COLLECTION, user.uid)),
+    ]);
+  } catch (e) {
+    console.warn('[BizCore] Access check not possible now (offline?) — the database still checks every change:', e.message);
+    return { ok: true, unchecked: true };
+  }
+  if (cust.exists()) return { custodian: true };
+  const owners = acc.exists() && Array.isArray(acc.data().adminUids) ? acc.data().adminUids : [];
+  _adminUids = owners.slice();
+  let rec = me.exists() ? me.data() : null;
+  if (owners.includes(user.uid)) {
+    if (!rec) { try { rec = await userService.ensureOwnerRecord(); } catch (e) { console.warn('[BizCore] Owner record not created:', e.message); } }
+    _myUser = rec; return { ok: true, owner: true };
+  }
+  if (!rec) return { ok: false, reason: 'none' };
+  if (rec.active === false) return { ok: false, reason: 'inactive' };
+  _myUser = rec; return { ok: true };
+}
+function _bcShowNoAccess(user, reason) {
+  const old = document.getElementById('bc-no-access'); if (old) old.remove();
+  const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const box = document.createElement('div');
+  box.id = 'bc-no-access'; box.className = 'bc-noacc';
+  box.innerHTML = `<div class="bc-noacc-box" role="alertdialog" aria-labelledby="bc-noacc-t"><div class="bc-noacc-ic">🔒</div>
+    <h2 id="bc-noacc-t">${reason === 'inactive' ? 'Your access has been switched off' : 'No access to BizCore yet'}</h2>
+    <p>You're signed in as <b>${esc(user.email || user.uid)}</b>, ${reason === 'inactive' ? 'but an administrator has deactivated this login.' : "but an administrator hasn't given this login access."}</p>
+    <p>Ask your administrator ${reason === 'inactive' ? 'to reactivate you' : 'to add you'} in Administration → Users.</p>
+    <div class="bc-noacc-actions"><button class="btn btn-secondary" type="button" id="bc-noacc-out"><i class="ti ti-logout"></i>Sign Out</button></div></div>`;
+  document.body.appendChild(box);
+  box.querySelector('#bc-noacc-out').onclick = () => signOut(auth).then(() => { location.href = 'login.html'; });
+  const overlay = document.getElementById('auth-loading'); if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+}
+window._bcShowNoAccess = _bcShowNoAccess;
+/** Own record, live: deactivated while signed in → stop; role changes update the administrator flag. */
+function _bcWatchMyUser(user) {
+  if (_myUserUnsub) return;
+  _myUserUnsub = onSnapshot(doc(db, UserCore.USER_COLLECTION, user.uid), snap => {
+    const rec = snap.exists() ? snap.data() : null;
+    const owner = _adminUids.includes(user.uid);
+    if (snap.metadata && snap.metadata.fromCache && !rec) return;
+    _myUser = rec;
+    _recomputeAdministrator();
+    if (!owner && (!rec || rec.active === false)) _bcShowNoAccess(user, rec ? 'inactive' : 'none');
+  }, err => console.warn('[BizCore] Own user record unavailable:', err.message));
+}
+/** Change password (forced after a temporary password, or from the user menu). */
+function bcOpenPasswordDialog(forced) {
+  if (document.getElementById('bc-pw-dlg')) return;
+  const box = document.createElement('div');
+  box.id = 'bc-pw-dlg'; box.className = 'bc-pw-dim';
+  box.innerHTML = `<div class="bc-pw-box" role="dialog" aria-labelledby="bc-pw-t">
+    <div class="bc-pw-head"><h3 id="bc-pw-t">${forced ? 'Choose your own password' : 'Change Password'}</h3>${forced ? '' : '<button type="button" class="bc-pw-x" aria-label="Close">✕</button>'}</div>
+    ${forced ? '<p class="bc-pw-info">You signed in with a temporary password. Please choose your own before you continue.</p>' : ''}
+    <label for="bc-pw1">New password *</label><input id="bc-pw1" type="password" autocomplete="new-password" minlength="8">
+    <label for="bc-pw2">Repeat new password *</label><input id="bc-pw2" type="password" autocomplete="new-password" minlength="8">
+    <div class="bc-pw-err" id="bc-pw-err"></div>
+    <div class="bc-pw-actions">${forced ? '<button type="button" class="btn btn-secondary" id="bc-pw-out"><i class="ti ti-logout"></i>Sign Out</button>' : '<button type="button" class="btn btn-secondary" id="bc-pw-cancel">Cancel</button>'}<button type="button" class="btn btn-primary" id="bc-pw-save"><i class="ti ti-key"></i>Save Password</button></div></div>`;
+  document.body.appendChild(box);
+  const close = () => box.remove();
+  const err = m => { box.querySelector('#bc-pw-err').textContent = m || ''; };
+  if (!forced) { box.querySelector('.bc-pw-x').onclick = close; box.querySelector('#bc-pw-cancel').onclick = close; }
+  else box.querySelector('#bc-pw-out').onclick = () => signOut(auth).then(() => { location.href = 'login.html'; });
+  box.querySelector('#bc-pw-save').onclick = async () => {
+    const a = box.querySelector('#bc-pw1').value, b = box.querySelector('#bc-pw2').value;
+    if (a.length < 8) return err('Use at least 8 characters.');
+    if (a !== b) return err('The two passwords are different.');
+    const btn = box.querySelector('#bc-pw-save'); btn.disabled = true; err('');
+    try { await window.BizCoreUsers.changeMyPassword(a); close(); if (typeof showToast === 'function') showToast('Password changed', 'success'); }
+    catch (e) { err(e.code === 'auth/requires-recent-login' ? 'For safety, sign out and sign in again, then change the password.' : (e.message || 'The password could not be changed.')); }
+    finally { btn.disabled = false; }
+  };
+  setTimeout(() => { const i = box.querySelector('#bc-pw1'); if (i) i.focus(); }, 30);
+}
+window.bcOpenPasswordDialog = bcOpenPasswordDialog;
+
+/* ═══════════════════════════════════════════════════
    V268.5 SHARED SETTINGS / USERS / APPROVALS — everything shared lives in Firebase, not in one browser.
    sharedSettings/{doc} { key, json, revision, updatedAt, updatedBy, updatedByUid }  (units: staff; others: administrators)
    (administrator names come from userDirectory, written by every login — V267.2)
@@ -3947,12 +4111,17 @@ window.FB = { fbSave, fbLoad, fbSaveRecordWith, fbMergeFields, fbCount, fbLarges
 window.fbAuthInstance = auth;
 
 /* ── Auth guard ── */
-onAuthStateChanged(auth, user => {
+onAuthStateChanged(auth, async user => {
   if (!user) { const target=(location.pathname.split('/').pop()||'index.html')+(location.search||'')+(location.hash||''); /* V265.6: keep #deliveries through sign-in */ window.location.href='login.html?return='+encodeURIComponent(target); return; }
 
-  // V267.2: a cash custodian login only has My Cash (the database refuses everything else anyway)
-  getDoc(doc(db, LedgerCore.LEDGER_COLLECTIONS.custodians, user.uid)).then(r => { if (r.exists()) location.replace('mycash.html'); }).catch(() => {});
+  // every login records itself, so an administrator sees logins without access (Administration → Users)
   setTimeout(() => ledgerService.registerSelf().catch(() => {}), 1500);
+  // V267.2: a cash custodian login only has My Cash. V270.4.1: other logins need an active users record (or be the owner).
+  const gate = await _bcResolveAccess(user);
+  if (gate.custodian) { location.replace('mycash.html'); return; }
+  if (!gate.ok) { _bcShowNoAccess(user, gate.reason); return; }
+  _bcWatchMyUser(user);
+  if (_myUser && _myUser.mustChangePassword) setTimeout(() => bcOpenPasswordDialog(true), 600);
   startDeliveryNoteModeListener();
   startLockingListeners();
   startInvoiceModeListener();
@@ -4036,7 +4205,7 @@ onAuthStateChanged(auth, user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.210';
+      s.src = 'js/app.js?v=270.41';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4048,7 +4217,9 @@ onAuthStateChanged(auth, user => {
         // V270.2.6: the RFQ entry screen (request type, product / service lines, requirements)
         const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=270.28'; document.body.appendChild(rq);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
-        const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.6'; document.body.appendChild(ds); };
+        const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=269.6'; document.body.appendChild(ds);
+        // V270.4.1: Administration → Users, Roles & Permissions
+        const us = document.createElement('script'); us.id = 'bizcore-users-script'; us.src = 'js/users.js?v=270.41'; document.body.appendChild(us); };
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js

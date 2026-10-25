@@ -11,6 +11,7 @@
  * Concurrency: transactions are serialisable; together with the order lock no two users can bill
  * the same order at the same moment, and the ledger checks hold even if they could.
  */
+import { accessWithRole } from './user-core.mjs?v=270.41';
 import { formatSequence, nextSequence } from './numbering.mjs?v=270.25';
 import {
   INVOICE_COLLECTIONS, INVOICE_SCHEMA_VERSION, INVOICE_TYPES, ERR, BILLING_SETTINGS_PATH, PERMISSION_LEVELS,
@@ -72,7 +73,7 @@ export function createInvoiceService(fs, options = {}) {
   /** Shared reads, in a fixed order (reads must precede writes). */
   async function readContext(tx, soId, extra = []) {
     const snaps = await Promise.all([
-      tx.get(refs.so(soId)), tx.get(refs.ledger(soId)), tx.get(refs.settings()), tx.get(refs.access()),
+      tx.get(refs.so(soId)), tx.get(refs.ledger(soId)), tx.get(refs.settings()), accessWithRole(tx, doc, db, actorOf().uid),
       lockRequired() ? tx.get(refs.lock(soId)) : Promise.resolve(null), ...extra.map(r => tx.get(r)),
     ]);
     const [soSnap, ledgerSnap, settingsSnap, accessSnap, lockSnap, ...rest] = snaps;

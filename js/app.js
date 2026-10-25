@@ -3188,7 +3188,8 @@ function switchSetupTab(tab) {
   if (tab === 'locks' && typeof startLocksScreen === 'function') startLocksScreen();
   if (tab === 'defaults') { renderSetupTermsList('delivery'); renderSetupTermsList('payment'); renderDocumentNumbering(); }
   if (tab === 'payment-accounts' && typeof renderPaymentAccounts === 'function') renderPaymentAccounts();
-  if (tab === 'users' && typeof renderCustodianLogins === 'function') renderCustodianLogins();   // V267.2
+  if (tab === 'users' && typeof renderUsersScreen === 'function') renderUsersScreen();   // V270.4.1 (custodian logins included)
+  if (tab === 'roles' && typeof renderRolesScreen === 'function') renderRolesScreen();   // V270.4.1
   if (tab === 'purchase-settings' && typeof renderPurchaseSettings === 'function') renderPurchaseSettings();   // V268.1
   if (tab === 'cost-components') renderCostComponents();
   if (tab === 'margin-status') renderMarginStatuses();

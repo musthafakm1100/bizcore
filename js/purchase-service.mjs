@@ -15,6 +15,7 @@
  *   recordSupplierPayment / recordSupplierCashBack / voidSupplierPayment are ONE transaction each:
  *   payment + balanced cash-ledger entry + postings (+ accounts hasEntries) + invoice figures + invoice event.
  */
+import { accessWithRole } from './user-core.mjs?v=270.41';
 import { formatSequence, nextSequence } from './numbering.mjs?v=270.25';
 import {
   PURCHASE_COLLECTIONS as C, PURCHASE_SCHEMA_VERSION, PURCHASE_SETTINGS_PATH, PURCHASE_STATUS,
@@ -129,7 +130,7 @@ export function createPurchaseService(fs, options = {}) {
     ensure(soIds.length <= 40, PURCHASE_ERR.INVALID_INPUT, 'One invoice can cover at most 40 sales orders.');
     // the stock keys depend on validation; read the candidates (product / description keys) up front
     return transact(async tx => {
-      const [settingsSnap, accessSnap, piSnap, counterSnap] = await Promise.all([tx.get(refs.settings()), tx.get(refs.access()), tx.get(refs.pi(id)), tx.get(refs.counter(numbering.counterKey))]);
+      const [settingsSnap, accessSnap, piSnap, counterSnap] = await Promise.all([tx.get(refs.settings()), accessWithRole(tx, doc, db, actorOf().uid), tx.get(refs.pi(id)), tx.get(refs.counter(numbering.counterKey))]);
       if (piSnap.exists()) {
         const ex = piSnap.data();
         ensure(ex.creationOperationId === operationId, PURCHASE_ERR.ID_COLLISION, 'Invoice ID already used by another operation');
@@ -321,7 +322,7 @@ export function createPurchaseService(fs, options = {}) {
     for (const l of lines) tx.update(refs.cashLine(l.id), { void: true, voidReason: why.slice(0, 200), entryRevision: er });
   }
   async function roleOf(tx, uid) {
-    const [accessSnap, settingsSnap] = await Promise.all([tx.get(refs.access()), tx.get(refs.settings())]);
+    const [accessSnap, settingsSnap] = await Promise.all([accessWithRole(tx, doc, db, actorOf().uid), tx.get(refs.settings())]);
     const admins = accessSnap.exists() && Array.isArray(accessSnap.data().adminUids) ? accessSnap.data().adminUids : [];
     return { isAdmin: admins.includes(uid), settings: effectivePurchaseSettings(settingsSnap.exists() ? settingsSnap.data() : null) };
   }
@@ -638,7 +639,7 @@ export function createPurchaseService(fs, options = {}) {
   }
 
   /* ───────── V268.5: Change Item (administrators) ───────── */
-  async function adminsOf(tx) { const a = await tx.get(refs.access()); return a.exists() && Array.isArray(a.data().adminUids) ? a.data().adminUids : []; }
+  async function adminsOf(tx) { const a = await accessWithRole(tx, doc, db, actorOf().uid); return a.exists() && Array.isArray(a.data().adminUids) ? a.data().adminUids : []; }
   async function changeStockItem(input = {}) {
     const { operationId, itemKey } = input;
     const id = stockChangeIdForOperation(operationId);
@@ -710,7 +711,7 @@ export function createPurchaseService(fs, options = {}) {
     const v = validatePurchaseSettings(input);
     if (!v.ok) fail(PURCHASE_ERR.INVALID_INPUT, v.errors.map(e => e.message).join(' '), { errors: v.errors });
     return transact(async tx => {
-      const [accessSnap, curSnap] = await Promise.all([tx.get(refs.access()), tx.get(refs.settings())]);
+      const [accessSnap, curSnap] = await Promise.all([accessWithRole(tx, doc, db, actorOf().uid), tx.get(refs.settings())]);
       const admins = accessSnap.exists() && Array.isArray(accessSnap.data().adminUids) ? accessSnap.data().adminUids : [];
       ensure(admins.includes(actor.uid), PURCHASE_ERR.NOT_ADMIN, 'Only administrators can change the purchase settings.');
       const revision = (curSnap.exists() ? Number(curSnap.data().revision) || 0 : 0) + 1;

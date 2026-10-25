@@ -8,6 +8,7 @@
  * Idempotency: document IDs derive from the client operation ID — a retried save is detected.
  * Concurrency: transactions are serialisable, so two users can never apply the same balance twice.
  */
+import { accessWithRole } from './user-core.mjs?v=270.41';
 import { formatSequence, nextSequence } from './numbering.mjs?v=270.25';
 import {
   RECEIPT_COLLECTIONS, RECEIPT_SCHEMA_VERSION, RECEIPT_SETTINGS_PATH, RECEIPT_STATUS, ERR,
@@ -70,7 +71,7 @@ export function createReceiptService(fs, options = {}) {
   /** Settings + admin flag + invoices + payment records, all read before any write. */
   async function readBase(tx, invoiceIds, extra = []) {
     const ids = [...new Set(invoiceIds)];
-    const snaps = await Promise.all([tx.get(refs.settings()), tx.get(refs.access()),
+    const snaps = await Promise.all([tx.get(refs.settings()), accessWithRole(tx, doc, db, actorOf().uid),
       ...ids.map(id => tx.get(refs.invoice(id))), ...ids.map(id => tx.get(refs.payment(id))), ...extra.map(r => tx.get(r))]);
     const [settingsSnap, accessSnap] = snaps;
     const invSnaps = snaps.slice(2, 2 + ids.length), paySnaps = snaps.slice(2 + ids.length, 2 + 2 * ids.length);
