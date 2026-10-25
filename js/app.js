@@ -5392,7 +5392,9 @@ const modalNavExcluded = new Set(['confirm-modal','validation-dialog','template-
    finished, so it must never become a "Back" target: the screen opened right after it (e.g. the Sales Order
    refreshed after saving an invoice) must not record it as the screen to return to, and any return entry that
    points back to it is dropped. Otherwise closing the next screens would reopen the already-saved form. */
-const modalNavEntryScreens = new Set(['so-create-modal','so-delivery-modal','dn-confirm-modal','dn-dispatch-action-modal','so-invoice-modal','so-payment-modal','inv-issue-modal','cn-issue-modal','rct-new-modal','rct-apply-modal','inv-edit-modal']);
+// V270.2.10: RFQ and Quotation entry added — after Save / Cancel the editor is finished; the view opened after a save must
+// not return to it (closing that view re-opened the editor and asked to discard).
+const modalNavEntryScreens = new Set(['rfq-modal','quote-modal','so-create-modal','so-delivery-modal','dn-confirm-modal','dn-dispatch-action-modal','so-invoice-modal','so-payment-modal','inv-issue-modal','cn-issue-modal','rct-new-modal','rct-apply-modal','inv-edit-modal']);
 function forgetFinishedEntryScreen(id){
   if(!modalNavEntryScreens.has(id)) return;
   for(let i=modalNavHistory.length-1;i>=0;i--){ if(modalNavHistory[i].from===id) modalNavHistory.splice(i,1); }

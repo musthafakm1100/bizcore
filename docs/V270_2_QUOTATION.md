@@ -274,3 +274,14 @@ See **docs/V270_2_6_RFQ_ENTRY.md** (mockup RFQ_2, Layout C). Upload list there (
 
 ## V270.2.9 — RFQ view (Layout A) and age badge (25 Oct 2026)
 See **docs/V270_2_9_RFQ_VIEW.md** (mockup RFQV_2). `bizcore-shell-v27029`. No rules change.
+
+## V270.2.10 — closing the view after an edit no longer returns to the editor (25 Oct 2026)
+**Reported by Musthafa:** RFQ View → Edit → Update RFQ opened the RFQ View; closing it went back to the RFQ editor (only
+Cancel / Update, and Cancel or ✕ asked to discard). Same with Quotation View → Edit → Save & Preview.
+- **Cause:** a screen opened within about a second after another one closed records that one as "where to go back"
+  (`openModalWithSize`). The editor had just closed, so the view recorded the editor.
+- **Fixed:** the RFQ and Quotation editors are "entry screens" like Sales Order / Delivery / Invoice / Receipt entry
+  (`modalNavEntryScreens`): once saved or cancelled, no screen returns to them. An editor that is still open underneath
+  (e.g. adding a customer from it) works as before.
+- Tests: tests/browser/edit-return.e2e.mjs (fails on V270.2.9 for both).
+- Upload: **index.html, sw.js, js/app.js** (`bizcore-shell-v270210`). No rules change.
