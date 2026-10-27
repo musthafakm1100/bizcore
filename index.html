@@ -2682,21 +2682,45 @@ window.BCPerm = {
   onChange(fn) { _bcPermListeners.add(fn); return () => _bcPermListeners.delete(fn); },
 };
 const _bcPermKey = (role, admin) => admin ? 'admin' : role ? JSON.stringify([role.id, role.revision, role.perms]) : 'none';
-/** At sign-in, before any data is read: the role's permissions. Administrators create the built-in roles once. */
+/** V270.4.4 administrators, in the background after sign-in: built-in roles created and Special Rights added only when
+ *  the roles read shows they are missing; user permission copies checked after such a change, otherwise once a day. */
+async function _bcRoleUpkeep() {
+  let changed = false;
+  try {
+    const roles = (await getDocs(collection(db, RoleCore.ROLE_COLLECTION))).docs.map(d => d.data()).filter(Boolean);
+    const have = new Set(roles.map(r => r.id));
+    if (RoleCore.BUILT_IN_ROLES.some(r => !have.has(r.id))) {
+      try { const made = await roleService.ensureBuiltInRoles(); if (made.length) { changed = true; console.info('[BizCore] Built-in roles created:', made.join(', ')); } }
+      catch (e) { console.warn('[BizCore] Built-in roles not created:', e.code || '', e.message); }
+    }
+    // V270.4.3, once: roles from before Special Rights get the rights with the same effect as today's settings
+    if (roles.some(r => !r.locked && (r.rights === undefined || r.rights === null))) {
+      try {
+        const rd = async id => { try { const x = await getDoc(doc(db, 'settings', id)); return x.exists() ? x.data() : {}; } catch (e) { return {}; } };
+        const [billing, receipts, purchasing] = await Promise.all([rd('billing'), rd('receipts'), rd('purchasing')]);
+        const done = await roleService.migrateRights({ billing, receipts, purchasing });
+        if (done.length) { changed = true; console.info('[BizCore] Special Rights added to roles:', done.join(', ')); }
+      } catch (e) { console.warn('[BizCore] Special Rights not added:', e.code || '', e.message); }
+    }
+  } catch (e) { console.warn('[BizCore] Role check not possible now:', e.code || '', e.message); return; }
+  // every user record carries its role's lists (what the rules read). Role and user saves keep them equal in the same
+  // commit; this repair pass (reads all users and roles) runs after an upkeep change, otherwise at most once a day here.
+  const KEY = 'bc_permSyncAt', day = 86400000;
+  let last = 0; try { last = Number(localStorage.getItem(KEY)) || 0; } catch (e) {}
+  if (!changed && Date.now() - last < day) return;
+  setTimeout(() => roleService.syncUserPerms().then(f => {
+    try { localStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+    if (f.length) console.info('[BizCore] permissions refreshed for', f.length, 'user(s)');
+  }).catch(e => console.warn('[BizCore] permission sync:', e.message)), 2500);
+}
+/** At sign-in, before any data is read: the role's permissions. Administrators: everything (role upkeep in the background). */
 async function _bcLoadPermissions(user, gate) {
   const admin = !!(gate.owner || (_myUser && _myUser.active !== false && UserCore.roleOfUser(_myUser) === 'administrator'));
   if (admin) {
     _bcSetPerm(null, true); _bcPermStamp = 'admin';
-    try { await roleService.ensureBuiltInRoles(); } catch (e) { console.warn('[BizCore] Built-in roles not created:', e.code || '', e.message); }
-    // V270.4.3, once: roles from before Special Rights get the rights with the same effect as today's settings
-    try {
-      const rd = async id => { try { const x = await getDoc(doc(db, 'settings', id)); return x.exists() ? x.data() : {}; } catch (e) { return {}; } };
-      const [billing, receipts, purchasing] = await Promise.all([rd('billing'), rd('receipts'), rd('purchasing')]);
-      const done = await roleService.migrateRights({ billing, receipts, purchasing });
-      if (done.length) console.info('[BizCore] Special Rights added to roles:', done.join(', '));
-    } catch (e) { console.warn('[BizCore] Special Rights not added:', e.code || '', e.message); }
-    // every user record carries its role's lists (what the rules read) — repair any that differ, in the background
-    setTimeout(() => roleService.syncUserPerms().then(f => { if (f.length) console.info('[BizCore] permissions refreshed for', f.length, 'user(s)'); }).catch(e => console.warn('[BizCore] permission sync:', e.message)), 2500);
+    // V270.4.4: role upkeep no longer holds up the sign-in. It only creates / completes records (it grants nothing):
+    // one plain read of the roles decides whether the built-in roles transaction or the Special Rights step is needed.
+    setTimeout(_bcRoleUpkeep, 0);
     return { ok: true };
   }
   if (gate.unchecked) { _bcSetPerm(null, true); return { ok: true }; }   // offline at start: the database still checks every change
@@ -4260,6 +4284,7 @@ onAuthStateChanged(auth, async user => {
   // V270.4.2: the role's permissions before any data is read; the users list (owner of new RFQs)
   const perm = await _bcLoadPermissions(user, gate);
   if (!perm.ok) { _bcShowNoAccess(user, perm.reason); return; }
+  try { console.info('[BizCore] Sign-in checks done ' + Math.round(performance.now()) + ' ms after the page started loading (' + (window.BCPerm.admin ? 'administrator' : 'user') + ')'); } catch (e) {}
   window.BizCoreUsers.startList();
   _bcWatchMyUser(user);
   if (_myUser && _myUser.mustChangePassword) setTimeout(() => bcOpenPasswordDialog(true), 600);
