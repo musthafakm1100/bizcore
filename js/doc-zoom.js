@@ -24,17 +24,21 @@
     }
     return document.scrollingElement || document.documentElement;
   }
-  function natural(doc) {
-    if (doc._bczNat) return doc._bczNat;
-    const z = doc.style.zoom; doc.style.zoom = '';
-    const w = doc.offsetWidth; doc.style.zoom = z;
-    if (w > 0) doc._bczNat = w;
-    return w || 794;
+  /** Every document page is A4: 210 mm = 793.7 CSS px at 100%. The page is held at that width (lock) so a zoom
+      enlarges it instead of squeezing its content into the same space (the desktop pages were fluid). */
+  const A4 = 210 * 96 / 25.4;
+  function lock(doc) {
+    if (doc._bczLocked) return;
+    [['width', '210mm'], ['min-width', '210mm'], ['max-width', 'none'], ['flex', '0 0 auto'], ['box-sizing', 'border-box']]
+      .forEach(([k, v]) => doc.style.setProperty(k, v, 'important'));
+    doc._bczLocked = true;
   }
+  function natural(doc) { lock(doc); return A4; }
   /** Set the scale. anchor = {px, py, cx, cy}: the page point (px, py, unscaled) goes under the screen point (cx, cy). */
   function apply(st, scale, anchor) {
     const { doc, host } = st;
     st.scale = clamp(scale, st.min, MAX);
+    lock(doc);
     doc.style.zoom = Math.abs(st.scale - 1) < 0.001 ? '' : String(+st.scale.toFixed(4));
     const wide = doc.getBoundingClientRect().width > host.clientWidth + 1;
     if (wide) { host.style.setProperty('overflow-x', 'auto', 'important'); host.style.setProperty('justify-content', 'flex-start', 'important'); }

@@ -328,7 +328,7 @@
     const Z = window.BCDocZoom;
     m.querySelectorAll('.qdoc-sheet, .dn-a4').forEach(doc => {
       const host = doc.parentElement; if (!host || m.id === 'dn-print-modal') return;
-      if (window.innerWidth > 1100) { if (Z) Z.fit(doc, 1); else { doc.style.zoom = ''; host.style.overflowX = ''; } return; }
+      if (!Z && window.innerWidth > 1100) { doc.style.zoom = ''; host.style.overflowX = ''; return; }
       if (!Z) {
         doc.style.zoom = '';
         const avail = host.clientWidth - 4, w = doc.offsetWidth;
@@ -336,7 +336,8 @@
         return;
       }
       if (host.clientWidth <= 0) return;   // Details tab: fitted when the Document tab opens
-      const avail = host.clientWidth - 4, w = Z.natural(doc);
+      // every size (V270.4.5 fix): A4 at 100%, smaller only when the area is narrower than the page
+      const avail = host.clientWidth - (window.innerWidth > 1100 ? 0 : 4), w = Z.natural(doc);
       Z.fit(doc, w > avail && avail > 100 ? avail / w : 1);
     });
   }

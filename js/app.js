@@ -12165,8 +12165,8 @@ function dnMobileTab(tab,silent){
 function dnFitA4(){
   const docEl=document.querySelector('#dn-print-body .dn-view-document'),a4=docEl?.querySelector('.dn-a4');if(!a4)return;
   const Z=window.BCDocZoom; // V270.4.5: page-only zoom (js/doc-zoom.js)
-  if(window.innerWidth>=900){if(Z)Z.fit(a4,1);else a4.style.zoom='';return;}
-  const avail=docEl.clientWidth-12;if(avail<=0)return;
+  if(!Z&&window.innerWidth>=900){a4.style.zoom='';return;}
+  const avail=docEl.clientWidth-(window.innerWidth>=900?0:12);if(avail<=0)return;
   if(Z){Z.fit(a4,Math.min(1,avail/Z.natural(a4)));return;}
   a4.style.zoom='';const w=a4.offsetWidth||794;
   a4.style.zoom=String(Math.min(1,avail/w));
