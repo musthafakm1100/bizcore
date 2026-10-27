@@ -1,0 +1,24 @@
+/* BizCore V270.4.5 — the app frame stays still on phones and tablets; document pages zoom on their own (js/doc-zoom.js).
+   touch-action on the root stops pinch and double-tap zoom of the whole app (Android Chrome, iPhone Safari 13+);
+   one-finger scrolling is unchanged. overscroll-behavior stops the edge bounce / pull-to-refresh that made the
+   screen "float". The phone's own accessibility zoom and text size settings still work. */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:pan-x pan-y;overscroll-behavior:none}
+body{overscroll-behavior:none}
+
+/* document zoom bar — approved mockup DZ_1 */
+.bcz-bar{position:absolute;z-index:60;display:flex;align-items:center;height:40px;padding:0 4px;box-sizing:border-box;
+  background:#fff;border:1px solid #cfd8e3;border-radius:22px;box-shadow:0 6px 18px rgba(15,39,61,.18);
+  color:#17324d;font-size:13px;font-weight:700;user-select:none;-webkit-user-select:none;transition:opacity .15s}
+.bcz-bar[hidden]{display:none!important}
+.bcz-bar button{all:unset;box-sizing:border-box;height:34px;min-width:36px;display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  border-radius:17px;color:#274d70;cursor:pointer;font-size:18px!important;font-weight:600!important;touch-action:manipulation}
+.bcz-bar button:hover{background:#eef4fa}
+.bcz-bar button:focus-visible{outline:2px solid #175b91;outline-offset:1px}
+.bcz-bar button:disabled{opacity:.35;cursor:default;background:none}
+.bcz-bar .bcz-pct{min-width:48px;text-align:center;font-variant-numeric:tabular-nums}
+.bcz-bar .bcz-sep{width:1px;height:20px;background:#dbe3ec;margin:0 4px}
+.bcz-bar .bcz-fit{padding:0 10px 0 7px;font-size:12.5px!important;font-weight:700!important;color:#175b91}
+.bcz-bar .bcz-fit i{font-size:15px}
+.bcz-bar .bcz-fit.on{color:#64748b}
+@media (hover:hover) and (pointer:fine){.bcz-bar{opacity:.6}.bcz-bar:hover,.bcz-bar:focus-within{opacity:1}}
+@media print{.bcz-bar{display:none!important}}

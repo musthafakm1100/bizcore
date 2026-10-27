@@ -324,12 +324,20 @@
     if (line.innerHTML !== html) line.innerHTML = html;
   }
   function fitDocuments(m) {
+    // V270.4.5: the fit-to-width scale goes to BCDocZoom (js/doc-zoom.js), which keeps the user's own zoom
+    const Z = window.BCDocZoom;
     m.querySelectorAll('.qdoc-sheet, .dn-a4').forEach(doc => {
-      const host = doc.parentElement; if (!host) return;
-      if (window.innerWidth > 1100 || m.id === 'dn-print-modal') { if (m.id !== 'dn-print-modal') { doc.style.zoom = ''; host.style.overflowX = ''; } return; }
-      doc.style.zoom = '';
-      const avail = host.clientWidth - 4, w = doc.offsetWidth;
-      if (w > avail && avail > 100) { doc.style.zoom = (avail / w).toFixed(3); host.style.overflowX = 'hidden'; }
+      const host = doc.parentElement; if (!host || m.id === 'dn-print-modal') return;
+      if (window.innerWidth > 1100) { if (Z) Z.fit(doc, 1); else { doc.style.zoom = ''; host.style.overflowX = ''; } return; }
+      if (!Z) {
+        doc.style.zoom = '';
+        const avail = host.clientWidth - 4, w = doc.offsetWidth;
+        if (w > avail && avail > 100) { doc.style.zoom = (avail / w).toFixed(3); host.style.overflowX = 'hidden'; }
+        return;
+      }
+      if (host.clientWidth <= 0) return;   // Details tab: fitted when the Document tab opens
+      const avail = host.clientWidth - 4, w = Z.natural(doc);
+      Z.fit(doc, w > avail && avail > 100 ? avail / w : 1);
     });
   }
   // Quotation / Invoice / Payment Receipt views below 900 px: "Document" and "Details" tabs, like the Delivery Note view
@@ -346,6 +354,9 @@
       body.insertBefore(tabs, body.firstChild);
     }
     tabs.hidden = false;
+    // V270.4.5: the tab bar sticks to the very top edge of the window body (over its padding), so a scrolled or zoomed page never shows above or beside it
+    const cs = getComputedStyle(body), pt = parseFloat(cs.paddingTop) || 0, pl = parseFloat(cs.paddingLeft) || 0, pr = parseFloat(cs.paddingRight) || 0;
+    tabs.style.top = -pt + 'px'; tabs.style.margin = `${-pt}px ${-pr}px 0 ${-pl}px`;
     if (!ws.dataset.bctab) ws.dataset.bctab = window.innerWidth < 700 ? 'details' : 'doc';
     if (tabs.nextElementSibling !== ws && tabs.parentElement === body) body.insertBefore(tabs, body.firstChild);
     paintTabs(tabs, ws);
