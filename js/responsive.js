@@ -349,7 +349,7 @@
     if (window.innerWidth > TAB_MAX) { if (tabs) tabs.hidden = true; ws.removeAttribute('data-bctab'); return; }
     if (!tabs) {
       tabs = document.createElement('div'); tabs.className = 'bcv-tabs'; tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'View');
-      tabs.innerHTML = '<button type="button" role="tab" data-bct="details">Details</button><button type="button" role="tab" data-bct="doc">Document</button>';
+      tabs.innerHTML = '<button type="button" role="tab" data-bct="doc">Document</button><button type="button" role="tab" data-bct="details">Details</button>';  // V270.4.5: Document first
       tabs.addEventListener('click', e => { const b = e.target.closest('[data-bct]'); if (!b) return; const w = body.querySelector('.qv-document-workspace, .inv-view-workspace'); if (!w) return; w.dataset.bctab = b.dataset.bct; paintTabs(tabs, w); body.scrollTop = 0; requestAnimationFrame(() => fitDocuments(m)); });
       body.insertBefore(tabs, body.firstChild);
     }
@@ -357,7 +357,7 @@
     // V270.4.5: the tab bar sticks to the very top edge of the window body (over its padding), so a scrolled or zoomed page never shows above or beside it
     const cs = getComputedStyle(body), pt = parseFloat(cs.paddingTop) || 0, pl = parseFloat(cs.paddingLeft) || 0, pr = parseFloat(cs.paddingRight) || 0;
     tabs.style.top = -pt + 'px'; tabs.style.margin = `${-pt}px ${-pr}px 0 ${-pl}px`;
-    if (!ws.dataset.bctab) ws.dataset.bctab = window.innerWidth < 700 ? 'details' : 'doc';
+    if (!ws.dataset.bctab) ws.dataset.bctab = 'doc';   // V270.4.5: the document opens first on every size
     if (tabs.nextElementSibling !== ws && tabs.parentElement === body) body.insertBefore(tabs, body.firstChild);
     paintTabs(tabs, ws);
   }

@@ -12211,8 +12211,8 @@ function viewDeliveryNote(soId, deliveryIdx) {
   const invBtn=document.getElementById('dn-create-invoice-btn');if(invBtn)invBtn.style.display=dnCanInvoiceFromView(so,d)?'inline-flex':'none';
   const hist=document.getElementById('dn-dispatch-history-btn');if(hist)hist.style.display=dnIndependentMode()?'none':(d.dispatchHistory||[]).length?'inline-flex':'none';
   // V265.5: phone / tablet (below 900 px) — "Details" and "Document" tabs; the desktop view is unchanged.
-  const mtab=window.innerWidth<700?'details':'doc';
-  window._activeDNView={soId:so.id,deliveryIdx};document.getElementById('dn-print-body').innerHTML=`<div class="dn-m-tabs" role="tablist" aria-label="Delivery Note view"><button type="button" role="tab" data-mtab="details" onclick="dnMobileTab('details')">Details</button><button type="button" role="tab" data-mtab="doc" onclick="dnMobileTab('doc')">Document</button></div><div class="dn-view-workspace" data-mtab="${mtab}">${dnMobileDetailsHtml(so,d)}<div class="dn-view-document">${buildDeliveryNoteDocument(so,d,deliveryIdx,'standard',true)}</div><aside class="dn-view-acceptance" aria-label="Delivery confirmation">${buildDNConfirmationPanel(d)}</aside></div>`;
+  const mtab='doc'; // V270.4.5: Document tab first and open by default
+  window._activeDNView={soId:so.id,deliveryIdx};document.getElementById('dn-print-body').innerHTML=`<div class="dn-m-tabs" role="tablist" aria-label="Delivery Note view"><button type="button" role="tab" data-mtab="doc" onclick="dnMobileTab('doc')">Document</button><button type="button" role="tab" data-mtab="details" onclick="dnMobileTab('details')">Details</button></div><div class="dn-view-workspace" data-mtab="${mtab}">${dnMobileDetailsHtml(so,d)}<div class="dn-view-document">${buildDeliveryNoteDocument(so,d,deliveryIdx,'standard',true)}</div><aside class="dn-view-acceptance" aria-label="Delivery confirmation">${buildDNConfirmationPanel(d)}</aside></div>`;
   dnMobileHeaderChip(d);dnMobileTab(mtab,true);
   renderDNQRCode(d);openModalWithSize('dn-print-modal');requestAnimationFrame(dnFitA4);
   if(m)m._independentAudit=null;
