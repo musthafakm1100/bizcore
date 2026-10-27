@@ -46,7 +46,7 @@
       "purpose": "any"
     },
     {
-      "src": "icons/bizcore-icon-192.png",
+      "src": "icons/bizcore-maskable-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
@@ -58,7 +58,7 @@
       "purpose": "any"
     },
     {
-      "src": "icons/bizcore-icon-512.png",
+      "src": "icons/bizcore-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
