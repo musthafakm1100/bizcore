@@ -2,7 +2,7 @@
    1. The app frame never zooms: the viewport tag stops Android pinch / focus zoom; iPhone Safari ignores the pinch
       limit, so its pinch gesture and two-finger moves are stopped here (css/mobile-zoom.css adds touch-action).
    2. Document pages (.qdoc-sheet, .dn-a4) zoom on their own: pinch, double-tap (Fit → 100% → 200% → Fit),
-      Ctrl + wheel / trackpad pinch, and the bar "−  % +  Fit". One finger pans with normal scrolling.
+      Ctrl + wheel / trackpad pinch, drag to pan with the mouse when wider than its area, and the bar "−  % +  Fit". One finger pans with normal scrolling.
    The fit code (js/responsive.js fitDocuments, js/app.js dnFitA4) calls BCDocZoom.fit(doc, base) with the
    fit-to-width scale; 100% = printed A4. Nothing is stored; nothing goes into Print / PDF. */
 (function () {
@@ -41,6 +41,7 @@
     lock(doc);
     doc.style.zoom = Math.abs(st.scale - 1) < 0.001 ? '' : String(+st.scale.toFixed(4));
     const wide = doc.getBoundingClientRect().width > host.clientWidth + 1;
+    host.classList.toggle('bcz-pan', wide);
     if (wide) { host.style.setProperty('overflow-x', 'auto', 'important'); host.style.setProperty('justify-content', 'flex-start', 'important'); }
     else { host.style.removeProperty('overflow-x'); host.style.removeProperty('justify-content'); }
     if (anchor) {
@@ -166,6 +167,25 @@
       e.preventDefault();
       apply(s, s.scale * Math.exp(-e.deltaY * 0.002), anchorAt(s, e.clientX, e.clientY));
     }, { passive: false });
+    // PC: when the page is wider than its area, hold the left mouse button and drag to pan (hand pointer).
+    // At normal size nothing changes, so text can still be selected.
+    let drag = null;
+    host.addEventListener('pointerdown', e => {
+      if (e.pointerType !== 'mouse' || e.button !== 0 || !host.classList.contains('bcz-pan')) return;
+      if (e.target.closest('a,button,input,select,textarea,label,[contenteditable]')) return;
+      const s = cur(); if (!s) return;
+      drag = { x: e.clientX, y: e.clientY, l: host.scrollLeft, v: vScroller(host), moved: false }; drag.t = drag.v.scrollTop;
+      e.preventDefault(); host.setPointerCapture?.(e.pointerId); host.classList.add('bcz-grabbing');
+    });
+    host.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+      host.scrollLeft = drag.l - dx; drag.v.scrollTop = drag.t - dy;
+    });
+    const endDrag = e => { if (!drag) return; const moved = drag.moved; drag = null; host.classList.remove('bcz-grabbing'); try { host.releasePointerCapture?.(e.pointerId); } catch (x) {}
+      if (moved) host.addEventListener('click', ev => { ev.stopPropagation(); ev.preventDefault(); }, { capture: true, once: true }); };
+    host.addEventListener('pointerup', endDrag); host.addEventListener('pointercancel', endDrag);
     if (window.ResizeObserver) new ResizeObserver(() => { const s = cur(); if (s && s.host.closest('.modal')?._bczBar) place(s.host.closest('.modal')._bczBar); }).observe(host);
   }
 

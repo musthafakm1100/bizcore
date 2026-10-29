@@ -22,3 +22,5 @@ body{overscroll-behavior:none}
 .bcz-bar .bcz-fit.on{color:#64748b}
 @media (hover:hover) and (pointer:fine){.bcz-bar{opacity:.6}.bcz-bar:hover,.bcz-bar:focus-within{opacity:1}}
 @media print{.bcz-bar{display:none!important}}
+/* PC: drag to pan a page that is zoomed wider than its area */
+@media (pointer:fine){.bcz-host.bcz-pan{cursor:grab}.bcz-host.bcz-pan.bcz-grabbing{cursor:grabbing;user-select:none;-webkit-user-select:none}}
