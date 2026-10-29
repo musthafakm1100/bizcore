@@ -296,3 +296,7 @@ label.inv-line-row{cursor:pointer;margin:0;text-transform:none;letter-spacing:0;
 .cn-paid-note{display:flex;gap:8px;align-items:flex-start;margin:0 0 10px;padding:10px 12px;border:1px solid #f1d9a6;background:#fff8e8;border-radius:9px;color:#7a5410;font-size:12.5px;line-height:1.5}
 .cn-paid-note i{font-size:16px;margin-top:1px;flex:0 0 auto}
 .cn-paid-note strong{font-weight:600}
+
+/* V270.4.7 — phone: the "⋯" More menu opens above the action bar; the bar must not clip it
+   (it scrolls sideways only when all buttons are shown, i.e. without the More button). */
+@media(max-width:700px){#inv-view-modal .dn-view-actionbar.bc-has-more{overflow:visible!important}}

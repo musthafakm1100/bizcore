@@ -6782,7 +6782,7 @@ function printQuotation(id) {
 +'</body></html>';
 
   const w = window.open('', '_blank', 'width=880,height=1020');
-  w.document.write(html);
+  w.document.write(window.BCPrintIOS ? BCPrintIOS.apply(html) : html); // V270.4.7: iPhone / iPad print
   w.document.close();
 }
 
@@ -12319,7 +12319,7 @@ function printDeliveryNote(format='standard',soArg=null,dArg=null,idxArg=null) {
   const printTitle=(baseName||'Delivery Note')+((format==='accepted-standard'||format==='accepted-progress')?' - Accepted - '+(format==='accepted-progress'?'Progress':'Standard'):'');
   const w=window.open('','_blank');if(!w){showToast('Please allow pop-ups to print the Delivery Note','warning');return}
   const safeTitle=escapeHtml(printTitle);
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeTitle}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>${html}<scr`+`ipt>(function(){var returned=false;var wantedTitle=${JSON.stringify(printTitle)};function keepTitle(){try{document.title=wantedTitle;}catch(e){}}function backToBizCore(){if(returned)return;returned=true;try{if(window.opener&&!window.opener.closed){window.opener.focus();}}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},80);}window.addEventListener('beforeprint',keepTitle);window.addEventListener('afterprint',backToBizCore);window.onload=function(){keepTitle();requestAnimationFrame(function(){requestAnimationFrame(function(){keepTitle();setTimeout(function(){keepTitle();window.print();},180);});});};})();</scr`+`ipt></body></html>`);w.document.close();
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeTitle}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style>${window.BCPrintIOS?BCPrintIOS.head():''}</head><body>${html}<scr`+`ipt>(function(){var returned=false;var wantedTitle=${JSON.stringify(printTitle)};function keepTitle(){try{document.title=wantedTitle;}catch(e){}}function backToBizCore(){if(returned)return;returned=true;try{if(window.opener&&!window.opener.closed){window.opener.focus();}}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},80);}window.addEventListener('beforeprint',keepTitle);window.addEventListener('afterprint',backToBizCore);window.onload=function(){keepTitle();requestAnimationFrame(function(){requestAnimationFrame(function(){keepTitle();setTimeout(function(){keepTitle();window.print();},180);});});};})();</scr`+`ipt></body></html>`);w.document.close();
 }
 
 /* ── Create Invoice / Partial Invoicing (V229) ── */
@@ -12689,6 +12689,7 @@ function _tplOpen(html) {
   html=String(html||'').replace(/<title>[\s\S]*?<\/title>/i,'<title>'+escTitle+'</title>');
   const lifecycle='<scr'+'ipt>(function(){var t='+JSON.stringify(printTitle)+';function setTitle(){try{document.title=t}catch(e){}}setTitle();window.addEventListener("beforeprint",setTitle);window.addEventListener("afterprint",function(){try{if(window.opener&&!window.opener.closed){window.opener.focus();}}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},120);});})();<'+'/script>';
   html=html.replace(/<\/body>/i,lifecycle+'</body>');
+  if(window.BCPrintIOS)html=BCPrintIOS.apply(html); // V270.4.7: iPhone / iPad print
   w.document.open();
   w.document.write(html);
   w.document.close();

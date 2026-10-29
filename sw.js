@@ -8,7 +8,7 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v27049';
+const CACHE_NAME = 'bizcore-shell-v27050';
 const APP_SHELL = [
   './login.html',
   './delivery.html',
@@ -20,7 +20,7 @@ const APP_SHELL = [
   './css/masters.css?v=266.5',
   './css/administration-typography.css?v=247',
   './css/numbering-controls.css?v=266.5',
-  './css/invoicing.css?v=270.49',
+  './css/invoicing.css?v=270.50',
   './css/register-standard.css?v=268.4',
   './css/doc-view.css?v=266.5',
   './css/delivery-compact.css?v=266.5',
@@ -46,9 +46,10 @@ const APP_SHELL = [
   './js/role-service.mjs?v=270.43',
   './css/mobile-zoom.css?v=270.49',
   './js/doc-zoom.js?v=270.48',
+  './js/print-ios.js?v=270.50',
   './js/ui-standard.js?v=269.1',
   './js/responsive.js?v=270.47',
-  './js/app.js?v=270.49',
+  './js/app.js?v=270.50',
   './js/so-view.js?v=270.43',
   './js/pricing-ui.js?v=270.24',
   './js/quotation-ui.js?v=270.21',
@@ -60,7 +61,7 @@ const APP_SHELL = [
   './js/lock-service.mjs?v=266.0',
   './js/invoice-core.mjs?v=266.0',
   './js/invoice-service.mjs?v=270.43',
-  './js/invoicing.js?v=270.49',
+  './js/invoicing.js?v=270.50',
   './js/receipts.js?v=270.43',
   './js/receipt-core.mjs?v=270.43',
   './js/accounts.js?v=268.51',

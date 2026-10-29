@@ -1086,7 +1086,7 @@ function openCreditNoteDocument(cnId){ openCreditNoteView(cnId); }
 function invPrintDocument(html, fileTitle){
   const w = window.open('', '_blank');
   if (!w) { showToast('Allow pop-ups for BizCore to print.', 'warning'); return; }
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${invEsc(fileTitle)}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>${html}<scr` + `ipt>(function(){var done=false;function back(){if(done)return;done=true;try{if(window.opener&&!window.opener.closed)window.opener.focus();}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},80);}window.addEventListener('afterprint',back);window.onload=function(){requestAnimationFrame(function(){requestAnimationFrame(function(){setTimeout(function(){window.print();},180);});});};})();</scr` + `ipt></body></html>`);
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${invEsc(fileTitle)}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style>${window.BCPrintIOS ? BCPrintIOS.head() : ''}</head><body>${html}<scr` + `ipt>(function(){var done=false;function back(){if(done)return;done=true;try{if(window.opener&&!window.opener.closed)window.opener.focus();}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},80);}window.addEventListener('afterprint',back);window.onload=function(){requestAnimationFrame(function(){requestAnimationFrame(function(){setTimeout(function(){window.print();},180);});});};})();</scr` + `ipt></body></html>`);
   w.document.close();
 }
 function printCustomerInvoice(invoiceId){
