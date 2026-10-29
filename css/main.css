@@ -9270,3 +9270,11 @@ img,svg,canvas{max-width:100%}
 .theme-sample-actions{display:flex;gap:6px;justify-content:flex-end}
 @media(max-width:760px){.preferences-theme-layout{grid-template-columns:1fr}}
 .theme-sample-row .badge{font-size:10.5px;padding:2px 8px;font-weight:700;line-height:1.4}
+
+/* V270.4.6 — invoiced Delivery Note: Correct / Revise locked */
+.dn-invoice-lock-note{display:flex;gap:8px;align-items:flex-start;margin:0 16px 10px;padding:9px 11px;border:1px solid #f1d9a6;background:#fff8e8;border-radius:9px;color:#7a5410;font-size:11px;line-height:1.45}
+.dn-invoice-lock-note i{font-size:15px;margin-top:1px;flex:0 0 auto}
+.dn-invoice-lock-note strong{font-weight:600}
+.dn-acceptance-actions button:disabled{opacity:.45;cursor:not-allowed;background:#f6f8fa}
+.dn-acceptance-actions button:disabled:hover{background:#f6f8fa;border-color:#d5e0ea;color:var(--c-31526f)}
+@media(max-width:560px){.dn-invoice-lock-note{margin:0 14px 10px}}

@@ -291,3 +291,8 @@ label.inv-line-row{cursor:pointer;margin:0;text-transform:none;letter-spacing:0;
 .inv-ready-item.ok b{background:#16a34a}
 .inv-ready-done{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:#166534}
 @media(max-width:700px){.inv-ready{flex-basis:100%;margin-right:0}}
+
+/* V270.4.6 — credit note on a paid invoice */
+.cn-paid-note{display:flex;gap:8px;align-items:flex-start;margin:0 0 10px;padding:10px 12px;border:1px solid #f1d9a6;background:#fff8e8;border-radius:9px;color:#7a5410;font-size:12.5px;line-height:1.5}
+.cn-paid-note i{font-size:16px;margin-top:1px;flex:0 0 auto}
+.cn-paid-note strong{font-weight:600}

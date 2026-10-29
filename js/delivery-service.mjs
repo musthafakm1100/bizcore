@@ -20,9 +20,9 @@ import {
   COLLECTIONS, SCHEMA_VERSION, LIMITS, ERR, DeliveryError,
   isSafeId, dnIdForOperation, eventIdForOperation, soLineIndex, emptyLedger, applyLedgerDeltas,
   ledgerDeltasBetween, buildDNItem, validateDispatchLines, validateAcceptanceLines, requireReason,
-  requireDate, cleanText, cleanDeliveredBy, assertSize, dnStatus, dispatchSnapshot, acceptanceSnapshot, roundQty,
-  invoicedQtyByLine,
-} from './delivery-core.mjs?v=266.0';
+  requireDate, cleanText, cleanDeliveredBy, assertSize, dnStatus, dispatchSnapshot, acceptanceSnapshot, roundQty, acceptedQtyOf,
+  invoicedQtyByLine, dnInvoiceCoverage, dnInvoicedMessage, dnKeyOf,
+} from './delivery-core.mjs?v=270.46';
 import { LOCK_COLLECTION, LOCK_TYPES, lockId, lockHeldBy } from './lock-service.mjs?v=266.0';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
@@ -176,13 +176,21 @@ export function createDeliveryService(fs, options = {}) {
   }
 
   /* ───────── change (shared transactional skeleton) ───────── */
-  async function change({ operationId, dnId, salesOrderId, expectedRevision, collection, eventPrefix, apply }) {
+  async function change({ operationId, dnId, salesOrderId, expectedRevision, collection, eventPrefix, apply, peers = false }) {
     ensure(isSafeId(dnId), ERR.INVALID_INPUT, 'Delivery Note ID required');
     ensure(isSafeId(salesOrderId), ERR.INVALID_INPUT, 'Sales Order ID required');
     ensure(Number.isInteger(expectedRevision) && expectedRevision > 0, ERR.INVALID_INPUT, 'Expected revision required');
     const eventId = eventIdForOperation(eventPrefix, operationId);
     const actor = actorOf(), at = now();
     const soId = salesOrderId;
+    // V270.4.6: corrections / revisions need the order's other Delivery Notes to tell which DN an invoice
+    // covers (first confirmed = first invoiced). Their IDs come from a query; their contents are read
+    // inside the transaction. Without query support the other DNs are treated as confirmed first.
+    let peerIds = null;
+    if (peers && typeof fs.getDocs === 'function' && typeof fs.query === 'function' && typeof fs.where === 'function' && typeof fs.collection === 'function') {
+      const snap = await fs.getDocs(fs.query(fs.collection(db, COLLECTIONS.deliveryNotes), fs.where('salesOrderId', '==', soId)));
+      peerIds = snap.docs.map(d => d.id).filter(id => id !== dnId && isSafeId(id));
+    }
     return transact(async tx => {
       // Read order matters: the ledger (aggregate) is read BEFORE the DN. If the reads straddle
       // another user's commit, the DN is then the newer read, so the revision check reports an
@@ -193,6 +201,8 @@ export function createDeliveryService(fs, options = {}) {
       ensure(dnSnap.exists(), ERR.NOT_FOUND, 'Delivery Note not found');
       const old = dnSnap.data();
       ensure(old.salesOrderId === soId, ERR.INVALID_INPUT, 'Delivery Note does not belong to this Sales Order');
+      const peerDocs = peerIds ? (await Promise.all(peerIds.map(id => tx.get(refs.dn(id)))))
+        .filter(x => x.exists()).map(x => x.data()).filter(d => d.salesOrderId === soId) : null;
       if (eventSnap.exists()) {
         const prev = eventSnap.data();
         ensure(prev.operationId === operationId && prev.deliveryNoteId === dnId, ERR.ID_COLLISION, 'Audit event ID collision');
@@ -206,7 +216,12 @@ export function createDeliveryService(fs, options = {}) {
       const lineIndex = soLineIndex(so);
       const ledger = readLedger(ledgerSnap, soId);
 
-      const { next, label, kind, type, reason, before, after } = apply(old, { lineIndex, so, at, actor });
+      // Invoiced-by-delivery quantity: from the ledger once invoices are independent documents,
+      // otherwise from the invoices still embedded in the Sales Order.
+      const invoicedEmbedded = invoicedQtyByLine(so);
+      const invoicedOf = id => (ledger.lines?.[id] && ledger.lines[id].invoicedDelivery != null)
+        ? Number(ledger.lines[id].invoicedDelivery) || 0 : (invoicedEmbedded.get(id) || 0);
+      const { next, label, kind, type, reason, before, after } = apply(old, { lineIndex, so, at, actor, ledger, invoicedOf, peerDocs });
       const revision = old.revision + 1;
       const record = {
         ...next, id: old.id, schemaVersion: SCHEMA_VERSION, salesOrderId: soId, dnNo: old.dnNo,
@@ -218,19 +233,14 @@ export function createDeliveryService(fs, options = {}) {
       const deltas = ledgerDeltasBetween(old, record);
       const nextLedger = applyLedgerDeltas(ledger, lineIndex, deltas);
       // Accepted quantity can never fall below what has already been invoiced for that line:
-      // the invoice must be cancelled (or a credit note issued) first.
-      // Invoiced-by-delivery quantity: from the ledger once invoices are independent documents,
-      // otherwise from the invoices still embedded in the Sales Order.
-      const invoicedEmbedded = invoicedQtyByLine(so);
-      const invoicedOf = id => (ledger.lines?.[id] && ledger.lines[id].invoicedDelivery != null)
-        ? Number(ledger.lines[id].invoicedDelivery) || 0 : (invoicedEmbedded.get(id) || 0);
+      // a credit note must be issued first (invoices are never cancelled).
       for (const d of deltas) {
         if (!(d.accepted < 0)) continue;
         const inv = invoicedOf(d.lineId);
         const acc = Number(nextLedger.lines?.[d.lineId]?.accepted) || 0;
         const ref = lineIndex.get(d.lineId);
         ensure(acc + 1e-6 >= inv, ERR.BELOW_INVOICED,
-          `"${ref?.line?.desc || ref?.line?.code || 'Line'}": ${roundQty(inv)} already invoiced, so the accepted quantity cannot be reduced to ${roundQty(acc)}. Cancel the invoice or issue a credit note first.`,
+          `"${ref?.line?.desc || ref?.line?.code || 'Line'}": ${roundQty(inv)} already invoiced, so the accepted quantity cannot be reduced to ${roundQty(acc)}. Issue a credit note on the invoice first.`,
           { lineId: d.lineId, invoiced: roundQty(inv), acceptedAfter: roundQty(acc) });
       }
       const event = {
@@ -295,11 +305,22 @@ export function createDeliveryService(fs, options = {}) {
     const receivedBy = cleanText(input.receivedBy, 200);
     ensure(receivedBy, ERR.INVALID_INPUT, 'Received By is required');
     return change({
-      ...input, collection: COLLECTIONS.acceptanceEvents, eventPrefix: mode,
-      apply(old, { at, actor }) {
+      ...input, collection: COLLECTIONS.acceptanceEvents, eventPrefix: mode, peers: mode !== 'confirm',
+      apply(old, { at, actor, ledger, invoicedOf, peerDocs }) {
         ensure(!old.voided, ERR.INVALID_STATE, `${old.dnNo} is voided`);
         if (mode === 'confirm') ensure(!old.customerConfirmed, ERR.INVALID_STATE, `${old.dnNo} is already confirmed`);
         else ensure(old.customerConfirmed, ERR.INVALID_STATE, `${old.dnNo} must be confirmed before it can be ${mode === 'correction' ? 'corrected' : 'revised'}`);
+        if (mode !== 'confirm') {
+          // V270.4.6: an invoiced Delivery Note is final (whole DN, every field). Returns after invoicing
+          // go through a credit note; the DN stays as the customer signed it.
+          const others = peerDocs || [{ id: '__others', customerConfirmed: true, confirmedAt: '', items: Object.entries(ledger?.lines || {}).map(([lineId, l]) => {
+            const mine = (old.items || []).filter(it => it.soLineId === lineId).reduce((s, it) => s + acceptedQtyOf(old, it), 0);
+            const q = Math.max(0, roundQty((Number(l.accepted) || 0) - mine));
+            return { soLineId: lineId, qty: q, acceptedQty: q };
+          }) }];
+          const covered = dnInvoiceCoverage([...others, old], invoicedOf).get(dnKeyOf(old));
+          ensure(!covered, ERR.INVOICED, dnInvoicedMessage(old, covered), { lines: covered });
+        }
         const items = validateAcceptanceLines(old, input.lines);
         const next = {
           ...old, items, customerConfirmed: true, receivedBy, customerRemarks: cleanText(input.customerRemarks, 1000),

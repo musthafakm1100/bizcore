@@ -64,6 +64,7 @@ export const ERR = Object.freeze({
   INCONSISTENT: 'inconsistent-data',
   LOCK_REQUIRED: 'lock-required',
   BELOW_INVOICED: 'below-invoiced',
+  INVOICED: 'invoiced',                 // V270.4.6: an invoiced Delivery Note can no longer be corrected / revised
 });
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
 const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, details); };
@@ -262,6 +263,42 @@ export function ledgerDeltasBetween(before, after) {
     if (d.inTransit || d.accepted || d.rejected) deltas.push(d);
   }
   return deltas;
+}
+
+/** V270.4.6 — which Delivery Notes are covered by delivery invoices.
+ *  Invoices are issued per Sales Order line, not per DN, so the invoiced quantity of each line is matched
+ *  to the confirmed DNs in the order they were confirmed (first confirmed = first invoiced).
+ *  `dns`: the order's Delivery Notes (any state; voided / unconfirmed ones are skipped).
+ *  `invoicedOf(lineId)`: quantity invoiced by delivery invoices for the line, net of credit notes.
+ *  Returns Map(dnKey → [{ lineId, desc, qty }]) for every DN with an invoiced quantity (dnKey = id || dnNo). */
+export const dnKeyOf = dn => String(dn?.id || dn?.dnNo || '');
+export function dnConfirmOrderKey(dn) {
+  return String(dn?.confirmedAt || dn?.customerConfirmedDate || dn?.date || '') + '|' + String(dn?.dnNo || '') + '|' + dnKeyOf(dn);
+}
+export function dnInvoiceCoverage(dns, invoicedOf) {
+  const left = new Map(), out = new Map();
+  const remaining = id => { if (!left.has(id)) left.set(id, Math.max(0, roundQty(Number(invoicedOf(id)) || 0))); return left.get(id); };
+  const list = (Array.isArray(dns) ? dns : []).filter(d => d && !d.voided && d.customerConfirmed)
+    .slice().sort((a, b) => dnConfirmOrderKey(a).localeCompare(dnConfirmOrderKey(b)));
+  for (const dn of list) {
+    const lines = [];
+    for (const it of dn.items || []) {
+      const id = it.soLineId; if (!id) continue;
+      const acc = acceptedQtyOf(dn, it), rest = remaining(id);
+      if (!(acc > QTY_EPSILON) || !(rest > QTY_EPSILON)) continue;
+      const qty = roundQty(Math.min(acc, rest));
+      left.set(id, roundQty(rest - qty));
+      lines.push({ lineId: id, desc: it.desc || it.code || '', qty });
+    }
+    if (lines.length) out.set(dnKeyOf(dn), lines);
+  }
+  return out;
+}
+/** Plain-language reason shown when an invoiced DN is opened for correction / revision. */
+export function dnInvoicedMessage(dn, lines, invoiceNos = []) {
+  const what = (lines || []).slice(0, 2).map(l => `${roundQty(l.qty)} of "${l.desc || 'item'}"`).join(', ') + ((lines || []).length > 2 ? ` and ${lines.length - 2} more line(s)` : '');
+  const inv = invoiceNos && invoiceNos.length ? ` in ${invoiceNos.join(', ')}` : '';
+  return `${dn?.dnNo || 'This Delivery Note'} is already invoiced${inv} (${what}). An invoiced Delivery Note stays as the customer signed it and can no longer be corrected or revised. If goods come back, issue a credit note on the invoice.`;
 }
 
 /** Quantity already invoiced per SO line (lineId → qty) from the invoices stored on the Sales Order.

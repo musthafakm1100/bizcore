@@ -24,3 +24,7 @@ body{overscroll-behavior:none}
 @media print{.bcz-bar{display:none!important}}
 /* PC: drag to pan a page that is zoomed wider than its area */
 @media (pointer:fine){.bcz-host.bcz-pan{cursor:grab}.bcz-host.bcz-pan.bcz-grabbing{cursor:grabbing;user-select:none;-webkit-user-select:none}}
+
+/* V270.4.6 — the footer "⋯" More menu must never open behind the zoom bar: hide the bar while the menu is open. */
+.modal:has(.bc-more-menu:not([hidden])) .bcz-bar,
+.modal-overlay:has(.bc-more-menu:not([hidden])) .bcz-bar{visibility:hidden;pointer-events:none}

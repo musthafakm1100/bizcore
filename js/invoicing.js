@@ -611,7 +611,7 @@ function ensureCreditNoteModal(){
         <div class="inv-advance-row"><div class="form-group"><label>Amount (before VAT)</label><div class="inv-input-prefix"><span>SAR</span><input id="cn-amount" class="bc-num-input" type="number" min="0" step="0.01" oninput="recalcCreditNote()"/></div></div><div class="inv-advance-base" id="cn-amount-help"></div></div>
       </section>
       <div class="so-bottom-grid">
-        <section class="so-entry-card"><div class="so-entry-card-title"><i class="ti ti-info-circle"></i>Good to know</div><div class="inv-note-text" id="cn-note"></div></section>
+        <section class="so-entry-card"><div class="so-entry-card-title"><i class="ti ti-info-circle"></i>Good to know</div><div class="cn-paid-note" id="cn-paid-note" role="note" hidden></div><div class="inv-note-text" id="cn-note"></div></section>
         <section class="so-entry-card so-summary-card"><div class="so-entry-card-title"><i class="ti ti-calculator"></i>Credit Note Summary</div><div id="cn-summary"></div></section>
       </div>
       <div id="cn-error" class="inv-error" hidden></div>
@@ -658,7 +658,7 @@ async function openIssueCreditNote(soId, invoiceId){
     m._lines = C.creditableOf(inv).lines.filter(l => l.creditable > 1e-6);
     document.getElementById('cn-lines').innerHTML = m._lines.map((l, i) => `<div class="inv-line-row"><span class="muted">${i + 1}</span><span class="desc">${invEsc(l.desc || '—')}</span><span class="num muted">${formatQuantity(l.qty)}</span><span class="num">${formatQuantity(l.qty - l.creditable)}</span><span class="num inv-avail">${formatQuantity(l.creditable)}</span><span><input class="bc-num-input bc-spin" id="cn-qty-${i}" type="number" min="0" max="${l.creditable}" step="${qtyStep(l.uom)}" value="0" oninput="recalcCreditNote()" aria-label="Credit quantity"></span><span class="muted">${invEsc(l.uom || '—')}</span><span class="num">${documentMoney('customerInvoice', 'unitPrice', l.up)}</span><span class="num strong" id="cn-amt-${i}">—</span></div>`).join('');
     document.getElementById('cn-note').textContent = (inv.totals?.deductionSubtotal > 0 ? 'The advance deducted on this invoice is given back in proportion to the goods credited, so it can be deducted again later. ' : '')
-      + (inv.type === 'delivery' ? 'A credit note does not change the delivery records; record returns on the Delivery Note if goods come back.' : 'The credited quantity can be invoiced again later.');
+      + (inv.type === 'delivery' ? 'A credit note does not change the delivery records or the stock. The Delivery Note stays as the customer signed it.' : 'The credited quantity can be invoiced again later.');
   }
   openModalWithSize('cn-issue-modal');
   recalcCreditNote();
@@ -707,6 +707,17 @@ function recalcCreditNote(){
   html += '<div class="so-summary-divider"></div>' + row('Subtotal', invMoney(n ? n.subtotal : 0)) + row('VAT', invMoney(n ? n.vat : 0))
     + `<div class="so-summary-total"><span>TOTAL CREDIT</span><span>${documentMoney('customerInvoice', 'grandTotal', n ? n.total : 0)}</span></div>`;
   document.getElementById('cn-summary').innerHTML = html;
+  // V270.4.6: the invoice is already (partly) paid → say what the credit leaves owed to the customer.
+  const pn = document.getElementById('cn-paid-note');
+  if (pn) {
+    const inv = m._invoice, paid = typeof invoicePaidOf === 'function' ? invNum(invoicePaidOf(inv)) : 0;
+    const net = typeof invoiceNetOf === 'function' ? invNum(invoiceNetOf(inv)) : invNum(inv.totals && inv.totals.total);
+    const credit = n ? invNum(n.total) : 0, owed = Math.round((paid - (net - credit)) * 100) / 100;
+    pn.hidden = !(paid > 0.004);
+    if (!pn.hidden) pn.innerHTML = `<i class="ti ti-cash"></i><span><strong>${invEsc(inv.invNo)} is ${paid >= net - 0.004 ? 'paid' : 'partly paid'}</strong> — ${invMoney(paid)} received.`
+      + (owed > 0.004 ? ` After this credit note <strong>${invMoney(owed)}</strong> is owed to the customer: keep it as customer credit (edit the receipt to apply it to another invoice) or refund it.`
+        : ` After this credit note the balance due is ${invMoney(Math.max(0, -owed))}.`) + `</span>`;
+  }
   const err = document.getElementById('cn-error');
   const show = r.errors.filter(x => !/at least one quantity|reason for the credit/i.test(x));
   err.hidden = !show.length; err.innerHTML = show.map(x => '<i class="ti ti-alert-circle"></i> ' + invEsc(x)).join('<br>');
