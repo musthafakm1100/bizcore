@@ -55,6 +55,11 @@
   }
   function format(iso) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || '')); return m ? `${m[3]}-${m[2]}-${m[1]}` : ''; }
   const bound = v => (typeof v === 'function' ? v() : v) || '';
+  // V270.4.8: the text in the box is read / written through the browser's own value property, so a field upgraded from
+  // a plain date input (whose .value gives the screen ISO, see upgrade()) still works inside the date field itself.
+  const NV = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  const raw = el => NV.get.call(el);
+  const setRaw = (el, v) => NV.set.call(el, v);
 
   /* ── the field ── */
   function attach(input, opts = {}) {
@@ -79,19 +84,19 @@
 
     const api = {
       input, opts: o,
-      getISO() { const v = parse(input.value); return v || ''; },
-      setISO(iso) { input.value = format(iso); input.dataset.iso = input.value ? iso : ''; mark(); },
+      getISO() { const v = parse(raw(input)); return v || ''; },
+      setISO(iso) { setRaw(input, format(iso)); input.dataset.iso = raw(input) ? iso : ''; mark(); },
       commit, open: () => openCal(api), close: closeCal,
     };
     function mark() {
-      const v = parse(input.value), min = bound(o.min), max = bound(o.max);
+      const v = parse(raw(input)), min = bound(o.min), max = bound(o.max);
       const bad = v === null || (v === '' && !o.allowEmpty && input.dataset.bcdRequired === '1') || (v && ((min && v < min) || (max && v > max)));
       input.classList.toggle('bcd-invalid', !!bad);
       return { iso: v || '', invalid: v === null, outOfRange: !!(v && ((min && v < min) || (max && v > max))) };
     }
     function commit() {
-      const v = parse(input.value);
-      if (v) { const f = format(v); if (input.value !== f) input.value = f; input.dataset.iso = v; }
+      const v = parse(raw(input));
+      if (v) { const f = format(v); if (raw(input) !== f) setRaw(input, f); input.dataset.iso = v; }
       else if (v === '') input.dataset.iso = '';
       const st = mark();
       if (typeof o.onCommit === 'function') o.onCommit(st.iso, st);
@@ -107,7 +112,7 @@
     btn.addEventListener('mousedown', e => e.preventDefault());
     btn.addEventListener('click', () => { if (cal && cal.api === api) closeCal(); else openCal(api); });
     input._bcdate = api;
-    if (input.value) { const v = parse(input.value); if (v) { input.value = format(v); input.dataset.iso = v; } }
+    if (raw(input)) { const v = parse(raw(input)); if (v) { setRaw(input, format(v)); input.dataset.iso = v; } }
     return api;
   }
 
@@ -117,7 +122,7 @@
   function openCal(api) {
     if (api.input.readOnly || api.input.disabled) return;   // V270.1.3: a read-only date (e.g. Pricing in View) has no calendar
     closeCal();
-    const sel = parse(api.input.value) || '';
+    const sel = parse(raw(api.input)) || '';
     const focus = sel || (bound(api.opts.max) && today() > bound(api.opts.max) ? bound(api.opts.max) : today());
     const root = document.createElement('div');
     root.className = 'bcd-pop' + (isPhone() ? ' bcd-sheet' : '');
@@ -135,7 +140,7 @@
       selected. Text that is not (yet) a whole date leaves the calendar where it is; an empty field clears the selection. */
   function syncCal() {
     if (!cal) return;
-    const t = String(cal.api.input.value || '').trim();
+    const t = String(raw(cal.api.input) || '').trim();
     // "15-06-20" / "150620" while typing 2026: the year is not finished yet — wait for it
     if (/^\d{1,2}[\/\-. ]+\d{1,2}[\/\-. ]+(19|20)$/.test(t) || /^\d{4}(19|20)$/.test(t)) return;
     const v = parse(t);
@@ -155,7 +160,7 @@
   function choose(iso) {
     const api = cal.api;
     closeCal(true);
-    api.input.value = format(iso);
+    setRaw(api.input, format(iso));
     api.commit();
     api.input.dispatchEvent(new Event('input', { bubbles: true }));
     api.input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -212,7 +217,7 @@
       if (act.dataset.act === 'today') choose(today());
       else if (act.dataset.act === 'yesterday') choose(today(-1));
       else if (act.dataset.act === 'close') closeCal(true);
-      else { const api = cal.api; closeCal(true); api.input.value = ''; api.commit(); api.input.dispatchEvent(new Event('input', { bubbles: true })); api.input.dispatchEvent(new Event('change', { bubbles: true })); }
+      else { const api = cal.api; closeCal(true); setRaw(api.input, ''); api.commit(); api.input.dispatchEvent(new Event('input', { bubbles: true })); api.input.dispatchEvent(new Event('change', { bubbles: true })); }
     }
   });
   document.addEventListener('keydown', e => {
@@ -229,8 +234,44 @@
   window.addEventListener('resize', () => closeCal());
   window.addEventListener('scroll', e => { if (cal && !cal.root.contains(e.target)) place(); }, true);
 
+  /* ── V270.4.8: every plain date input in BizCore becomes the BizCore date field ──
+     The screen's code keeps working unchanged: the field's .value still gives / takes ISO (YYYY-MM-DD) — the box shows
+     DD-MM-YYYY. min / max attributes keep limiting the calendar. A date typed but not readable gives '' (and is marked).
+     Opt out with data-native-date (none today). New inputs (windows built later) are upgraded as they appear. */
+  function upgrade(input) {
+    if (!input || input._bcdate || input.hasAttribute('data-native-date') || input.type !== 'date') return input && input._bcdate;
+    if (input.hidden || input.getAttribute('aria-hidden') === 'true') return null;
+    const iso = raw(input);
+    input.type = 'text';
+    input.inputMode = 'numeric';
+    input.setAttribute('data-bc-date-field', '');
+    const api = attach(input, {
+      allowEmpty: true,
+      min: () => input.getAttribute('min') || '',
+      max: () => input.getAttribute('max') || '',
+    });
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      get() { return parse(raw(input)) || ''; },
+      set(v) { const t = String(v == null ? '' : v); api.setISO(/^\d{4}-\d{2}-\d{2}/.test(t) ? t.slice(0, 10) : (parse(t) || '')); },
+    });
+    if (iso) api.setISO(iso);
+    return api;
+  }
+  function upgradeAll(root) {
+    if (!root || !root.querySelectorAll) return;
+    if (root.matches && root.matches('input[type="date"]')) upgrade(root);
+    root.querySelectorAll('input[type="date"]').forEach(upgrade);
+  }
+  function startAuto() {
+    upgradeAll(document);
+    new MutationObserver(list => { for (const m of list) for (const n of m.addedNodes) if (n.nodeType === 1) upgradeAll(n); })
+      .observe(document.documentElement, { childList: true, subtree: true });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startAuto); else startAuto();
+
   window.BCDate = {
-    attach, parse, format, today,
+    attach, upgrade, parse, format, today,
     getISO: el => (el && el._bcdate ? el._bcdate.getISO() : parse(el && el.value) || ''),
     setISO: (el, iso) => { if (!el) return; if (el._bcdate) el._bcdate.setISO(iso); else el.value = format(iso); },
     isOpen: () => !!cal, close: () => closeCal(),

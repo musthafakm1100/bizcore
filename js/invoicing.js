@@ -953,7 +953,7 @@ function invoiceDocumentHtml(doc, kind, screenMode){
   <table class="dn-items"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>
   <div class="inv-doc-sum"><div class="inv-doc-notes">${notes}</div><div><div class="inv-doc-totals">${totals}</div>${creditedLine}</div></div>
   <div class="dn-bottom"><div class="dn-sign"><h4>Prepared By</h4><div>Name: ${invEsc(doc.createdBy || '________________')}<br>Date: ${fmtDate(doc.date)}<br>Signature: <span class="dn-line"></span></div></div><div class="dn-sign"><h4>${cn ? 'Acknowledged By (Customer)' : 'Received By (Customer)'}</h4><div>Name: ________________<br>Date: ________________<br>Signature: <span class="dn-line"></span></div></div><div class="dn-doc-qr-slot"></div></div>
-  <div class="dn-foot"><div>${contactParts.join(' &nbsp; | &nbsp; ')}</div></div></div>`;
+  <div class="dn-foot dn-foot-j">${typeof docFooterPartsHtml === 'function' ? docFooterPartsHtml(contactParts) : contactParts.join(' &nbsp; | &nbsp; ')}</div></div>`;
 }
 
 function ensureInvoiceViewModal(){
@@ -1086,12 +1086,14 @@ function openCreditNoteDocument(cnId){ openCreditNoteView(cnId); }
 function invPrintDocument(html, fileTitle){
   const w = window.open('', '_blank');
   if (!w) { showToast('Allow pop-ups for BizCore to print.', 'warning'); return; }
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${invEsc(fileTitle)}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style>${window.BCPrintIOS ? BCPrintIOS.head() : ''}</head><body>${html}<scr` + `ipt>(function(){var done=false;function back(){if(done)return;done=true;try{if(window.opener&&!window.opener.closed)window.opener.focus();}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},80);}window.addEventListener('afterprint',back);window.onload=function(){requestAnimationFrame(function(){requestAnimationFrame(function(){setTimeout(function(){window.print();},180);});});};})();</scr` + `ipt></body></html>`);
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${invEsc(fileTitle)}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style>${window.BCPages ? BCPages.head(BCPages.DN) : ''}</head><body>${html}<scr` + `ipt>(function(){var done=false;function back(){if(done)return;done=true;try{if(window.opener&&!window.opener.closed)window.opener.focus();}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},80);}window.addEventListener('afterprint',back);window.onload=function(){requestAnimationFrame(function(){requestAnimationFrame(function(){setTimeout(function(){window.print();},180);});});};})();</scr` + `ipt></body></html>`);
   w.document.close();
 }
 function printCustomerInvoice(invoiceId){
   const inv = invoicesCache.find(i => i.id === invoiceId); if (!inv) return;
-  invPrintDocument(invoiceDocumentHtml(inv, 'invoice', false), [inv.invNo, typeof dnSafeFilePart === 'function' ? dnSafeFilePart(inv.customer) : inv.customer].filter(Boolean).join(' - '));
+  // V270.4.8: "INV-2610-0001 - SNC Lavalin Arabia - PO2200005124" (the invoice's PO no., else the order's; none → no PO part)
+  const po = inv.poNo || ((typeof salesOrders !== 'undefined' ? salesOrders : []).find(x => x.id === inv.salesOrderId) || {}).poNo || '';
+  invPrintDocument(invoiceDocumentHtml(inv, 'invoice', false), [inv.invNo, typeof dnSafeFilePart === 'function' ? dnSafeFilePart(inv.customer) : inv.customer, typeof docPoFilePart === 'function' ? docPoFilePart(po) : ''].filter(Boolean).join(' - '));
 }
 function printCreditNote(cnId){
   const c = creditNotesCache.find(x => x.id === cnId); if (!c) return;

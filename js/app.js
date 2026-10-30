@@ -1100,7 +1100,10 @@ function companyDocumentParts(docKey,area){
   return parts;
 }
 function companyDocumentHeaderHtml(docKey){return companyDocumentParts(docKey,'header').map(x=>`<div>${escapeHtml(x)}</div>`).join('');}
-function companyDocumentFooterHtml(docKey){return companyDocumentParts(docKey,'footer').map(escapeHtml).join(' &nbsp; | &nbsp; ');}
+/** V270.4.8: parts as <span class="dfp"> with " | " separators (<span class="dfs">) — footers that spread the text from the
+ *  left margin to the right hide the separators; the print pages (js/doc-pages.js) read the parts. */
+function docFooterPartsHtml(parts){return (parts||[]).filter(Boolean).map(p=>`<span class="dfp">${p}</span>`).join('<span class="dfs"> &nbsp; | &nbsp; </span>');}
+function companyDocumentFooterHtml(docKey){return docFooterPartsHtml(companyDocumentParts(docKey,'footer').map(escapeHtml));}
 
 function getDefaultSettings() {
   return {coname:'Downtown Trading Est.',conameAr:'',tagline:'Trading & Contracting',cr:'',building:'',street:'',secondary:'',district:'',postal:'',city:'Riyadh',country:'Saudi Arabia',pobox:'',phone:'+966 XX XXX XXXX',mobile:'',email:'info@downtowntrading.com',vat:'3XXXXXXXXXXXXXXXXX',website:'',closingMessage:'Thank you for the opportunity to serve you.',signatoryName:'',signatoryDesignation:'',signatureSize:100,stampSize:100,signatureStampOverlap:true,signatureStampOverlapAmount:75,documentDisplay:getDefaultDocumentDisplay(),vatrate:15,validity:7,rfqDefaultHours:48,delivery:'2–4 weeks from confirmed PO',payment:'Net 2 weeks from invoice date',logo:'',signature:'',stamp:'',documentNumbering:{rfq:{prefix:'RFQ',reset:'monthly'},pricing:{prefix:'PR',reset:'monthly'},quotation:{prefix:'Q',reset:'monthly'},salesOrder:{prefix:'SO',reset:'monthly'},deliveryNote:{prefix:'DN',reset:'monthly'},customerInvoice:{prefix:'INV',reset:'monthly'},purchaseOrder:{prefix:'PO',reset:'monthly'},purchaseInvoice:{prefix:'PI',reset:'monthly'}}};
@@ -6782,7 +6785,7 @@ function printQuotation(id) {
 +'</body></html>';
 
   const w = window.open('', '_blank', 'width=880,height=1020');
-  w.document.write(window.BCPrintIOS ? BCPrintIOS.apply(html) : html); // V270.4.7: iPhone / iPad print
+  w.document.write(html);
   w.document.close();
 }
 
@@ -11994,7 +11997,7 @@ function buildDeliveryNoteDocument(so,d,deliveryIdx,format='standard',screenMode
   <table class="dn-items"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>
   <div class="dn-remarks"><b>Remarks</b>${escapeHtml(d.remarks||'—')}</div>${internalBlock}
   <div class="dn-bottom"><div class="dn-sign"><h4>Prepared / Dispatched By</h4><div>Name: ${escapeHtml(d.dispatchedBy||'________________')}<br>Date: ${fmtDate(d.date)}<br>Signature: <span class="dn-line"></span></div></div><div class="dn-sign"><h4>Received By (Customer)</h4><div>Name: ${escapeHtml(d.receivedBy||'________________')}<br>Date: ${d.confirmedAt?new Date(d.confirmedAt).toLocaleDateString('en-GB'):'________________'}<br>Signature: <span class="dn-line"></span></div></div>${qr}</div>
-  <div class="dn-foot"><div>${[cp.pobox?`P.O. Box ${escapeHtml(cp.pobox)}`:'',cp.address?escapeHtml(cp.address):'',cp.phone?`Tel: ${escapeHtml(cp.phone)}`:'',cp.email?escapeHtml(cp.email):'',cp.website?escapeHtml(cp.website):''].filter(Boolean).join(' &nbsp; | &nbsp; ')}</div></div></div>`;
+  <div class="dn-foot dn-foot-j">${docFooterPartsHtml([cp.pobox?`P.O. Box ${escapeHtml(cp.pobox)}`:'',cp.address?escapeHtml(cp.address):'',cp.phone?`Tel: ${escapeHtml(cp.phone)}`:'',cp.email?escapeHtml(cp.email):'',cp.website?escapeHtml(cp.website):''])}</div></div>`;
 }
 /* V255 — controlled dispatch correction / void, only before acceptance. */
 function dnDispatchEditable(d){return !!d&&!d.customerConfirmed&&!d.voided;}
@@ -12300,6 +12303,11 @@ async function openDeliveryConfirmationFromDNView(){
   // V265.3: openDeliveryAcceptance is wrapped by the document lock (async) — wait for it before checking the screen.
   try{const opened=await openDeliveryAcceptance(soId,deliveryIdx),confirmModal=document.getElementById('dn-confirm-modal');if(opened===false&&!confirmModal?.classList.contains('open'))return;if(confirmModal?.classList.contains('open')){viewModal?.classList.remove('open','modal-fs-overlay');updateFullscreenShellState();confirmModal.style.zIndex='6200';return}showToast('Could not open Delivery Confirmation','error')}catch(err){console.error('Delivery Confirmation open failed',err);showToast('Could not open Delivery Confirmation: '+(err?.message||'Unknown error'),'error')}
 }
+/** V270.4.8: customer PO number for a PDF file name — "PO2200005124" ('' when there is none; an existing "PO" prefix is not doubled). */
+function docPoFilePart(po){
+  const t=String(po||'').trim().replace(/^p\.?\s*o\.?\s*(no\.?|number|#)?\s*[:\-#]?\s*/i,'');
+  return t?dnSafeFilePart('PO'+t):'';
+}
 function dnSafeFilePart(value){
   return String(value||'').replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim().replace(/[. ]+$/,'');
 }
@@ -12315,11 +12323,12 @@ function printDeliveryNote(format='standard',soArg=null,dArg=null,idxArg=null) {
   const qrSrc=qrCanvas?qrCanvas.toDataURL('image/png'):(qrImg?.src||'');
   if(qrSrc)html=html.replace('<div class="dn-doc-qr-slot"></div>',`<div class="dn-doc-qr-slot"><img src="${qrSrc}" alt="Delivery QR" style="width:108px;height:108px"></div>`);
   const cust=dnCustomerProfile(so);
-  const baseName=[dnSafeFilePart(d.dnNo||'Delivery Note'),dnSafeFilePart(cust?.name)].filter(Boolean).join(' - ');
-  const printTitle=(baseName||'Delivery Note')+((format==='accepted-standard'||format==='accepted-progress')?' - Accepted - '+(format==='accepted-progress'?'Progress':'Standard'):'');
+  // V270.4.8: "DN-2610-0003 - SNC Lavalin Arabia - PO2200005124" (no PO → no PO part; no Accepted / Standard ending)
+  const baseName=[dnSafeFilePart(d.dnNo||'Delivery Note'),dnSafeFilePart(cust?.name),docPoFilePart(so.poNo)].filter(Boolean).join(' - ');
+  const printTitle=baseName||'Delivery Note';
   const w=window.open('','_blank');if(!w){showToast('Please allow pop-ups to print the Delivery Note','warning');return}
   const safeTitle=escapeHtml(printTitle);
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeTitle}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style>${window.BCPrintIOS?BCPrintIOS.head():''}</head><body>${html}<scr`+`ipt>(function(){var returned=false;var wantedTitle=${JSON.stringify(printTitle)};function keepTitle(){try{document.title=wantedTitle;}catch(e){}}function backToBizCore(){if(returned)return;returned=true;try{if(window.opener&&!window.opener.closed){window.opener.focus();}}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},80);}window.addEventListener('beforeprint',keepTitle);window.addEventListener('afterprint',backToBizCore);window.onload=function(){keepTitle();requestAnimationFrame(function(){requestAnimationFrame(function(){keepTitle();setTimeout(function(){keepTitle();window.print();},180);});});};})();</scr`+`ipt></body></html>`);w.document.close();
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeTitle}</title><style>*{box-sizing:border-box}html,body{margin:0;background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style>${window.BCPages?BCPages.head(BCPages.DN):''}</head><body>${html}<scr`+`ipt>(function(){var returned=false;var wantedTitle=${JSON.stringify(printTitle)};function keepTitle(){try{document.title=wantedTitle;}catch(e){}}function backToBizCore(){if(returned)return;returned=true;try{if(window.opener&&!window.opener.closed){window.opener.focus();}}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},80);}window.addEventListener('beforeprint',keepTitle);window.addEventListener('afterprint',backToBizCore);window.onload=function(){keepTitle();requestAnimationFrame(function(){requestAnimationFrame(function(){keepTitle();setTimeout(function(){keepTitle();window.print();},180);});});};})();</scr`+`ipt></body></html>`);w.document.close();
 }
 
 /* ── Create Invoice / Partial Invoicing (V229) ── */
@@ -12689,7 +12698,8 @@ function _tplOpen(html) {
   html=String(html||'').replace(/<title>[\s\S]*?<\/title>/i,'<title>'+escTitle+'</title>');
   const lifecycle='<scr'+'ipt>(function(){var t='+JSON.stringify(printTitle)+';function setTitle(){try{document.title=t}catch(e){}}setTitle();window.addEventListener("beforeprint",setTitle);window.addEventListener("afterprint",function(){try{if(window.opener&&!window.opener.closed){window.opener.focus();}}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},120);});})();<'+'/script>';
   html=html.replace(/<\/body>/i,lifecycle+'</body>');
-  if(window.BCPrintIOS)html=BCPrintIOS.apply(html); // V270.4.7: iPhone / iPad print
+  // V270.4.8: A4 pages with the footer at the bottom of every page (js/doc-pages.js)
+  if(window.BCPages){const cfg=/<table class="pw"/.test(html)?BCPages.SERVICE_QUOTE:/<article class="sheet/.test(html)?BCPages.ERP_QUOTE:null;if(cfg)html=BCPages.apply(html,cfg);}
   w.document.open();
   w.document.write(html);
   w.document.close();

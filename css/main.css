@@ -9278,3 +9278,14 @@ img,svg,canvas{max-width:100%}
 .dn-acceptance-actions button:disabled{opacity:.45;cursor:not-allowed;background:#f6f8fa}
 .dn-acceptance-actions button:disabled:hover{background:#f6f8fa;border-color:#d5e0ea;color:var(--c-31526f)}
 @media(max-width:560px){.dn-invoice-lock-note{margin:0 14px 10px}}
+
+/* V270.4.8 — document footer at the bottom of the A4 sheet on screen too (Delivery Note, Invoice, Credit Note, Receipt,
+   Quotation), its text spread from the left margin to the right, at least 8 mm below the content. Print / PDF: js/doc-pages.js */
+.dn-a4.dn-a4-screen{display:flex!important;flex-direction:column;padding-bottom:8mm!important}
+.dn-a4.dn-a4-screen>.dn-foot{margin-top:auto!important;flex-shrink:0}
+.dn-a4.dn-a4-screen>:has(+ .dn-foot){margin-bottom:8mm!important}
+.dn-foot.dn-foot-j{display:flex!important;justify-content:space-between;flex-wrap:wrap;gap:2px 10px}
+.dn-foot-j .dfs,.qdoc-page-footer .dfs{display:none}
+.qdoc-page-footer>span{display:flex!important;justify-content:space-between;flex-wrap:wrap;gap:2px 10px}
+.qdoc-sheet>:has(+ .qdoc-page-footer){margin-bottom:8mm}
+.qdoc-sheet{padding-bottom:8mm!important}

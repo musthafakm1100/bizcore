@@ -624,7 +624,7 @@ function receiptDocumentHtml(r, screenMode){
   <div class="inv-doc-sum"><div class="inv-doc-notes">${notes}</div><div><div class="inv-doc-totals">${totals}</div>${charges}</div></div>
   <div class="rct-words"><b>Amount in words:</b> ${rctEsc(rctLib() ? rctLib().amountInWords(r.amount) : '')}</div>
   <div class="dn-bottom"><div class="dn-sign"><h4>Received By</h4><div>Name: ${rctEsc(r.createdBy || '________________')}<br>Date: ${fmtDate(r.date)}<br>Signature: <span class="dn-line"></span></div></div><div class="dn-sign"><h4>Authorised Signature &amp; Stamp</h4><div>Name: ________________<br>Date: ________________<br>Signature: <span class="dn-line"></span></div></div><div class="dn-doc-qr-slot"></div></div>
-  <div class="dn-foot"><div>${contactParts.join(' &nbsp; | &nbsp; ')}</div></div></div>`;
+  <div class="dn-foot dn-foot-j">${typeof docFooterPartsHtml === 'function' ? docFooterPartsHtml(contactParts) : contactParts.join(' &nbsp; | &nbsp; ')}</div></div>`;
 }
 function openReceiptView(id){
   const r = receiptsCache.find(x => x.id === id);
