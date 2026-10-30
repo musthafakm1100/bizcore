@@ -102,10 +102,15 @@
       if (typeof o.onCommit === 'function') o.onCommit(st.iso, st);
       return st;
     }
-    input.addEventListener('blur', () => { if (!cal || cal.api !== api) commit(); });
+    // V270.4.8.1: leaving the field (Tab, a click elsewhere) closes its calendar — unless focus moved into the calendar
+    input.addEventListener('blur', e => {
+      if (cal && cal.api === api) { if (e.relatedTarget && cal.root.contains(e.relatedTarget)) return; closeCal(); }
+      commit();
+    });
     input.addEventListener('keydown', e => {
       if ((e.altKey && e.key === 'ArrowDown') || e.key === 'F4') { e.preventDefault(); openCal(api); }
-      else if (e.key === 'Enter') commit();
+      else if (e.key === 'Enter') { commit(); if (cal && cal.api === api) closeCal(); }
+      else if (e.key === 'Tab' && cal && cal.api === api) closeCal();   // V270.4.8.1: Tab moves on and closes the calendar
       else if (e.key === 'Escape' && cal && cal.api === api) { e.preventDefault(); e.stopPropagation(); closeCal(); }
     });
     input.addEventListener('input', () => { input.classList.remove('bcd-invalid'); if (cal && cal.api === api) syncCal(); });   // V270.2.7: typing moves the open calendar
@@ -129,6 +134,11 @@
     root.setAttribute('role', 'dialog'); root.setAttribute('aria-label', 'Choose a date');
     let dim = null;
     if (isPhone()) { dim = document.createElement('div'); dim.className = 'bcd-dim'; dim.addEventListener('click', closeCal); document.body.appendChild(dim); }
+    // V270.4.8.1: clicks inside the calendar stay inside it — a date filter box around the field closes on any page
+    // click, which closed it before the To date could be picked. A mouse press keeps the focus in the field.
+    root.addEventListener('mousedown', e => e.preventDefault());
+    root.addEventListener('click', e => { e.stopPropagation(); calClick(e); });
+    if (dim) dim.addEventListener('click', e => e.stopPropagation());
     document.body.appendChild(root);
     cal = { api, root, dim, sel, focus, view: focus.slice(0, 7) };
     render();
@@ -208,7 +218,7 @@
     moveFocus(isoOf(d));
   }
   document.addEventListener('mousedown', e => { if (cal && !cal.root.contains(e.target) && !cal.api.input.closest('.bcd-wrap').contains(e.target)) { const a = cal.api; closeCal(); a.commit(); } }, true);
-  document.addEventListener('click', e => {
+  function calClick(e) {
     if (!cal || !cal.root.contains(e.target)) return;
     const day = e.target.closest('.bcd-day'), nav = e.target.closest('.bcd-nav'), act = e.target.closest('.bcd-act');
     if (day && day.getAttribute('aria-disabled') !== 'true') choose(day.dataset.iso);
@@ -219,7 +229,7 @@
       else if (act.dataset.act === 'close') closeCal(true);
       else { const api = cal.api; closeCal(true); setRaw(api.input, ''); api.commit(); api.input.dispatchEvent(new Event('input', { bubbles: true })); api.input.dispatchEvent(new Event('change', { bubbles: true })); }
     }
-  });
+  }
   document.addEventListener('keydown', e => {
     if (!cal) return;
     if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeCal(true); return; }
