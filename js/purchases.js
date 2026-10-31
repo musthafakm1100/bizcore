@@ -1560,7 +1560,7 @@ async function piSaveNewProduct(){
   const sim = m._sim || [], key = sim.map(p => p.id).join(',');
   if (sim.length && m._warned !== key) { m._warned = key; piNewProductCheck(); document.getElementById('pnp-save').innerHTML = '<i class="ti ti-plus"></i>Yes, add a new product'; return; }
   if (!piCanAddProduct()) { err.textContent = 'Only administrators may add a new product (Administration → Purchase Settings).'; err.hidden = false; return; }
-  const p = { id: window.BizCoreMasters ? BizCoreMasters.core.newMasterId('p') : 'p' + Date.now().toString(36), name, code: '', brand: document.getElementById('pnp-brand').value.trim(), model: '', category: document.getElementById('pnp-cat').value, uom, price: 0, notes: '', specs: [], image: null, imagePath: null,
+  const p = { id: window.BizCoreMasters ? BizCoreMasters.core.newMasterId('p') : 'p' + Date.now().toString(36), type: 'goods', name, code: '', brand: document.getElementById('pnp-brand').value.trim(), model: '', category: document.getElementById('pnp-cat').value, uom, price: 0, notes: '', specs: [], image: null, imagePath: null,
     createdFrom: 'purchase-invoice', createdBy: (window.currentUser && window.currentUser.name) || '', createdAt: new Date().toISOString() };
   try {
     await bcBusy('Adding product…', async () => { products.unshift(p); let ok; try { ok = await saveProducts(); } catch (e) { products.splice(products.indexOf(p), 1); throw e; }

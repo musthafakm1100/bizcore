@@ -1529,7 +1529,7 @@ function bcLocalISO(d){d=d instanceof Date?d:new Date();return d.getFullYear()+'
 const DOC_NUMBERING_DEFAULTS={
   rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},paymentReceipt:{label:'Payment Receipt',prefix:'RCT',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'},supplierPayment:{label:'Supplier Payment',prefix:'SP',reset:'monthly'},
   // V270.4.9: master codes — system-generated on save, one running sequence (never reset), no date part
-  customer:{label:'Customer',prefix:'CUS',reset:'never',dateFormat:'none',digits:5},supplier:{label:'Supplier',prefix:'SUP',reset:'never',dateFormat:'none',digits:5},product:{label:'Product',prefix:'ITM',reset:'never',dateFormat:'none',digits:6},employee:{label:'Employee',prefix:'EMP',reset:'never',dateFormat:'none',digits:4}
+  customer:{label:'Customer',prefix:'CUS',reset:'never',dateFormat:'none',digits:5},supplier:{label:'Supplier',prefix:'SUP',reset:'never',dateFormat:'none',digits:5},product:{label:'Product (goods)',prefix:'ITM',reset:'never',dateFormat:'none',digits:6},service:{label:'Product (service)',prefix:'SRV',reset:'never',dateFormat:'none',digits:6},employee:{label:'Employee',prefix:'EMP',reset:'never',dateFormat:'none',digits:4}
 };
 /* V270.2.5 — Number format and sequence reset are set separately.
    A number is  PREFIX + sep1 + DATE PART + sep2 + SEQUENCE  (the date part is optional).
@@ -1544,7 +1544,7 @@ const DOC_RESETS_FOR_FORMAT={none:['never'],YY:['yearly','never'],YYYY:['yearly'
 const DOC_RESET_LABELS={yearly:'Yearly',monthly:'Monthly',never:'Never'};
 const DOC_SEPARATORS=['-','/','.',''];
 const DOC_DIGITS=[3,4,5,6];
-const DOC_NUMBERING_GROUPS=[['Sales',['rfq','pricing','quotation','salesOrder','deliveryNote','customerInvoice','creditNote','paymentReceipt']],['Purchases',['purchaseOrder','purchaseInvoice','supplierPayment']],['Master Data',['customer','supplier','product','employee']]];
+const DOC_NUMBERING_GROUPS=[['Sales',['rfq','pricing','quotation','salesOrder','deliveryNote','customerInvoice','creditNote','paymentReceipt']],['Purchases',['purchaseOrder','purchaseInvoice','supplierPayment']],['Master Data',['customer','supplier','product','service','employee']]];
 function cleanDocPrefix(v){return String(v||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8);}
 function normalizeDocNumberingConfig(type,raw){
   const d=DOC_NUMBERING_DEFAULTS[type]||{},c={...(raw||{})};
@@ -1589,7 +1589,7 @@ async function allocateDocumentNumber(type,date=new Date()){
 }
 function existingDocumentNumbers(type){
   // V270.4.9: master codes
-  if(type==='customer')return customers.map(x=>x.code||''); if(type==='supplier')return suppliers.map(x=>x.code||''); if(type==='product')return products.map(x=>x.code||''); if(type==='employee')return employees.map(x=>x.code||'');
+  if(type==='customer')return customers.map(x=>x.code||''); if(type==='supplier')return suppliers.map(x=>x.code||''); if(type==='product')return products.filter(x=>x.type!=='service').map(x=>x.code||''); if(type==='service')return products.filter(x=>x.type==='service').map(x=>x.code||''); if(type==='employee')return employees.map(x=>x.code||'');
   if(type==='rfq')return rfqs.map(x=>x.rfqNo||''); if(type==='quotation')return quotations.map(x=>x.qno||''); if(type==='salesOrder')return salesOrders.map(x=>x.soNo||'');
   if(type==='deliveryNote')return salesOrders.flatMap(s=>(s.deliveries||[]).map(x=>x.dnNo||'')); if(type==='customerInvoice')return salesOrders.flatMap(s=>(s.invoices||[]).map(x=>x.invNo||'')); if(type==='creditNote')return salesOrders.flatMap(s=>(s.creditNotes||[]).map(x=>x.cnNo||'')); if(type==='paymentReceipt')return (typeof receiptsCache!=='undefined'?receiptsCache:[]).map(x=>x.rctNo||''); if(type==='purchaseInvoice')return (window.BizCorePI?window.BizCorePI.invoices:[]).map(x=>x.piNo||''); if(type==='supplierPayment')return (window.BizCorePI?window.BizCorePI.payments:[]).map(x=>x.spNo||''); return [];
 }
@@ -1831,8 +1831,10 @@ async function bcAssignMasterCodes(){
       for(const [col,list] of Object.entries(lists)){
         const t=C.MASTER_TYPES[col], todo=list.filter(x=>x&&!x.code&&!x._deletedAt).sort((a,b)=>String(a[t.nameField]||'').localeCompare(String(b[t.nameField]||'')));
         if(!todo.length) continue;
-        const codes=await BizCoreMasters.reserveCodes(col,todo.length);
-        todo.forEach((r,i)=>{ r.code=codes[i]; });
+        // V270.4.10: products — goods (ITM) and services (SRV) have their own sequences
+        const kinds=col==='products'?['goods','service']:[null];
+        for(const k of kinds){ const part=k?todo.filter(r=>(r.type==='service'?'service':'goods')===k):todo; if(!part.length) continue;
+          const codes=await BizCoreMasters.reserveCodes(col,part.length,k==='service'?'service':null); part.forEach((r,i)=>{ r.code=codes[i]; }); }
         if((await savers[col]())===false){ todo.forEach(r=>{ delete r.code; }); console.warn('[BizCore] master codes not saved for',col); continue; }
         given+=todo.length;
       }
@@ -2306,12 +2308,14 @@ function renderProducts() {
   document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PROD_PER_PAGE)) el.value = String(PROD_PER_PAGE); });
   const search = (document.getElementById('prod-search-filter')?.value||'').toLowerCase();
   const cat    = document.getElementById('prod-cat-filter')?.value||'';
+  const ptype  = document.getElementById('prod-type-filter')?.value||'';   // V270.4.10
   let list = products.filter(p => {
     if (cat && p.category !== cat) return false;
+    if (ptype && (p.type === 'service' ? 'service' : 'goods') !== ptype) return false;
     if (search && !`${p.name} ${p.brand} ${p.model} ${p.code}`.toLowerCase().includes(search)) return false;
     return true;
   });
-  list=sortRegisterRows(list,'products',{code:p=>p.code,name:p=>p.name,brand:p=>p.brand,model:p=>p.model,category:p=>p.category,uom:p=>p.uom,price:p=>parseFloat(p.price)||0,specs:p=>(p.specs||[]).map(x=>`${x.k} ${x.v}`).join(' ')});
+  list=sortRegisterRows(list,'products',{type:p=>p.type==='service'?'Service':'Goods',code:p=>p.code,name:p=>p.name,brand:p=>p.brand,model:p=>p.model,category:p=>p.category,uom:p=>p.uom,price:p=>parseFloat(p.price)||0,specs:p=>(p.specs||[]).map(x=>`${x.k} ${x.v}`).join(' ')});
   const pages = Math.ceil(list.length / PROD_PER_PAGE) || 1;
   if (prodPage > pages) prodPage = 1;
   const slice = list.slice((prodPage-1)*PROD_PER_PAGE, prodPage*PROD_PER_PAGE);
@@ -2328,7 +2332,8 @@ function renderProducts() {
       <td class="master-select-col" onclick="event.stopPropagation()"><input class="master-row-check" type="checkbox" ${selected?'checked':''} onkeydown="event.stopPropagation()" aria-label="Select ${p.name}" onchange="toggleMasterSelection('products','${p.id}',this.checked)"></td>
       <td>${imgHtml}</td>
       <td style="font-weight:500;color:var(--gray)">${p.code||'—'}</td>
-      <td><strong>${p.name}</strong></td>
+      <td><span class="bcm-type${p.type==='service'?' svc':''}">${p.type==='service'?'Service':'Goods'}</span></td>
+      <td><strong>${escapeHtml(p.name||'')}</strong></td>
       <td>${p.brand||'—'}</td>
       <td>${p.model||'—'}</td>
       <td>${p.category||'—'}</td>
@@ -2336,7 +2341,7 @@ function renderProducts() {
       <td class="right" style="font-weight:600">${p.price>0?fmt(p.price):'—'}</td>
       <td style="font-size:11px;color:var(--gray);max-width:180px">${specStr||'—'}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="10"><div class="empty-state"><i class="ti ti-package-off"></i><strong>No products found</strong><p>Add products to the database to use them in quotations.</p></div></td></tr>`;
+  }).join('') : `<tr><td colspan="11"><div class="empty-state"><i class="ti ti-package-off"></i><strong>No products found</strong><p>Add products to the database to use them in quotations.</p></div></td></tr>`;
 
   const pp = document.getElementById('prod-pagination');
   if (pp) pp.innerHTML = buildPaginationHTML(prodPage, pages, 'goProdPage');
@@ -2344,65 +2349,110 @@ function renderProducts() {
 }
 function goProdPage(p){ prodPage=p; renderProducts(); }
 
+/* V270.4.10 (PF_1): the image box shows the picture as soon as it is chosen, pasted (Ctrl+V) or dropped, with
+   "Uploading…" → "✓ Uploaded"; the uploaded copy replaces it only once it has loaded (no blank box). Save waits for it. */
+function pmImgStatus(kind, text) {
+  const st = document.getElementById('pm-img-status'); if (!st) return;
+  st.hidden = !kind; st.className = 'pm-img-status' + (kind ? ' ' + kind : '');
+  st.innerHTML = kind === 'up' ? '<i class="ti ti-loader-2"></i>' + (text || 'Uploading… — Save waits until it finishes') : kind === 'ok' ? '<i class="ti ti-check"></i>' + (text || 'Uploaded') : kind === 'err' ? '<i class="ti ti-alert-triangle"></i>' + (text || 'Upload failed — choose the image again') : '';
+}
+function pmShowImage(src) {
+  const thumb = document.getElementById('pm-img-thumb'), area = document.getElementById('pm-img-area');
+  // an empty src fires "error", and the page hides broken images (display:none) — that kept a newly chosen picture
+  // invisible until the form was reopened. So: no empty src, and the picture is shown again each time.
+  if (src) { thumb.style.display = ''; thumb.src = src; } else thumb.removeAttribute('src');
+  document.getElementById('pm-img-preview').style.display = src ? 'block' : 'none';
+  document.getElementById('pm-img-placeholder').style.display = src ? 'none' : 'flex';
+  document.getElementById('pm-img-actions').style.display = src ? 'flex' : 'none';
+  area.classList.toggle('has-img', !!src);
+}
 function clearProductImage() {
   const area = document.getElementById('pm-img-area');
-  if (area._imagePath && window.FB) window.FB.deleteFile(area._imagePath);
-  document.getElementById('pm-img-thumb').src = '';
-  document.getElementById('pm-img-preview').style.display = 'none';
-  document.getElementById('pm-img-placeholder').style.display = 'block';
-  document.getElementById('pm-img-actions').style.display = 'none';
+  if (area._imagePath && area._imagePath !== area._savedImagePath && window.FB) window.FB.deleteFile(area._imagePath);   // only a file uploaded in this session
+  pmShowImage('');
   area._imageData = null;
   area._imagePath = null;
   area._imageUploadPromise = null; // discard any stale/stuck upload from a previous attempt
   area._imageUploadFailed = false;
+  area._uploadSeq = (area._uploadSeq || 0) + 1;
+  pmImgStatus('');
 }
 
 function handleProductImageUpload(e) {
-  const file = e.target.files[0]; if (!file) return;
+  const file = e.target.files[0]; e.target.value = '';
+  if (file) pmUseImageFile(file);
+}
+function pmUseImageFile(file) {
+  if (!file || !/^image\//.test(file.type || '')) { showToast('Please choose an image (PNG or JPG)', 'error'); return; }
   if (file.size > 8*1024*1024) { showToast('Image must be under 8MB','error'); return; }
   const area = document.getElementById('pm-img-area');
-  const localPreview = URL.createObjectURL(file); // instant preview, no base64 needed
-  const oldPath = area._imagePath; // the file this one is replacing, if any
-
-  document.getElementById('pm-img-thumb').src = localPreview;
-  document.getElementById('pm-img-preview').style.display = 'block';
-  document.getElementById('pm-img-placeholder').style.display = 'none';
-  document.getElementById('pm-img-actions').style.display = 'flex';
-  area._imageData = localPreview;
+  const seq = area._uploadSeq = (area._uploadSeq || 0) + 1;
+  const oldPath = area._imagePath && area._imagePath !== area._savedImagePath ? area._imagePath : null;   // replaced before saving
   area._imageUploadFailed = false;
-
-  if (window.FB) {
-    const path = 'products/' + (editingProdId || ('new-'+Date.now().toString(36))) + '/' + Date.now() + '_' + file.name;
-    area._imageUploadPromise = window.FB.uploadFile(path, file).then(url => {
-      if (url) {
-        URL.revokeObjectURL(localPreview);
-        area._imageData = url; area._imagePath = path; area._imageUploadFailed = false;
-        document.getElementById('pm-img-thumb').src = url;
-        if (oldPath) window.FB.deleteFile(oldPath); // best-effort, don't wait on it
-      } else {
-        area._imageUploadFailed = true;
-        showToast('Image upload failed — please try again before saving','error');
-      }
-      return url;
-    });
-  }
-  e.target.value = '';
+  const reader = new FileReader();
+  reader.onload = () => { if (area._uploadSeq === seq) { pmShowImage(reader.result); if (!window.FB) area._imageData = reader.result; } };
+  reader.readAsDataURL(file);
+  markDirty('prod-modal');
+  if (!window.FB) return;
+  pmImgStatus('up');
+  const ext = (file.name && /\.\w+$/.test(file.name) ? file.name : 'pasted-image.' + ((file.type.split('/')[1] || 'png').replace('jpeg', 'jpg'))).replace(/[^\w.-]+/g, '_');
+  const path = 'products/' + (editingProdId || ('new-'+Date.now().toString(36))) + '/' + Date.now() + '_' + ext;
+  area._imageUploadPromise = window.FB.uploadFile(path, file).then(url => new Promise(res => {
+    if (area._uploadSeq !== seq) { if (url) window.FB.deleteFile(path); return res(null); }   // replaced / removed meanwhile
+    if (!url) { area._imageUploadFailed = true; pmImgStatus('err'); showToast('Image upload failed — please try again before saving','error'); return res(null); }
+    area._imageData = url; area._imagePath = path;
+    if (oldPath) window.FB.deleteFile(oldPath);   // best-effort
+    const pre = new Image();
+    pre.onload = () => { if (area._uploadSeq === seq) { pmShowImage(url); pmImgStatus('ok'); } res(url); };
+    pre.onerror = () => { if (area._uploadSeq === seq) pmImgStatus('ok'); res(url); };   // keep the local picture on screen
+    pre.src = url;
+  }));
 }
-
+/** Ctrl+V (an image copied anywhere) and drag-and-drop into the open product form. */
+(function pmImageInputs(){
+  document.addEventListener('paste', e => {
+    const m = document.getElementById('prod-modal'); if (!m || !m.classList.contains('open') || m.querySelector('.pm-modal.pm-service')) return;
+    const item = [...(e.clipboardData?.items || [])].find(i => i.kind === 'file' && /^image\//.test(i.type));
+    if (!item) return;   // text paste goes to the field as usual
+    e.preventDefault(); pmUseImageFile(item.getAsFile());
+  });
+  document.addEventListener('dragover', e => { const a = e.target.closest && e.target.closest('#pm-img-area'); if (a) { e.preventDefault(); a.classList.add('drag'); } });
+  document.addEventListener('dragleave', e => { const a = e.target.closest && e.target.closest('#pm-img-area'); if (a) a.classList.remove('drag'); });
+  document.addEventListener('drop', e => { const a = e.target.closest && e.target.closest('#pm-img-area'); if (!a) return; e.preventDefault(); a.classList.remove('drag');
+    const f = [...(e.dataTransfer?.files || [])].find(x => /^image\//.test(x.type)); if (f) pmUseImageFile(f); });
+  document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && document.getElementById('prod-modal')?.classList.contains('open')) { e.preventDefault(); saveProduct(); } });
+})();
+/** Goods / Service: what the form shows; the type can't change once the product has its code. */
+function pmCurrentType() { return document.getElementById('pm-type-service')?.checked ? 'service' : 'goods'; }
+function pmApplyType() {
+  const svc = pmCurrentType() === 'service', m = document.querySelector('#prod-modal .pm-modal'); if (!m) return;
+  m.classList.toggle('pm-service', svc);
+  const editing = !!editingProdId;
+  document.getElementById('prod-modal-title').textContent = (editing ? 'Edit ' : 'Add ') + (svc ? 'service' : 'product');
+  document.getElementById('pm-name-label').textContent = (svc ? 'Service' : 'Product') + ' name *';
+  document.getElementById('pm-name').placeholder = svc ? 'e.g. AC maintenance' : 'e.g. Insect Killer Light 32W Round';
+  document.getElementById('pm-notes').placeholder = svc ? 'Scope we usually include, exclusions…' : 'Any extra information about this product…';
+  document.getElementById('pm-svc-note').hidden = !svc;
+  document.getElementById('pm-save-label').textContent = 'Save ' + (svc ? 'service' : 'product');
+  try { BCMasterUI && BCMasterUI.refresh('products'); } catch (_) {}
+}
+function pmSetType(type, locked) {
+  const svc = type === 'service';
+  document.getElementById('pm-type-goods').checked = !svc; document.getElementById('pm-type-service').checked = svc;
+  document.querySelectorAll('#prod-modal .pm-type-seg input').forEach(i => { i.disabled = !!locked; });
+  const seg = document.querySelector('#prod-modal .pm-type-seg'); seg.classList.toggle('locked', !!locked);
+  seg.title = locked ? 'The type can’t change once the product has its code' : '';
+  pmApplyType();
+}
 function setProductImageInForm(imageData, imagePath) {
   const area = document.getElementById('pm-img-area');
   area._imageUploadPromise = null; // discard any stale/stuck upload from a previous product session
   area._imageUploadFailed = false;
-  area._imagePath = imagePath || null;
-  if (imageData) {
-    document.getElementById('pm-img-thumb').src = imageData;
-    document.getElementById('pm-img-preview').style.display = 'block';
-    document.getElementById('pm-img-placeholder').style.display = 'none';
-    document.getElementById('pm-img-actions').style.display = 'flex';
-    area._imageData = imageData;
-  } else {
-    clearProductImage();
-  }
+  area._uploadSeq = (area._uploadSeq || 0) + 1;
+  area._imagePath = imagePath || null; area._savedImagePath = imagePath || null;
+  pmImgStatus('');
+  if (imageData) { pmShowImage(imageData); area._imageData = imageData; }
+  else { area._imageData = null; pmShowImage(''); }
 }
 
 function onCategoryChange() {
@@ -2478,7 +2528,7 @@ function loadCustomCategoriesIntoForm() {
   });
 }
 
-function openAddProduct() {
+function openAddProduct(type) {
   editingProdId = null;
   const delBtn=document.getElementById('prod-edit-delete-btn'); if(delBtn){delBtn.style.display='none';delBtn.removeAttribute('data-pid');}
   document.getElementById('prod-modal-title').textContent = 'Add product';
@@ -2488,89 +2538,99 @@ function openAddProduct() {
   document.getElementById('pm-uom').value = 'Pcs';
   document.getElementById('pm-price').value = '';
   document.getElementById('specs-list').innerHTML = '';
+  document.getElementById('pm-img-area')._savedImagePath = null;
   clearProductImage();
   loadCustomCategoriesIntoForm();
   addSpecRow(); addSpecRow();
+  pmSetType(type === 'service' ? 'service' : 'goods', false);   // V270.4.10
+  pmUomCheck();
   openModalWithSize('prod-modal');
+  setTimeout(() => document.getElementById('pm-name')?.focus(), 60);
 }
 
+/* V270.4.10 (mockup PF_3): where a product is used and at what prices — built from the documents already loaded (no
+   reads); "Show older" asks the database only when pressed. Lines are matched by the product id (linked lines). */
+function bcProductUsage(p){
+  const docs=[], pid=String(p.id), key=(()=>{ try{ return window.BizCorePI.core.itemKeyOf({productId:p.id}); }catch(_){ return 'p_'+pid; } })();
+  const mine=it=>!!it&&(String(it.prodId||'')===pid||String(it.productId||'')===pid);
+  const n=v=>Number(v)||0;
+  (typeof rfqs!=='undefined'?rfqs:[]).forEach(r=>(r.pricingItems||[]).forEach(it=>{ if(mine(it)) docs.push({kind:'pricing',label:'Pricing',id:r.id,no:r.rfqNo||'RFQ',date:r.date||'',party:r.company||r.customer||'',text:it.desc||'',qty:n(it.qty),price:n(it.buy),est:true,sell:n(it.sell),open:`viewPricingReadOnly('${r.id}')`}); }));
+  (typeof quotations!=='undefined'?quotations:[]).forEach(q=>(q.items||[]).forEach(it=>{ if(mine(it)) docs.push({kind:'quotation',label:'Quotation',id:q.id,no:q.qno||'Quotation',date:q.date||'',party:q.company||'',text:it.desc||'',qty:n(it.qty),price:n(it.up),status:q.status,open:`viewQuotation('${q.id}')`}); }));
+  const soById=new Map();
+  (typeof salesOrders!=='undefined'?salesOrders:[]).forEach(o=>{ soById.set(String(o.id),o); (o.items||[]).forEach(it=>{ if(mine(it)) docs.push({kind:'so',label:'Sales order',id:o.id,no:o.soNo||'Sales order',date:o.date||'',party:o.customer||o.company||'',text:it.desc||'',qty:n(it.qty),price:n(it.up),open:`viewSO('${o.id}')`}); }); });
+  (typeof invoicesCache!=='undefined'?invoicesCache:[]).forEach(inv=>{
+    if(!inv||inv.status==='Voided'||inv.status==='Cancelled'||inv.type==='advance') return;
+    const so=soById.get(String(inv.salesOrderId||''))||(typeof salesOrders!=='undefined'?salesOrders.find(o=>o.soNo&&o.soNo===inv.soNo):null); if(!so) return;
+    (inv.lines||[]).forEach(l=>{ const it=(so.items||[]).find(x=>(l.lineId&&x.lineId===l.lineId)||(l.soLineId&&x.lineId===l.soLineId))||(Number.isInteger(l.soIdx)?(so.items||[])[l.soIdx]:null);
+      if(mine(it)) docs.push({kind:'invoice',label:'Invoice',id:inv.id,no:inv.invNo||'Invoice',date:inv.date||'',party:inv.customer||so.customer||'',text:l.desc||it.desc||'',qty:n(l.qty),price:n(l.up),open:`openInvoiceView('${inv.id}')`}); });
+  });
+  const pis=(window.BizCorePI&&window.BizCorePI.invoices)||[];
+  pis.forEach(pi=>{ if(!pi||pi.status==='Voided') return; (pi.lines||[]).forEach(l=>{ if(String(l.productId||'')===pid||(l.itemKey&&l.itemKey===key)) docs.push({kind:'purchase',label:'Purchase inv.',id:pi.id,no:pi.piNo||'Purchase invoice',date:pi.date||'',party:pi.supplierName||'',text:l.desc||'',qty:n(l.qty||l.stockQty),price:n(l.landedUnitCost||l.unitCost),open:`openPurchaseInvoiceView('${pi.id}')`}); }); });
+  docs.sort((x,y)=>String(y.date).localeCompare(String(x.date))||String(y.no).localeCompare(String(x.no)));
+  return {docs,key};
+}
+let _pvState={id:null,tab:'docs',filter:'all',all:false,older:false};
 function viewProduct(id) {
   const p = products.find(x=>x.id===id); if (!p) return;
-  const matchesProduct = it => !!it && ((p.id && (it.productId===p.id || it.productID===p.id)) || (p.code && it.code===p.code));
-  const quoteUsage = quotations.filter(q=>(q.items||[]).some(matchesProduct));
-  const pricingUsage = rfqs.filter(r=>(r.items||r.lines||[]).some(matchesProduct));
-  const soUsage = salesOrders.filter(o=>(o.items||o.lines||[]).some(matchesProduct));
-  const totalUsage = quoteUsage.length + pricingUsage.length + soUsage.length;
-  const specs = (p.specs||[]).filter(s=>s.k||s.v);
-  const image = p.image
-    ? `<img class="product-profile-image" src="${p.image}" alt="${p.name||'Product'}">`
-    : `<div class="product-profile-image-placeholder"><i class="ti ti-package"></i><span>No product image</span></div>`;
-  const specRows = specs.length ? specs.map(s=>`
-      <div class="product-profile-spec"><span>${s.k||'—'}</span><strong>${s.v||'—'}</strong></div>`).join('')
-    : `<div class="product-profile-empty">No specifications have been added.</div>`;
-
-  document.getElementById('prod-view-body').innerHTML = `
-    <div class="product-profile">
-      <div class="product-profile-hero">
-        <div class="product-profile-identity">
-          <div class="product-profile-icon"><i class="ti ti-package"></i></div>
-          <div>
-            <div class="product-profile-eyebrow">PRODUCT PROFILE</div>
-            <h3>${p.name||'Unnamed product'}</h3>
-            <div class="product-profile-meta">
-              <span class="product-code-chip">${p.code||'No item code'}</span>
-              ${p.brand?`<span>${p.brand}</span>`:''}
-              ${p.model?`<span>${p.model}</span>`:''}
-            </div>
-          </div>
-        </div>
-        <span class="product-profile-status"><i class="ti ti-circle-check-filled"></i> Active</span>
-      </div>
-
-      <div class="product-profile-grid">
-        <section class="product-profile-card product-profile-info">
-          <div class="product-profile-section-title"><i class="ti ti-info-circle"></i><span>Product information</span></div>
-          <div class="product-profile-fields">
-            <div><label>Item code / SKU</label><strong>${p.code||'—'}</strong></div>
-            <div><label>Category</label><span>${p.category||'—'}</span></div>
-            <div><label>Brand</label><span>${p.brand||'—'}</span></div>
-            <div><label>Model number</label><span>${p.model||'—'}</span></div>
-            <div><label>Unit of measure</label><span>${p.uom||'—'}</span></div>
-            <div><label>Default price</label><strong class="product-profile-price">${p.price>0?fmt(p.price):'—'}</strong></div>
-          </div>
-        </section>
-        <section class="product-profile-card product-profile-image-card">
-          <div class="product-profile-section-title"><i class="ti ti-photo"></i><span>Product image</span></div>
-          <div class="product-profile-image-wrap">${image}</div>
-        </section>
-      </div>
-
-      <div class="product-profile-grid product-profile-lower-grid">
-        <section class="product-profile-card">
-          <div class="product-profile-section-title"><i class="ti ti-adjustments-horizontal"></i><span>Specifications</span></div>
-          <div class="product-profile-specs">${specRows}</div>
-        </section>
-        <section class="product-profile-card">
-          <div class="product-profile-section-title"><i class="ti ti-note"></i><span>Description & notes</span></div>
-          <div class="product-profile-notes">${p.notes ? p.notes : '<span>No additional notes for this product.</span>'}</div>
-        </section>
-      </div>
-
-      <section class="product-profile-card product-profile-usage-card">
-        <div class="product-profile-section-title"><i class="ti ti-chart-dots-3"></i><span>Activity & usage</span></div>
-        <div class="product-profile-usage">
-          <div><span>Quotations</span><strong>${quoteUsage.length}</strong></div>
-          <div><span>Pricing / RFQ</span><strong>${pricingUsage.length}</strong></div>
-          <div><span>Sales orders</span><strong>${soUsage.length}</strong></div>
-          <div class="product-profile-usage-total"><span>Total references</span><strong>${totalUsage}</strong></div>
-        </div>
-        <div class="product-profile-usage-note"><i class="ti ti-shield-lock"></i>${totalUsage ? 'This product is connected to business records and is protected from deletion.' : 'No business-document references found. Standard delete protection still applies.'}</div>
-      </section>
-    </div>`;
-  document.getElementById('prod-view-title').textContent = 'Product details';
+  if(_pvState.id!==id) _pvState={id,tab:'docs',filter:'all',all:false,older:false};
+  const svc=p.type==='service', esc2=v=>escapeHtml(v==null?'':String(v));
+  const {docs}=bcProductUsage(p);
+  const seeCost=typeof window.bcRight==='function'?window.bcRight('seeCost'):bcIsAdmin();
+  const bought=docs.filter(d=>d.kind==='purchase'), sold=docs.filter(d=>d.kind==='invoice');
+  const yearAgo=bcLocalISO(new Date(Date.now()-365*86400000));
+  const sold12=sold.filter(d=>String(d.date)>=yearAgo), q12=sold12.reduce((a,d)=>a+d.qty,0), avg=q12?sold12.reduce((a,d)=>a+d.qty*d.price,0)/q12:0;
+  const lb=bought[0], ls=sold[0], margin=lb&&ls&&ls.price?((ls.price-lb.price)/ls.price*100):null;
+  const kpi=(t,v,sub)=>`<div class="pv-kpi"><span>${t}</span><b>${v}</b><small>${sub||''}</small></div>`;
+  const kpis=[seeCost?kpi('Last bought',lb?fmt(lb.price):'—',lb?`${esc2(lb.no)} · ${esc2(lb.party)} · ${fmtDate(lb.date)}`:'No purchase yet'):'',
+    kpi('Last sold',ls?fmt(ls.price):'—',ls?`${esc2(ls.no)} · ${esc2(ls.party)} · ${fmtDate(ls.date)}`:'Not invoiced yet'),
+    kpi('Average sold (12 m)',q12?fmt(avg):'—',q12?`${sold12.length} invoice${sold12.length===1?'':'s'} · ${formatQuantity(q12)} ${esc2(p.uom||'')}`:''),
+    seeCost?kpi('Margin (last)',margin==null?'—':margin.toFixed(1)+'%',margin==null?'':`sold ${formatNumber(ls.price,2)} · bought ${formatNumber(lb.price,2)}`):''].join('');
+  const kinds=[['all','All'],['pricing','Pricing / RFQ'],['quotation','Quotations'],['so','Sales orders'],['invoice','Invoices'],['purchase','Purchase invoices']].filter(([k])=>k==='all'||docs.some(d=>d.kind===k&&(seeCost||(k!=='purchase'&&k!=='pricing'))));
+  const visible=docs.filter(d=>(_pvState.filter==='all'||d.kind===_pvState.filter)&&(seeCost||(d.kind!=='purchase'&&d.kind!=='pricing')));
+  const shown=_pvState.all?visible:visible.slice(0,8);
+  const priceCell=d=>(d.kind==='pricing'||d.kind==='purchase')&&!seeCost?'—':(d.est?'est. ':'')+formatNumber(d.price,2);
+  const rows=shown.map(d=>`<tr><td><span class="pv-t pv-${d.kind}">${d.label}</span></td><td><button type="button" class="profile-doc-link" onclick="closeModal('prod-view-modal');${d.open}">${esc2(d.no)}</button></td><td>${fmtDate(d.date)||'—'}</td><td>${esc2(d.party)||'—'}</td><td class="pv-text">${esc2(d.text)}</td><td class="r">${formatQuantity(d.qty)}</td><td class="r">${priceCell(d)}</td></tr>`).join('');
+  const docsHtml=`<div class="pv-filters">${kinds.map(([k,l])=>{ const c=k==='all'?visible.length+(_pvState.filter==='all'?0:0):docs.filter(d=>d.kind===k).length; return `<button type="button" class="pv-f${_pvState.filter===k?' on':''}" onclick="_pvState.filter='${k}';_pvState.all=false;viewProduct('${p.id}')">${l} ${k==='all'?docs.filter(d=>seeCost||(d.kind!=='purchase'&&d.kind!=='pricing')).length:c}</button>`; }).join('')}</div>
+    ${rows?`<div class="pv-table-wrap"><table class="pv-table"><thead><tr><th>Type</th><th>Document</th><th>Date</th><th>Customer / supplier</th><th>Line text</th><th class="r">Qty</th><th class="r">Price</th></tr></thead><tbody>${rows}</tbody></table></div>`:`<div class="pv-empty">No ${_pvState.filter==='all'?'':'such '}documents use this ${svc?'service':'product'} yet${_pvState.older?'':' (last 12 months)'}.</div>`}
+    <div class="pv-more"><span>${_pvState.older?'Including older documents':'Showing documents from the last 12 months'}</span>${_pvState.older?'':`<button type="button" class="btn btn-secondary btn-sm" id="pv-older-btn" onclick="pvShowOlder('${p.id}')"><i class="ti ti-history"></i>Show older</button>`}<span style="flex:1"></span>${visible.length>8?`<span>${shown.length} of ${visible.length}</span><button type="button" class="pv-link" onclick="_pvState.all=${!_pvState.all};viewProduct('${p.id}')">${_pvState.all?'Show less':'Show all'}</button>`:''}</div>`;
+  // price history: one row per priced document, oldest → newest, by kind
+  const hist=[...docs].filter(d=>seeCost||(d.kind!=='purchase'&&d.kind!=='pricing')).reverse();
+  const histHtml=hist.length?`<div class="pv-table-wrap"><table class="pv-table"><thead><tr><th>Date</th><th>Price</th><th>Kind</th><th>Document</th><th>Customer / supplier</th><th class="r">Qty</th></tr></thead><tbody>${hist.map(d=>`<tr><td>${fmtDate(d.date)||'—'}</td><td><b>${formatNumber(d.price,2)}</b></td><td>${{pricing:'Estimated cost',quotation:'Quoted',so:'Ordered',invoice:'Sold',purchase:'Bought'}[d.kind]}</td><td><button type="button" class="profile-doc-link" onclick="closeModal('prod-view-modal');${d.open}">${esc2(d.no)}</button></td><td>${esc2(d.party)||'—'}</td><td class="r">${formatQuantity(d.qty)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="pv-empty">No prices yet.</div>';
+  const histTab=window.BCMasterUI?BCMasterUI.historyHtml(p):'';
+  const specs=(p.specs||[]).filter(x=>x.k||x.v);
+  const image=!svc&&p.image?`<img class="pv-img" src="${esc2(p.image)}" alt="${esc2(p.name||'Product')}">`:`<div class="pv-img pv-noimg"><i class="ti ti-${svc?'tool':'package'}"></i></div>`;
+  let stock='';
+  if(!svc){ try{ const u=bcProductUnitUse(p); stock=u.stock?`${formatQuantity(u.stock)} ${esc2(p.uom||'')}`:'—'; }catch(_){ stock='—'; } }
+  const fact=(l,v)=>v?`<div><b>${l}</b>${v}</div>`:'';
+  const tab=(k,l)=>`<button type="button" class="pv-tab${_pvState.tab===k?' on':''}" onclick="_pvState.tab='${k}';viewProduct('${p.id}')">${l}</button>`;
+  document.getElementById('prod-view-body').innerHTML=`<div class="pv">
+    <div class="pv-head"><h3>${esc2(p.name)}</h3>${p.code?`<span class="bcm-code">${esc2(p.code)}</span>`:''}<span class="bcm-type${svc?' svc':''}">${svc?'Service':'Goods'}</span></div>
+    <div class="pv-top">${image}<div class="pv-facts">${fact('Category',esc2(p.category||'—'))}${fact('Unit',esc2(p.uom||'—'))}${svc?'':fact('Brand',esc2(p.brand||'—'))}${fact('Default price',p.price>0?fmt(p.price):'—')}${svc?'':fact('Model',esc2(p.model||'—'))}${svc?'':fact('Specs',specs.length?specs.map(x=>esc2(x.k)+(x.v?' '+esc2(x.v):'')).join(' · '):'—')}${fact('Created',(p.createdAt?fmtDate(String(p.createdAt).slice(0,10)):'—')+(p.createdBy?' · '+esc2(p.createdBy):''))}${svc?'':fact('In stock',stock)}</div></div>
+    ${p.notes?`<div class="pv-notes"><b>Notes</b>${esc2(p.notes)}</div>`:''}
+    <div class="pv-kpis">${kpis}</div>
+    <div class="pv-tabs">${tab('docs',`Documents (${docs.filter(d=>seeCost||(d.kind!=='purchase'&&d.kind!=='pricing')).length})`)}${tab('prices','Price history')}${tab('history',`Change history (${(p.changeLog||[]).length})`)}</div>
+    <div class="pv-pane">${_pvState.tab==='docs'?docsHtml:_pvState.tab==='prices'?histHtml:histTab}</div>
+  </div>`;
+  document.getElementById('prod-view-title').textContent = svc?'Service details':'Product details';
   document.getElementById('prod-view-edit-btn').setAttribute('data-pid', id);
+  const eb=document.getElementById('prod-view-edit-btn'); if(eb) eb.innerHTML='<i class="ti ti-edit"></i>Edit '+(svc?'service':'product');
   document.getElementById('prod-view-delete-btn')?.setAttribute('data-pid', id);
-  openModalWithSize('prod-view-modal');
+  if(!document.getElementById('prod-view-modal').classList.contains('open')) openModalWithSize('prod-view-modal');
+}
+/** "Show older": documents older than the loaded window that carry this product (one question per document type). */
+async function pvShowOlder(id){
+  const p=products.find(x=>x.id===id); if(!p||!window.BCWin||!window.BCWin.loadContains) { _pvState.older=true; viewProduct(id); return; }
+  const btn=document.getElementById('pv-older-btn'); if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i>Loading…'; }
+  let key=''; try{ key=window.BizCorePI.core.itemKeyOf({productId:p.id}); }catch(_){}
+  try{
+    await Promise.all([window.BCWin.loadContains('rfqs','productIds',p.id),window.BCWin.loadContains('quotations','productIds',p.id),window.BCWin.loadContains('salesOrders','productIds',p.id),key?window.BCWin.loadContains('purchaseInvoices','itemKeys',key):0].map(x=>Promise.resolve(x).catch(()=>0)));
+    // invoices of the orders now loaded
+    const sos=salesOrders.filter(o=>(o.items||[]).some(it=>String(it.prodId||it.productId||'')===String(p.id)));
+    const have=new Set((typeof invoicesCache!=='undefined'?invoicesCache:[]).map(i=>String(i.salesOrderId||'')));
+    await Promise.all(sos.filter(o=>!have.has(String(o.id))).slice(0,30).map(o=>window.BCWin.loadWhere('customerInvoices','salesOrderId',String(o.id)).catch(()=>0)));
+    if(window.BCWin.idle) await window.BCWin.idle();
+  }catch(e){ showToast('Older documents could not be loaded — '+(navigator.onLine===false?'you are offline':'please try again'),'warning'); }
+  _pvState.older=true; viewProduct(id);
 }
 
 function openEditProduct(id) {
@@ -2592,7 +2652,11 @@ function openEditProduct(id) {
   setProductImageInForm(p.image||null, p.imagePath||null);
   loadCustomCategoriesIntoForm();
   // Set category after loading custom ones
-  document.getElementById('pm-cat').value = p.category||'';
+  const catSel = document.getElementById('pm-cat');   // V270.4.10: a category not in the list (e.g. imported) is kept, not cleared
+  if (p.category && !Array.from(catSel.options).some(o => o.value === p.category)) { const o = document.createElement('option'); o.value = o.textContent = p.category; catSel.insertBefore(o, catSel.querySelector('option[value="__addcat__"]')); }
+  catSel.value = p.category||'';
+  pmSetType(p.type === 'service' ? 'service' : 'goods', !!p.code);   // V270.4.10: fixed once the code is given
+  pmUomCheck();
   openModalWithSize('prod-modal');
 }
 
@@ -3411,7 +3475,9 @@ async function saveCustomer() {
 const _origSaveProduct = saveProduct;
 async function saveProduct() {
   const name = document.getElementById('pm-name').value.trim();
-  if (!name) { showToast('Product name is required','error'); return; }
+  const ptype = pmCurrentType(), svc = ptype === 'service';   // V270.4.10
+  if (!name) { showToast((svc ? 'Service' : 'Product') + ' name is required','error'); return; }
+  if (!document.getElementById('pm-uom').value) { showToast('Unit is required','error'); return; }
   const specs = [];
   document.querySelectorAll('#specs-list > div').forEach(row => {
     const inputs = row.querySelectorAll('input');
@@ -3430,16 +3496,17 @@ async function saveProduct() {
   const p = {
     ...(prevProd || {}),   // keeps the system code and history
     id: editingProdId || (window.BizCoreMasters?BizCoreMasters.core.newMasterId('p'):('p'+Date.now().toString(36))),
+    type: prevProd?.code ? (prevProd.type === 'service' ? 'service' : 'goods') : ptype,
     name, code: prevProd?.code || '',
-    brand: document.getElementById('pm-brand').value.trim(),
-    model: document.getElementById('pm-model').value.trim(),
+    brand: svc ? '' : document.getElementById('pm-brand').value.trim(),
+    model: svc ? '' : document.getElementById('pm-model').value.trim(),
     category,
     uom: document.getElementById('pm-uom').value,
     price: parseFloat(document.getElementById('pm-price').value)||0,
     notes: document.getElementById('pm-notes').value.trim(),
-    specs,
-    image: imageData,
-    imagePath: imgArea._imagePath || null
+    specs: svc ? [] : specs,
+    image: svc ? null : imageData,
+    imagePath: svc ? null : (imgArea._imagePath || null)
   };
   const isNew = !editingProdId;
   if (window.BCMasterUI) { hideBusyOverlay('prod-modal'); const chk = await BCMasterUI.beforeSave('products', prevProd, p); if (!chk.ok) return; BCMasterUI.addHistory(p, chk.log); showBusyOverlay('prod-modal', 'Saving product…'); }
@@ -3450,11 +3517,14 @@ async function saveProduct() {
     if (window.BCMasterUI) BCMasterUI.explainFailure('products'); else showToast('Product not saved','error');
     return;
   }
+  if (prevProd && prevProd.imagePath && prevProd.imagePath !== p.imagePath && window.FB) window.FB.deleteFile(prevProd.imagePath);   // the old picture, once the new one is saved
+  imgArea._savedImagePath = p.imagePath || null;
   clearDirty(); closeModal('prod-modal');
   document.getElementById('prod-modal').style.zIndex = '';
   renderProducts();
-  showToast(editingProdId ? 'Product updated' : 'Product added','success');
+  showToast((svc ? 'Service' : 'Product') + (editingProdId ? ' updated' : ' added'),'success');
 
+  if (isNew && typeof window._bcLinkNewProduct === 'function') { quickAddContext = null; window._bcLinkNewProduct(p); return; }   // V270.4.11: + New Product from the link window
   // If called from quotation form — auto-add the new product as a line item
   if (quickAddContext === 'product' && isNew) {
     quickAddContext = null;
@@ -5664,10 +5734,68 @@ function calcTotals() {
   window._qtTotals={gross,lineDisc,lineNet,disc:qd,bvat,vat,net,rate,items,badLines:bad,discBad};
   updateQuotationCommercialSummary();
   if(typeof qtAfterCalc==='function') qtAfterCalc(window._qtTotals);
+  qtRefreshLinkMarks();
+}
+/* V270.4.11 (mockup PB_2): each priced line shows whether it is linked to an item — green "✓ ITM-… name" or orange
+   "Not linked — Link item…". The line text is never changed by linking. Contracting scope lines are not linked. */
+function qtRefreshLinkMarks(){
+  if(currentQuoteType==='contracting') { document.querySelectorAll('#items-tbody .qt-lk').forEach(x=>x.remove()); return; }
+  document.querySelectorAll('#items-tbody tr[data-row-kind="product"]').forEach(tr=>{
+    const cell=tr.querySelector('.qt-dc'); if(!cell) return;
+    const desc=(tr.querySelector('[data-f="desc"]')?.value||'').trim();
+    let mk=cell.querySelector('.qt-lk');
+    if(!desc&&!tr.dataset.prodId){ if(mk) mk.remove(); return; }
+    if(!mk){ mk=document.createElement('div'); mk.className='qt-lk'; cell.appendChild(mk); }
+    const p=tr.dataset.prodId?products.find(x=>x.id===tr.dataset.prodId):null;
+    const key=(p?'g'+p.id:'o')+'|'+desc;
+    if(mk.dataset.k===key) return; mk.dataset.k=key;
+    mk.className='qt-lk '+(p?'is-linked':'not-linked');
+    mk.innerHTML=p?`<span class="qt-lk-dot"></span>Linked: ${p.code?`<span class="bcm-code">${escapeHtml(p.code)}</span> `:''}${escapeHtml(p.name)} <button type="button" class="qt-lk-btn" title="Change the linked item">change</button>`
+      :`<span class="qt-lk-dot"></span>Not linked — <button type="button" class="qt-lk-btn">Link item…</button>`;
+  });
+}
+// one listener for every line's "Link item…" / "change" (survives the marker being repainted); mousedown keeps the focus
+document.addEventListener('mousedown',e=>{ if(e.target.closest&&e.target.closest('#items-tbody .qt-lk-btn')) e.preventDefault(); },true);
+document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closest('#items-tbody .qt-lk-btn'); if(!b) return; e.preventDefault(); e.stopPropagation(); const tr=b.closest('tr'); if(tr) qtLinkLine(tr); },true);
+async function qtLinkLine(tr){
+  if(!window.BCItemLink) return;
+  const desc=(tr.querySelector('[data-f="desc"]')?.value||'').trim(), uom=tr.querySelector('select')?.value||'';
+  const L={text:desc,uom,prodId:tr.dataset.prodId||'',label:'Line '+(tr.querySelector('.qt-n')?.textContent||''),makeNote:true};
+  const r=await BCItemLink.open({title:'Link this line to an item',intro:'The line text stays as written — only the link is added.',lines:[L],custId:selectedCustId,mode:'link'});
+  if(r.action!=='link') return;
+  qtApplyLinkChoice(tr,L);
+}
+/** A link window choice on a quotation edit row: the item id (text unchanged), or the line becomes a note line. */
+function qtApplyLinkChoice(tr,L){
+  if(L._note){
+    const text=(tr.querySelector('[data-f="desc"]')?.value||'').trim();
+    const note=addSpecialQuoteRow('note',text,{focus:false}); if(note){ tr.parentElement.insertBefore(note,tr); tr.remove(); renumberQuoteItemRows(); calcTotals(); }
+  } else if(L._choice){
+    tr.dataset.prodId=L._choice;
+    const p=products.find(x=>x.id===L._choice); if(p&&p.image) tr.dataset.image=p.image;
+  }
+  markDirty('quote-modal'); qtRefreshLinkMarks();
 }
 
 /* opts.skipConfirm: the person already chose "Save & Close" in the Leave Without Saving? dialog (V270.2) */
 async function saveQuotation(mode='save', opts={}) {
+  // V270.4.11 (PB_3): marking as Sent first reminds about lines not linked to an item (Send anyway is allowed)
+  const _goingSent=mode==='sent'||(mode==='save'&&document.getElementById('f-status')?.value==='Sent'&&!(editingId&&quotations.find(x=>x.id===editingId)?.status==='Sent'));
+  if(_goingSent&&!opts.linkChecked&&currentQuoteType!=='contracting'&&window.BCItemLink&&!window.__bcTestNoLinks){
+    const rows=[...document.querySelectorAll('#items-tbody tr[data-row-kind="product"]')].filter(tr=>!tr.dataset.prodId&&(tr.querySelector('[data-f="desc"]')?.value||'').trim());
+    if(rows.length){
+      const priced=document.querySelectorAll('#items-tbody tr[data-row-kind="product"]').length;
+      const lines=rows.map(tr=>({tr,text:tr.querySelector('[data-f="desc"]').value.trim(),uom:tr.querySelector('select')?.value||'',prodId:'',label:'Line '+(tr.querySelector('.qt-n')?.textContent||''),makeNote:true}));
+      const r=await BCItemLink.open({title:'Link items before sending?',intro:`${rows.length} of ${priced} priced line${priced===1?'':'s'} ${rows.length===1?'is':'are'} not linked. Linked lines keep one price history per item (estimated · quoted · bought · sold), whatever the wording.`,lines,custId:selectedCustId,mode:'sent'});
+      if(!r.action) return;
+      if(r.action==='link') lines.forEach(L=>{ if(L._choice||L._note) qtApplyLinkChoice(L.tr,L); });
+      return saveQuotation(mode,{...opts,linkChecked:true});
+    }
+  }
+  if(_goingSent&&window.BCItemLink){   // remember this customer's wording of the linked lines
+    const q0=document.getElementById('f-qno')?.value||'';
+    bcRememberDocLinks(selectedCustId,[...document.querySelectorAll('#items-tbody tr[data-row-kind="product"]')].map(tr=>({desc:(tr.querySelector('[data-f="desc"]')?.value||'').trim(),prodId:tr.dataset.prodId||''})),q0);
+  }
   if(mode==='draft') document.getElementById('f-status').value='Draft';
   if(mode==='sent') document.getElementById('f-status').value='Sent';
   const company=document.getElementById('f-company').value.trim();
@@ -6153,8 +6281,31 @@ async function updateStatus(id, status) {
   renderStatusBar(q, status, true);
 }
 
-async function commitStatus(id, newStatus) {
+/** V270.4.11: the customer's wording of linked lines is remembered (only when it differs from the item's name). */
+function bcRememberDocLinks(custId, items, docNo){
+  if(!window.BCItemLink||!custId) return;
+  (items||[]).forEach(it=>{ if(!it||!it.prodId||it.lineType==='note'||it.lineType==='heading') return; const p=products.find(x=>x.id===it.prodId);
+    if(p&&BCItemLink.norm(it.desc)&&BCItemLink.norm(it.desc)!==BCItemLink.norm(p.name)) BCItemLink.remember(custId,it.desc,p.id,docNo); });
+}
+/** Lines of a saved quotation that are priced items without a link (contracting scope lines excluded). */
+function bcUnlinkedQuoteLines(q){
+  if(!q||q.type==='contracting'||q.quoteType==='contracting') return [];
+  return (q.items||[]).map((it,i)=>({it,i})).filter(({it})=>it&&(!it.lineType||it.lineType==='item')&&it.rowKind!=='scope'&&it.type!=='contracting'&&!it.prodId&&String(it.desc||'').trim());
+}
+async function commitStatus(id, newStatus, opts={}) {
   const q = quotations.find(x=>x.id===id); if (!q) return;
+  // V270.4.11 (PB_3): Sent → reminder about lines not linked to an item
+  if(newStatus==='Sent'&&q.status!=='Sent'&&!opts.linkChecked&&window.BCItemLink&&!window.__bcTestNoLinks){
+    const open=bcUnlinkedQuoteLines(q);
+    if(open.length){
+      const priced=(q.items||[]).filter(it=>it&&(!it.lineType||it.lineType==='item')).length;
+      const lines=open.map(({it,i})=>({idx:i,text:String(it.desc).trim(),uom:it.uom||'',prodId:'',label:'Line '+(i+1)}));
+      const r=await BCItemLink.open({title:'Link items before sending?',intro:`${open.length} of ${priced} priced line${priced===1?'':'s'} ${open.length===1?'is':'are'} not linked. Linked lines keep one price history per item (estimated · quoted · bought · sold), whatever the wording.`,lines,custId:q.custId,mode:'sent'});
+      if(!r.action){ renderStatusBar(q,q.status); return; }
+      if(r.action==='link') lines.forEach(L=>{ if(L._choice) q.items[L.idx]={...q.items[L.idx],prodId:L._choice}; });
+    }
+  }
+  if(newStatus==='Sent'&&q.status!=='Sent') bcRememberDocLinks(q.custId,q.items,q.qno);
   const oldStatus = q.status;
   q.status = newStatus;
   q.updated = new Date().toISOString();
@@ -7067,6 +7218,7 @@ function viewCustomer(id) {
     <section class="product-profile-card party-address-card"><div class="product-profile-section-title"><i class="ti ti-map-pin"></i><span>National address</span></div><div class="party-address-layout"><div class="party-address-readable"><strong>${c.shortAddress||'National address'}</strong><span>${addr.line1||'—'}</span><span>${addr.line2||''}</span><span>${addr.country}</span>${(addr.ar1||addr.ar2||c.companyAr)?`<div class="party-address-ar" dir="rtl"><span>${addr.ar1||''}</span><span>${addr.ar2||''}</span><span>${addr.country==='Saudi Arabia'?'المملكة العربية السعودية':''}</span></div>`:''}</div><div class="party-address-facts"><div><label>Building No.</label><strong>${c.buildingNo||'—'}</strong></div><div><label>Secondary No.</label><strong>${c.secondaryNo||'—'}</strong></div><div><label>Postal Code</label><strong>${c.postalCode||'—'}</strong></div><div><label>City</label><strong>${c.city||'—'}</strong></div></div></div></section>
     <section class="product-profile-card product-profile-usage-card"><div class="product-profile-section-title"><i class="ti ti-chart-dots-3"></i><span>Activity & usage</span></div><div class="product-profile-usage"><div><span>RFQs</span><strong>${cRFQs.length}</strong></div><div><span>Quotations</span><strong>${cQuotes.length}</strong></div><div><span>Sales orders</span><strong>${cSOs.length}</strong></div><div class="product-profile-usage-total"><span>Quotation value</span><strong>${fmtShort(totalVal)}</strong></div></div><div class="product-profile-usage-note"><i class="ti ti-trophy"></i>Won quotation value: <strong>${fmtShort(wonVal)}</strong></div></section>
     <section class="product-profile-card profile-recent"><button class="profile-recent-head" onclick="toggleProfileTransactions(this)" aria-expanded="false"><span><i class="ti ti-history"></i> Recent transactions</span><span class="profile-recent-hint">Latest ${Math.min(txns.length,10)} <i class="ti ti-chevron-down"></i></span></button><div class="profile-recent-body"><div class="profile-recent-tools"><span>Showing latest transactions</span><select onchange="filterProfileTransactions(this)"><option value="">All types</option><option>RFQ</option><option>Quotation</option><option>Sales Order</option></select></div><div class="table-wrap"><table class="profile-txn-table"><thead><tr><th>Date</th><th>Document</th><th>Type</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>${txnRows}</tbody></table></div></div></section>
+    <section class="product-profile-card bch-card"><div class="product-profile-section-title"><i class="ti ti-history"></i><span>Change history</span></div>${window.BCMasterUI?BCMasterUI.historyHtml(c):''}</section>
   </div>`;
   document.getElementById('cust-view-title').textContent='Customer details';
   document.getElementById('cust-view-edit-btn').setAttribute('data-cid',id); document.getElementById('cust-view-delete-btn')?.setAttribute('data-cid',id);
@@ -7552,6 +7704,7 @@ function viewSupplier(id) {
     <section class="product-profile-card party-address-card"><div class="product-profile-section-title"><i class="ti ti-map-pin"></i><span>National address</span></div><div class="party-address-layout"><div class="party-address-readable"><strong>${sp.shortAddress||'National address'}</strong><span>${addr.line1||'—'}</span><span>${addr.line2||''}</span><span>${addr.country}</span>${(addr.ar1||addr.ar2||sp.companyAr)?`<div class="party-address-ar" dir="rtl"><span>${addr.ar1||''}</span><span>${addr.ar2||''}</span><span>${addr.country==='Saudi Arabia'?'المملكة العربية السعودية':''}</span></div>`:''}</div><div class="party-address-facts"><div><label>Building No.</label><strong>${sp.buildingNo||'—'}</strong></div><div><label>Secondary No.</label><strong>${sp.secondaryNo||'—'}</strong></div><div><label>Postal Code</label><strong>${sp.postalCode||'—'}</strong></div><div><label>City</label><strong>${sp.city||'—'}</strong></div></div></div></section>
     <div class="product-profile-grid product-profile-lower-grid"><section class="product-profile-card"><div class="product-profile-section-title"><i class="ti ti-chart-dots-3"></i><span>Activity & usage</span></div><div class="profile-compact-stats"><div><span>RFQ / Pricing references</span><strong>${related.length}</strong></div><div><span>Pricing documents</span><strong>${pricingDocs.length}</strong></div></div><div class="product-profile-usage-note"><i class="ti ti-shield-lock"></i>${related.length?'This supplier is connected to business records and is protected from deletion.':'No business-document references found.'}</div></section><section class="product-profile-card"><div class="product-profile-section-title"><i class="ti ti-note"></i><span>Notes</span></div><div class="product-profile-notes">${sp.notes||'<span>No notes have been added for this supplier.</span>'}</div></section></div>
     <section class="product-profile-card profile-recent"><button class="profile-recent-head" onclick="toggleProfileTransactions(this)" aria-expanded="false"><span><i class="ti ti-history"></i> Recent transactions</span><span class="profile-recent-hint">Latest ${Math.min(txns.length,10)} <i class="ti ti-chevron-down"></i></span></button><div class="profile-recent-body"><div class="profile-recent-tools"><span>Showing latest supplier transactions</span><select onchange="filterProfileTransactions(this)"><option value="">All types</option><option>Pricing</option></select></div><div class="table-wrap"><table class="profile-txn-table"><thead><tr><th>Date</th><th>Document</th><th>Type</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>${txnRows}</tbody></table></div></div></section>
+    <section class="product-profile-card bch-card"><div class="product-profile-section-title"><i class="ti ti-history"></i><span>Change history</span></div>${window.BCMasterUI?BCMasterUI.historyHtml(sp):''}</section>
   </div>`;
   document.getElementById('sup-view-title').textContent='Supplier details'; document.getElementById('sup-view-edit-btn').setAttribute('data-sid',id); document.getElementById('sup-view-delete-btn').setAttribute('data-sid',id); openModalWithSize('sup-view-modal');
 }
@@ -11025,11 +11178,38 @@ function soReplacePOFile(event){soBrowsePOFile(event);}
 function soPOAttachmentKeydown(event){if(event.key==='Enter'||event.key===' '){event.preventDefault();soBrowsePOFile(event);}}
 function soPOFileChanged(input){const f=input?.files?.[0]||null;const modal=document.getElementById('so-create-modal');if(modal)modal._poAttachmentRemoved=false;soRenderPOAttachment(f,modal?modal._poAttachment:null);}
 function soRemovePOFile(event){event?.preventDefault();event?.stopPropagation();const fi=document.getElementById('so-po-file');if(fi)fi.value='';const modal=document.getElementById('so-create-modal');if(modal){modal._poAttachment=null;modal._poAttachmentRemoved=true;}soRenderPOAttachment();}
+/* V270.4.11 (mockup PB_4): every line going into the Sales Order must be linked to an item (contracting scope lines
+   excepted). Lines not in this order are left as they are. A link of an earlier order of the same quotation line is
+   taken over; the customer's earlier wording is suggested ("Use it"). */
+const soNeedsLink=it=>!window.__bcTestNoLinks&&!!it&&(!it.lineType||it.lineType==='item')&&it.rowKind!=='scope'&&it.type!=='contracting';
+function soLinkHtml(it,i){
+  if(!soNeedsLink(it)) return '';
+  const p=it.prodId?products.find(x=>x.id===it.prodId):null;
+  if(p) return `<span class="soc-lk-ok"><i class="ti ti-link"></i>${p.code?`<span class="bcm-code">${escapeHtml(p.code)}</span> `:''}${escapeHtml(p.name)}</span> <button type="button" class="soc-lk-btn" onclick="soLinkItem(${i})">change</button>`;
+  const modal=document.getElementById('so-create-modal'), q=quotations.find(x=>x.id===modal?._quotationId);
+  const mem=window.BCItemLink?BCItemLink.memoryOf(q?.custId,it.desc):null;
+  return `<button type="button" class="btn btn-sm soc-lk-need" onclick="soLinkItem(${i})"><i class="ti ti-link"></i>Link item… (required)</button>${mem?` <span class="soc-lk-mem">💡 Linked for this customer before: ${mem.product.code?`<span class="bcm-code">${escapeHtml(mem.product.code)}</span> `:''}${escapeHtml(mem.product.name)} <button type="button" class="soc-lk-btn" onclick="soUseLink(${i},'${escapeHtml(mem.product.id)}')">Use it</button></span>`:''}`;
+}
+function soUseLink(i,pid){
+  const modal=document.getElementById('so-create-modal'), it=(modal._remainingItems||[])[i]; if(!it) return;
+  it.prodId=pid; const el=document.getElementById('soc-lk-'+i); if(el) el.innerHTML=soLinkHtml(it,i);
+  document.getElementById('soc-chk-'+i)?.closest('.so-item-row')?.classList.remove('soc-need');
+}
+async function soLinkItem(i){
+  const modal=document.getElementById('so-create-modal'), it=(modal._remainingItems||[])[i]; if(!it||!window.BCItemLink) return;
+  const q=quotations.find(x=>x.id===modal._quotationId);
+  const L={text:String(it.desc||'').trim(),uom:it.uom||'',prodId:it.prodId||'',label:'Line '+(Number(it.origIdx)+1)};
+  const r=await BCItemLink.open({title:'Link this line to an item',intro:'Required for the lines in this Sales Order. The line text stays as written.',lines:[L],custId:q?.custId,mode:'link'});
+  if(r.action==='link'&&L._choice) soUseLink(i,L._choice);
+}
 function renderSOCreateItems(items,currentByOrig={}){
+  // a line already linked in an earlier order of the same quotation keeps that link
+  const modal=document.getElementById('so-create-modal'), prev=salesOrders.filter(o=>o.quotationId===modal?._quotationId&&o.id!==modal?._editingSOId);
+  items.forEach(it=>{ if(!it.prodId){ for(const o of prev){ const x=(o.items||[]).find(y=>Number(y.origIdx)===Number(it.origIdx)&&y.prodId); if(x){ it.prodId=x.prodId; break; } } } });
   document.getElementById('so-items-list').innerHTML=items.map((it,i)=>{const current=currentByOrig[it.origIdx]||0;const checked=current>0||!Object.keys(currentByOrig).length;const qty=current>0?current:it.remainingQty;const after=Math.max(0,it.remainingQty-qty);return `
     <div class="so-item-row">
       <input type="checkbox" class="so-item-check" id="soc-chk-${i}" ${checked?'checked':''} onchange="soCalcSummary()">
-      <div><div style="font-weight:600;color:#0f172a">${escapeHtml(it.desc||'—')}</div>${it.brand||it.model?`<div style="font-size:11px;color:var(--gray)">${escapeHtml([it.brand,it.model].filter(Boolean).join(' / '))}</div>`:''}</div>
+      <div><div style="font-weight:600;color:#0f172a">${escapeHtml(it.desc||'—')}</div>${it.brand||it.model?`<div style="font-size:11px;color:var(--gray)">${escapeHtml([it.brand,it.model].filter(Boolean).join(' / '))}</div>`:''}<div class="soc-lk" id="soc-lk-${i}">${soLinkHtml(it,i)}</div></div>
       <div class="so-num">${formatQtyForUom(it.origQty,it.uom)}</div><div class="so-num so-muted">${formatQtyForUom(it.orderedQty||0,it.uom)}</div>
       <div><input type="number" class="so-qty-input bc-spin" id="soc-qty-${i}" value="${qty}" min="${qtyMin(it.uom)}" max="${it.remainingQty}" step="${qtyStep(it.uom)}" oninput="soCalcSummary()"></div>
       <div class="so-num so-remain" id="soc-rem-${i}">${formatQtyForUom(after,it.uom)}</div><div>${escapeHtml(it.uom||'—')}</div>
@@ -11097,6 +11277,16 @@ async function _saveSalesOrderCore() {
 
   if (invalidQty) return;
   if (!selectedItems.length) { showToast('Please select at least one item','error'); return; }
+  // V270.4.11 (PB_4): every line in the order must be linked to an item
+  const unlinked = items.map((it,i)=>({it,i})).filter(({it,i})=>document.getElementById('soc-chk-'+i)?.checked && roundQtyForUom(document.getElementById('soc-qty-'+i)?.value,it.uom)>0 && soNeedsLink(it) && !it.prodId);
+  document.querySelectorAll('#so-items-list .so-item-row').forEach(r=>r.classList.remove('soc-need'));
+  if (unlinked.length) {
+    unlinked.forEach(({i})=>document.getElementById('soc-chk-'+i)?.closest('.so-item-row')?.classList.add('soc-need'));
+    showValidationDialog('Link the items first', `${unlinked.length} line${unlinked.length===1?'':'s'} in this order ${unlinked.length===1?'is':'are'} not linked to an item:\n\n${unlinked.slice(0,6).map(({it})=>'• '+(it.desc||'—')).join('\n')}\n\nUse "Link item…" on ${unlinked.length===1?'that line':'those lines'}. Lines not in this order don't need a link.`, '', '');
+    document.getElementById('soc-lk-'+unlinked[0].i)?.scrollIntoView({block:'center'});
+    return;
+  }
+  { const q0=quotations.find(x=>x.id===modal._quotationId); bcRememberDocLinks(q0?.custId, selectedItems, q0?.qno||''); }
 
   const vat = Math.round(sub * vr * 100) / 100;
   const total = sub + vat;
@@ -12112,7 +12302,7 @@ function dnCustomerProfile(so){
 function docPrintItemCode(code){
   const c=String(code||'').trim(); if(!c) return '';
   if(products.some(p=>p&&p.code&&String(p.code).trim()===c)) return '';
-  try{ const px=docNumberParts('product').numbering.displayPrefix; if(px&&c.startsWith(px)&&/^\d+$/.test(c.slice(px.length))) return ''; }catch(_){}
+  for(const t of ['product','service']){ try{ const px=docNumberParts(t).numbering.displayPrefix; if(px&&c.startsWith(px)&&/^\d+$/.test(c.slice(px.length))) return ''; }catch(_){} }
   if(/-OFF-/.test(c)) return '';   // a temporary (offline) system code
   return c;
 }
@@ -14410,6 +14600,7 @@ const IMPORT_SCHEMAS = {
     label: 'Products',
     columns: [
       { key:'name',     label:'Product Name *', required:true,  hint:'Full product name' },
+      { key:'type',     label:'Type',           required:false, hint:'Goods or Service (empty = Goods)' },
       { key:'oldCode',  label:'Old Code',       required:false, hint:'Your previous item code (kept for reference — BizCore gives ITM codes)', aliases:['Product Code'] },
       { key:'brand',    label:'Brand',          required:false, hint:'e.g. Roco, Deluxe' },
       { key:'model',    label:'Model',          required:false, hint:'e.g. A4-500' },
@@ -14419,8 +14610,8 @@ const IMPORT_SCHEMAS = {
       { key:'notes',    label:'Notes',          required:false, hint:'Product description or notes' },
     ],
     example: [
-      { 'Product Name *':'Roco Printing Paper A4','Old Code':'PP-A4-500','Brand':'Roco','Model':'A4-500','Category':'Stationery','Unit of Measure':'Box','Default Price':'79','Notes':'500 pcs per ream, 5 reams per box' },
-      { 'Product Name *':'Deluxe Binder Clip 32mm','Old Code':'BC-32MM','Brand':'Deluxe','Model':'32mm','Category':'Stationery','Unit of Measure':'Pkt','Default Price':'25','Notes':'12 pcs per packet' },
+      { 'Product Name *':'Roco Printing Paper A4','Type':'Goods','Old Code':'PP-A4-500','Brand':'Roco','Model':'A4-500','Category':'Stationery','Unit of Measure':'Box','Default Price':'79','Notes':'500 pcs per ream, 5 reams per box' },
+      { 'Product Name *':'Deluxe Binder Clip 32mm','Type':'Goods','Old Code':'BC-32MM','Brand':'Deluxe','Model':'32mm','Category':'Stationery','Unit of Measure':'Pkt','Default Price':'25','Notes':'12 pcs per packet' },
     ]
   },
 
@@ -14674,7 +14865,7 @@ async function confirmImport() {
     if (mod === 'customers') { const contacts = r.contact ? [{ name: r.contact, title: '', phone: r.phone || '', isDefault: true }] : [];
       return { id: C.newMasterId('c'), company: r.company, city: r.city || '', vat: r.vat || '', contacts, contact: r.contact || '', phone: r.phone || '', email: r.email || '', importedAt: new Date().toISOString() }; }
     if (mod === 'suppliers') return { id: C.newMasterId('s'), company: r.company, contact: r.contact || '', phone: r.phone || '', email: r.email || '', whatsapp: r.whatsapp || '', city: r.city || '', cat: r.cat || '', vat: r.vat || '', notes: r.notes || '', importedAt: new Date().toISOString() };
-    if (mod === 'products') return { id: C.newMasterId('p'), name: r.name, code: '', oldCode: r.oldCode || '', brand: r.brand || '', model: r.model || '', category: r.category || '', uom: r.uom || 'Pcs', price: parseFloat(r.price) || 0, notes: r.notes || '', specs: [], image: null, importedAt: new Date().toISOString() };
+    if (mod === 'products') return { id: C.newMasterId('p'), type: /^serv/i.test(String(r.type || '').trim()) ? 'service' : 'goods', name: r.name, code: '', oldCode: r.oldCode || '', brand: r.brand || '', model: r.model || '', category: r.category || '', uom: r.uom || 'Pcs', price: parseFloat(r.price) || 0, notes: r.notes || '', specs: [], image: null, importedAt: new Date().toISOString() };
     return { id: C.newMasterId('emp-'), code: '', oldCode: r.oldCode || '', name: r.name, department: r.department || '', designation: r.designation || '', email: r.email || '', mobile: r.mobile || '', roles: [],
       iqamaNo: r.iqamaNo || '', iqamaExpiry: r.iqamaExpiry || '', passportNo: r.passportNo || '', passportExpiry: r.passportExpiry || '', licenseNo: '', licenseExpiry: '', active: true, photo: null, importedAt: new Date().toISOString() };
   };
@@ -14689,8 +14880,11 @@ async function confirmImport() {
       }
     } else {
       const list = mod === 'products' ? products : employees;
-      const recs = rows.map(build), codes = await M.reserveCodes(mod, recs.length);
-      recs.forEach((rec, i) => { rec.code = codes[i]; });
+      const recs = rows.map(build);
+      for (const k of (mod === 'products' ? ['goods', 'service'] : [null])) {   // V270.4.10: ITM / SRV sequences
+        const part = k ? recs.filter(r => (r.type === 'service' ? 'service' : 'goods') === k) : recs; if (!part.length) continue;
+        const codes = await M.reserveCodes(mod, part.length, k === 'service' ? 'service' : null); part.forEach((rec, i) => { rec.code = codes[i]; });
+      }
       for (let i = 0; i < recs.length; i += 50) {
         const part = recs.slice(i, i + 50);
         list.push(...part);
@@ -15487,6 +15681,24 @@ async function bcRenderAnalyticsWindowNote(){
 
 
 /* ── V270.4.9 — master record forms: code, same / similar name notice, VAT No. block, rename (js/master-ui.js) ── */
+/* V270.4.10: where a product's unit is in use — stock on hand and documents (loaded ones). */
+function bcProductUnitUse(p){
+  if(!p) return {stock:0,docs:0};
+  let stock=0;
+  try{ const C=window.BizCorePI&&window.BizCorePI.core, key=C?C.itemKeyOf({productId:p.id}):'', st=key&&window.BizCorePI.stock&&window.BizCorePI.stock.get(key); stock=Math.round((Number(st&&st.qty)||0)*1000)/1000; }catch(_){}
+  let docs=0; try{ docs=bcProductUsage(p).docs.length; }catch(_){}
+  return {stock,docs};
+}
+/** Edit form: a note under Unit as soon as it is changed on a product in use. */
+function pmUomCheck(){
+  const sel=document.getElementById('pm-uom'), note=document.getElementById('pm-uom-note'); if(!sel||!note) return;
+  const prev=editingProdId?products.find(x=>x.id===editingProdId):null;
+  sel.onchange=()=>pmUomCheck();
+  if(!prev||!prev.uom||sel.value===prev.uom){ note.hidden=true; return; }
+  const u=bcProductUnitUse(prev);
+  note.hidden=!(u.stock>0||u.docs>0);
+  note.textContent=u.stock>0?`In stock as ${prev.uom} (${u.stock}) — the unit can't change.`:u.docs>0?`Used in ${u.docs} document${u.docs===1?'':'s'} as ${prev.uom} — issued documents keep ${prev.uom}.`:'';
+}
 (function bcBindMasterForms(){
   if(!window.BCMasterUI) return;
   const same=(a,b)=>String(a||'').trim().toLowerCase()===String(b||'').trim().toLowerCase();
@@ -15505,7 +15717,7 @@ async function bcRenderAnalyticsWindowNote(){
     meta:s=>[s.city,s.contact].filter(Boolean).join(' · '),usage:usageSupplier});
   BCMasterUI.bind({col:'products',boxId:'prod-modal',titleSel:'#prod-modal-title',nameId:'pm-name',nameField:'name',label:'product',
     list:()=>products,getId:()=>editingProdId,current:()=>editingProdId?products.find(x=>x.id===editingProdId):null,open:reopen('prod-modal',openEditProduct),
-    meta:p=>[p.brand,p.uom].filter(Boolean).join(' · '),usage:usageProduct});
+    meta:p=>[p.brand,p.uom].filter(Boolean).join(' · '),usage:usageProduct,unitCheck:p=>bcProductUnitUse(p)});
   BCMasterUI.bind({col:'employees',boxId:'employee-form-panel',titleSel:'#employee-form-title',nameId:'emp-name',nameField:'name',label:'employee',
     list:()=>employees,getId:()=>editingEmployeeId,current:()=>editingEmployeeId?employees.find(x=>x.id===editingEmployeeId):null,open:id=>openEmployeeForm(id)});
 })();

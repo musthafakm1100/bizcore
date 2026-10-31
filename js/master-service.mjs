@@ -19,6 +19,9 @@ export const MASTER_TYPES = Object.freeze({
   employees: { numberingType: 'employee', nameField: 'name', vat: false },
 });
 export const VAT_COLLECTION = 'partyVat';
+/** V270.4.10 (Package B1): products are goods (ITM-…) or services (SRV-…) — each type has its own code sequence. */
+export const isService = rec => !!rec && rec.type === 'service';
+export const numberingTypeOf = (col, rec) => (col === 'products' && isService(rec) ? 'service' : (MASTER_TYPES[col] || {}).numberingType);
 export const ERR = Object.freeze({ DUPLICATE_VAT: 'duplicate-vat', INVALID: 'invalid-input', NOT_FOUND: 'not-found' });
 
 /** VAT number as compared: letters and digits only, capitals ("300 437-135" = "300437135"). */
@@ -98,7 +101,7 @@ export function createMasterService(fs, options = {}) {
     const actor = actorOf();
     const ref = doc(db, col, docIdFor(col, record));
     const vatKey = t.vat ? normVat(record.vat) : '';
-    const numbering = needsCode(record) && options.numberingFor ? options.numberingFor(t.numberingType) : null;
+    const numbering = needsCode(record) && options.numberingFor ? options.numberingFor(numberingTypeOf(col, record)) : null;
     return runTransaction(db, async tx => {
       const reads = [tx.get(ref)];
       const claimRef = vatKey ? doc(db, VAT_COLLECTION, vatClaimId(col, vatKey)) : null;
@@ -150,10 +153,10 @@ export function createMasterService(fs, options = {}) {
   /**
    * Codes for many new records at once (import): ONE transaction reserves the block, in file order. → [codes].
    */
-  async function reserveCodes(col, count) {
+  async function reserveCodes(col, count, kind = null) {
     const t = MASTER_TYPES[col]; if (!t) fail(ERR.INVALID, 'Unknown master list ' + col);
     if (!(count > 0)) return [];
-    const numbering = options.numberingFor(t.numberingType);
+    const numbering = options.numberingFor(numberingTypeOf(col, kind ? { type: kind } : null));
     const counterRef = doc(db, 'counters', numbering.counterKey);
     return runTransaction(db, async tx => {
       const c = await tx.get(counterRef);

@@ -23,8 +23,12 @@
   function codeChip(cfg) {
     const head = document.querySelector(cfg.titleSel);
     if (!head) return;
-    let chip = head.parentElement.querySelector('.bcm-code');
+    // V270.4.10: the header may be re-wrapped after the first paint (title wrap) — look in the whole header, keep one chip
+    const box = head.closest('.modal-header, .modal, header') || head.parentElement;
+    const all = [...box.querySelectorAll('.bcm-code')]; all.slice(1).forEach(x => x.remove());
+    let chip = all[0];
     if (!chip) { chip = document.createElement('span'); chip.className = 'bcm-code'; head.insertAdjacentElement('afterend', chip); }
+    else if (chip.previousElementSibling !== head) head.insertAdjacentElement('afterend', chip);
     const r = cfg.current();
     chip.textContent = r && r.code ? r.code : 'Code given on save';
     chip.classList.toggle('bcm-code-new', !(r && r.code));
@@ -112,16 +116,16 @@
         ack[col] = C.normName(nameOf(next));
       }
     }
-    // 3. a used record renamed / its VAT No. changed → confirmation; the change goes in its history
-    const log = [], who = (window.currentUser && window.currentUser.name) || '', at = new Date().toISOString();
-    if (prev && nameOf(prev) && nameOf(prev) !== nameOf(next)) log.push({ at, by: who, field: cfg.nameField, from: nameOf(prev), to: nameOf(next) });
+    // 3. a used record renamed / its VAT No. changed → confirmation; V270.4.10: EVERY changed field goes in its history
+    const who = (window.currentUser && window.currentUser.name) || '', at = new Date().toISOString();
+    const log = prev ? diffLog(prev, next, at, who) : [];
     const vatChanged = cfg.vatId && prev && C.normVat(prev.vat) !== C.normVat(next.vat);
-    if (vatChanged) log.push({ at, by: who, field: 'vat', from: prev.vat || '', to: next.vat || '' });
-    if (prev && log.length && cfg.usage) {
+    const renamed = prev && nameOf(prev) && nameOf(prev) !== nameOf(next);
+    if (prev && (renamed || vatChanged) && cfg.usage) {
       const n = cfg.usage(prev);
       if (n > 0) {
         const parts = [];
-        if (log.some(l => l.field === cfg.nameField)) parts.push(`renamed from <b>${esc(nameOf(prev))}</b> to <b>${esc(nameOf(next))}</b>`);
+        if (renamed) parts.push(`renamed from <b>${esc(nameOf(prev))}</b> to <b>${esc(nameOf(next))}</b>`);
         if (vatChanged) parts.push(`VAT No. changed from <b>${esc(prev.vat || '—')}</b> to <b>${esc(next.vat || '—')}</b>`);
         const ok = await confirmP({ icon: '✏️', title: `Change a ${cfg.label} that is in use?`,
           message: `${esc(nameOf(prev))} is used in <b>${n}</b> document${n === 1 ? '' : 's'}. It will be ${parts.join(' and ')}.<br><br>Issued documents keep the ${vatChanged && parts.length === 1 ? 'old VAT No.' : 'old details'}; new documents use the new ones. The change is kept in the ${cfg.label}'s history.`,
@@ -129,10 +133,48 @@
         if (!ok) return { ok: false, log: [] };
       }
     }
+    // 4. V270.4.10: a used product's unit — refused while it has stock, otherwise asked first
+    if (prev && cfg.unitCheck && String(prev.uom || '') !== String(next.uom || '')) {
+      const u = cfg.unitCheck(prev);
+      if (u.stock > 0) { if (typeof showValidationDialog === 'function') showValidationDialog('Unit can\u2019t change', `${nameOf(prev)} has ${u.stock} ${prev.uom} in stock. Changing the unit would make the stock quantities wrong — keep ${prev.uom}, or add a new product with the other unit.`, 'pm-uom', 'In stock'); return { ok: false, log: [] }; }
+      if (u.docs > 0) {
+        const ok = await confirmP({ icon: '⚠️', title: 'Change the unit of a product in use?', message: `${esc(nameOf(prev))} is used in <b>${u.docs}</b> document${u.docs === 1 ? '' : 's'} with unit <b>${esc(prev.uom)}</b>. Issued documents keep ${esc(prev.uom)}; new documents use <b>${esc(next.uom)}</b>.`, confirmText: 'Change the unit', cancelText: 'Go back' });
+        if (!ok) return { ok: false, log: [] };
+      }
+    }
     return { ok: true, log };
   }
+  /** V270.4.10: what changed between two versions of a record → history entries (who, when, field, old → new). */
+  const SKIP = new Set(['id', 'code', 'vatKey', 'tempCode', 'changeLog', 'createdAt', 'createdBy', 'createdByUid', 'updatedAt', 'updatedBy', 'updatedByUid', 'importedAt', 'imagePath', 'wordings', 'revision', '_deletedAt', '_deletedBy', '_rev', 'oldCode']);
+  const COMPLEX = { image: 'image', specs: 'specifications', contacts: 'contacts' };
+  const FORM_DEFAULTS = { country: 'Saudi Arabia', countryAr: 'المملكة العربية السعودية', type: 'goods', uom: 'Pcs' };
+  const show = v => v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+  function diffLog(prev, next, at, by) {
+    const out = [], keys = new Set([...Object.keys(prev || {}), ...Object.keys(next || {})]);
+    keys.forEach(k => {
+      if (SKIP.has(k) || k.startsWith('_')) return;
+      const a = prev[k], b = next[k];
+      const sa = show(a), sb = show(b);
+      if (sa === sb || ((a == null || a === '') && (b == null || b === '' || (Array.isArray(b) && !b.length)))) return;
+      if (a === undefined && FORM_DEFAULTS[k] === b) return;   // a field the form fills in by default, not a change
+      if (COMPLEX[k] || typeof a === 'object' || typeof b === 'object') out.push({ at, by, field: k, from: '', to: '', note: (COMPLEX[k] || k) + ' changed' });
+      else out.push({ at, by, field: k, from: sa.slice(0, 200), to: sb.slice(0, 200) });
+    });
+    return out;
+  }
   /** Adds history entries (newest last, at most 50). */
-  function addHistory(record, log) { if (log && log.length) record.changeLog = [...(record.changeLog || []), ...log].slice(-50); }
+  function addHistory(record, log) { if (log && log.length) record.changeLog = [...(record.changeLog || []), ...log].slice(-100); }
+  /** V270.4.10: the History section of a view screen (newest first). labels: field → words. */
+  const LABELS = { company: 'Company name', name: 'Name', vat: 'VAT No.', uom: 'Unit', category: 'Category', brand: 'Brand', model: 'Model number', price: 'Default price', notes: 'Notes', city: 'City', contact: 'Contact', phone: 'Phone', email: 'Email', mobile: 'Mobile', whatsapp: 'WhatsApp', cat: 'Category', type: 'Type', companyAr: 'Company name (Arabic)', shortAddress: 'Short address', buildingNo: 'Building no.', street: 'Street', district: 'District', postalCode: 'Postal code', secondaryNo: 'Secondary no.', country: 'Country' };
+  const label = f => LABELS[f] || f.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, c => c.toUpperCase());
+  function historyHtml(record) {
+    const log = [...((record && record.changeLog) || [])].reverse();
+    const made = record && record.createdAt ? `<div class="bch-row bch-made"><span class="bch-when">${esc(fmt(record.createdAt))}</span><span class="bch-who">${esc(record.createdBy || '')}</span><span class="bch-what">Created${record.code ? ' · ' + esc(record.code) : ''}</span></div>` : '';
+    if (!log.length) return `<div class="bch">${made}<div class="bch-empty">No changes recorded yet.</div></div>`;
+    const row = l => `<div class="bch-row"><span class="bch-when">${esc(fmt(l.at))}</span><span class="bch-who">${esc(l.by || '—')}</span><span class="bch-what"><b>${esc(label(l.field))}</b>${l.note ? ': ' + esc(l.note.replace(/^\w+ /, '')) : `: ${esc(l.from || "—")} <span class="bch-arrow">→</span> ${esc(l.to || "—")}`}</span></div>`;
+    return `<div class="bch">${log.map(row).join('')}${made}</div>`;
+  }
+  function fmt(iso) { const d = new Date(iso); if (isNaN(d)) return String(iso || ''); const p = n => String(n).padStart(2, '0'); return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; }
   /** After a failed save: the reason in plain words (VAT already used, offline VAT …), or false when there was none. */
   function explainFailure(col) {
     const e = window.BizCoreMasters && window.BizCoreMasters.lastError && window.BizCoreMasters.lastError();
@@ -145,5 +187,5 @@
     if (typeof showToast === 'function') showToast('Not saved: ' + (e.message || e.code || 'please try again'), 'error');
     return true;
   }
-  window.BCMasterUI = { bind, refresh, beforeSave, addHistory, explainFailure };
+  window.BCMasterUI = { bind, refresh, beforeSave, addHistory, explainFailure, historyHtml, diffLog };
 })();

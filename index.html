@@ -7,7 +7,8 @@
 <link rel="stylesheet" href="css/mobile-zoom.css?v=270.49"/>
 <script src="js/doc-zoom.js?v=270.48"></script>
 <script src="js/doc-pages.js?v=270.51"></script>
-<script src="js/master-ui.js?v=270.54"></script>
+<script src="js/master-ui.js?v=270.56"></script>
+<script src="js/item-link.js?v=270.56"></script>
 <title>BizCore — Downtown Trading Est.</title>
 <meta content="#ffffff" name="theme-color"/>
 <link rel="manifest" href="manifest.json"/>
@@ -18,7 +19,7 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=270.54" rel="stylesheet"/>
+<link href="css/main.css?v=270.56" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=266.5" rel="stylesheet"/>
 <link href="css/typography.css?v=215" rel="stylesheet"/>
 <link href="css/masters.css?v=266.5" rel="stylesheet"/>
@@ -904,12 +905,13 @@ document.addEventListener('error', function(e) {
 <select id="prod-cat-filter" onchange="renderProducts()">
 <option value="">All categories</option>
 </select>
+<select id="prod-type-filter" onchange="prodPage=1;renderProducts()" aria-label="Type"><option value="">Goods &amp; services</option><option value="goods">Goods</option><option value="service">Services</option></select>
 </div>
 </div>
 <div class="list-table-scroll">
 <table>
 <thead><tr>
-<th class="master-select-col"><input id="products-select-all" class="master-row-check" type="checkbox" onkeydown="event.stopPropagation()" aria-label="Select all products on this page" onclick="event.stopPropagation();toggleMasterPageSelection('products',this.checked)"></th><th style="width:52px">Image</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="code" onclick="setRegisterSort('products','code',renderProducts)">Item code</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="name" onclick="setRegisterSort('products','name',renderProducts)">Product name</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="brand" onclick="setRegisterSort('products','brand',renderProducts)">Brand</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="model" onclick="setRegisterSort('products','model',renderProducts)">Model no.</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="category" onclick="setRegisterSort('products','category',renderProducts)">Category</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="uom" onclick="setRegisterSort('products','uom',renderProducts)">UOM</th><th class="sortable-register-th right" data-sort-screen="products" data-sort-key="price" onclick="setRegisterSort('products','price',renderProducts)">Default price</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="specs" onclick="setRegisterSort('products','specs',renderProducts)">Specs</th>
+<th class="master-select-col"><input id="products-select-all" class="master-row-check" type="checkbox" onkeydown="event.stopPropagation()" aria-label="Select all products on this page" onclick="event.stopPropagation();toggleMasterPageSelection('products',this.checked)"></th><th style="width:52px">Image</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="code" onclick="setRegisterSort('products','code',renderProducts)">Item code</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="type" onclick="setRegisterSort('products','type',renderProducts)">Type</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="name" onclick="setRegisterSort('products','name',renderProducts)">Product name</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="brand" onclick="setRegisterSort('products','brand',renderProducts)">Brand</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="model" onclick="setRegisterSort('products','model',renderProducts)">Model no.</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="category" onclick="setRegisterSort('products','category',renderProducts)">Category</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="uom" onclick="setRegisterSort('products','uom',renderProducts)">UOM</th><th class="sortable-register-th right" data-sort-screen="products" data-sort-key="price" onclick="setRegisterSort('products','price',renderProducts)">Default price</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="specs" onclick="setRegisterSort('products','specs',renderProducts)">Specs</th>
 </tr></thead>
 <tbody id="products-tbody"></tbody>
 </table>
@@ -1676,23 +1678,26 @@ document.addEventListener('error', function(e) {
 </div>
 <!-- ADD / EDIT PRODUCT MODAL -->
 <div class="modal-overlay" id="prod-modal">
-<div class="modal modal-normal">
+<div class="modal modal-normal pm-modal">
 <div class="modal-header">
 <h2 id="prod-modal-title">Add product</h2>
-<div style="display:flex;align-items:center;gap:8px">
-
+<div class="pm-type-seg" role="radiogroup" aria-label="Type">
+<label><input type="radio" name="pm-type" id="pm-type-goods" value="goods" checked onchange="pmApplyType()"/><span><i class="ti ti-package"></i>Goods</span></label>
+<label><input type="radio" name="pm-type" id="pm-type-service" value="service" onchange="pmApplyType()"/><span><i class="ti ti-tool"></i>Service</span></label>
+</div>
+<div style="display:flex;align-items:center;gap:8px;margin-left:auto">
 <button class="close-btn" onclick="confirmCloseModal('prod-modal')">✕</button>
 </div>
 </div>
-<div class="modal-body" onchange="markDirty('prod-modal')" oninput="markDirty('prod-modal')" style="overflow-y:auto">
-<!-- Two-column: form fields left, image right -->
-<div style="display:grid;grid-template-columns:1fr 200px;gap:16px;align-items:start">
-<!-- LEFT: all form fields -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
-<div class="form-group form-full"><label>Product name *</label><input id="pm-name" placeholder="e.g. Insect Killer Light 32W Round"/></div>
-<div class="form-group"><label>Item code</label><input id="pm-code" placeholder="Given on save" readonly="" tabindex="-1" title="Given by BizCore when the product is saved — never changes"/></div>
-<div class="form-group">
-<label>Category</label>
+<!-- V270.4.10 (mockups PF_1 / PF_2): sections; image on the right (goods only); Ctrl+V pastes an image -->
+<div class="modal-body pm-body" onchange="markDirty('prod-modal')" oninput="markDirty('prod-modal')" style="overflow-y:auto">
+<input id="pm-code" type="hidden"/>
+<div class="pm-grid">
+<div class="pm-main">
+<section class="pm-sec"><h4>Basic</h4>
+<div class="form-group"><label id="pm-name-label" for="pm-name">Product name *</label><input id="pm-name" placeholder="e.g. Insect Killer Light 32W Round" autocomplete="off"/></div>
+<div class="pm-row2">
+<div class="form-group"><label class="bc-label-row" for="pm-cat"><span>Category</span></label>
 <select id="pm-cat" onchange="onCategoryChange()">
 <option value="">— Select —</option>
 <option>Electrical</option><option>Mechanical</option><option>Safety</option>
@@ -1702,52 +1707,60 @@ document.addEventListener('error', function(e) {
 <option>Other</option>
 <option value="__addcat__">＋ Add new category…</option>
 </select>
-<div id="pm-cat-add" style="display:none;margin-top:6px;display:none;gap:6px;align-items:center">
+<div id="pm-cat-add" style="display:none;margin-top:6px;gap:6px;align-items:center">
 <input id="pm-cat-new" onkeydown="if(event.key==='Enter'){saveNewCategory();event.preventDefault()}" placeholder="New category name…" style="flex:1;height:30px;border:1px solid var(--blue-mid);border-radius:var(--radius);padding:0 10px;font-size:12px;outline:none"/>
-<button class="btn btn-primary btn-sm" onclick="saveNewCategory()"><i class="ti ti-check"></i>Add</button>
-<button class="btn btn-secondary btn-sm" onclick="cancelNewCategory()">Cancel</button>
+<button class="btn btn-primary btn-sm" type="button" onclick="saveNewCategory()"><i class="ti ti-check"></i>Add</button>
+<button class="btn btn-secondary btn-sm" type="button" onclick="cancelNewCategory()">Cancel</button>
 </div>
 </div>
-<div class="form-group"><label>Brand</label><input id="pm-brand" placeholder="e.g. Sylvania"/></div>
-<div class="form-group"><label>Model number</label><input id="pm-model" placeholder="e.g. SYL-IKL-32W"/></div>
-<div class="form-group"><label class="bc-label-row"><span>UOM</span><button class="bc-label-link" type="button" onclick="openQuickUom('pm-uom')"><i class="ti ti-plus"></i>New Unit</button></label>
+<div class="form-group"><label class="bc-label-row" for="pm-uom"><span>Unit (UOM) *</span><button class="bc-label-link" type="button" onclick="openQuickUom('pm-uom')"><i class="ti ti-plus"></i>New Unit</button></label>
 <select id="pm-uom"></select>
-</div>
-<div class="form-group"><label>Default price (SAR)</label><input id="pm-price" min="0" placeholder="0.00" step="0.01" type="number"/></div>
-</div>
-<!-- RIGHT: product image -->
-<div style="display:flex;flex-direction:column;gap:8px">
-<label style="font-size:11px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:.05em">Product image</label>
-<div id="pm-img-area" onclick="document.getElementById('pm-img-input').click()" style="border:2px dashed var(--border);border-radius:var(--radius);cursor:pointer;transition:border-color .2s;width:100%;aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;background:#fafafa">
-<div id="pm-img-preview" style="display:none;width:100%;height:100%">
-<img id="pm-img-thumb" style="width:100%;height:100%;object-fit:contain;border-radius:4px"/>
-</div>
-<div id="pm-img-placeholder" style="text-align:center;padding:8px">
-<i class="ti ti-photo-up" style="font-size:28px;color:var(--blue-light);display:block;margin-bottom:6px"></i>
-<span style="font-size:11px;color:var(--gray)">Click to upload</span>
-<span style="font-size:10px;color:#aaa;display:block">PNG, JPG</span>
+<div id="pm-uom-note" class="pm-uom-note" hidden></div>
 </div>
 </div>
-<input accept="image/*" id="pm-img-input" onchange="handleProductImageUpload(event)" style="display:none" type="file"/>
-<div id="pm-img-actions" style="display:none;gap:4px;flex-direction:column">
-<button class="btn btn-secondary btn-sm" onclick="document.getElementById('pm-img-input').click()" style="width:100%;justify-content:center"><i class="ti ti-upload"></i>Change</button>
-<button class="btn btn-danger btn-sm" onclick="clearProductImage()" style="width:100%;justify-content:center"><i class="ti ti-trash"></i>Remove</button>
+<div id="pm-svc-note" class="pm-svc-note" hidden><i class="ti ti-info-circle"></i><span>Keep services <b>short and general</b> (e.g. "AC maintenance", "Manpower – technician / day"). The job's own description is written on the quotation line.</span></div>
+</section>
+<section class="pm-sec pm-goods-only"><h4>Identification <small>— optional</small></h4>
+<div class="pm-row2">
+<div class="form-group"><label for="pm-brand">Brand</label><input id="pm-brand" placeholder="e.g. Sylvania"/></div>
+<div class="form-group"><label for="pm-model">Model number</label><input id="pm-model" placeholder="e.g. SYL-IKL-32W"/></div>
 </div>
+</section>
+<section class="pm-sec"><h4>Price</h4>
+<div class="pm-row2">
+<div class="form-group"><label for="pm-price">Default selling price</label><div class="pm-money"><b>SAR</b><input id="pm-price" min="0" placeholder="0.00" step="0.01" type="number"/></div></div>
+<div class="pm-hint">Used as the starting price on new quotations.</div>
 </div>
-</div><!-- end two-column grid -->
-<div style="margin-top:14px">
-<div class="section-title" style="margin-top:0">Specifications <span style="font-size:10px;font-weight:400;color:var(--gray);text-transform:none">(optional — e.g. Color, Height, Wattage)</span></div>
+</section>
+<section class="pm-sec pm-goods-only"><h4>Specifications <small>— optional, e.g. Color, Wattage</small></h4>
 <div id="specs-list" style="display:flex;flex-direction:column;gap:8px"></div>
-<button class="btn btn-secondary btn-sm" onclick="addSpecRow()" style="margin-top:8px"><i class="ti ti-plus"></i>Add spec</button>
+<button class="btn btn-secondary btn-sm" type="button" onclick="addSpecRow()" style="margin-top:8px"><i class="ti ti-plus"></i>Add spec</button>
+</section>
+<section class="pm-sec"><h4>Notes <small>— optional, inside BizCore only</small></h4>
+<textarea id="pm-notes" placeholder="Any extra information about this product…"></textarea>
+</section>
 </div>
-<div class="form-group" style="margin-top:14px"><label>Additional description / notes</label>
-<textarea id="pm-notes" placeholder="Any extra information about this product…" style="height:70px;width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;resize:vertical;outline:none"></textarea>
+<aside class="pm-side pm-goods-only">
+<section class="pm-sec pm-img-sec"><h4>Product image</h4>
+<div id="pm-img-area" tabindex="0" role="button" aria-label="Product image — click, drop or paste (Ctrl+V)" onclick="document.getElementById('pm-img-input').click()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">
+<div id="pm-img-preview" style="display:none"><img id="pm-img-thumb" alt="Product image"/></div>
+<div id="pm-img-placeholder"><i class="ti ti-photo-up"></i><b>Click, drop or paste an image</b><span>PNG, JPG · up to 8 MB · Ctrl+V</span></div>
+</div>
+<div id="pm-img-status" class="pm-img-status" hidden></div>
+<input accept="image/*" id="pm-img-input" onchange="handleProductImageUpload(event)" style="display:none" type="file"/>
+<div id="pm-img-actions" style="display:none">
+<button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('pm-img-input').click()"><i class="ti ti-refresh"></i>Replace</button>
+<button class="btn btn-secondary btn-sm pm-img-remove" type="button" onclick="clearProductImage()"><i class="ti ti-trash"></i>Remove</button>
+</div>
+</section>
+</aside>
 </div>
 </div>
 <div class="modal-footer">
 <button class="btn btn-danger" id="prod-edit-delete-btn" style="display:none;margin-right:auto" onclick="deleteProduct(this.getAttribute('data-pid'),'prod-modal')"><i class="ti ti-trash"></i>Delete</button>
+<span class="pm-keys">Tab to move · Ctrl+S to save</span>
 <button class="btn btn-secondary" onclick="confirmCloseModal('prod-modal')">Cancel</button>
-<button class="btn btn-primary" onclick="saveProduct()"><i class="ti ti-device-floppy"></i>Save product</button>
+<button class="btn btn-primary" id="pm-save-btn" onclick="saveProduct()"><i class="ti ti-device-floppy"></i><span id="pm-save-label">Save product</span></button>
 </div>
 </div>
 </div>
@@ -2296,7 +2309,7 @@ import * as LockCore from './js/lock-service.mjs?v=266.0';
 import * as InvCore from './js/invoice-core.mjs?v=266.0';
 import { createInvoiceService } from './js/invoice-service.mjs?v=270.43';
 import { createNumbering, nextSequence, formatSequence } from './js/numbering.mjs?v=270.25';
-import * as MasterCore from './js/master-service.mjs?v=270.53';   // V270.4.9: master codes + VAT numbers
+import * as MasterCore from './js/master-service.mjs?v=270.55';   // V270.4.9: master codes + VAT numbers
 import * as RctCore from './js/receipt-core.mjs?v=270.43';
 import { createReceiptService } from './js/receipt-service.mjs?v=270.43';
 import * as AccCore from './js/account-core.mjs?v=268.2';
@@ -2522,13 +2535,13 @@ function _bcMasters() {
   if (!_bcMasterSvc) _bcMasterSvc = MasterCore.createMasterService({ db, doc, runTransaction }, {
     docIdFor: (c, r) => _docIdFor(c, r),
     format: formatSequence,
-    numberingFor: t => (typeof window.docNumberParts === 'function' ? window.docNumberParts(t).numbering : { counterKey: 'doc_' + t + '_all', displayPrefix: { customer: 'CUS-', supplier: 'SUP-', product: 'ITM-', employee: 'EMP-' }[t], digits: { customer: 5, supplier: 5, product: 6, employee: 4 }[t], floor: 0 }),
+    numberingFor: t => (typeof window.docNumberParts === 'function' ? window.docNumberParts(t).numbering : { counterKey: 'doc_' + t + '_all', displayPrefix: { customer: 'CUS-', supplier: 'SUP-', product: 'ITM-', service: 'SRV-', employee: 'EMP-' }[t], digits: { customer: 5, supplier: 5, product: 6, service: 6, employee: 4 }[t], floor: 0 }),
     actor: () => { const u = auth.currentUser, cu = window.currentUser || {}; return u ? { uid: u.uid, name: cu.name || u.displayName || u.email || u.uid } : {}; },
   });
   return _bcMasterSvc;
 }
-function _bcMasterTempCode(col) {
-  const t = MasterCore.MASTER_TYPES[col].numberingType;
+function _bcMasterTempCode(col, rec) {
+  const t = MasterCore.numberingTypeOf(col, rec);
   const prefix = (typeof window.docNumberParts === 'function' ? window.docNumberParts(t).numbering.displayPrefix : t.slice(0, 3).toUpperCase()).replace(/[-/.]+$/, '');
   return prefix + '-OFF-' + (typeof window.getDeviceTag === 'function' ? window.getDeviceTag() : 'dev') + '-' + String(Date.now()).slice(-5);
 }
@@ -2543,7 +2556,7 @@ async function _bcMasterWrites(col, writes, cache, origById) {
     if (!MasterCore.needsCode(w.data) && !vatChanged) { rest.push(w); continue; }
     if (!navigator.onLine) {
       if (vatChanged && vatNow) { const e = new Error('A VAT number can be saved only with a connection (BizCore checks that no other ' + (col === 'customers' ? 'customer' : 'supplier') + ' has it). Please reconnect and save again.'); e.code = 'offline-vat'; throw e; }
-      if (!w.data.code) w.data.code = _bcMasterTempCode(col);   // a temporary code; the real one is given when back online
+      if (!w.data.code) w.data.code = _bcMasterTempCode(col, w.data);   // a temporary code; the real one is given when back online
       if (t.vat) w.data.vatKey = vatNow;
       w.json = JSON.stringify(w.data); rest.push(w); continue;
     }
@@ -2563,7 +2576,7 @@ window.BizCoreMasters = {
     const cache = _lastSynced[col] || (_lastSynced[col] = {}); cache[_docIdFor(col, record)] = JSON.stringify(record);
     return r;
   },
-  reserveCodes: (col, n) => _bcMasters().reserveCodes(col, n),
+  reserveCodes: (col, n, kind) => _bcMasters().reserveCodes(col, n, kind),
   releaseVat: (col, record) => _bcMasters().releaseVat(col, record),
   /** The last save's error (fbSave returns false and keeps it here). */
   lastError: () => window.BizCoreStorageDiagnostics && window.BizCoreStorageDiagnostics.lastSaveError,
@@ -4504,7 +4517,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.54';
+      s.src = 'js/app.js?v=270.56';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4524,7 +4537,7 @@ onAuthStateChanged(auth, async user => {
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js
-    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=270.53'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
+    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=270.55'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
     // V268.3: supplier-payments.js (Supplier Payments, advances, edits) after purchases.js
     // V268.4: stock.js (Purchasing → Stock) after supplier-payments.js
     const loadStock = () => { const st = document.createElement('script'); st.id = 'bizcore-stock-script'; st.src = 'js/stock.js?v=268.61'; st.onload = start; st.onerror = () => { console.error('[BizCore] stock.js could not be loaded'); start(); }; document.body.appendChild(st); };

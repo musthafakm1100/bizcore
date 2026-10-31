@@ -8,13 +8,13 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v27054';
+const CACHE_NAME = 'bizcore-shell-v27056';
 const APP_SHELL = [
   './login.html',
   './delivery.html',
   './index.html',
   './mycash.html',
-  './css/main.css?v=270.54',
+  './css/main.css?v=270.56',
   './css/bizcore-design.css?v=266.5',
   './css/typography.css?v=215',
   './css/masters.css?v=266.5',
@@ -47,11 +47,12 @@ const APP_SHELL = [
   './css/mobile-zoom.css?v=270.49',
   './js/doc-zoom.js?v=270.48',
   './js/doc-pages.js?v=270.51',
-  './js/master-ui.js?v=270.54',
-  './js/master-service.mjs?v=270.53',
+  './js/master-ui.js?v=270.56',
+  './js/item-link.js?v=270.56',
+  './js/master-service.mjs?v=270.55',
   './js/ui-standard.js?v=269.1',
   './js/responsive.js?v=270.47',
-  './js/app.js?v=270.54',
+  './js/app.js?v=270.56',
   './js/so-view.js?v=270.43',
   './js/pricing-ui.js?v=270.24',
   './js/quotation-ui.js?v=270.21',
@@ -72,7 +73,7 @@ const APP_SHELL = [
   './js/ledger-core.mjs?v=269.3',
   './js/ledger-service.mjs?v=269.3',
   './js/running-totals.mjs?v=269.3',
-  './js/purchases.js?v=270.53',
+  './js/purchases.js?v=270.55',
   './js/supplier-payments.js?v=269.3',
   './js/stock.js?v=268.61',
   './js/data-safety.js?v=270.43',
