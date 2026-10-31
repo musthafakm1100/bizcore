@@ -35,6 +35,11 @@ const DS = {
       if (typeof renderUomMaster === 'function') try { renderUomMaster(); } catch (e) {}
       if (typeof refreshProductUomSelect === 'function') try { refreshProductUomSelect(); } catch (e) {} },
   },
+  bizcore_categories: {   // V270.4.12: Master Data → Categories (goods / services)
+    doc: 'categories', label: 'Categories', adminOnly: false,
+    summary(j){ const a = parse(j) || []; return Array.isArray(a) ? plural(a.length, 'category').replace('categorys', 'categories') : '—'; },
+    reload(){ if (typeof loadCategoryMaster === 'function') try { loadCategoryMaster(); if (typeof renderCategoryMaster === 'function') renderCategoryMaster(); if (typeof populateCategoryFilter === 'function') populateCategoryFilter(); } catch (e) {} },
+  },
   bizcoreTaxMaster: {
     doc: 'taxMaster', label: 'Tax master', adminOnly: true,
     summary(j){ const a = parse(j) || []; return Array.isArray(a) && a.length ? a.map(t => (t.name || t.code) + ' ' + Number(t.rate || 0) + '%' + (t.isDefault ? ' (default)' : '')).join(', ') : '—'; },

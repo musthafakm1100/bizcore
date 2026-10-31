@@ -375,6 +375,7 @@ function sovOverview(m){
   const chips = [];
   chips.push(r ? chip(sovEsc(r.rfqNo || 'RFQ'), `Pricing V${sovEsc(q && q.pricingVersion || r.currentPricingVersion || 1)}`, `data-open="rfq" data-id="${sovEsc(r.id)}"`) : chip('RFQ', 'Not Linked', 'disabled', 'sov-chip-missing'));
   chips.push(q ? chip(sovEsc(q.qno), `${sovEsc(q.status || 'Quotation')} ${q.date ? sovDayMonth(q.date) : ''}`, `data-open="quote" data-id="${sovEsc(q.id)}"`) : chip('Quotation', 'Not Linked', 'disabled', 'sov-chip-missing'));
+  (typeof soQuoteIds === 'function' ? soQuoteIds(so) : []).slice(1).forEach(id => { const q2 = (typeof quotations !== 'undefined' ? quotations : []).find(x => x.id === id); if (q2) chips.push(chip(sovEsc(q2.qno), `${sovEsc(q2.status || 'Quotation')} ${q2.date ? sovDayMonth(q2.date) : ''}`, `data-open="quote" data-id="${sovEsc(q2.id)}"`)); });   // V270.4.12
   chips.push(chip(sovEsc(so.soNo), 'This Order', 'aria-current="true" disabled', 'sov-chip-current'));
   chips.push(piCount ? chip(piCount > 1 ? `Purchases ×${piCount}` : sovEsc((m.purch.piLines[0] && m.purch.piLines[0].pi.piNo) || 'From Stock'), m.toBuyLines.length ? `${sovPlural(m.toBuyLines.length, 'Line')} To Buy` : 'All Bought', 'data-sov-pop="pi" aria-haspopup="dialog"') : chip('Purchase', m.lines.length ? 'Not Yet' : '—', 'disabled', 'sov-chip-missing'));
   chips.push(liveDns.length ? chip(liveDns.length > 1 ? `DN ×${liveDns.length}` : sovEsc(liveDns[0].d.dnNo), liveDns.length > 1 ? `Latest ${sovDayMonth(liveDns[0].d.date)}` : `${SOV_DN_TONE[liveDns[0].status] ? SOV_DN_TONE[liveDns[0].status][0] : liveDns[0].status} ${sovDayMonth(liveDns[0].d.date)}`, 'data-sov-pop="dn" aria-haspopup="dialog"') : chip('Delivery Note', 'Not Yet', 'disabled', 'sov-chip-missing'));
@@ -651,7 +652,8 @@ function sovRender(soId, opts = {}){
 
   // header
   const title = document.getElementById('so-view-title');
-  const sub = [so.poNo ? 'PO ' + sovEsc(so.poNo) : '', so.date ? 'SO Date ' + fmtDate(so.date) : '', q ? sovEsc(q.qno) : '', 'Salesperson: ' + sovEsc(so.createdBy || '—')].filter(Boolean).join(' · ');
+  const allQ = (typeof soQuoteIds === 'function' ? soQuoteIds(so) : [so.quotationId]).map(id => (typeof quotations !== 'undefined' ? quotations : []).find(x => x.id === id)).filter(Boolean);   // V270.4.12
+  const sub = [so.poNo ? 'PO ' + sovEsc(so.poNo) : '', so.date ? 'SO Date ' + fmtDate(so.date) : '', allQ.length ? allQ.map(x => sovEsc(x.qno)).join(', ') : (q ? sovEsc(q.qno) : ''), 'Salesperson: ' + sovEsc(so.createdBy || '—')].filter(Boolean).join(' · ');
   if (title) title.innerHTML = `<span class="sov-title-main">${sovEsc(so.soNo)}<span class="sov-desk"> — ${sovEsc(so.customer || '')}</span></span><span class="sov-title-sub sov-desk">${sub}</span><span class="sov-title-sub sov-mob">${sovEsc(so.customer || '')}${so.poNo ? ' · PO ' + sovEsc(so.poNo) : ''}</span>`;
   sovEnsureHeadActions(modal, acts);
 

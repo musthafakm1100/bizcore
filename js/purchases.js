@@ -39,7 +39,8 @@ const piSOs = () => (typeof salesOrders !== 'undefined' && Array.isArray(salesOr
 function piEstimateFor(so, soLine){
   try {
     const qs = typeof quotations !== 'undefined' ? quotations : [], rs = typeof rfqs !== 'undefined' ? rfqs : [];
-    const q = qs.find(x => x.id === so.quotationId || x.qno === so.quotationId);
+    const qid = (soLine && soLine.quotationId) || so.quotationId;   // V270.4.12: a line keeps its own quotation
+    const q = qs.find(x => x.id === qid || x.qno === qid);
     if (!q) return null;
     const r = rs.find(x => x.id === q.rfqId || x.rfqNo === q.rfqId) || rs.find(x => x.quotationId === q.id || x.quotationId === q.qno);
     if (!r) return null;
@@ -49,7 +50,7 @@ function piEstimateFor(so, soLine){
     const v = typeof pvFull === 'function' ? pvFull(r, n) : null;
     if (!v && typeof pvLoad === 'function' && n !== Number(r.currentPricingVersion || 1)) { pvLoad(r, n).catch(() => {}); return null; }
     const items = (v && v.pricingItems) || r.pricingItems || [];
-    const qi = (q.items || [])[Number(soLine.origIdx)] || {};
+    const qi = (q.items || [])[Number(soLine.qIdx !== undefined && soLine.qIdx !== null ? soLine.qIdx : soLine.origIdx)] || {};
     const low = s => String(s || '').trim().toLowerCase();
     const prod = qi.prodId || soLine.prodId, code = low(qi.code || soLine.code), desc = low(qi.desc || soLine.desc);
     const hit = (prod && items.find(i => String(i.productId || '') === String(prod)))

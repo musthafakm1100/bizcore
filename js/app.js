@@ -188,8 +188,8 @@ async function pvLoadWithMessage(r, versionNo) {
 function pvPrefetchForSalesOrders(sos) {
   try {
     const seen = new Set();
-    (sos || []).forEach(so => {
-      const q = quotations.find(x => x.id === so.quotationId || x.qno === so.quotationId); if (!q || !q.pricingVersion) return;
+    (sos || []).flatMap(so => soQuoteIds(so)).forEach(qid => {   // V270.4.12: every quotation of each order
+      const q = quotations.find(x => x.id === qid || x.qno === qid); if (!q || !q.pricingVersion) return;
       const r = rfqs.find(x => x.id === q.rfqId || x.rfqNo === q.rfqId) || rfqs.find(x => x.quotationId === q.id || x.quotationId === q.qno); if (!r) return;
       const k = r.id + '#' + Number(q.pricingVersion); if (seen.has(k) || pvFull(r, q.pricingVersion)) return; seen.add(k);
       pvLoad(r, q.pricingVersion).catch(() => {});
@@ -393,7 +393,7 @@ let editingUomId=null;
 function loadUomMaster(){
   try{uomMaster=JSON.parse(localStorage.getItem('bizcore_uom_master')||'[]');}catch(e){uomMaster=[];}
   if(!Array.isArray(uomMaster)||!uomMaster.length) uomMaster=DEFAULT_UOM_MASTER.map(x=>({...x}));
-  uomMaster=uomMaster.map((u,i)=>({id:u.id||('uom-'+Date.now()+'-'+i),code:String(u.code||'').trim(),name:String(u.name||u.code||'').trim(),decimals:Math.max(0,Math.min(3,Number(u.decimals)||0)),step:Number(u.step)>0?Number(u.step):1,active:u.active!==false})).filter(u=>u.code);
+  uomMaster=uomMaster.map((u,i)=>({id:u.id||('uom-'+Date.now()+'-'+i),code:String(u.code||'').trim(),name:String(u.name||u.code||'').trim(),decimals:Math.max(0,Math.min(3,Number(u.decimals)||0)),step:Number(u.step)>0?Number(u.step):1,active:u.active!==false,...(u.usedFor?{usedFor:u.usedFor}:{})})).filter(u=>u.code);
   localStorage.setItem('bizcore_uom_master',JSON.stringify(uomMaster));
 }
 loadUomMaster();
@@ -2434,6 +2434,7 @@ function pmApplyType() {
   document.getElementById('pm-notes').placeholder = svc ? 'Scope we usually include, exclusions…' : 'Any extra information about this product…';
   document.getElementById('pm-svc-note').hidden = !svc;
   document.getElementById('pm-save-label').textContent = 'Save ' + (svc ? 'service' : 'product');
+  pmFillCategories(svc ? 'service' : 'goods'); refreshProductUomSelect(svc ? 'service' : 'goods');   // V270.4.12: lists of this type
   try { BCMasterUI && BCMasterUI.refresh('products'); } catch (_) {}
 }
 function pmSetType(type, locked) {
@@ -2469,28 +2470,16 @@ function onCategoryChange() {
 function saveNewCategory() {
   const val = document.getElementById('pm-cat-new').value.trim();
   if (!val) return;
-  const sel = document.getElementById('pm-cat');
-  // Check if already exists
-  const exists = Array.from(sel.options).some(o => o.text.toLowerCase() === val.toLowerCase() && o.value !== '__addcat__');
-  if (!exists) {
-    const opt = document.createElement('option');
-    opt.value = val; opt.textContent = val;
-    // Insert before "＋ Add new" option
-    const addOpt = sel.querySelector('option[value="__addcat__"]');
-    sel.insertBefore(opt, addOpt);
-    // Save to settings
-    if (!settings.customCategories) settings.customCategories = [];
-    if (!settings.customCategories.includes(val)) {
-      settings.customCategories.push(val);
-      saveSettings();
-    }
-    // Also update filter dropdown
-    populateCategoryFilter();
-  }
-  sel.value = val;
+  const type = typeof pmCurrentType === 'function' ? pmCurrentType() : 'goods';   // V270.4.12: the category gets the form's type
+  const ex = categoryMaster.find(c => c.name.toLowerCase() === val.toLowerCase());
+  if (ex && ex.type !== type) { showToast(`"${ex.name}" is a ${ex.type === 'service' ? 'service' : 'goods'} category — choose another name, or change it in Master Data → Categories.`, 'error'); return; }
+  if (!ex) { categoryMaster.push({ id: 'cat-' + Date.now().toString(36), name: val, type, active: true }); persistCategoryMaster(); }
+  else if (!ex.active) { ex.active = true; persistCategoryMaster(); }
+  pmFillCategories(type, ex ? ex.name : val);
   document.getElementById('pm-cat-new').value = '';
   document.getElementById('pm-cat-add').style.display = 'none';
-  showToast('Category "'+val+'" added','success');
+  populateCategoryFilter();
+  showToast('Category "'+(ex ? ex.name : val)+'" added','success');
 }
 
 function cancelNewCategory() {
@@ -2499,34 +2488,99 @@ function cancelNewCategory() {
   document.getElementById('pm-cat').value = '';
 }
 
+/* V270.4.12 (mockup CU_1): categories are a shared list (Master Data → Categories), each for goods or for services.
+   Until someone edits the list it is built from the old fixed list + categories added before + those used by items. */
+const BC_GOODS_CATEGORIES=['Electrical','Mechanical','Safety','Cleaning','Stationery','Tools','Plumbing','Hardware','Consumables','Food & Beverages','IT Hardware & Software','Other'];
+const BC_SERVICE_CATEGORIES=['Electrical works','HVAC / AC services','Plumbing works','Civil & finishing works','Fabrication & welding','Installation & commissioning','Maintenance & repair (AMC)','Manpower supply','Transportation & logistics','Equipment rental','Cleaning services','Inspection & testing','Design & engineering','IT services'];
+let categoryMaster=[];
+function loadCategoryMaster(){
+  let list=null; try{ list=JSON.parse(localStorage.getItem('bizcore_categories')||'null'); }catch(_){}
+  if(!Array.isArray(list)||!list.length){
+    const seen=new Set(); list=[];
+    const add=(name,type)=>{ const n=String(name||'').trim(); if(!n||seen.has(n.toLowerCase())) return; seen.add(n.toLowerCase()); list.push({id:'cat-'+list.length+'-'+n.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,30),name:n,type,active:true}); };
+    BC_GOODS_CATEGORIES.forEach(n=>add(n,'goods')); ((typeof settings!=='undefined'&&settings.customCategories)||[]).forEach(n=>add(n,'goods'));
+    (typeof products!=='undefined'?products:[]).forEach(p=>add(p.category,p.type==='service'?'service':'goods'));
+    BC_SERVICE_CATEGORIES.forEach(n=>add(n,'service'));
+    list._built=true;
+  }
+  categoryMaster=list.map(c=>({id:c.id,name:String(c.name||'').trim(),type:c.type==='service'?'service':'goods',active:c.active!==false})).filter(c=>c.name);
+  // a category used by an item but not in the list is shown as well (kept on the item)
+  (typeof products!=='undefined'?products:[]).forEach(p=>{ const n=String(p.category||'').trim(); if(n&&!categoryMaster.some(c=>c.name.toLowerCase()===n.toLowerCase())) categoryMaster.push({id:'cat-u-'+n.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,30),name:n,type:p.type==='service'?'service':'goods',active:true,_fromItems:true}); });
+}
+function persistCategoryMaster(){
+  const clean=categoryMaster.map(({id,name,type,active})=>({id,name,type,active}));
+  try{ localStorage.setItem('bizcore_categories',JSON.stringify(clean)); }catch(_){}
+  categoryMaster.forEach(c=>{ delete c._fromItems; });
+  if(typeof bcSharedSave==='function') bcSharedSave('bizcore_categories');
+}
+const catItemsOf=c=>products.filter(p=>String(p.category||'').toLowerCase()===c.name.toLowerCase()).length;
+let catFilter='all', editingCatId=null;
+function renderCategoryMaster(){
+  const body=document.getElementById('cat-tbody'); if(!body) return;
+  if(!categoryMaster.length) loadCategoryMaster();
+  const q=(document.getElementById('cat-search')?.value||'').trim().toLowerCase();
+  const n=t=>categoryMaster.filter(c=>t==='all'||c.type===t).length;
+  const f=document.getElementById('cat-filters'); if(f) f.innerHTML=[['all','All'],['goods','Goods'],['service','Services']].map(([k,l])=>`<button type="button" class="pv-f${catFilter===k?' on':''}" onclick="catFilter='${k}';renderCategoryMaster()">${l} ${n(k)}</button>`).join('');
+  const rows=bcSortBy(categoryMaster.filter(c=>(catFilter==='all'||c.type===catFilter)&&c.name.toLowerCase().includes(q)),c=>(c.type==='service'?'1':'0')+c.name);
+  const cnt=document.getElementById('cat-count'); if(cnt) cnt.textContent=`${rows.length} categor${rows.length===1?'y':'ies'}`;
+  body.innerHTML=rows.length?rows.map(c=>{ const used=catItemsOf(c); return `<tr><td><strong>${escapeHtml(c.name)}</strong></td><td><span class="bcm-type${c.type==='service'?' svc':''}">${c.type==='service'?'Service':'Goods'}</span></td><td class="right">${used}</td><td class="center"><span class="status-pill ${c.active?'active':'inactive'}">${c.active?'Active':'Off'}</span></td><td class="center"><div class="action-btns"><button class="abtn abtn-edit" onclick="openCategoryForm('${escapeHtml(c.id)}')" title="Edit"><i class="ti ti-edit"></i></button>${used?'':`<button class="abtn abtn-del" onclick="deleteCategoryMaster('${escapeHtml(c.id)}')" title="Delete"><i class="ti ti-trash"></i></button>`}</div></td></tr>`; }).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--gray);padding:28px">No categories found.</td></tr>';
+}
+function openCategoryForm(id=null){
+  editingCatId=id; const c=id?categoryMaster.find(x=>x.id===id):null;
+  document.getElementById('cat-form-panel').style.display='block';
+  document.getElementById('cat-form-title').textContent=c?'Edit category':'New category';
+  document.getElementById('cat-name').value=c?.name||'';
+  document.getElementById(c?.type==='service'||(!c&&catFilter==='service')?'cat-type-service':'cat-type-goods').checked=true;
+  document.getElementById('cat-active').value=String(c?c.active:true);
+  const used=c?catItemsOf(c):0, note=document.getElementById('cat-form-note');
+  document.querySelectorAll('#cat-form-panel input[name="cat-type"]').forEach(i=>{ i.disabled=used>0; });
+  note.hidden=!used; note.textContent=used?`Used by ${used} item${used===1?'':'s'} — renaming changes it on ${used===1?'that item':'those items'} too; the type can't change while items use it.`:'';
+  setTimeout(()=>document.getElementById('cat-name')?.focus(),30);
+}
+function closeCategoryForm(){ editingCatId=null; const p=document.getElementById('cat-form-panel'); if(p) p.style.display='none'; }
+async function saveCategoryMaster(){
+  const name=document.getElementById('cat-name').value.trim(), type=document.getElementById('cat-type-service').checked?'service':'goods', active=document.getElementById('cat-active').value==='true';
+  if(!name){ showToast('Category name is required','error'); return; }
+  if(categoryMaster.some(c=>c.name.toLowerCase()===name.toLowerCase()&&c.id!==editingCatId)){ showToast('This category already exists','error'); return; }
+  const c=editingCatId?categoryMaster.find(x=>x.id===editingCatId):null;
+  if(c&&c.name!==name){
+    const items=products.filter(p=>String(p.category||'').toLowerCase()===c.name.toLowerCase());
+    if(items.length){
+      const ok=await showConfirmAsync({icon:'✏️',title:'Rename the category?',message:`<b>${escapeHtml(c.name)}</b> → <b>${escapeHtml(name)}</b> on ${items.length} item${items.length===1?'':'s'} as well.`,confirmText:'Rename'});
+      if(!ok) return;
+      const who=(window.currentUser&&window.currentUser.name)||'', at=new Date().toISOString();
+      items.forEach(p=>{ p.changeLog=[...(p.changeLog||[]),{at,by:who,field:'category',from:c.name,to:name}].slice(-100); p.category=name; });
+      if((await saveProducts())===false){ showToast('Items not updated — please try again','error'); return; }
+    }
+  }
+  if(c) Object.assign(c,{name,type:catItemsOf(c)?c.type:type,active}); else categoryMaster.push({id:'cat-'+Date.now().toString(36),name,type,active});
+  persistCategoryMaster(); closeCategoryForm(); renderCategoryMaster(); populateCategoryFilter(); renderProducts();
+  showToast('Category saved','success');
+}
+function deleteCategoryMaster(id){
+  const c=categoryMaster.find(x=>x.id===id); if(!c) return;
+  if(catItemsOf(c)){ showToast('This category is used by items — switch it off instead.','error'); return; }
+  showConfirm({icon:'🗂️',title:'Delete category?',message:`Delete ${escapeHtml(c.name)}?`,confirmText:'Delete',confirmClass:'btn-danger',onConfirm:()=>{ categoryMaster=categoryMaster.filter(x=>x.id!==id); persistCategoryMaster(); renderCategoryMaster(); populateCategoryFilter(); }});
+}
 function populateCategoryFilter() {
-  const builtIn = ['Electrical','Mechanical','Safety','Cleaning','Stationery','Tools',
-    'Plumbing','Hardware','Consumables','Food & Beverages','IT Hardware & Software','Other'];
-  const custom  = settings.customCategories || [];
-  const all     = [...new Set([...builtIn, ...custom])];
-  // Get all used categories from products too
-  const used = [...new Set(products.map(p=>p.category).filter(Boolean))];
-  const combined = [...new Set([...all, ...used])].sort();
+  if(!categoryMaster.length) loadCategoryMaster();
   const sel = document.getElementById('prod-cat-filter');
   if (!sel) return;
   const prev = sel.value;
-  sel.innerHTML = '<option value="">All categories</option>' +
-    combined.map(c=>`<option${c===prev?' selected':''}>${c}</option>`).join('');
+  const names = bcSortBy([...new Set([...categoryMaster.map(c=>c.name), ...products.map(p=>p.category).filter(Boolean)])], x=>x);
+  sel.innerHTML = '<option value="">All categories</option>' + names.map(c=>`<option${c===prev?' selected':''}>${escapeHtml(c)}</option>`).join('');
 }
-
-function loadCustomCategoriesIntoForm() {
-  const sel = document.getElementById('pm-cat');
-  if (!sel) return;
-  const custom = settings.customCategories || [];
-  const addOpt = sel.querySelector('option[value="__addcat__"]');
-  custom.forEach(cat => {
-    if (!Array.from(sel.options).some(o=>o.value===cat)) {
-      const opt = document.createElement('option');
-      opt.value = cat; opt.textContent = cat;
-      sel.insertBefore(opt, addOpt);
-    }
-  });
+/** Product form: the active categories of the chosen type (+ the item's own one), then "+ Add new category…". */
+function pmFillCategories(type, keep){
+  if(!categoryMaster.length) loadCategoryMaster();
+  const sel=document.getElementById('pm-cat'); if(!sel) return;
+  const cur=keep!==undefined?keep:sel.value;
+  const names=bcSortBy(categoryMaster.filter(c=>c.type===type&&c.active).map(c=>c.name),x=>x);
+  if(cur&&cur!=='__addcat__'&&!names.some(n=>n.toLowerCase()===String(cur).toLowerCase())) names.unshift(cur);
+  sel.innerHTML='<option value="">— Select —</option>'+names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')+'<option value="__addcat__">＋ Add new category…</option>';
+  sel.value=cur&&cur!=='__addcat__'?cur:'';
 }
+function loadCustomCategoriesIntoForm() { pmFillCategories(typeof pmCurrentType==='function'?pmCurrentType():'goods'); }
 
 function openAddProduct(type) {
   editingProdId = null;
@@ -2652,10 +2706,9 @@ function openEditProduct(id) {
   setProductImageInForm(p.image||null, p.imagePath||null);
   loadCustomCategoriesIntoForm();
   // Set category after loading custom ones
-  const catSel = document.getElementById('pm-cat');   // V270.4.10: a category not in the list (e.g. imported) is kept, not cleared
-  if (p.category && !Array.from(catSel.options).some(o => o.value === p.category)) { const o = document.createElement('option'); o.value = o.textContent = p.category; catSel.insertBefore(o, catSel.querySelector('option[value="__addcat__"]')); }
-  catSel.value = p.category||'';
+  pmFillCategories(p.type === 'service' ? 'service' : 'goods', p.category || '');   // V270.4.10/12: the item's category is kept even when not in the list
   pmSetType(p.type === 'service' ? 'service' : 'goods', !!p.code);   // V270.4.10: fixed once the code is given
+  refreshProductUomSelect(p.type === 'service' ? 'service' : 'goods', p.uom || 'Pcs');   // V270.4.12: the item's own unit kept
   pmUomCheck();
   openModalWithSize('prod-modal');
 }
@@ -2995,12 +3048,12 @@ function renderUomMaster(){
   const q=(document.getElementById('uom-search')?.value||'').trim().toLowerCase();
   const rows=uomMaster.filter(u=>`${u.code} ${u.name}`.toLowerCase().includes(q)).sort((a,b)=>a.code.localeCompare(b.code));
   const count=document.getElementById('uom-count'); if(count)count.textContent=`${rows.length} unit${rows.length===1?'':'s'}`;
-  body.innerHTML=rows.length?rows.map(u=>`<tr><td><strong>${escapeHtml(u.code)}</strong></td><td>${escapeHtml(u.name)}</td><td class="center"><span class="uom-decimal-badge">${u.decimals}</span></td><td class="right">${Number(u.step).toLocaleString('en-US',{maximumFractionDigits:3})}</td><td class="center"><span class="status-pill ${u.active?'active':'inactive'}">${u.active?'Active':'Inactive'}</span></td><td class="center"><div class="action-btns"><button class="abtn abtn-edit" onclick="openUomForm('${u.id}')" title="Edit"><i class="ti ti-edit"></i></button><button class="abtn abtn-del" onclick="deleteUomMaster('${u.id}')" title="Delete"><i class="ti ti-trash"></i></button></div></td></tr>`).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--gray);padding:28px">No units found.</td></tr>';
+  body.innerHTML=rows.length?rows.map(u=>`<tr><td><strong>${escapeHtml(u.code)}</strong></td><td>${escapeHtml(u.name)}</td><td class="center"><span class="uom-decimal-badge">${u.decimals}</span></td><td class="right">${Number(u.step).toLocaleString('en-US',{maximumFractionDigits:3})}</td><td>${(f=>`<span class="bcm-type${f==='service'?' svc':f==='both'?' both':''}">${f==='service'?'Services':f==='both'?'Both':'Goods'}</span>`)(uomUsedFor(u))}</td><td class="center"><span class="status-pill ${u.active?'active':'inactive'}">${u.active?'Active':'Inactive'}</span></td><td class="center"><div class="action-btns"><button class="abtn abtn-edit" onclick="openUomForm('${u.id}')" title="Edit"><i class="ti ti-edit"></i></button><button class="abtn abtn-del" onclick="deleteUomMaster('${u.id}')" title="Delete"><i class="ti ti-trash"></i></button></div></td></tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--gray);padding:28px">No units found.</td></tr>';
 }
 function openUomForm(id=null){
   editingUomId=id; const u=id?uomMaster.find(x=>x.id===id):null;
   document.getElementById('uom-form-panel').style.display='block'; document.getElementById('uom-form-title').textContent=u?'Edit unit of measure':'New unit of measure';
-  document.getElementById('uom-code').value=u?.code||''; document.getElementById('uom-name').value=u?.name||''; document.getElementById('uom-decimals').value=String(u?.decimals??0); document.getElementById('uom-step').value=String(u?.step??1); document.getElementById('uom-active').value=String(u?.active!==false);
+  document.getElementById('uom-code').value=u?.code||''; document.getElementById('uom-name').value=u?.name||''; document.getElementById('uom-decimals').value=String(u?.decimals??0); document.getElementById('uom-step').value=String(u?.step??1); document.getElementById('uom-active').value=String(u?.active!==false); document.getElementById('uom-usedfor').value=u?uomUsedFor(u):'goods';
   setTimeout(()=>document.getElementById('uom-code')?.focus(),30);
 }
 function closeUomForm(){ editingUomId=null; const p=document.getElementById('uom-form-panel');if(p)p.style.display='none'; }
@@ -3009,7 +3062,7 @@ function saveUomMaster(){
   const code=document.getElementById('uom-code').value.trim(),name=document.getElementById('uom-name').value.trim(),decimals=Math.max(0,Math.min(3,Number(document.getElementById('uom-decimals').value)||0)),step=parseBizNumber(document.getElementById('uom-step').value),active=document.getElementById('uom-active').value==='true';
   if(!code||!name){showToast('UOM code and unit name are required','error');return;} if(step<=0){showToast('Quantity step must be greater than zero','error');return;}
   if(uomMaster.some(u=>u.code.toLowerCase()===code.toLowerCase()&&u.id!==editingUomId)){showToast('This UOM code already exists','error');return;}
-  const obj={id:editingUomId||('uom-'+Date.now()),code,name,decimals,step,active}; if(editingUomId){const i=uomMaster.findIndex(u=>u.id===editingUomId);uomMaster[i]=obj;}else uomMaster.push(obj);
+  const obj={id:editingUomId||('uom-'+Date.now()),code,name,decimals,step,active,usedFor:document.getElementById('uom-usedfor')?.value||'goods'}; if(editingUomId){const i=uomMaster.findIndex(u=>u.id===editingUomId);uomMaster[i]=obj;}else uomMaster.push(obj);
   persistUomMaster(); closeUomForm(); renderUomMaster(); refreshProductUomSelect(); showToast('Unit of measure saved','success');
 }
 function deleteUomMaster(id){
@@ -3049,12 +3102,29 @@ function saveQuickUom(){
   if(!code||!name)return fail('Enter the code and the name.');
   if(!(step>0))return fail('The quantity step must be more than zero.');
   if(uomMaster.some(u=>u.code.toLowerCase()===code.toLowerCase()))return fail(`Code ${code} already exists. Choose it from the list, or use a different code.`);
-  uomMaster.push({id:'uom-'+Date.now(),code,name,decimals,step,active:true});
+  uomMaster.push({id:'uom-'+Date.now(),code,name,decimals,step,active:true,usedFor:document.getElementById('prod-modal')?.classList.contains('open')&&typeof pmCurrentType==='function'&&pmCurrentType()==='service'?'service':'goods'});   // V270.4.12
   persistUomMaster(); try{renderUomMaster();}catch(e){} refreshProductUomSelect();
   if(quickUomTarget){const sel=document.getElementById(quickUomTarget);if(sel){if(![...sel.options].some(o=>o.value===code)){const o=document.createElement('option');o.value=code;o.textContent=code+' — '+name;sel.appendChild(o);}sel.value=code;sel.dispatchEvent(new Event('change',{bubbles:true}));}}
   closeModal('qu-modal'); showToast(`Unit ${code} — ${name} added for everyone`,'success');
 }
-function refreshProductUomSelect(){ const sel=document.getElementById('pm-uom');if(!sel)return;const current=sel.value;sel.innerHTML=bcSortBy(uomMaster.filter(u=>u.active),u=>u.code).map(u=>`<option value="${escapeHtml(u.code)}">${escapeHtml(u.code)} — ${escapeHtml(u.name)}</option>`).join('');if([...sel.options].some(o=>o.value===current))sel.value=current; }
+/* V270.4.12 (mockup CU_2): each unit is used for goods, services or both. Units saved before have no setting yet:
+   Job / Lot / Lump sum / Visit / Month / Man-day / Man-hour / Trip → services; Hours / Days / EA / Nos / Mtr / Sq.m / Cu.m → both. */
+const BC_SERVICE_UOMS=['job','lot','lump sum','ls','visit','month','months','man-day','man-hour','trip'], BC_BOTH_UOMS=['hours','hrs','hour','days','day','ea','nos','mtr','m','sq.m','sqm','cu.m','cum','lm'];
+function uomUsedFor(u){ if(!u) return 'goods'; if(u.usedFor==='service'||u.usedFor==='both'||u.usedFor==='goods') return u.usedFor; const c=String(u.code||'').toLowerCase(); return BC_SERVICE_UOMS.includes(c)?'service':BC_BOTH_UOMS.includes(c)?'both':'goods'; }
+const uomFits=(u,type)=>{ const f=uomUsedFor(u); return f==='both'||f===(type==='service'?'service':'goods'); };
+const BC_SUGGESTED_SERVICE_UOMS=[{code:'Month',name:'Month',decimals:0,step:1,usedFor:'service'},{code:'Visit',name:'Visit',decimals:0,step:1,usedFor:'service'},{code:'Trip',name:'Trip',decimals:0,step:1,usedFor:'service'},{code:'Man-day',name:'Man-day',decimals:1,step:0.5,usedFor:'service'},{code:'Man-hour',name:'Man-hour',decimals:1,step:0.5,usedFor:'service'},{code:'Sq.m',name:'Square metre',decimals:2,step:0.01,usedFor:'both'},{code:'Cu.m',name:'Cubic metre',decimals:2,step:0.01,usedFor:'both'}];
+function addSuggestedServiceUoms(){
+  const add=BC_SUGGESTED_SERVICE_UOMS.filter(x=>!uomMaster.some(u=>u.code.toLowerCase()===x.code.toLowerCase()));
+  if(!add.length){ showToast('The suggested service units are already there','info'); return; }
+  add.forEach((x,i)=>uomMaster.push({id:'uom-'+Date.now()+'-'+i,...x,active:true}));
+  persistUomMaster(); renderUomMaster(); refreshProductUomSelect(); showToast(add.length+' service unit'+(add.length===1?'':'s')+' added: '+add.map(x=>x.code).join(', '),'success');
+}
+function refreshProductUomSelect(type,keepUom){ const sel=document.getElementById('pm-uom');if(!sel)return;const current=keepUom!==undefined?keepUom:sel.value;
+  if(!type&&document.getElementById('prod-modal')?.classList.contains('open')&&typeof pmCurrentType==='function') type=pmCurrentType();
+  if(type){ const list=bcSortBy(uomMaster.filter(u=>u.active&&uomFits(u,type)),u=>u.code); const keep=list.some(u=>u.code===current)?current:(editingProdId&&current?current:(type==='service'?(list.find(u=>u.code==='Job')||list[0])?.code:(list.find(u=>u.code==='Pcs')||list[0])?.code)||'');
+    if(keep&&!list.some(u=>u.code===keep)){ const u=uomMaster.find(x=>x.code===keep); list.unshift(u||{code:keep,name:keep}); }
+    sel.innerHTML=list.map(u=>`<option value="${escapeHtml(u.code)}">${escapeHtml(u.code)} — ${escapeHtml(u.name||u.code)}</option>`).join(''); sel.value=keep; return; }
+sel.innerHTML=bcSortBy(uomMaster.filter(u=>u.active),u=>u.code).map(u=>`<option value="${escapeHtml(u.code)}">${escapeHtml(u.code)} — ${escapeHtml(u.name)}</option>`).join('');if([...sel.options].some(o=>o.value===current))sel.value=current; }
 
 function escapeHtml(value){
   return String(value??'').replace(/[&<>"']/g,function(ch){
@@ -3853,7 +3923,7 @@ function getQuotationRegisterExportRows(){
   return sortRegisterRows(rows,'quotation',{
     no:q=>q.qno,date:q=>normalizedQuotationDate(q),customer:q=>q.company,reference:q=>q.ref,
     items:q=>(q.items||[]).length,amount:q=>calcQuote(q).net,status:q=>q.status,
-    salesorders:q=>salesOrders.filter(x=>x.quotationId===q.id).map(x=>x.soNo).join(' '),valid:q=>validUntil(q)
+    salesorders:q=>salesOrders.filter(x=>soQuoteIds(x).includes(q.id)).map(x=>x.soNo).join(' '),valid:q=>validUntil(q)
   });
 }
 
@@ -3961,7 +4031,7 @@ function exportQuotationRegisterExcel(includeLines=false, prefetchedRows=null){
     const headers=['Quotation No.','Date','Customer','Contact','Reference / RFQ','Project','Status','Revision','Validity (Days)','Valid Until','Items','Subtotal','Discount','VAT Rate %','VAT Amount','Net Amount','Sales Orders','Payment Terms','Delivery Terms'];
     const data=rows.map(q=>{
       const c=calcQuote(q);
-      const linkedSOs=salesOrders.filter(x=>x.quotationId===q.id).map(x=>x.soNo).filter(Boolean).join(', ');
+      const linkedSOs=salesOrders.filter(x=>soQuoteIds(x).includes(q.id)).map(x=>x.soNo).filter(Boolean).join(', ');
       return [
         q.qno||'', normalizedQuotationDate(q), q.company||'', q.contact||'', q.ref||'', q.project||'', q.status||'',
         Number(q.revisionNo)||0, Number(q.validity)||7, validUntil(q), (q.items||[]).filter(i=>!i.lineType||i.lineType==='item').length,
@@ -4123,7 +4193,7 @@ function renderTable() {
       ? `<br><span style="font-size:10px;background:#fff3cd;color:#856404;border-radius:3px;padding:1px 5px;margin-top:2px;display:inline-block">
            <i class="ti ti-search" style="font-size:9px"></i> matched in: ${matchedItems.slice(0,2).map(it=>it.desc||it.code||'item').join(', ')}${matchedItems.length>2?' +more':''}
          </span>` : '';
-    const linkedSOs = salesOrders.filter(s=>s.quotationId===q.id);
+    const linkedSOs = salesOrders.filter(s=>soQuoteIds(s).includes(q.id));
     const soChips = linkedSOs.map(so => {
       const soSt = getSOStatus(so);
       const soStBadge = {'Confirmed':'🔵','Delivered':'🟣','Invoiced':'🟠','Paid':'🟢','Partially Paid':'🟡'}[soSt]||'🔵';
@@ -4824,7 +4894,7 @@ function showPage(page, el) {
 
 
 function switchMastersTab(tab){
-  const valid=['customers','suppliers','products','employees','units'];
+  const valid=['customers','suppliers','products','employees','units','categories'];
   if(!valid.includes(tab)) tab='customers';
   document.querySelectorAll('.masters-tab-content').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.masters-tab').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-selected','false');x.tabIndex=-1;});
@@ -4832,8 +4902,9 @@ function switchMastersTab(tab){
   const button=document.getElementById('mtab-'+tab);
   if(panel) panel.classList.add('active');
   if(button){button.classList.add('active');button.setAttribute('aria-selected','true');button.tabIndex=0;}
-  const labels={customers:'Customers',suppliers:'Suppliers',products:'Products',employees:'Employees',units:'Units of Measure'};
+  const labels={customers:'Customers',suppliers:'Suppliers',products:'Products',employees:'Employees',units:'Units of Measure',categories:'Categories'};
   const title=document.getElementById('page-title'); if(title) title.textContent=labels[tab]||'Masters';
+  if(tab==='categories'){loadCategoryMaster();renderCategoryMaster();}
   if(tab==='customers'){customerPage=1;renderCustomers();}
   if(tab==='suppliers'){supplierPage=1;renderSuppliers();}
   if(tab==='products'){prodPage=1;renderProducts();populateCategoryFilter();}
@@ -5393,7 +5464,7 @@ function addItemRow(item={}) {
   const discAmt=quoteLineDisc(item);
   if(discAmt){ tr.dataset.discBy=item.discBy==='pct'?'pct':'amt'; tr.dataset.discPct=String(quoteLineDiscPct(item)); }
   const selectedUom=item.uom||(isProduct?'Pcs':'Job');
-  const options=(isProduct?uomMaster.filter(u=>u.active):uomMaster.filter(u=>u.active && ['Job','Hours','Days','Months','Visit','Lump sum','EA'].includes(u.code)));
+  const options=(isProduct?uomMaster.filter(u=>u.active):uomMaster.filter(u=>u.active && uomFits(u,'service')));   // V270.4.12: the Services units of Units of Measure
   if(!options.some(u=>u.code===selectedUom)) options.push(getUomRule(selectedUom));
   const uomOptions=bcSortBy(options,u=>u.code).map(u=>`<option value="${escapeHtml(u.code)}"${u.code===selectedUom?' selected':''}>${escapeHtml(u.code)}</option>`).join('');
   const qtyValue=item.qty!==undefined&&item.qty!==''?formatQtyForUom(item.qty,selectedUom):(isProduct?'':'1');
@@ -6059,7 +6130,7 @@ async function saveQuotation(mode='save', opts={}) {
 /* ── VIEW QUOTATION ── */
 
 function getSalesOrderForQuotation(quotationId) {
-  return salesOrders.find(so => so.quotationId === quotationId) || null;
+  return salesOrders.find(so => soQuoteIds(so).includes(quotationId)) || null;
 }
 
 function openQuotationDocument(quotationId) {
@@ -7787,7 +7858,7 @@ function getRFQWorkflowStage(r) {
     r.quotationId,
     ...quotations.filter(q => q.rfqId === r.id).map(q => q.id)
   ].filter(Boolean));
-  if ([...quoteIds].some(qid => salesOrders.some(so => so.quotationId === qid))) return 'Sales Order';
+  if ([...quoteIds].some(qid => salesOrders.some(so => soQuoteIds(so).includes(qid)))) return 'Sales Order';
   if (quoteIds.size) return 'Quoted';
   if ((r.pricingItems && r.pricingItems.length) || ensurePricingVersions(r).length) return 'Pricing';
   // Repair legacy false-positive status created by older builds that marked Pricing on screen open.
@@ -7933,7 +8004,7 @@ function renderRFQPage() {
     const hasPricing = !!(r.pricingItems && r.pricingItems.length);
     const quoteIds = new Set([...(r.quotationIds||[]),r.quotationId,...quotations.filter(q=>q.rfqId===r.id).map(q=>q.id)].filter(Boolean));
     const hasQuote = quoteIds.size>0;
-    const hasSO = [...quoteIds].some(qid=>salesOrders.some(so=>so.quotationId===qid));
+    const hasSO = [...quoteIds].some(qid=>salesOrders.some(so=>soQuoteIds(so).includes(qid)));
     let progress = '<i class="ti ti-circle-dot"></i> RFQ';
     if (hasSO) progress = '<i class="ti ti-shopping-cart-check"></i> Sales Order';
     else if (hasQuote) progress = '<i class="ti ti-file-check"></i> Quotation';
@@ -8812,7 +8883,7 @@ function viewRFQ(id) {
   // documents for the progress line and activity
   const qIds=new Set([...(Array.isArray(r.quotationIds)?r.quotationIds:[]),r.quotationId,...quotations.filter(q=>q.rfqId===r.id).map(q=>q.id)].filter(Boolean));
   const qs=quotations.filter(q=>qIds.has(q.id)).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
-  const sos=salesOrders.filter(so=>qIds.has(so.quotationId));
+  const sos=salesOrders.filter(so=>soQuoteIds(so).some(id=>qIds.has(id)));
   const versions=(typeof ensurePricingVersions==='function'?ensurePricingVersions(r):[])||[];
   const reqItems=hasPricing?r.pricingItems:[];
   const isPriced=i=>parseFloat(i.buy)>0||parseFloat(i.sell)>0;
@@ -10952,7 +11023,7 @@ function renderSOPage() {
         <td style="${rowStyle}">${fmtDate(so.date)}</td>
         <td style="${rowStyle}">${escapeHtml(so.customer||'—')}</td>
         <td style="${rowStyle}"><span class="so-register-po">${escapeHtml(so.poNo||'—')}${so.poAttachment?.url?'<i class="ti ti-paperclip so-register-attachment" title="Customer PO attached" aria-label="Customer PO attached"></i>':''}</span></td>
-        <td style="${rowStyle}">${q?escapeHtml(q.qno):'—'}</td>
+        <td style="${rowStyle}">${q?escapeHtml(q.qno):'—'}${soQuoteIds(so).length>1?` <span class="so-more-q" title="${escapeHtml(soQuoteIds(so).map(id=>quotations.find(x=>x.id===id)?.qno||'').filter(Boolean).join(', '))}">+${soQuoteIds(so).length-1}</span>`:''}</td>
         <td class="center" style="${rowStyle}">${(so.items||[]).length}</td>
         <td class="right" style="${rowStyle}">${formatNumber(parseFloat(so.total)||0,2)}</td>
         <td style="${rowStyle}"><span class="badge ${getSOBadgeClass(status)}">${status}</span>${so._toInvoice?' <span class="so-to-invoice">· to invoice</span>':''}</td>
@@ -11151,12 +11222,24 @@ function soNewFromQuotation(){
 })();
 
 /* ── Open Create SO modal ── */
+/* V270.4.12 (mockup PB_5): one Sales Order may hold lines of several quotations of the same customer.
+   so.quotationId = the first quotation (as before); so.quotationIds = all of them. Each line keeps its quotation
+   (it.quotationId) and its row there (it.qIdx). origIdx stays unique within the order: the first quotation's lines keep
+   their row number, the k-th added quotation's lines get k×10000 + row — so deliveries and invoices (keyed by origIdx)
+   never mix two quotations' lines. */
+const SO_Q_OFFSET=10000;
+function soQuoteIds(so){ return so?[...new Set([so.quotationId,...(Array.isArray(so.quotationIds)?so.quotationIds:[])].filter(Boolean))]:[]; }
+function soLineQuoteId(so,it){ return (it&&it.quotationId)||(so&&so.quotationId)||''; }
+function soLineQIdx(it){ return it&&it.qIdx!==undefined&&it.qIdx!==null?Number(it.qIdx):Number(it?.origIdx); }
+function soRemainingFrom(quotationId,k,excludeSOId=''){
+  return getQuotationSOProgress(quotationId,excludeSOId).remaining.map(it=>({...it,quotationId,qIdx:it.origIdx,origIdx:k?SO_Q_OFFSET*k+it.origIdx:it.origIdx}));
+}
 function getQuotationSOProgress(quotationId, excludeSOId='') {
   const q=quotations.find(x=>x.id===quotationId);
   if(!q) return {remaining:[],complete:true,linked:[]};
-  const linked=salesOrders.filter(so=>so.quotationId===quotationId && so.id!==excludeSOId);
+  const linked=salesOrders.filter(so=>soQuoteIds(so).includes(quotationId) && so.id!==excludeSOId);
   const ordered={};
-  linked.forEach(so=>(so.items||[]).forEach(it=>{ const idx=Number(it.origIdx); ordered[idx]=roundQtyForUom((ordered[idx]||0)+(parseFloat(it.qty)||0),it.uom); }));
+  linked.forEach(so=>(so.items||[]).forEach(it=>{ if(soLineQuoteId(so,it)!==quotationId) return; const idx=soLineQIdx(it); ordered[idx]=roundQtyForUom((ordered[idx]||0)+(parseFloat(it.qty)||0),it.uom); }));
   // V270.2: a discounted quotation line goes to the order at its price after the line discount (quotedUp keeps the list price)
   const remaining=(q.items||[]).map((it,i)=>{const quoted=parseFloat(it.qty)||0, prev=ordered[i]||0, rem=roundQtyForUom(Math.max(0,quoted-prev),it.uom);const net=quoteLineDisc(it)?{up:quoteLineNetUnit(it),quotedUp:parseFloat(it.up)||0}:{};return {...it,...net,origIdx:i,origQty:quoted,orderedQty:prev,remainingQty:rem};}).filter(it=>it.remainingQty>0);
   return {remaining,complete:remaining.length===0,linked};
@@ -11195,21 +11278,71 @@ function soUseLink(i,pid){
   it.prodId=pid; const el=document.getElementById('soc-lk-'+i); if(el) el.innerHTML=soLinkHtml(it,i);
   document.getElementById('soc-chk-'+i)?.closest('.so-item-row')?.classList.remove('soc-need');
 }
+/* V270.4.12 (PB_5): "+ Add lines from another quotation" — same customer only; a different VAT rate or currency can't
+   be combined. Each added line keeps its quotation, row, price and cost. */
+function soQuoteOK(base,q){
+  if(!q) return 'not found';
+  if(Math.abs(vatRate(q)-vatRate(base))>1e-9) return `VAT ${Math.round(vatRate(q)*100)}% — different VAT rate, can't be combined`;
+  if(String(q.currency||'SAR')!==String(base.currency||'SAR')) return `${escapeHtml(q.currency||'SAR')} quotation — different currency, can't be combined`;
+  return '';
+}
+function soCaptureRows(){ const modal=document.getElementById('so-create-modal'); (modal._remainingItems||[]).forEach((it,i)=>{ const c=document.getElementById('soc-chk-'+i), q=document.getElementById('soc-qty-'+i); if(c) it._sel=c.checked; if(q) it._qty=q.value; }); }
+function soRenderQuotesBar(){
+  const modal=document.getElementById('so-create-modal'), bar=document.getElementById('so-quotes-bar'); if(!bar) return;
+  const qs=(modal._quotationIds||[]).map(id=>quotations.find(x=>x.id===id)).filter(Boolean);
+  const ref=document.getElementById('so-quote-ref'); if(ref&&qs.length) ref.value=qs.map(q=>q.qno).join(', ')+(qs.length===1&&qs[0].date?' — '+fmtDate(qs[0].date):'');
+  const btn=document.getElementById('so-add-quote-btn'); if(btn) btn.hidden=!!modal._editingSOId&&soHasDownstreamActivity(salesOrders.find(x=>x.id===modal._editingSOId)||{});
+  if(qs.length<2){ bar.hidden=true; bar.innerHTML=''; return; }
+  const pays=[...new Set(qs.map(q=>String(q.payment||'').trim()).filter(Boolean))];
+  bar.hidden=false;
+  bar.innerHTML=`<b>Quotations:</b> ${qs.map((q,k)=>`<span class="so-src-q">${escapeHtml(q.qno)}</span>${k?` <button type="button" class="soc-lk-btn" onclick="soRemoveQuotation('${escapeHtml(q.id)}')" title="Remove this quotation's lines">remove</button>`:''}`).join(' ')}`
+    +(pays.length>1?`<div class="so-terms-note"><i class="ti ti-info-circle"></i>Payment terms differ (${qs.map(q=>escapeHtml(q.qno)+': '+escapeHtml(q.payment||'—')).join(' · ')}). Using the first quotation's terms — you can change them.</div>`:'');
+}
+function soRemoveQuotation(qid){
+  const modal=document.getElementById('so-create-modal'); soCaptureRows();
+  modal._remainingItems=(modal._remainingItems||[]).filter(it=>it.quotationId!==qid); modal._quotationIds=(modal._quotationIds||[]).filter(x=>x!==qid);
+  renderSOCreateItems(modal._remainingItems,{}); soRenderQuotesBar(); soCalcSummary();
+}
+function soOpenAddQuotation(){
+  const modal=document.getElementById('so-create-modal'), base=quotations.find(x=>x.id===modal._quotationId); if(!base) return;
+  const same=q=>q.id!==base.id&&!(modal._quotationIds||[]).includes(q.id)&&((base.custId&&q.custId===base.custId)||(!base.custId&&q.company===base.company));
+  const list=quotations.filter(q=>same(q)&&['Sent','Won'].includes(q.status)).map(q=>({q,why:soQuoteOK(base,q),left:getQuotationSOProgress(q.id,modal._editingSOId||'').remaining.length})).filter(x=>x.left>0||x.why);
+  let m=document.getElementById('so-addq-modal');
+  if(!m){ m=document.createElement('div'); m.className='modal-overlay'; m.id='so-addq-modal'; document.body.appendChild(m); }
+  m.innerHTML=`<div class="modal modal-compact" style="max-width:600px;height:auto"><div class="modal-header"><h2>Add lines from another quotation</h2><button class="close-btn" onclick="closeModal('so-addq-modal')">✕</button></div>
+    <div class="modal-body" style="padding:16px 20px"><div class="so-addq-sub">Sent / won quotations of <b>${escapeHtml(base.company||'')}</b> only</div>
+    ${list.length?list.map(({q,why,left},i)=>`<label class="bcl-opt${why?' so-addq-off':''}"><input type="radio" name="so-addq" value="${escapeHtml(q.id)}"${why?' disabled':''}${!why&&!list.slice(0,i).some(x=>!x.why)?' checked':''}><span class="bcl-n"><b>${escapeHtml(q.qno)}</b> · ${fmtDate(q.date)} · ${left} line${left===1?'':'s'} open · ${documentMoney('quotation','summary',calcQuote(q).net)}${why?`<small class="so-addq-why">${why}</small>`:''}</span></label>`).join(''):'<div class="pv-empty">No other sent or won quotation of this customer has open lines.</div>'}
+    </div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('so-addq-modal')">Cancel</button><button class="btn btn-primary" id="so-addq-ok" ${list.some(x=>!x.why)?'':'disabled'} onclick="soAddQuotation()"><i class="ti ti-plus"></i>Add its lines</button></div></div>`;
+  const z=Math.max(0,...[...document.querySelectorAll('.modal-overlay.open')].map(e=>Number(getComputedStyle(e).zIndex)||0)); m.style.zIndex=z?String(z+1):'';
+  openModalWithSize('so-addq-modal');
+}
+function soAddQuotation(){
+  const modal=document.getElementById('so-create-modal'), id=document.querySelector('#so-addq-modal input[name="so-addq"]:checked')?.value; if(!id) return;
+  const base=quotations.find(x=>x.id===modal._quotationId), q=quotations.find(x=>x.id===id), why=soQuoteOK(base,q); if(why){ showToast(why,'error'); return; }
+  soCaptureRows();
+  const k=Math.max(0,...(modal._remainingItems||[]).map(it=>Math.floor(Number(it.origIdx)/SO_Q_OFFSET)))+1;   // a new block of line numbers
+  modal._quotationIds=[...(modal._quotationIds||[modal._quotationId]),id];
+  modal._remainingItems=[...(modal._remainingItems||[]),...soRemainingFrom(id,k,modal._editingSOId||'').map(it=>({...it,_sel:true}))];
+  closeModal('so-addq-modal');
+  renderSOCreateItems(modal._remainingItems,{}); soRenderQuotesBar(); soCalcSummary();
+  showToast(`Lines of ${q.qno} added`,'success');
+}
 async function soLinkItem(i){
   const modal=document.getElementById('so-create-modal'), it=(modal._remainingItems||[])[i]; if(!it||!window.BCItemLink) return;
   const q=quotations.find(x=>x.id===modal._quotationId);
-  const L={text:String(it.desc||'').trim(),uom:it.uom||'',prodId:it.prodId||'',label:'Line '+(Number(it.origIdx)+1)};
+  const L={text:String(it.desc||'').trim(),uom:it.uom||'',prodId:it.prodId||'',label:'Line '+(soLineQIdx(it)+1)};
   const r=await BCItemLink.open({title:'Link this line to an item',intro:'Required for the lines in this Sales Order. The line text stays as written.',lines:[L],custId:q?.custId,mode:'link'});
   if(r.action==='link'&&L._choice) soUseLink(i,L._choice);
 }
 function renderSOCreateItems(items,currentByOrig={}){
   // a line already linked in an earlier order of the same quotation keeps that link
-  const modal=document.getElementById('so-create-modal'), prev=salesOrders.filter(o=>o.quotationId===modal?._quotationId&&o.id!==modal?._editingSOId);
-  items.forEach(it=>{ if(!it.prodId){ for(const o of prev){ const x=(o.items||[]).find(y=>Number(y.origIdx)===Number(it.origIdx)&&y.prodId); if(x){ it.prodId=x.prodId; break; } } } });
-  document.getElementById('so-items-list').innerHTML=items.map((it,i)=>{const current=currentByOrig[it.origIdx]||0;const checked=current>0||!Object.keys(currentByOrig).length;const qty=current>0?current:it.remainingQty;const after=Math.max(0,it.remainingQty-qty);return `
+  const modal=document.getElementById('so-create-modal');
+  items.forEach(it=>{ if(!it.prodId){ const qid=it.quotationId||modal?._quotationId; for(const o of salesOrders.filter(o=>soQuoteIds(o).includes(qid)&&o.id!==modal?._editingSOId)){ const x=(o.items||[]).find(y=>soLineQuoteId(o,y)===qid&&soLineQIdx(y)===soLineQIdx(it)&&y.prodId); if(x){ it.prodId=x.prodId; break; } } } });
+  const multi=(modal?._quotationIds||[]).length>1;
+  document.getElementById('so-items-list').innerHTML=items.map((it,i)=>{const current=currentByOrig[it.origIdx]||0;const checked=it._sel!==undefined?it._sel:(current>0||!Object.keys(currentByOrig).length);const qty=it._qty!==undefined?it._qty:(current>0?current:it.remainingQty);const after=Math.max(0,it.remainingQty-qty);return `
     <div class="so-item-row">
       <input type="checkbox" class="so-item-check" id="soc-chk-${i}" ${checked?'checked':''} onchange="soCalcSummary()">
-      <div><div style="font-weight:600;color:#0f172a">${escapeHtml(it.desc||'—')}</div>${it.brand||it.model?`<div style="font-size:11px;color:var(--gray)">${escapeHtml([it.brand,it.model].filter(Boolean).join(' / '))}</div>`:''}<div class="soc-lk" id="soc-lk-${i}">${soLinkHtml(it,i)}</div></div>
+      <div><div style="font-weight:600;color:#0f172a">${escapeHtml(it.desc||'—')}</div>${it.brand||it.model?`<div style="font-size:11px;color:var(--gray)">${escapeHtml([it.brand,it.model].filter(Boolean).join(' / '))}</div>`:''}<div class="soc-lk" id="soc-lk-${i}">${multi?`<span class="so-src-q">${escapeHtml(quotations.find(x=>x.id===it.quotationId)?.qno||'')}</span>`:''}${soLinkHtml(it,i)}</div></div>
       <div class="so-num">${formatQtyForUom(it.origQty,it.uom)}</div><div class="so-num so-muted">${formatQtyForUom(it.orderedQty||0,it.uom)}</div>
       <div><input type="number" class="so-qty-input bc-spin" id="soc-qty-${i}" value="${qty}" min="${qtyMin(it.uom)}" max="${it.remainingQty}" step="${qtyStep(it.uom)}" oninput="soCalcSummary()"></div>
       <div class="so-num so-remain" id="soc-rem-${i}">${formatQtyForUom(after,it.uom)}</div><div>${escapeHtml(it.uom||'—')}</div>
@@ -11221,14 +11354,14 @@ function openCreateSO(quotationId) {
   const progress=getQuotationSOProgress(quotationId);
   if(progress.complete){showToast('All quoted quantities have already been ordered.','info','Quotation Fully Ordered');return;}
   const modal=document.getElementById('so-create-modal');
-  modal._editingSOId=null;modal._quotationId=quotationId;modal._remainingItems=progress.remaining;modal._vatRate=vatRate(q);modal._poAttachment=null;modal._saveOperationId=(globalThis.crypto?.randomUUID?.()||('so-'+Date.now()+'-'+Math.random().toString(36).slice(2)));
+  modal._editingSOId=null;modal._quotationId=quotationId;modal._quotationIds=[quotationId];modal._remainingItems=soRemainingFrom(quotationId,0);modal._vatRate=vatRate(q);modal._poAttachment=null;modal._saveOperationId=(globalThis.crypto?.randomUUID?.()||('so-'+Date.now()+'-'+Math.random().toString(36).slice(2)));
   document.getElementById('so-create-title').textContent='Create Sales Order';
   document.getElementById('so-create-subtitle').textContent=`Create from ${q.qno} · ${progress.linked.length?progress.linked.length+' previous order'+(progress.linked.length===1?'':'s'):'first order'}`;
   document.getElementById('so-save-btn-text').textContent='Save Sales Order';document.getElementById('so-no').value='Auto on Save';document.getElementById('so-date').value=bcLocalISO();
   ['so-po-no','so-po-date','so-project','so-contact','so-expected-delivery','so-notes','so-internal-note'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   document.getElementById('so-customer').value=q.company||'';document.getElementById('so-quote-ref').value=q.qno+' — '+fmtDate(q.date);document.getElementById('so-payment').value=q.payment||settings.payment||'';document.getElementById('so-delivery').value=q.delivery||settings.delivery||'';
   const fi=document.getElementById('so-po-file');if(fi)fi.value='';modal._poAttachment=null;modal._poAttachmentRemoved=false;soRenderPOAttachment();clearFieldValidation(document.getElementById('so-po-no'));
-  renderSOCreateItems(progress.remaining);soCalcSummary();openModalWithSize('so-create-modal');
+  renderSOCreateItems(modal._remainingItems);soRenderQuotesBar();soCalcSummary();openModalWithSize('so-create-modal');
 }
 function soSelectAll(check) {
   const modal = document.getElementById('so-create-modal');
@@ -11241,7 +11374,7 @@ function soCalcSummary() {
   const modal=document.getElementById('so-create-modal'),items=modal._remainingItems||[],vr=modal._vatRate||0.15;
   let sub=0,partial=false;
   items.forEach((it,i)=>{const chk=document.getElementById('soc-chk-'+i);let qty=roundQtyForUom(document.getElementById('soc-qty-'+i)?.value,it.uom);if(qty>it.remainingQty)qty=it.remainingQty;if(qty<0)qty=0;const selected=!!chk?.checked;const tot=selected?qty*(parseFloat(it.up)||0):0;sub+=tot;const after=selected?Math.max(0,it.remainingQty-qty):it.remainingQty;if(after>0)partial=true;const t=document.getElementById('soc-tot-'+i);if(t)t.textContent=selected?documentMoney('salesOrder','lineAmount',tot):'—';const r=document.getElementById('soc-rem-'+i);if(r)r.textContent=formatQtyForUom(after,it.uom);});
-  const vat=Math.round(sub*vr*100)/100,total=sub+vat,q=quotations.find(x=>x.id===modal._quotationId),quoteValue=q?calcQuote(q).net:0;
+  const vat=Math.round(sub*vr*100)/100,total=sub+vat,quoteValue=(modal._quotationIds||[modal._quotationId]).map(id=>quotations.find(x=>x.id===id)).filter(Boolean).reduce((a,q)=>a+calcQuote(q).net,0);
   document.getElementById('so-sum-quote').textContent=documentMoney('salesOrder','summary',quoteValue);document.getElementById('so-sum-order').textContent=documentMoney('salesOrder','summary',total);document.getElementById('so-sum-sub').textContent=documentMoney('salesOrder','summary',sub);document.getElementById('so-sum-vat').textContent=documentMoney('salesOrder','summary',vat);document.getElementById('so-sum-vat-label').textContent='VAT ('+Math.round(vr*100)+'%)';document.getElementById('so-sum-total').textContent=documentMoney('salesOrder','grandTotal',total);
   const note=document.getElementById('so-remaining-note');if(note){note.style.display=partial?'block':'none';note.innerHTML=partial?'<strong>Partial order</strong> — quantities remaining after this PO can be converted to another Sales Order later.':'';}
 }
@@ -11328,6 +11461,7 @@ async function _saveSalesOrderCore() {
     customer:    document.getElementById('so-customer').value,
     custId:      (()=>{const q=quotations.find(x=>x.id===modal._quotationId);return q?.custId||findUniqueMasterByName(customers,document.getElementById('so-customer').value)?.id||'';})(),
     quotationId: modal._quotationId,
+    ...((modal._quotationIds||[]).length>1?{quotationIds:modal._quotationIds.slice()}:{}),   // V270.4.12: several quotations
     notes:       document.getElementById('so-notes').value.trim(),
     items:       selectedItems,
     subtotal:    sub,
@@ -11444,11 +11578,13 @@ async function openEditSO(soId){
   const so=salesOrders.find(x=>x.id===soId);if(!so)return;if(soHasDownstreamActivity(so)||await salesOrderHasServerDeliveryActivity(soId)){showValidationDialog('Editing Restricted','This Sales Order already has delivery, invoice, or payment activity. To protect document history, it cannot be edited.','','');return;}
   const q=quotations.find(x=>x.id===so.quotationId);if(!q){showToast('The linked quotation could not be found.','error');return;}
   const currentByOrig={};(so.items||[]).forEach(it=>currentByOrig[it.origIdx]=(currentByOrig[it.origIdx]||0)+(parseFloat(it.qty)||0));
-  const progress=getQuotationSOProgress(so.quotationId,so.id),available=progress.remaining;
-  const modal=document.getElementById('so-create-modal');modal._editingSOId=so.id;modal._saveOperationId=so.creationOperationId||'';modal._quotationId=so.quotationId;modal._remainingItems=available;modal._vatRate=so.vatRate||vatRate(q);
+  const qids=soQuoteIds(so);   // V270.4.12: every quotation of the order, each with the line-number block its lines were saved with
+  const kOf=(qid,pos)=>{ const l=(so.items||[]).find(it=>soLineQuoteId(so,it)===qid); return l?Math.floor(Number(l.origIdx)/SO_Q_OFFSET):pos; };
+  const available=qids.flatMap((qid,pos)=>soRemainingFrom(qid,kOf(qid,pos),so.id));
+  const modal=document.getElementById('so-create-modal');modal._editingSOId=so.id;modal._saveOperationId=so.creationOperationId||'';modal._quotationId=so.quotationId;modal._quotationIds=qids;modal._remainingItems=available;modal._vatRate=so.vatRate||vatRate(q);
   document.getElementById('so-create-title').textContent='Edit Sales Order';document.getElementById('so-create-subtitle').textContent=so.soNo+' · linked to '+q.qno;document.getElementById('so-save-btn-text').textContent='Save Changes';
   const vals={'so-no':so.soNo,'so-date':so.date,'so-po-no':so.poNo||'','so-po-date':so.poDate||'','so-project':so.project||'','so-contact':so.contact||'','so-customer':so.customer,'so-quote-ref':q.qno+' — '+fmtDate(q.date),'so-payment':so.payment||q.payment||'','so-delivery':so.delivery||q.delivery||'','so-expected-delivery':so.expectedDelivery||'','so-notes':so.notes||'','so-internal-note':so.internalNote||''};Object.entries(vals).forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.value=v;});
-  const fi=document.getElementById('so-po-file');if(fi)fi.value='';modal._poAttachment=so.poAttachment||null;modal._poAttachmentRemoved=false;soRenderPOAttachment(null,modal._poAttachment);clearFieldValidation(document.getElementById('so-po-no'));renderSOCreateItems(available,currentByOrig);closeModal('so-view-modal');soCalcSummary();openModalWithSize('so-create-modal');
+  const fi=document.getElementById('so-po-file');if(fi)fi.value='';modal._poAttachment=so.poAttachment||null;modal._poAttachmentRemoved=false;soRenderPOAttachment(null,modal._poAttachment);clearFieldValidation(document.getElementById('so-po-no'));renderSOCreateItems(available,currentByOrig);soRenderQuotesBar();closeModal('so-view-modal');soCalcSummary();openModalWithSize('so-create-modal');
 }
 async function deleteSalesOrder(soId){
   const so=salesOrders.find(x=>x.id===soId); if(!so) return;
