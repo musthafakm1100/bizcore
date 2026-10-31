@@ -19,7 +19,7 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=270.57" rel="stylesheet"/>
+<link href="css/main.css?v=270.58" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=266.5" rel="stylesheet"/>
 <link href="css/typography.css?v=215" rel="stylesheet"/>
 <link href="css/masters.css?v=266.5" rel="stylesheet"/>
@@ -1000,11 +1000,11 @@ document.addEventListener('error', function(e) {
 <div class="card uom-master-card">
   <div class="card-header page-command-header">
     <div><h3><i class="ti ti-ruler-measure" style="margin-right:6px"></i>Units of Measure</h3><p class="uom-master-subtitle">Control quantity precision and keyboard increments across BizCore documents.</p></div>
-    <button class="btn btn-primary btn-sm page-primary-command" onclick="openUomForm()"><i class="ti ti-plus"></i>Add UOM</button>
+    <div class="cm-head-btns"><button class="btn btn-secondary btn-sm" type="button" onclick="addSuggestedServiceUoms()" title="Month, Visit, Trip, Man-day, Man-hour, Sq.m, Cu.m"><i class="ti ti-plus"></i>Add suggested service units</button><button class="btn btn-primary btn-sm page-primary-command" onclick="openUomForm()"><i class="ti ti-plus"></i>Add UOM</button></div>
   </div>
-  <div class="card-body uom-toolbar">
-    <input id="uom-search" oninput="renderUomMaster()" placeholder="Search code or unit name…" type="text"/>
-    <button class="btn btn-secondary btn-sm" type="button" onclick="addSuggestedServiceUoms()" title="Month, Visit, Trip, Man-day, Man-hour, Sq.m, Cu.m"><i class="ti ti-plus"></i>Add suggested service units</button>
+  <div class="card-body uom-toolbar cm-toolbar">
+    <div class="cm-search"><i class="ti ti-search" aria-hidden="true"></i><input id="uom-search" oninput="renderUomMaster()" placeholder="Search code or unit name…" type="search" aria-label="Search units"/></div>
+    <div class="cat-filters" id="uom-filters"></div>
     <span class="uom-count" id="uom-count"></span>
   </div>
   <div class="uom-form-panel" id="uom-form-panel" style="display:none">
@@ -1019,7 +1019,7 @@ document.addEventListener('error', function(e) {
     </div>
     <div class="uom-form-actions"><button class="btn btn-secondary" onclick="closeUomForm()">Cancel</button><button class="btn btn-primary" onclick="saveUomMaster()"><i class="ti ti-device-floppy"></i>Save UOM</button></div>
   </div>
-  <div style="overflow-x:auto"><table class="uom-table"><thead><tr><th>Code</th><th>Unit name</th><th class="center">Decimal places</th><th class="right">Quantity step</th><th>Used for</th><th class="center">Status</th><th class="center">Actions</th></tr></thead><tbody id="uom-tbody"></tbody></table></div>
+  <div style="overflow-x:auto"><table class="uom-table cm-table"><thead id="uom-thead"></thead><tbody id="uom-tbody"></tbody></table></div>
 </div>
 </div><div class="masters-tab-content" id="masters-tab-categories">
 <!-- V270.4.12 (mockup CU_1): categories for goods and for services -->
@@ -1038,13 +1038,13 @@ document.addEventListener('error', function(e) {
     <div class="cat-form-note" id="cat-form-note" hidden></div>
     <div class="uom-form-actions"><button class="btn btn-secondary" onclick="closeCategoryForm()">Cancel</button><button class="btn btn-primary" onclick="saveCategoryMaster()"><i class="ti ti-device-floppy"></i>Save</button></div>
   </div>
-  <div class="card-body uom-toolbar cat-toolbar">
-    <input id="cat-search" oninput="renderCategoryMaster()" placeholder="Search category…" type="text"/>
+  <div class="card-body uom-toolbar cat-toolbar cm-toolbar">
+    <div class="cm-search"><i class="ti ti-search" aria-hidden="true"></i><input id="cat-search" oninput="renderCategoryMaster()" placeholder="Search category…" type="search" aria-label="Search categories"/></div>
     <div class="cat-filters" id="cat-filters"></div>
     <span class="uom-count" id="cat-count"></span>
   </div>
-  <div style="overflow-x:auto"><table class="uom-table"><thead><tr><th>Category</th><th>Used for</th><th class="right">Items</th><th class="center">Status</th><th class="center">Actions</th></tr></thead><tbody id="cat-tbody"></tbody></table></div>
-  <div class="cat-note">Delete only a category no item uses. A category switched off stays on the items that have it but is not offered for new items.</div>
+  <div style="overflow-x:auto"><table class="uom-table cm-table"><thead id="cat-thead"></thead><tbody id="cat-tbody"></tbody></table></div>
+  <div class="cat-note">Delete only a category no item uses. A category switched off stays on the items that have it but is not offered for new items. Merge moves every item of a category into another category of the same type and removes the merged one; each item keeps the change in its history.</div>
 </div>
 </div></div></div></div><div class="page" id="page-setup">
 <div class="setup-shell">
@@ -4544,7 +4544,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.57';
+      s.src = 'js/app.js?v=270.58';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)

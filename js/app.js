@@ -2514,16 +2514,61 @@ function persistCategoryMaster(){
   if(typeof bcSharedSave==='function') bcSharedSave('bizcore_categories');
 }
 const catItemsOf=c=>products.filter(p=>String(p.category||'').toLowerCase()===c.name.toLowerCase()).length;
-let catFilter='all', editingCatId=null;
+let catFilter='all', editingCatId=null, catSort={k:'name',d:1};
+/* V270.4.13 (mockups CM_1–CM_3): compact tables, regular-weight names, sortable headings, filters incl. Unused, Edit
+   always in the same place (Delete only when unused), likely duplicates marked, Merge into… */
+function cmHead(cols,sort,fn){ return '<tr>'+cols.map(([k,l,cls,w])=>k?`<th class="${cls||''} cm-sortable${sort.k===k?' on':''}" style="${w?'width:'+w:''}" tabindex="0" role="button" aria-label="Sort by ${l}" onclick="${fn}('${k}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${fn}('${k}')}">${l} <span class="cm-s">${sort.k===k?(sort.d>0?'▲':'▼'):'↕'}</span></th>`:`<th class="${cls||''}" style="${w?'width:'+w:''}">${l}</th>`).join('')+'</tr>'; }
+function cmActs(id,used,editFn,delFn,mergeFn){ return `<div class="cm-acts"><button type="button" class="cm-ab" onclick="${mergeFn}('${id}')">Merge into…</button><button type="button" class="cm-ab" onclick="${editFn}('${id}')"><i class="ti ti-edit"></i>Edit</button><button type="button" class="cm-ab del"${used?' style="visibility:hidden" tabindex="-1" aria-hidden="true"':''} onclick="${delFn}('${id}')"><i class="ti ti-trash"></i>Delete</button></div>`; }
+/** Likely duplicates: one name's words all inside the other's ("Hardware" ~ "Fasteners & Hardware"), same type. */
+function catSimilarTo(c){
+  const w=x=>String(x||'').toLowerCase().replace(/&/g,' ').split(/[^a-z0-9]+/).filter(t=>t&&!['and','the','of'].includes(t));
+  const a=w(c.name); if(!a.length) return null;
+  const hits=categoryMaster.filter(o=>o!==c&&o.type===c.type&&(()=>{ const b=w(o.name); return b.length>a.length&&a.every(t=>b.includes(t)); })());
+  return hits.sort((x,y)=>catItemsOf(y)-catItemsOf(x)||x.name.length-y.name.length)[0]||null;   // the most used first
+}
+function sortCategories(k){ catSort=catSort.k===k?{k,d:-catSort.d}:{k,d:1}; renderCategoryMaster(); }
 function renderCategoryMaster(){
   const body=document.getElementById('cat-tbody'); if(!body) return;
   if(!categoryMaster.length) loadCategoryMaster();
   const q=(document.getElementById('cat-search')?.value||'').trim().toLowerCase();
-  const n=t=>categoryMaster.filter(c=>t==='all'||c.type===t).length;
-  const f=document.getElementById('cat-filters'); if(f) f.innerHTML=[['all','All'],['goods','Goods'],['service','Services']].map(([k,l])=>`<button type="button" class="pv-f${catFilter===k?' on':''}" onclick="catFilter='${k}';renderCategoryMaster()">${l} ${n(k)}</button>`).join('');
-  const rows=bcSortBy(categoryMaster.filter(c=>(catFilter==='all'||c.type===catFilter)&&c.name.toLowerCase().includes(q)),c=>(c.type==='service'?'1':'0')+c.name);
+  const fits=(c,f)=>f==='all'||(f==='unused'?!catItemsOf(c):c.type===f);
+  const n=f=>categoryMaster.filter(c=>fits(c,f)).length;
+  const fl=document.getElementById('cat-filters'); if(fl) fl.innerHTML=[['all','All'],['goods','Goods'],['service','Services'],['unused','Unused']].map(([k,l])=>`<button type="button" class="pv-f${catFilter===k?' on':''}" onclick="catFilter='${k}';renderCategoryMaster()">${l} ${n(k)}</button>`).join('');
+  const head=document.getElementById('cat-thead'); if(head) head.innerHTML=cmHead([['name','Category','','320px'],['type','Used for','','110px'],['items','Items','right','80px'],['','Status','','90px'],['','','right','']],catSort,'sortCategories');
+  const key={name:c=>c.name.toLowerCase(),type:c=>c.type+c.name.toLowerCase(),items:c=>catItemsOf(c)}[catSort.k]||(c=>c.name.toLowerCase());
+  const rows=categoryMaster.filter(c=>fits(c,catFilter)&&c.name.toLowerCase().includes(q)).sort((x,y)=>{ const a=key(x),b=key(y); return (a<b?-1:a>b?1:0)*catSort.d; });
   const cnt=document.getElementById('cat-count'); if(cnt) cnt.textContent=`${rows.length} categor${rows.length===1?'y':'ies'}`;
-  body.innerHTML=rows.length?rows.map(c=>{ const used=catItemsOf(c); return `<tr><td><strong>${escapeHtml(c.name)}</strong></td><td><span class="bcm-type${c.type==='service'?' svc':''}">${c.type==='service'?'Service':'Goods'}</span></td><td class="right">${used}</td><td class="center"><span class="status-pill ${c.active?'active':'inactive'}">${c.active?'Active':'Off'}</span></td><td class="center"><div class="action-btns"><button class="abtn abtn-edit" onclick="openCategoryForm('${escapeHtml(c.id)}')" title="Edit"><i class="ti ti-edit"></i></button>${used?'':`<button class="abtn abtn-del" onclick="deleteCategoryMaster('${escapeHtml(c.id)}')" title="Delete"><i class="ti ti-trash"></i></button>`}</div></td></tr>`; }).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--gray);padding:28px">No categories found.</td></tr>';
+  body.innerHTML=rows.length?rows.map(c=>{ const used=catItemsOf(c), sim=catSimilarTo(c); return `<tr><td class="cm-name">${escapeHtml(c.name)}${sim?` <span class="cm-dup" title="Merge into… if it is the same">similar: ${escapeHtml(sim.name)}</span>`:''}</td><td><span class="bcm-type${c.type==='service'?' svc':''}">${c.type==='service'?'Service':'Goods'}</span></td><td class="right${used?'':' cm-zero'}">${used}</td><td><span class="cm-st${c.active?'':' off'}">${c.active?'Active':'Off'}</span></td><td class="right">${cmActs(escapeHtml(c.id),used,'openCategoryForm','deleteCategoryMaster','openCategoryMerge')}</td></tr>`; }).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--gray);padding:28px">No categories found.</td></tr>';
+}
+/** Merge window (CM_2) — shared by categories and units. */
+function cmOpenMerge({title,lead,options,onMerge,infoFn}){
+  let m=document.getElementById('cm-merge-modal');
+  if(!m){ m=document.createElement('div'); m.className='modal-overlay'; m.id='cm-merge-modal'; document.body.appendChild(m); }
+  m.innerHTML=`<div class="modal modal-compact" style="max-width:560px;height:auto"><div class="modal-header"><h2>${title}</h2><button class="close-btn" onclick="closeModal('cm-merge-modal')">✕</button></div>
+    <div class="modal-body" style="padding:16px 20px"><div class="cm-merge-lead">${lead}</div>
+    ${options.length?`<div class="form-group" style="margin-top:12px"><label for="cm-merge-to">Merge into *</label><select id="cm-merge-to">${options.map(o=>`<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}</select></div><div class="cm-merge-info" id="cm-merge-info"></div>`:'<div class="pv-empty">There is nothing of the same type to merge into.</div>'}
+    </div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('cm-merge-modal')">Cancel</button><button class="btn btn-primary" id="cm-merge-ok" ${options.length?'':'disabled'}><i class="ti ti-arrow-merge"></i>Merge</button></div></div>`;
+  const sel=m.querySelector('#cm-merge-to'), info=m.querySelector('#cm-merge-info');
+  if(sel){ const upd=()=>{ info.innerHTML=infoFn(sel.value); }; sel.onchange=upd; upd(); }
+  m.querySelector('#cm-merge-ok').onclick=async()=>{ const b=m.querySelector('#cm-merge-ok'); if(!sel||b.disabled) return; b.disabled=true; try{ if(await onMerge(sel.value)!==false) closeModal('cm-merge-modal'); } finally{ b.disabled=false; } };
+  openModalWithSize('cm-merge-modal');
+}
+async function cmMoveProducts(list,field,to,from){
+  const who=(window.currentUser&&window.currentUser.name)||'', at=new Date().toISOString();
+  list.forEach(p=>{ p.changeLog=[...(p.changeLog||[]),{at,by:who,field,from,to,note:''}].slice(-100); p[field]=to; });
+  return list.length?(await saveProducts())!==false:true;
+}
+function openCategoryMerge(id){
+  const c=categoryMaster.find(x=>x.id===id); if(!c) return;
+  const used=catItemsOf(c), opts=bcSortBy(categoryMaster.filter(o=>o!==c&&o.type===c.type),o=>o.name).map(o=>({value:o.id,label:`${o.name} (${catItemsOf(o)} item${catItemsOf(o)===1?'':'s'})${o.active?'':' — off'}`}));
+  const sim=catSimilarTo(c); if(sim){ const i=opts.findIndex(o=>o.value===sim.id); if(i>0) opts.unshift(opts.splice(i,1)[0]); }
+  cmOpenMerge({title:`Merge "${escapeHtml(c.name)}" into another category`,lead:`<b>${escapeHtml(c.name)}</b> · ${c.type==='service'?'Service':'Goods'} · used by <b>${used} item${used===1?'':'s'}</b>`,options:opts,
+    infoFn:v=>{ const t=categoryMaster.find(x=>x.id===v); return t?`${used?`The ${used===1?'item':used+' items'} of ${escapeHtml(c.name)} move${used===1?'s':''} to <b>${escapeHtml(t.name)}</b> (${catItemsOf(t)+used} items after the merge). `:''}"${escapeHtml(c.name)}" is removed. Each item's change history keeps the old category.`:''; },
+    onMerge:async v=>{ const t=categoryMaster.find(x=>x.id===v); if(!t) return false;
+      const items=products.filter(p=>String(p.category||'').toLowerCase()===c.name.toLowerCase());
+      if(!(await cmMoveProducts(items,'category',t.name,c.name))){ showToast('Items not updated — please try again','error'); return false; }
+      if(!t.active) t.active=true; categoryMaster=categoryMaster.filter(x=>x!==c); persistCategoryMaster(); renderCategoryMaster(); populateCategoryFilter(); renderProducts();
+      showToast(`${c.name} merged into ${t.name}${items.length?' · '+items.length+' item'+(items.length===1?'':'s')+' moved':''}`,'success'); }});
 }
 function openCategoryForm(id=null){
   editingCatId=id; const c=id?categoryMaster.find(x=>x.id===id):null;
@@ -3043,12 +3088,33 @@ function loadAccessSetup(){}
 
 /* Units of Measure Master */
 function persistUomMaster(){ localStorage.setItem('bizcore_uom_master',JSON.stringify(uomMaster)); UOM_LIST=uomMaster.filter(u=>u.active).map(u=>u.code); if(typeof bcSharedSave==='function')bcSharedSave('bizcore_uom_master'); }   // V268.5
+let uomFilter='all', uomSort={k:'code',d:1};
+const uomItemsOf=u=>products.filter(p=>String(p.uom||'').toLowerCase()===String(u.code||'').toLowerCase()).length;
+function sortUoms(k){ uomSort=uomSort.k===k?{k,d:-uomSort.d}:{k,d:1}; renderUomMaster(); }
 function renderUomMaster(){
   const body=document.getElementById('uom-tbody'); if(!body)return;
   const q=(document.getElementById('uom-search')?.value||'').trim().toLowerCase();
-  const rows=uomMaster.filter(u=>`${u.code} ${u.name}`.toLowerCase().includes(q)).sort((a,b)=>a.code.localeCompare(b.code));
+  const fits=(u,f)=>f==='all'||(f==='unused'?!uomItemsOf(u):uomUsedFor(u)===f);
+  const n=f=>uomMaster.filter(u=>fits(u,f)).length;
+  const fl=document.getElementById('uom-filters'); if(fl) fl.innerHTML=[['all','All'],['goods','Goods'],['service','Services'],['both','Both'],['unused','Unused']].map(([k,l])=>`<button type="button" class="pv-f${uomFilter===k?' on':''}" onclick="uomFilter='${k}';renderUomMaster()">${l} ${n(k)}</button>`).join('');
+  const head=document.getElementById('uom-thead'); if(head) head.innerHTML=cmHead([['code','Code','','110px'],['','Unit name','','190px'],['','Decimals','center','90px'],['','Step','right','80px'],['usedFor','Used for','','100px'],['items','Items','right','80px'],['','Status','','90px'],['','','right','']],uomSort,'sortUoms');
+  const key={code:u=>u.code.toLowerCase(),usedFor:u=>uomUsedFor(u)+u.code.toLowerCase(),items:u=>uomItemsOf(u)}[uomSort.k]||(u=>u.code.toLowerCase());
+  const rows=uomMaster.filter(u=>fits(u,uomFilter)&&`${u.code} ${u.name}`.toLowerCase().includes(q)).sort((x,y)=>{ const a=key(x),b=key(y); return (a<b?-1:a>b?1:0)*uomSort.d; });
   const count=document.getElementById('uom-count'); if(count)count.textContent=`${rows.length} unit${rows.length===1?'':'s'}`;
-  body.innerHTML=rows.length?rows.map(u=>`<tr><td><strong>${escapeHtml(u.code)}</strong></td><td>${escapeHtml(u.name)}</td><td class="center"><span class="uom-decimal-badge">${u.decimals}</span></td><td class="right">${Number(u.step).toLocaleString('en-US',{maximumFractionDigits:3})}</td><td>${(f=>`<span class="bcm-type${f==='service'?' svc':f==='both'?' both':''}">${f==='service'?'Services':f==='both'?'Both':'Goods'}</span>`)(uomUsedFor(u))}</td><td class="center"><span class="status-pill ${u.active?'active':'inactive'}">${u.active?'Active':'Inactive'}</span></td><td class="center"><div class="action-btns"><button class="abtn abtn-edit" onclick="openUomForm('${u.id}')" title="Edit"><i class="ti ti-edit"></i></button><button class="abtn abtn-del" onclick="deleteUomMaster('${u.id}')" title="Delete"><i class="ti ti-trash"></i></button></div></td></tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--gray);padding:28px">No units found.</td></tr>';
+  body.innerHTML=rows.length?rows.map(u=>{ const used=uomItemsOf(u), f=uomUsedFor(u); return `<tr><td class="cm-name">${escapeHtml(u.code)}</td><td class="${u.name.toLowerCase()===u.code.toLowerCase()?'cm-dim':''}">${escapeHtml(u.name)}</td><td class="center">${u.decimals}</td><td class="right">${Number(u.step).toLocaleString('en-US',{maximumFractionDigits:3})}</td><td><span class="bcm-type${f==='service'?' svc':f==='both'?' both':''}">${f==='service'?'Services':f==='both'?'Both':'Goods'}</span></td><td class="right${used?'':' cm-zero'}">${used}</td><td><span class="cm-st${u.active?'':' off'}">${u.active?'Active':'Inactive'}</span></td><td class="right">${cmActs(escapeHtml(u.id),used,'openUomForm','deleteUomMaster','openUomMerge')}</td></tr>`; }).join(''):'<tr><td colspan="8" style="text-align:center;color:var(--gray);padding:28px">No units found.</td></tr>';
+}
+function openUomMerge(id){
+  const u=uomMaster.find(x=>x.id===id); if(!u) return;
+  const used=uomItemsOf(u), opts=bcSortBy(uomMaster.filter(o=>o!==u),o=>o.code).map(o=>({value:o.id,label:`${o.code} — ${o.name} (${uomItemsOf(o)} product${uomItemsOf(o)===1?'':'s'})${o.active?'':' — inactive'}`}));
+  cmOpenMerge({title:`Merge unit "${escapeHtml(u.code)}" into another unit`,lead:`<b>${escapeHtml(u.code)}</b> — ${escapeHtml(u.name)} · used by <b>${used} product${used===1?'':'s'}</b>`,options:opts,
+    infoFn:v=>{ const t=uomMaster.find(x=>x.id===v); return t?`${used?`The ${used===1?'product changes its':used+' products change their'} unit to <b>${escapeHtml(t.code)}</b>. `:''}Quotations, orders and invoices already issued keep "${escapeHtml(u.code)}". "${escapeHtml(u.code)}" is removed from the list.`:''; },
+    onMerge:async v=>{ const t=uomMaster.find(x=>x.id===v); if(!t) return false;
+      const list=products.filter(p=>String(p.uom||'').toLowerCase()===u.code.toLowerCase());
+      const stocked=list.filter(p=>{ try{ return bcProductUnitUse(p).stock>0; }catch(_){ return false; } });
+      if(stocked.length){ showValidationDialog('Unit in stock', `${stocked.length} product${stocked.length===1?' has':'s have'} stock in ${u.code} (${stocked.slice(0,4).map(p=>p.name).join(', ')}${stocked.length>4?'…':''}). Changing the unit would make the stock quantities wrong, so these units can't be merged.`,'',''); return false; }
+      if(!(await cmMoveProducts(list,'uom',t.code,u.code))){ showToast('Products not updated — please try again','error'); return false; }
+      if(!t.active) t.active=true; uomMaster=uomMaster.filter(x=>x!==u); persistUomMaster(); renderUomMaster(); refreshProductUomSelect(); renderProducts();
+      showToast(`${u.code} merged into ${t.code}${list.length?' · '+list.length+' product'+(list.length===1?'':'s')+' changed':''}`,'success'); }});
 }
 function openUomForm(id=null){
   editingUomId=id; const u=id?uomMaster.find(x=>x.id===id):null;
