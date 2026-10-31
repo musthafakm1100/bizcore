@@ -70,7 +70,7 @@
     else if (st.fontSize) f.z = sizeKeyCss(st.fontSize);
     if (/^H[1-3]$/.test(t)) f.z = 'h'; else if (/^H[4-6]$/.test(t)) f.z = 'lg';
     // our own classes (stored HTML)
-    (el.classList ? [...el.classList] : []).forEach(c => { let m; if ((m = c.match(/^rt-c-([nrgs])$/))) f.c = m[1]; else if ((m = c.match(/^rt-z-(sm|lg|h)$/))) f.z = m[1]; else if (c === 'rt-hl') f.hl = true; });
+    (el.classList ? [...el.classList] : []).forEach(c => { let m; if ((m = c.match(/^rt-c-([nrgsk])$/))) { f.c = m[1]; f.own = true; } else if ((m = c.match(/^rt-z-(sm|lg|h|n)$/))) f.z = m[1]; else if (c === 'rt-hl') f.hl = true; else if (c === 'rt-nohl') f.nohl = true; });
     return f;
   }
   function clean(html) {
@@ -81,7 +81,7 @@
     const out = [];
     function walk(node, depth) { for (let n = node.firstChild; n; n = n.nextSibling) one(n, depth); }
     function one(n, depth) {
-        if (n.nodeType === 3) { const t = n.nodeValue.replace(/[\r\n]+/g, ' '); if (t) out.push(escT(t)); return; }
+        if (n.nodeType === 3) { const t = n.nodeValue.replace(/[\r\n]+/g, ' ').replace(/\u200B/g, ''); if (t) out.push(escT(t)); return; }
         if (n.nodeType !== 1) return;
         const t = n.tagName.toUpperCase();
         if (DROP.has(t) || /^O:|^W:|^V:/.test(t)) { if (t === 'O:P') walk(n, depth); return; }
@@ -106,10 +106,10 @@
         if (f.b) { open.push('<b>'); close.unshift('</b>'); }
         if (f.i) { open.push('<i>'); close.unshift('</i>'); }
         if (f.u) { open.push('<u>'); close.unshift('</u>'); }
-        const cls = [f.c && f.c !== 'k' ? 'rt-c-' + f.c : '', f.z ? 'rt-z-' + f.z : '', f.hl ? 'rt-hl' : ''].filter(Boolean);
+        const cls = [f.c && (f.c !== 'k' || f.own) ? 'rt-c-' + f.c : '', f.z ? 'rt-z-' + f.z : '', f.hl ? 'rt-hl' : f.nohl ? 'rt-nohl' : ''].filter(Boolean);   // k / n / nohl: our own "back to normal" inside another span
         if (cls.length) { open.push(`<span class="${cls.join(' ')}">`); close.unshift('</span>'); }
         if (t === 'TABLE' || t === 'TBODY' || t === 'THEAD' || t === 'TFOOT') { walk(n, depth); return; }
-        if (BLOCK.has(t)) { out.push('<div>' + open.join('')); walk(n, depth); out.push(close.join('') + '</div>'); }
+        if (BLOCK.has(t)) { const ind = String(n.getAttribute && n.getAttribute('class') || '').match(/rt-ind-([123])/); out.push((ind ? `<div class="rt-ind-${ind[1]}">` : '<div>') + open.join('')); walk(n, depth); out.push(close.join('') + '</div>'); }
         else if (t === 'TD' || t === 'TH') { walk(n, depth); out.push(' '); }
         else { out.push(open.join('')); walk(n, depth); out.push(close.join('')); }
     }
@@ -122,7 +122,7 @@
     return s.length > MAX_HTML ? s.slice(0, MAX_HTML) : s;
   }
   /** true when the (clean) HTML has anything beyond plain text and line breaks */
-  function hasFormat(h) { return /<(b|i|u|ol|ul|span)\b/i.test(String(h || '')); }
+  function hasFormat(h) { return /<(b|i|u|ol|ul|span)\b|rt-ind-/i.test(String(h || '')); }
 
   /* ───────── HTML → plain text with the layout (Delivery Note, Invoice, search, wording memory) ───────── */
   function roman(n) { const m = [[1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'], [50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']]; let s = ''; for (const [v, r] of m) while (n >= v) { s += r; n -= v; } return s; }
@@ -132,12 +132,12 @@
   function toText(html) {
     if (!html) return '';
     let docu; try { docu = new DOMParser().parseFromString('<!doctype html><body>' + String(html), 'text/html'); } catch (_) { return String(html).replace(/<[^>]*>/g, ''); }
-    const lines = []; let cur = '';
+    const lines = []; let cur = '', pad = '';
     const brk = () => { lines.push(cur); cur = ''; };
     const soft = () => { if (cur.trim() !== '') brk(); };
     function walk(node, depth) {
       for (let n = node.firstChild; n; n = n.nextSibling) {
-        if (n.nodeType === 3) { cur += n.nodeValue.replace(/\s+/g, ' '); continue; }
+        if (n.nodeType === 3) { const t = n.nodeValue.replace(/\u200B/g, '').replace(/\s+/g, ' '); if (t && cur === '' && pad) cur = pad; cur += t; continue; }
         if (n.nodeType !== 1) continue;
         const t = n.tagName;
         if (t === 'BR') { brk(); continue; }
@@ -154,7 +154,7 @@
           }
           continue;
         }
-        if (t === 'DIV' || t === 'P' || t === 'LI') { soft(); walk(n, depth); soft(); continue; }
+        if (t === 'DIV' || t === 'P' || t === 'LI') { soft(); const ind = t !== 'LI' && String(n.getAttribute('class') || '').match(/rt-ind-([123])/); const keep = pad; if (ind) pad = '   '.repeat(Number(ind[1])); walk(n, depth); soft(); pad = keep; continue; }
         walk(n, depth);
       }
     }
@@ -180,21 +180,24 @@
     paintEmpty(el);
     return el;
   }
-  function paintEmpty(el) { el.classList.toggle('bc-rt-empty', !el.textContent.trim() && !el.querySelector('li')); }
+  function paintEmpty(el) { el.classList.toggle('bc-rt-empty', !el.textContent.replace(/\u200B/g, '').trim() && !el.querySelector('li')); }
   /** the line's formatting to store ('' when there is none) */
-  function htmlOf(el) { if (!el || !el.isContentEditable) return ''; const h = clean(el.innerHTML); return hasFormat(h) ? h : ''; }
+  function htmlOf(el) { if (!el || !el.isContentEditable) return ''; const c = el.cloneNode(true); flatten(c); const h = clean(c.innerHTML); return hasFormat(h) ? h : ''; }   // V270.4.14.2: tidied (one span per piece of text) before it is stored
 
   let cur = null;   // the editor the Format bar works on
   const bars = new Set();
   const editorOf = n => n && n.closest ? n.closest('.bc-rt[contenteditable="true"]') : null;
   document.addEventListener('focusin', e => { const ed = editorOf(e.target); if (ed) { cur = ed; paintBars(); } else if (!e.target.closest || !e.target.closest('.bc-rtbar, .bc-rtpop')) { cur = null; paintBars(); } }, true);
-  document.addEventListener('focusout', () => setTimeout(paintBars, 0), true);
+  document.addEventListener('focusout', e => { const ed = editorOf(e.target); if (ed && !(e.relatedTarget && ed.contains(e.relatedTarget))) { try { flatten(ed); } catch (_) {} } setTimeout(paintBars, 0); }, true);
   document.addEventListener('selectionchange', () => { if (cur && document.activeElement === cur) paintBars(); });
   document.addEventListener('input', e => { const ed = editorOf(e.target); if (ed) paintEmpty(ed); }, true);
   document.addEventListener('keydown', e => {
     const ed = editorOf(e.target); if (!ed) return;
-    if (e.key === 'Tab' && !e.ctrlKey && !e.altKey) {
-      if (inList()) { e.preventDefault(); e.stopPropagation(); cmd(e.shiftKey ? 'outdent' : 'indent'); }
+    if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      // V270.4.14.2: Tab / Shift+Tab indent inside a list or at the start of a line (or over several lines);
+      // elsewhere Tab moves on to the next field as before
+      if (cur !== ed) cur = ed;
+      if (e.shiftKey ? canOutdent() : canIndent()) { e.preventDefault(); e.stopPropagation(); indent(e.shiftKey ? -1 : 1); }
       return;
     }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && /^[biu]$/i.test(e.key)) { e.preventDefault(); e.stopPropagation(); cmd({ b: 'bold', i: 'italic', u: 'underline' }[e.key.toLowerCase()]); }
@@ -206,9 +209,158 @@
     const h = cd.getData('text/html'), t = cd.getData('text/plain');
     const ins = h ? clean(h) : plainToHtml(t);
     try { document.execCommand('insertHTML', false, ins || ''); } catch (_) {}
+    flatten(ed);
     ed.dispatchEvent(new Event('input', { bubbles: true }));
   }, true);
   document.addEventListener('drop', e => { if (editorOf(e.target)) e.preventDefault(); }, true);   // no pictures / files dropped into a line
+
+  /* ───────── V270.4.14.2: our own engine for colour, size, highlight and indent ─────────
+     The browser's own colour / size commands nest <font> tags and can't undo a colour given by a class (red → black
+     failed), and its indent adds an inline style that our cleaning removes. So: every piece of text gets exactly ONE
+     <span> with its colour / size / highlight (the newest choice wins), bold / italic / underline stay <b> <i> <u>
+     (browser commands), lists use nested <ol>/<ul>, a line's indent is a class on its line (rt-ind-1…3). */
+  const ZW = '​';
+  function sel() { const s = window.getSelection(); return s && s.rangeCount && cur && cur.contains(s.getRangeAt(0).commonAncestorContainer) ? s.getRangeAt(0) : null; }
+  function textNodes(root) { const out = [], w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) out.push(n); return out; }
+  /** the selection as character positions in the editor (survives moving nodes) */
+  function saveSel(ed) {
+    const r = sel(); if (!r) return null;
+    const pos = (node, off) => { let n = 0; for (const t of textNodes(ed)) { if (t === node) return n + off; n += t.length; } // element boundary
+      const pre = document.createRange(); pre.selectNodeContents(ed); try { pre.setEnd(node, off); } catch (_) { return n; } return pre.toString().length; };
+    return { s: pos(r.startContainer, r.startOffset), e: pos(r.endContainer, r.endOffset) };
+  }
+  function restoreSel(ed, p) {
+    if (!p) return;
+    // a position between two text nodes: the start goes to the next node, the end stays in the previous one
+    const at = (x, start) => { let n = 0; const ts = textNodes(ed); for (let i = 0; i < ts.length; i++) { const t = ts[i]; if (x < n + t.length || (x === n + t.length && !(start && ts[i + 1]))) return [t, x - n]; n += t.length; } const l = ts[ts.length - 1]; return l ? [l, l.length] : [ed, ed.childNodes.length]; };
+    const r = document.createRange(); const [sn, so] = at(p.s, true), [en, eo] = p.e === p.s ? [sn, so] : at(p.e, false);
+    try { r.setStart(sn, so); r.setEnd(en, eo); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } catch (_) {}
+  }
+  const GROUP_RE = { c: /^rt-c-(\w+)$/, z: /^rt-z-(\w+)$/ };
+  /** colour / size / highlight of a text node: the nearest span inside the editor decides */
+  function effOf(node, ed) {
+    const v = { c: '', z: '', hl: null };
+    for (let n = node.parentNode; n && n !== ed; n = n.parentNode) {
+      if (n.nodeType !== 1 || n.tagName !== 'SPAN') continue;
+      [...n.classList].forEach(c => { let m; if (!v.c && (m = c.match(GROUP_RE.c))) v.c = m[1]; else if (!v.z && (m = c.match(GROUP_RE.z))) v.z = m[1]; else if (v.hl === null && (c === 'rt-hl' || c === 'rt-nohl')) v.hl = c === 'rt-hl'; });
+    }
+    return v;
+  }
+  const clsOf = v => [v.c && v.c !== 'k' ? 'rt-c-' + v.c : '', v.z && v.z !== 'n' ? 'rt-z-' + v.z : '', v.hl ? 'rt-hl' : ''].filter(Boolean).join(' ');
+  /** one span per piece of text, no nesting; empty / default spans gone; neighbours with the same look merged */
+  function flatten(ed) {
+    const p = document.activeElement === ed ? saveSel(ed) : null;
+    ed.querySelectorAll('font').forEach(f => { const fm = fmtOf(f), sp = document.createElement('span'); sp.className = [fm.c && fm.c !== 'k' ? 'rt-c-' + fm.c : '', fm.z ? 'rt-z-' + fm.z : ''].filter(Boolean).join(' '); while (f.firstChild) sp.appendChild(f.firstChild); f.replaceWith(sp); });
+    ed.querySelectorAll('span[style]').forEach(sp => { const fm = fmtOf(sp); if (fm.hl) sp.classList.add('rt-hl'); if (fm.c && fm.c !== 'k') sp.classList.add('rt-c-' + fm.c); if (fm.z) sp.classList.add('rt-z-' + fm.z); sp.removeAttribute('style'); });
+    ed.querySelectorAll('[style]').forEach(x => x.removeAttribute('style'));
+    const looks = textNodes(ed).map(t => [t, clsOf(effOf(t, ed))]);
+    [...ed.querySelectorAll('span')].forEach(sp => sp.replaceWith(...sp.childNodes));
+    looks.forEach(([t, c]) => { if (!c || !ed.contains(t)) return; const sp = document.createElement('span'); sp.className = c; t.replaceWith(sp); sp.appendChild(t); });
+    ed.querySelectorAll('span').forEach(sp => { let nx = sp.nextSibling; while (nx && nx.nodeType === 1 && nx.tagName === 'SPAN' && nx.className === sp.className) { while (nx.firstChild) sp.appendChild(nx.firstChild); const d = nx; nx = nx.nextSibling; d.remove(); } });
+    ed.normalize();
+    if (p) restoreSel(ed, p);
+  }
+  /** give the selected text a colour / size / highlight (v: 'k' black, 'n' normal size, false = no highlight) */
+  function applyInline(group, v) {
+    if (!cur) return;
+    if (document.activeElement !== cur) cur.focus();
+    const r = sel(); if (!r) return;
+    const look = { c: group === 'c' ? v : '', z: group === 'z' ? v : '', hl: group === 'hl' ? !!v : null };
+    const cls = [look.c ? 'rt-c-' + look.c : '', look.z ? 'rt-z-' + look.z : '', look.hl === null ? '' : look.hl ? 'rt-hl' : 'rt-nohl'].filter(Boolean).join(' ');
+    if (r.collapsed) {   // no words selected: what is typed next gets the look
+      const sp = document.createElement('span'); sp.className = cls; sp.textContent = ZW;
+      r.insertNode(sp); const nr = document.createRange(); nr.setStart(sp.firstChild, 1); nr.collapse(true);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(nr);
+      done(); return;
+    }
+    const p = saveSel(cur);
+    let sc = r.startContainer, so = r.startOffset, ec = r.endContainer, eo = r.endOffset;
+    if (ec.nodeType === 3 && eo > 0 && eo < ec.length) ec.splitText(eo);
+    if (ec.nodeType === 3) eo = eo === 0 ? 0 : ec.length;
+    if (sc.nodeType === 3 && so > 0 && so < sc.length) { const nn = sc.splitText(so); if (ec === sc) { ec = nn; eo = nn.length; } sc = nn; so = 0; }
+    const range = document.createRange();
+    try { range.setStart(sc, so); range.setEnd(ec, eo); } catch (_) { return; }
+    textNodes(cur).filter(t => t.length && range.intersectsNode(t) && !(t === ec && eo === 0) && !(t === sc && so >= t.length))
+      .forEach(t => { const sp = document.createElement('span'); sp.className = cls; t.replaceWith(sp); sp.appendChild(t); });
+    flatten(cur); restoreSel(cur, p); done();
+  }
+  function done() { cur.dispatchEvent(new Event('input', { bubbles: true })); paintBars(); }
+
+  /* indent: list items nest / come out; other lines get rt-ind-1…3 on their line */
+  function liOf(n) { for (; n && n !== cur; n = n.parentNode) if (n.nodeType === 1 && n.tagName === 'LI') return n; return null; }
+  function depth(li) { let d = 0; for (let n = li; n && n !== cur; n = n.parentNode) if (n.nodeType === 1 && (n.tagName === 'OL' || n.tagName === 'UL')) d++; return d; }
+  function selectedLis(r) {
+    if (r.collapsed) { const li = liOf(r.startContainer); return li ? [li] : []; }
+    return [...cur.querySelectorAll('li')].filter(li => r.intersectsNode(li) && hasOwnSel(li, r));
+  }
+  function hasOwnSel(li, r) { return [...li.childNodes].some(c => !(c.nodeType === 1 && (c.tagName === 'OL' || c.tagName === 'UL')) && r.intersectsNode(c)); }
+  /** the line (block) a node is on: its nearest <div>/<p> inside the editor (a loose line is wrapped in a <div> first) */
+  function blockOf(node) { for (let n = node; n && n !== cur; n = n.parentNode) if (n.nodeType === 1 && /^(DIV|P)$/.test(n.tagName)) return n; return null; }
+  function lineOf(node) {
+    if (liOf(node)) return null;
+    const bl = blockOf(node); if (bl) return bl;
+    let n = node; while (n && n.parentNode !== cur) n = n.parentNode; if (!n) return null;
+    const isStop = x => x.nodeType === 1 && /^(DIV|P|OL|UL)$/.test(x.tagName);
+    const isBr = x => x && x.nodeType === 1 && x.tagName === 'BR';
+    if (isBr(n) && n.previousSibling && !isStop(n.previousSibling)) n = n.previousSibling;
+    let a = n; while (a.previousSibling && !isStop(a.previousSibling) && !isBr(a.previousSibling)) a = a.previousSibling;
+    let z = n; while (!isBr(z) && z.nextSibling && !isStop(z.nextSibling)) z = z.nextSibling;
+    const div = document.createElement('div'); cur.insertBefore(div, a);
+    let x = a; while (x) { const nx = x.nextSibling, last = x === z; if (isBr(x) && last) { x.remove(); break; } div.appendChild(x); if (last) break; x = nx; }
+    if (!div.childNodes.length) div.appendChild(document.createElement('br'));
+    return div;
+  }
+  function selectedLines(r) {
+    if (r.collapsed) { const l = lineOf(r.startContainer); return l ? [l] : []; }
+    const leaf = [...cur.querySelectorAll('div, p')].filter(d => r.intersectsNode(d) && !d.querySelector('div, p, ol, ul'));
+    const first = lineOf(r.startContainer); if (first && !leaf.includes(first)) leaf.unshift(first);
+    return leaf;
+  }
+  const indOf = el => { const m = (el.className || '').match(/rt-ind-([123])/); return m ? Number(m[1]) : 0; };
+  const setInd = (el, n) => { el.classList.remove('rt-ind-1', 'rt-ind-2', 'rt-ind-3'); if (n > 0) el.classList.add('rt-ind-' + Math.min(3, n)); if (!el.className) el.removeAttribute('class'); };
+  function atLineStart(r) {
+    if (!r.collapsed) return false;
+    const block = liOf(r.startContainer) || blockOf(r.startContainer);
+    const pre = document.createRange();
+    if (block) pre.setStart(block, 0);
+    else {   // loose line: from the previous <br> / block
+      let n = r.startContainer; while (n && n.parentNode !== cur) n = n.parentNode; if (!n) return false;
+      let a = n; while (a.previousSibling && !(a.previousSibling.nodeType === 1 && /^(BR|DIV|P|OL|UL)$/.test(a.previousSibling.tagName))) a = a.previousSibling;
+      pre.setStartBefore(a);
+    }
+    pre.setEnd(r.startContainer, r.startOffset);
+    // inside a <li>, the text of its sub-list is not "before" the caret's line
+    return pre.toString().replace(new RegExp(ZW, 'g'), '').trim() === '';
+  }
+  function canIndent() { const r = sel(); if (!r) return false; return !!liOf(r.startContainer) || !r.collapsed && /\n/.test(r.toString()) || atLineStart(r); }
+  function canOutdent() { const r = sel(); if (!r) return false; if (liOf(r.startContainer)) return true; return selectedLines(r).some(l => indOf(l) > 0); }
+  function indent(dir) {
+    if (!cur) return;
+    if (document.activeElement !== cur) cur.focus();
+    const r = sel(); if (!r) return;
+    const keep = [r.startContainer, r.startOffset, r.endContainer, r.endOffset];
+    const lis = selectedLis(r);
+    if (lis.length) {
+      if (dir > 0) lis.forEach(li => { const prev = li.previousElementSibling; if (!prev || depth(li) >= 3) return; const list = li.parentNode; let sub = prev.lastElementChild; if (!sub || !/^(OL|UL)$/.test(sub.tagName)) { sub = document.createElement(list.tagName); prev.appendChild(sub); } sub.appendChild(li); const kids = li.querySelector(':scope > ol, :scope > ul'); if (kids) { while (kids.firstChild) sub.appendChild(kids.firstChild); kids.remove(); } });
+      else [...lis].reverse().forEach(li => {
+        const list = li.parentNode, parentLi = list.parentNode && list.parentNode.nodeType === 1 && list.parentNode.tagName === 'LI' ? list.parentNode : null;
+        const after = []; for (let n = li.nextElementSibling; n; n = n.nextElementSibling) after.push(n);
+        if (parentLi) {
+          parentLi.parentNode.insertBefore(li, parentLi.nextSibling);
+          if (after.length) { const sub = document.createElement(list.tagName); if (list.getAttribute('type')) sub.setAttribute('type', list.getAttribute('type')); after.forEach(x => sub.appendChild(x)); li.appendChild(sub); }
+        } else {   // top level: the line leaves the list
+          const div = document.createElement('div'); [...li.childNodes].forEach(c => { if (c.nodeType === 1 && /^(OL|UL)$/.test(c.tagName)) after.unshift(...c.children); else div.appendChild(c); });
+          if (!div.childNodes.length) div.appendChild(document.createElement('br'));
+          list.parentNode.insertBefore(div, list.nextSibling);
+          if (after.length) { const rest = list.cloneNode(false); if (list.tagName === 'OL') rest.setAttribute('start', String((Number(list.getAttribute('start')) || 1) + [...list.children].indexOf(li) + 1)); after.forEach(x => rest.appendChild(x)); div.parentNode.insertBefore(rest, div.nextSibling); }
+          li.remove();
+        }
+        if (!list.children.length) list.remove();
+      });
+    } else selectedLines(r).forEach(l => setInd(l, indOf(l) + dir));
+    try { const nr = document.createRange(); nr.setStart(keep[0], keep[1]); nr.setEnd(keep[2], keep[3]); const s = window.getSelection(); s.removeAllRanges(); s.addRange(nr); } catch (_) {}
+    done();
+  }
 
   function inList() { const s = window.getSelection(); let n = s && s.anchorNode; while (n && n !== cur) { if (n.nodeType === 1 && n.tagName === 'LI') return true; n = n.parentNode; } return false; }
   function curList() { const s = window.getSelection(); let n = s && s.anchorNode; while (n && n !== cur) { if (n.nodeType === 1 && (n.tagName === 'OL' || n.tagName === 'UL')) return n; n = n.parentNode; } return null; }
@@ -217,76 +369,39 @@
     if (document.activeElement !== cur) cur.focus();
     try { document.execCommand('styleWithCSS', false, false); } catch (_) {}
     try { document.execCommand(name, false, val); } catch (_) {}
-    normalize(cur);
-    cur.dispatchEvent(new Event('input', { bubbles: true }));
-    paintBars();
+    done();   // no tidying here: it would lose the browser's "typing in bold" state (tidied on leaving the line)
   }
-  /** after a command: <font> / inline styles the browser made → our classes (keeps the caret) */
-  function normalize(ed) {
-    ed.querySelectorAll('font').forEach(f => {
-      const sp = document.createElement('span'), fm = fmtOf(f), cls = [];
-      if (fm.c && fm.c !== 'k') cls.push('rt-c-' + fm.c);
-      if (fm.z) cls.push('rt-z-' + fm.z);
-      if (cls.length) sp.className = cls.join(' ');
-      while (f.firstChild) sp.appendChild(f.firstChild);
-      f.replaceWith(sp);
-    });
-    ed.querySelectorAll('span[style]').forEach(sp => {
-      const fm = fmtOf(sp);
-      if (fm.hl) sp.classList.add('rt-hl');
-      if (fm.c && fm.c !== 'k') sp.classList.add('rt-c-' + fm.c);
-      if (fm.z) sp.classList.add('rt-z-' + fm.z);
-      sp.removeAttribute('style');
-    });
-    ed.querySelectorAll('[style]').forEach(x => x.removeAttribute('style'));
-    ed.querySelectorAll('span:not([class])').forEach(sp => { if (!sp.attributes.length) sp.replaceWith(...sp.childNodes); });
-  }
-  function setColor(k) {
-    if (!cur) return;
-    cur.focus();
-    const hex = k ? COLORS.find(c => c[0] === k)[1] : '#0f172a';
-    cmd('foreColor', hex);
-    // black = no colour class at all
-    if (!k) cur.querySelectorAll('.rt-c-k').forEach(x => x.classList.remove('rt-c-k'));
-  }
-  function setSize(z) {
-    if (!cur) return;
-    cur.focus();
-    cmd('fontSize', z === 'sm' ? '2' : z === 'lg' ? '4' : z === 'h' ? '5' : '3');
-    if (!z) cur.querySelectorAll('.rt-z-sm, .rt-z-lg, .rt-z-h').forEach(x => { if (selContains(x)) x.classList.remove('rt-z-sm', 'rt-z-lg', 'rt-z-h'); });
-  }
-  function selContains(n) { const s = window.getSelection(); try { return s && s.rangeCount && s.getRangeAt(0).intersectsNode(n); } catch (_) { return false; } }
-  function toggleHighlight() {
-    if (!cur) return;
-    cur.focus();
-    const on = stateOf().hl;
-    if (on) { cur.querySelectorAll('.rt-hl').forEach(x => { if (selContains(x)) x.classList.remove('rt-hl'); }); cur.dispatchEvent(new Event('input', { bubbles: true })); paintBars(); return; }
-    try { document.execCommand('styleWithCSS', false, true); document.execCommand('hiliteColor', false, HL); } catch (_) {}
-    try { document.execCommand('styleWithCSS', false, false); } catch (_) {}
-    normalize(cur); cur.dispatchEvent(new Event('input', { bubbles: true })); paintBars();
-  }
+  function setColor(k) { applyInline('c', k || 'k'); }
+  function setSize(z) { applyInline('z', z || 'n'); }
+  function toggleHighlight() { if (!cur) return; applyInline('hl', !stateOf().hl); }
   function olType(ty) {
     if (!cur) return;
     cur.focus();
     let l = curList();
     if (!l || l.tagName !== 'OL') { cmd('insertOrderedList'); l = curList(); }
     if (l && l.tagName === 'OL') { if (ty === '1' && !l.parentNode.closest('ol,ul')) l.removeAttribute('type'); else l.setAttribute('type', ty); }
-    cur.dispatchEvent(new Event('input', { bubbles: true })); paintBars();
+    done();
   }
   function clearFmt() {
     if (!cur) return;
-    cmd('removeFormat');
-    cur.querySelectorAll('span[class]').forEach(sp => { if (selContains(sp)) sp.replaceWith(...sp.childNodes); });
-    cur.dispatchEvent(new Event('input', { bubbles: true })); paintBars();
+    if (document.activeElement !== cur) cur.focus();
+    const r = sel(); if (!r) return;
+    if (r.collapsed) { applyInline('c', 'k'); return; }
+    try { document.execCommand('styleWithCSS', false, false); document.execCommand('removeFormat'); } catch (_) {}
+    const p = saveSel(cur); restoreSel(cur, p);
+    applyInline('c', 'k'); restoreSel(cur, p); applyInline('z', 'n'); restoreSel(cur, p); applyInline('hl', false);
   }
   function stateOf() {
     const st = { b: false, i: false, u: false, c: '', z: '', hl: false, ul: false, ol: false };
     if (!cur) return st;
     try { st.b = document.queryCommandState('bold'); st.i = document.queryCommandState('italic'); st.u = document.queryCommandState('underline'); } catch (_) {}
-    const s = window.getSelection(); let n = s && s.anchorNode;
-    while (n && n !== cur) { if (n.nodeType === 1) { const cl = n.classList; if (cl) { [...cl].forEach(c => { let m; if (!st.c && (m = c.match(/^rt-c-(\w)$/))) st.c = m[1]; if (!st.z && (m = c.match(/^rt-z-(\w+)$/))) st.z = m[1]; if (c === 'rt-hl') st.hl = true; }); } if (n.tagName === 'UL' && !st.ol) st.ul = true; if (n.tagName === 'OL' && !st.ul) st.ol = true; } n = n.parentNode; }
+    const s = window.getSelection(); let a = s && s.anchorNode; if (!a || !cur.contains(a)) return st;
+    const t = a.nodeType === 3 ? a : (a.childNodes[Math.max(0, (s.anchorOffset || 0) - 1)] || a);
+    const v = effOf(t.nodeType === 3 ? t : (textNodes(t)[0] || t), cur); st.c = v.c === 'k' ? '' : v.c; st.z = v.z === 'n' ? '' : v.z; st.hl = !!v.hl;
+    for (let n = a; n && n !== cur; n = n.parentNode) { if (n.nodeType === 1 && n.tagName === 'UL' && !st.ol) st.ul = true; if (n.nodeType === 1 && n.tagName === 'OL' && !st.ul) st.ol = true; }
     return st;
   }
+
 
   /* ───────── the Format bar (one per screen; buttons keep the caret in the line) ───────── */
   const svgA = c => `<span class="rtb-a" style="--rtc:${c}">A</span>`;
@@ -318,7 +433,8 @@
     bar.addEventListener('click', e => {
       const b = e.target.closest('.rtb'); if (!b || !cur) return;
       const a = b.dataset.rt;
-      if (a === 'bold' || a === 'italic' || a === 'underline' || a === 'indent' || a === 'outdent') cmd(a);
+      if (a === 'bold' || a === 'italic' || a === 'underline') cmd(a);
+      else if (a === 'indent' || a === 'outdent') indent(a === 'indent' ? 1 : -1);
       else if (a === 'ul') cmd('insertUnorderedList');
       else if (a === 'hl') toggleHighlight();
       else if (a === 'clear') clearFmt();
@@ -344,8 +460,8 @@
   /** Print windows: the classes the formatting uses (the quotation prints force black / normal weight on the lines). */
   const PRINT_CSS = '.bc-rtx{line-height:1.45}.bc-rtx div{min-height:1em}.bc-rtx ol,.bc-rtx ul{margin:2px 0 2px 0!important;padding-left:20px!important}.bc-rtx li{margin:1px 0}.bc-rtx ol ol{list-style-type:lower-alpha}.bc-rtx ol ol ol{list-style-type:lower-roman}.bc-rtx ul ul{list-style-type:circle}.bc-rtx ul ul ul{list-style-type:square}'
     + '.bc-rtx b,.bc-rtx strong,td .bc-rtx b{font-weight:700!important}.bc-rtx i{font-style:italic}.bc-rtx u{text-decoration:underline}'
-    + '.bc-rtx .rt-c-n,td .bc-rtx .rt-c-n,td .bc-rtx .rt-c-n *{color:#1F4E79!important}.bc-rtx .rt-c-r,td .bc-rtx .rt-c-r,td .bc-rtx .rt-c-r *{color:#b91c1c!important}.bc-rtx .rt-c-g,td .bc-rtx .rt-c-g,td .bc-rtx .rt-c-g *{color:#15803d!important}.bc-rtx .rt-c-s,td .bc-rtx .rt-c-s,td .bc-rtx .rt-c-s *{color:#64748b!important}'
-    + '.bc-rtx .rt-z-sm{font-size:.85em}.bc-rtx .rt-z-lg{font-size:1.18em}.bc-rtx .rt-z-h{font-size:1.38em}.bc-rtx .rt-hl{background:#fef08a!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.bc-rtp{white-space:pre-line}';
+    + '.bc-rtx .rt-c-k,td .bc-rtx .rt-c-k,td .bc-rtx .rt-c-k *{color:#0f172a!important}.bc-rtx .rt-c-n,td .bc-rtx .rt-c-n,td .bc-rtx .rt-c-n *{color:#1F4E79!important}.bc-rtx .rt-c-r,td .bc-rtx .rt-c-r,td .bc-rtx .rt-c-r *{color:#b91c1c!important}.bc-rtx .rt-c-g,td .bc-rtx .rt-c-g,td .bc-rtx .rt-c-g *{color:#15803d!important}.bc-rtx .rt-c-s,td .bc-rtx .rt-c-s,td .bc-rtx .rt-c-s *{color:#64748b!important}'
+    + '.bc-rtx .rt-ind-1{margin-left:2em}.bc-rtx .rt-ind-2{margin-left:4em}.bc-rtx .rt-ind-3{margin-left:6em}.bc-rtx .rt-z-sm{font-size:.85em}.bc-rtx .rt-z-lg{font-size:1.18em}.bc-rtx .rt-z-h{font-size:1.38em}.bc-rtx .rt-hl{background:#fef08a!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.bc-rtp{white-space:pre-line}';
 
   // the quotation screen's Format bar (index.html #qt-rtbar)
   const wireMain = () => { const b = document.getElementById('qt-rtbar'); if (b && !b.classList.contains('bc-rtbar')) wireBar(b); };

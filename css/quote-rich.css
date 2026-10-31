@@ -9,7 +9,7 @@
 .bc-rt ul ul,.bc-rtx ul ul{list-style-type:circle}.bc-rt ul ul ul,.bc-rtx ul ul ul{list-style-type:square}
 .bc-rt li,.bc-rtx li{margin:1px 0}
 .bc-rt b,.bc-rt strong,.bc-rtx b,.bc-rtx strong{font-weight:700}
-.rt-c-n{color:#1F4E79!important}.rt-c-r{color:#b91c1c!important}.rt-c-g{color:#15803d!important}.rt-c-s{color:#64748b!important}
+.rt-c-k{color:#0f172a!important}.rt-c-n{color:#1F4E79!important}.rt-c-r{color:#b91c1c!important}.rt-c-g{color:#15803d!important}.rt-c-s{color:#64748b!important}
 .rt-z-sm{font-size:.85em}.rt-z-lg{font-size:1.18em}.rt-z-h{font-size:1.38em}
 .rt-hl{background:#fef08a}
 .bc-rtp{white-space:pre-line}
@@ -96,3 +96,8 @@
 /* V270.4.14.1: service units are often longer (Lumpsum, Month, Visit) — a wider unit box on Service quotations */
 #quote-modal .qt-table.qt-svc th.qt-th-qty{width:136px!important}
 #quote-modal .qt-table.qt-svc .qt-qu{grid-template-columns:minmax(0,1fr) 70px}
+/* V270.4.14.2: indented lines (Tab / ⇥ outside a list) */
+.bc-rt .rt-ind-1,.bc-rtx .rt-ind-1{margin-left:2em}.bc-rt .rt-ind-2,.bc-rtx .rt-ind-2{margin-left:4em}.bc-rt .rt-ind-3,.bc-rtx .rt-ind-3{margin-left:6em}
+/* V270.4.14.2: while typing, a size / highlight chosen inside another one shows right at once (the line is tidied to one span per piece of text on leaving it) */
+.bc-rt .rt-z-sm .rt-z-n{font-size:1.1765em}.bc-rt .rt-z-sm .rt-z-lg{font-size:1.3882em}.bc-rt .rt-z-sm .rt-z-h{font-size:1.6235em}.bc-rt .rt-z-lg .rt-z-sm{font-size:0.7203em}.bc-rt .rt-z-lg .rt-z-n{font-size:0.8475em}.bc-rt .rt-z-lg .rt-z-h{font-size:1.1695em}.bc-rt .rt-z-h .rt-z-sm{font-size:0.6159em}.bc-rt .rt-z-h .rt-z-n{font-size:0.7246em}.bc-rt .rt-z-h .rt-z-lg{font-size:0.8551em}
+.bc-rt .rt-hl .rt-nohl{background:#fff}
