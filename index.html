@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="css/mobile-zoom.css?v=270.49"/>
 <script src="js/doc-zoom.js?v=270.48"></script>
 <script src="js/doc-pages.js?v=270.51"></script>
-<script src="js/master-ui.js?v=270.53"></script>
+<script src="js/master-ui.js?v=270.54"></script>
 <title>BizCore — Downtown Trading Est.</title>
 <meta content="#ffffff" name="theme-color"/>
 <link rel="manifest" href="manifest.json"/>
@@ -18,7 +18,7 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=270.53" rel="stylesheet"/>
+<link href="css/main.css?v=270.54" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=266.5" rel="stylesheet"/>
 <link href="css/typography.css?v=215" rel="stylesheet"/>
 <link href="css/masters.css?v=266.5" rel="stylesheet"/>
@@ -3094,6 +3094,34 @@ async function fbRestoreRecord(col, id) {
   const st = _win[col]; if (st && st.extra.has(String(id))) { const d = { ...st.extra.get(String(id)) }; delete d._deletedAt; delete d._deletedBy; st.extra.set(String(id), d); }
   return true;
 }
+/** V270.4.9.1: Recycle Bin — many records restored / permanently deleted in a few saves (400 per save).
+ *  → { done: [ids], ok }; onProgress(done, total) after each save. */
+async function _fbBinMany(col, ids, purge, onProgress) {
+  const done = [];
+  for (let i = 0; i < ids.length; i += 400) {
+    const part = ids.slice(i, i + 400), b = writeBatch(db);
+    part.forEach(id => purge ? b.delete(doc(db, col, _safeDocId(id))) : b.set(doc(db, col, _safeDocId(id)), { _deletedAt: deleteField(), _deletedBy: deleteField() }, { merge: true }));
+    try { await b.commit(); }
+    catch (e) {
+      window.BizCoreStorageDiagnostics.lastSaveError = { collection: col, code: e?.code || 'unknown', message: String(e?.message || e), timestamp: new Date().toISOString() };
+      console.warn('[BizCore] Recycle Bin ' + (purge ? 'purge' : 'restore') + ' failed:', col, e.code || '', e.message); return { done, ok: false };
+    }
+    const c = _lastSynced[col], st = _win[col];
+    part.forEach(id => {
+      const k = _safeDocId(id);
+      if (purge) { if (c) delete c[k]; }
+      else {
+        if (c && c[k]) { const o = JSON.parse(c[k]); delete o._deletedAt; delete o._deletedBy; c[k] = JSON.stringify(o); }
+        if (st && st.extra.has(String(id))) { const d = { ...st.extra.get(String(id)) }; delete d._deletedAt; delete d._deletedBy; st.extra.set(String(id), d); }
+      }
+      done.push(id);
+    });
+    if (onProgress) try { onProgress(done.length, ids.length); } catch (_) {}
+  }
+  return { done, ok: true };
+}
+const fbPurgeMany = (col, ids, onProgress) => _fbBinMany(col, ids, true, onProgress);
+const fbRestoreMany = (col, ids, onProgress) => _fbBinMany(col, ids, false, onProgress);
 async function fbPurgeRecord(col, id) {
   await deleteDoc(doc(db, col, _safeDocId(id)));
   const c = _lastSynced[col]; if (c) delete c[_safeDocId(id)];
@@ -4340,7 +4368,7 @@ window.BizCoreRct = {
   },
 };
 /* Expose to app.js */
-window.FB = { fbSave, fbLoad, fbSaveRecordWith, fbMergeFields, fbCount, fbLargest, fbMarkDeleted, fbSoftDelete, fbSoftDeleteMany, fbDeletedRecords, fbRestoreRecord, fbPurgeRecord, fbSyncedJSON, fbReadDoc, fbReadAll, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
+window.FB = { fbSave, fbLoad, fbSaveRecordWith, fbMergeFields, fbCount, fbLargest, fbMarkDeleted, fbSoftDelete, fbSoftDeleteMany, fbPurgeMany, fbRestoreMany, fbDeletedRecords, fbRestoreRecord, fbPurgeRecord, fbSyncedJSON, fbReadDoc, fbReadAll, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
   getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, finalizeProvisionalNumber, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
 
   /* ═══════════════════════════════════════════════════
@@ -4476,7 +4504,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.53';
+      s.src = 'js/app.js?v=270.54';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)

@@ -95,7 +95,7 @@
     if (cfg.vatId) {
       const o = C.findVatOwner(cfg.list(), next.vat, next.id);
       if (o) {
-        if (typeof showValidationDialog === 'function') showValidationDialog('VAT No. already used', `VAT No. ${esc(next.vat)} already belongs to ${esc(o[cfg.nameField])}${o.code ? ' (' + esc(o.code) + ')' : ''}. A VAT number can belong to one ${cfg.label} only.`, cfg.vatId, 'Already used');
+        if (typeof showValidationDialog === 'function') showValidationDialog('VAT No. already used', `VAT No. ${next.vat} already belongs to ${o[cfg.nameField]}${o.code ? ' (' + o.code + ')' : ''}. A VAT number can belong to one ${cfg.label} only.`, cfg.vatId, 'Already used');
         paintVat(cfg); return { ok: false, log: [] };
       }
     }
@@ -139,7 +139,7 @@
     const cfg = forms[col];
     if (!e || (e.collection && e.collection !== col)) return false;
     if (e.code === 'duplicate-vat' || e.code === 'offline-vat') {
-      if (typeof showValidationDialog === 'function') showValidationDialog(e.code === 'duplicate-vat' ? 'VAT No. already used' : 'Connection needed', esc(e.message), cfg && cfg.vatId, e.code === 'duplicate-vat' ? 'Already used' : 'Needs a connection');
+      if (typeof showValidationDialog === 'function') showValidationDialog(e.code === 'duplicate-vat' ? 'VAT No. already used' : 'Connection needed', e.message, cfg && cfg.vatId, e.code === 'duplicate-vat' ? 'Already used' : 'Needs a connection');
       return true;
     }
     if (typeof showToast === 'function') showToast('Not saved: ' + (e.message || e.code || 'please try again'), 'error');

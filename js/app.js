@@ -6592,10 +6592,12 @@ const RECYCLE_BIN_TYPES = {
   }
 };
 let recycleBinFilter = 'all';
+const binSelected = new Set();   // V270.4.9.1: keys "collection|id"
+const binKey = item => item.originalCollection + '|' + item.id;
 
 async function openRecycleBin() {
   recycleBinFilter = 'all';
-  recycleBin = [];
+  recycleBin = []; binSelected.clear();
   const list = document.getElementById('recycle-bin-list'); if (list) list.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--gray)">Loading…</div>';
   openModalWithSize('recycle-bin-modal');
   await loadRecycleBin();   // V269.5: read from Firebase when opened
@@ -6604,7 +6606,7 @@ async function openRecycleBin() {
 function bcIsAdmin() { return !!((window.BizCorePI && window.BizCorePI.isAdministrator) || (window.currentUser && window.currentUser.isAdmin)); }
 
 function switchRecycleBinFilter(type) {
-  recycleBinFilter = type;
+  recycleBinFilter = type; binSelected.clear();
   renderRecycleBin();
 }
 
@@ -6628,6 +6630,19 @@ function renderRecycleBin() {
     .filter(x => recycleBinFilter === 'all' || x.originalCollection === recycleBinFilter)
     .sort((a,b) => new Date(b.deletedAt) - new Date(a.deletedAt));
 
+  // V270.4.9.1: tick boxes, Select all (this tab), Restore selected / Purge selected (administrators)
+  [...binSelected].forEach(k => { if (!items.some(x => binKey(x) === k)) binSelected.delete(k); });
+  let bar = document.getElementById('recycle-bin-bulk');
+  if (!bar) { bar = document.createElement('div'); bar.id = 'recycle-bin-bulk'; bar.className = 'rb-bulk'; list.parentElement.insertBefore(bar, list); }
+  const nSel = binSelected.size, allOn = items.length && nSel === items.length;
+  bar.hidden = !items.length;
+  bar.innerHTML = '<label class="rb-all"><input type="checkbox" id="rb-select-all"' + (allOn ? ' checked' : '') + ' aria-label="Select all in this list"> Select all (' + items.length + ')</label>'
+    + '<span class="rb-n">' + (nSel ? nSel + ' selected' : '') + '</span><span style="flex:1"></span>'
+    + '<button type="button" class="btn btn-sm btn-secondary" id="rb-restore-sel"' + (nSel ? '' : ' disabled') + ' onclick="restoreSelectedFromBin()"><i class="ti ti-restore"></i> Restore selected</button>'
+    + (bcIsAdmin() ? '<button type="button" class="btn btn-sm rb-purge-btn" id="rb-purge-sel"' + (nSel ? '' : ' disabled') + ' onclick="purgeSelectedFromBin()"><i class="ti ti-trash-x"></i> Purge selected</button>' : '');
+  const sa = bar.querySelector('#rb-select-all');
+  if (sa) { sa.indeterminate = nSel > 0 && !allOn; sa.onchange = () => { binSelected.clear(); if (sa.checked) items.forEach(x => binSelected.add(binKey(x))); renderRecycleBin(); }; }
+
   if (!items.length) {
     list.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--gray)">'
       + '<i class="ti ti-trash" style="font-size:36px;opacity:.3;display:block;margin-bottom:10px"></i>'
@@ -6644,6 +6659,7 @@ function renderRecycleBin() {
     const icon = cfg ? cfg.icon : 'ti-file';
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #EEF1F4">'
       + '<div style="display:flex;align-items:center;gap:10px">'
+      + '<input type="checkbox" class="rb-check" data-key="' + esc(binKey(item)) + '"' + (binSelected.has(binKey(item)) ? ' checked' : '') + ' aria-label="Select ' + esc(title) + '">'
       + '<i class="ti ' + icon + '" style="color:var(--gray);font-size:18px"></i>'
       + '<div>'
       + '<div style="font-weight:700;font-size:13px;color:var(--blue)">' + esc(title) + ' <span style="font-weight:400;color:var(--gray);font-size:10px">· ' + esc(typeLabel) + '</span></div>'
@@ -6654,7 +6670,68 @@ function renderRecycleBin() {
       + (bcIsAdmin() ? '<button class="btn btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA" onclick="purgeFromBin(\'' + item.id + '\')"><i class="ti ti-trash-x"></i> Purge</button>' : '')
       + '</div></div>';
   }).join('');
+  list.querySelectorAll('.rb-check').forEach(cb => cb.onchange = () => { cb.checked ? binSelected.add(cb.dataset.key) : binSelected.delete(cb.dataset.key); renderRecycleBin(); });
 }
+
+/** V270.4.9.1: a restored customer / supplier must not bring back a VAT No. or a name that an active record now has. */
+function binRestoreConflict(item, activeList) {
+  const C = window.BizCoreMasters && BizCoreMasters.core; if (!C) return '';
+  const t = C.MASTER_TYPES[item.originalCollection]; if (!t) return '';
+  if (t.vat) { const o = C.findVatOwner(activeList, item.vat, item.id); if (o) return 'VAT No. ' + item.vat + ' is now used by ' + (o[t.nameField] || ''); }
+  const same = C.findSimilar(activeList, item[t.nameField], { nameField: t.nameField, id: item.id, products: item.originalCollection === 'products' }).find(h => h.kind === 'same');
+  return same ? 'same name as the active ' + (same.record[t.nameField] || '') + (same.record.code ? ' (' + same.record.code + ')' : '') : '';
+}
+async function binBulk(purge) {
+  if (purge && !bcIsAdmin()) { showToast('Only administrators can permanently delete.', 'error'); return; }
+  const chosen = recycleBin.filter(x => binSelected.has(binKey(x))); if (!chosen.length) return;
+  const n = chosen.length, what = n + ' record' + (n === 1 ? '' : 's');
+  // restore: records whose VAT No. / name is now used by an active record stay in the bin
+  const skipped = [];
+  let todo = chosen;
+  if (!purge) {
+    todo = [];
+    const seen = {};
+    for (const x of chosen) {
+      const cfg = RECYCLE_BIN_TYPES[x.originalCollection]; if (!cfg) { skipped.push({ x, why: 'cannot be restored automatically' }); continue; }
+      const active = (seen[x.originalCollection] = seen[x.originalCollection] || [...cfg.restoreArray()]);
+      const why = binRestoreConflict(x, active);
+      if (why) { skipped.push({ x, why }); continue; }
+      active.push(x); todo.push(x);
+    }
+    if (!todo.length) { showValidationDialog('Not restored', skipped.slice(0, 8).map(s => '• ' + (RECYCLE_BIN_TYPES[s.x.originalCollection]?.titleOf(s.x) || s.x.id) + ' — ' + s.why).join('\n') + (skipped.length > 8 ? '\n… ' + (skipped.length - 8) + ' more' : ''), '', ''); return; }
+  }
+  const ok1 = await showConfirmAsync(purge
+    ? { icon: '⚠️', title: 'Permanently delete ' + what + '?', message: 'This cannot be undone. The records are removed for good and cannot be recovered.', confirmText: 'Continue' }
+    : { icon: '♻️', title: 'Restore ' + todo.length + ' record' + (todo.length === 1 ? '' : 's') + '?', message: 'They go back to their active lists.' + (skipped.length ? ' ' + skipped.length + ' stay in the Recycle Bin (their VAT No. or name is now used by an active record).' : ''), confirmText: 'Restore' });
+  if (!ok1) return;
+  if (purge && !(await showConfirmAsync({ icon: '⚠️', title: 'Final confirmation', message: 'Permanently delete ' + what + ' now? This cannot be undone.', confirmText: 'Permanently Delete' }))) return;
+  const groups = {}; todo.forEach(x => (groups[x.originalCollection] = groups[x.originalCollection] || []).push(x));
+  let done = 0, failed = false;
+  await bcProgress.open((purge ? 'Permanently deleting ' : 'Restoring ') + todo.length + ' record' + (todo.length === 1 ? '' : 's') + '…', 'Please keep BizCore open until it finishes.');
+  try {
+    for (const [col, recs] of Object.entries(groups)) {
+      const ids = recs.map(r => r.id), base = done;
+      let res;
+      if (window.FB && (purge ? window.FB.fbPurgeMany : window.FB.fbRestoreMany)) res = await (purge ? window.FB.fbPurgeMany : window.FB.fbRestoreMany)(col, ids, d => bcProgress.set(base + d, todo.length, (base + d) + ' of ' + todo.length));
+      else res = { done: ids, ok: true };
+      const doneSet = new Set(res.done);
+      recs.filter(r => doneSet.has(r.id)).forEach(r => {
+        if (!purge) { const cfg = RECYCLE_BIN_TYPES[col], back = { ...r }; delete back.deletedAt; delete back.deletedBy; delete back.originalCollection; delete back._deletedAt; delete back._deletedBy;
+          const arr = cfg.restoreArray(); if (!arr.some(y => y.id === back.id)) arr.push(back); }
+        binSelected.delete(binKey(r));
+      });
+      recycleBin = recycleBin.filter(r => !(r.originalCollection === col && doneSet.has(r.id)));
+      done += res.done.length;
+      if (!res.ok) { failed = true; break; }
+    }
+  } finally { bcProgress.close(); }
+  if (!purge) { if (!window.FB) for (const col of Object.keys(groups)) { try { await RECYCLE_BIN_TYPES[col].restoreSave(); } catch (_) {} } renderAll(); renderSuppliers(); }
+  renderRecycleBin();
+  if (failed) showValidationDialog(purge ? 'Not all deleted' : 'Not all restored', done + ' of ' + todo.length + ' done. ' + (navigator.onLine === false ? 'You are offline. ' : 'The database did not confirm the change. ') + 'The rest are still selected — please try again.', '', '');
+  else showToast(done + ' record' + (done === 1 ? '' : 's') + (purge ? ' permanently deleted' : ' restored') + (skipped.length ? ' · ' + skipped.length + ' left in the bin' : ''), skipped.length ? 'warning' : 'success');
+}
+function restoreSelectedFromBin() { return binBulk(false); }
+function purgeSelectedFromBin() { return binBulk(true); }
 
 async function restoreFromBin(id) {
   const idx = recycleBin.findIndex(x => x.id === id);
@@ -6663,6 +6740,8 @@ async function restoreFromBin(id) {
   const cfg = RECYCLE_BIN_TYPES[item.originalCollection];
   if (!cfg) { showToast('This item type can no longer be restored automatically.', 'error'); return; }
 
+  const conflict = binRestoreConflict(item, cfg.restoreArray());   // V270.4.9.1
+  if (conflict) { showValidationDialog('Not restored', cfg.titleOf(item) + ' stays in the Recycle Bin: ' + conflict + '.', '', ''); return; }
   const confirmed = await showConfirmAsync({
     icon: '♻️',
     title: 'Restore ' + cfg.titleOf(item) + '?',

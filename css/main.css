@@ -9334,3 +9334,9 @@ input.bcm-invalid{border-color:#dc2626!important;box-shadow:0 0 0 3px rgba(220,3
 .bc-progress-overlay{position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.35);display:flex;align-items:center;justify-content:center;padding:16px}
 .bc-progress-card{background:var(--card-bg,#fff);color:var(--text,#1f2937);border-radius:10px;padding:16px 18px;width:min(380px,100%);box-shadow:0 10px 30px rgba(0,0,0,.2)}
 .bcp-t{font-weight:700;font-size:14px}.bcp-n{font-size:12px;margin-top:6px}.bcp-s{font-size:11px;color:var(--text-muted,#6b7785);margin-top:2px}
+/* V270.4.9.1 Recycle Bin bulk bar */
+.rb-bulk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 20px 0;font-size:12px}
+.rb-all{display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600}
+.rb-n{color:var(--text-muted,#6b7785)}
+.rb-purge-btn{background:#FEF2F2;color:#DC2626;border:1px solid #FECACA}
+.rb-check{width:16px;height:16px;flex:none;cursor:pointer}
