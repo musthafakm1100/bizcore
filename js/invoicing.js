@@ -249,8 +249,8 @@ async function openIssueInvoice(soId, opts = {}){
     _allowed: { delivery: { ok: true, why: '' }, order: permState(settings.allowOrderInvoices, (typeof window.bcRight === 'function' ? window.bcRight('orderInvoices') : !!window.BizCoreInv.isAdministrator)), advance: permState(settings.allowAdvanceInvoices, (typeof window.bcRight === 'function' ? window.bcRight('advanceInvoices') : !!window.BizCoreInv.isAdministrator)) } });   // V270.4.3 Special Rights
   document.getElementById('ii-title').textContent = 'Create Invoice — ' + so.soNo;
   document.getElementById('ii-subtitle').textContent = [so.customer, so.poNo ? 'Customer PO ' + so.poNo : ''].filter(Boolean).join(' · ');
-  const today = new Date().toISOString().split('T')[0], due = new Date(); due.setDate(due.getDate() + 14);
-  document.getElementById('ii-date').value = today; document.getElementById('ii-due').value = due.toISOString().split('T')[0];
+  const today = (typeof bcLocalISO === 'function' ? bcLocalISO() : new Date().toISOString().split('T')[0]), due = new Date(); due.setDate(due.getDate() + 14);
+  document.getElementById('ii-date').value = today; document.getElementById('ii-due').value = (typeof bcLocalISO === 'function' ? bcLocalISO(due) : due.toISOString().split('T')[0]);
   ['ii-zoho', 'ii-notes', 'ii-reason'].forEach(id => { document.getElementById(id).value = ''; });
   document.querySelector('input[name="ii-adv-method"][value="percentOrder"]').checked = true; document.getElementById('ii-adv-pct').value = '50';
   m._fromDn = null; m._reissueOf = null;
@@ -638,7 +638,7 @@ async function openIssueCreditNote(soId, invoiceId){
   Object.assign(m, { _soId: soId, _invoiceId: invoiceId, _invoice: inv, _ledger: ledger, _opId: newDeliveryOperationId('credit', soId), _reissue: null });
   document.getElementById('cn-title').textContent = 'Credit Note — ' + inv.invNo;
   document.getElementById('cn-subtitle').textContent = `${invTypeLabel(inv.type)} · ${inv.customer || ''} · ${inv.soNo || ''}`;
-  document.getElementById('cn-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('cn-date').value = (typeof bcLocalISO === 'function' ? bcLocalISO() : new Date().toISOString().split('T')[0]);
   document.getElementById('cn-reason').value = '';
   const credited = (inv.creditNotes || []).reduce((s, c) => s + invNum(c.total), 0);
   const f = (k, v) => `<div><span>${k}</span><strong>${v}</strong></div>`;
@@ -923,7 +923,7 @@ function invoiceDocumentHtml(doc, kind, screenMode){
   } else {
     const credited = (!cn && doc.credited && doc.credited.lines) || {};
     head = '<th>#</th><th>Item Code</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Unit Price</th><th class="num">VAT %</th><th class="num">Amount (SAR)</th>';
-    rows = (doc.lines || []).map((l, i) => `<tr><td class="c">${i + 1}</td><td>${invEsc(l.code || '—')}</td><td class="desc">${invEsc(l.desc || '—')}${credited[l.lineId] ? `<small>${formatQuantity(credited[l.lineId])} credited</small>` : ''}</td><td class="num">${formatQuantity(l.qty)}</td><td>${invEsc(l.uom || '—')}</td><td class="num">${n2(l.up)}</td><td class="num">${Math.round(invNum(l.vatRate) * 100)}%</td><td class="num">${n2(l.subtotal)}</td></tr>`).join('');
+    rows = (doc.lines || []).map((l, i) => `<tr><td class="c">${i + 1}</td><td>${invEsc((typeof docPrintItemCode === 'function' ? docPrintItemCode(l.code) : l.code) || '—')}</td><td class="desc">${invEsc(l.desc || '—')}${credited[l.lineId] ? `<small>${formatQuantity(credited[l.lineId])} credited</small>` : ''}</td><td class="num">${formatQuantity(l.qty)}</td><td>${invEsc(l.uom || '—')}</td><td class="num">${n2(l.up)}</td><td class="num">${Math.round(invNum(l.vatRate) * 100)}%</td><td class="num">${n2(l.subtotal)}</td></tr>`).join('');
   }
   // Totals
   const tr = (k, v, cls = '') => `<div${cls ? ` class="${cls}"` : ''}><span>${k}</span><strong>${v}</strong></div>`;

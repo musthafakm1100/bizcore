@@ -527,6 +527,7 @@ async function loadData() {
       console.log('Data loaded from Firebase ✅');
       window.__bcDataReady = true; if (typeof bcDeliveriesRefresh === 'function') bcDeliveriesRefresh(); // V265.6: Deliveries leaves its loading state
       setTimeout(() => { if (typeof finalizeProvisionalNumbers === 'function') finalizeProvisionalNumbers(); }, 4000);
+      setTimeout(() => { if (typeof bcAssignMasterCodes === 'function') bcAssignMasterCodes(); }, 6000);   // V270.4.9
 
       // ── Real-time listeners: auto-update when another device saves ──
       // Uses smart refresh — updates data in background, only re-renders
@@ -864,11 +865,13 @@ async function saveQuotations() {
 }
 async function saveCustomers() {
   try { localStorage.setItem('dtq_customers', JSON.stringify(customers)); } catch(e) {}
-  if (window.FB) await window.FB.fbSave('customers', customers);
+  if (window.FB) return await window.FB.fbSave('customers', customers);   // V270.4.9: false = not saved (reason: BCMasterUI.explainFailure)
+  return true;
 }
 async function saveEmployees() {
   try { localStorage.setItem('dtq_employees', JSON.stringify(employees)); } catch(e) {}
-  if (window.FB) await window.FB.fbSave('employees', employees);
+  if (window.FB) return await window.FB.fbSave('employees', employees);
+  return true;
 }
 async function saveSettings() {
   try { localStorage.setItem('dtq_settings', JSON.stringify(settings)); } catch(e) {}
@@ -881,10 +884,14 @@ async function saveProducts() {
   try { localStorage.setItem('dtq_suppliers', JSON.stringify(suppliers)); } catch(e) {}
   try { void 0 /* V269.4: no browser copy of rfqs */; } catch(e) {}
   if (window.FB) {
-    await window.FB.fbSave('products', products);
+    const ok = await window.FB.fbSave('products', products);
+    const err = window.BizCoreStorageDiagnostics && window.BizCoreStorageDiagnostics.lastSaveError;   // V270.4.9: keep the products' reason
     await window.FB.fbSave('deliveryTerms', deliveryTerms);
     await window.FB.fbSave('paymentTerms', paymentTerms);
+    if (ok === false && window.BizCoreStorageDiagnostics) window.BizCoreStorageDiagnostics.lastSaveError = err;
+    return ok;
   }
+  return true;
 }
 async function saveTerms() {
   try { localStorage.setItem('dtq_delivery_terms', JSON.stringify(deliveryTerms)); } catch(e) {}
@@ -1373,7 +1380,7 @@ function readTaxMaster(){
 }
 function normalizeTaxRecord(t){return {id:t.id||taxMasterId(),code:String(t.code||'VAT').trim().toUpperCase(),name:String(t.name||'VAT').trim(),rate:Math.max(0,Math.min(100,Number(t.rate)||0)),effectiveFrom:t.effectiveFrom||'',effectiveTo:t.effectiveTo||'',active:t.active!==false,isDefault:t.isDefault===true||t.default===true,remarks:t.remarks||''}}
 function writeTaxMaster(rows){localStorage.setItem('bizcoreTaxMaster',JSON.stringify(rows.map(normalizeTaxRecord)));if(typeof bcSharedSave==='function')bcSharedSave('bizcoreTaxMaster');}   // V268.5: shared (Firebase)
-function taxIsEffective(t,dateValue){const d=dateValue||new Date().toISOString().slice(0,10);return (!t.effectiveFrom||t.effectiveFrom<=d)&&(!t.effectiveTo||t.effectiveTo>=d)}
+function taxIsEffective(t,dateValue){const d=dateValue||bcLocalISO();return (!t.effectiveFrom||t.effectiveFrom<=d)&&(!t.effectiveTo||t.effectiveTo>=d)}
 function activeTaxSettings(dateValue){
   const rows=readTaxMaster();
   return rows.find(t=>t.active&&t.isDefault&&taxIsEffective(t,dateValue))||rows.find(t=>t.active&&taxIsEffective(t,dateValue))||rows.find(t=>t.isDefault)||rows[0]||{...DEFAULT_TAX_SETTINGS};
@@ -1425,7 +1432,7 @@ function renderTaxMaster(){
   const rows=readTaxMaster(),body=document.getElementById('tax-master-tbody');
   const count=document.getElementById('tax-master-count'); if(count)count.textContent=`${rows.length} record${rows.length===1?'':'s'}`;
   if(!body)return;
-  body.innerHTML=rows.map(t=>{const used=taxUsageCount(t),expired=!!(t.effectiveTo&&t.effectiveTo<new Date().toISOString().slice(0,10));return `<tr>
+  body.innerHTML=rows.map(t=>{const used=taxUsageCount(t),expired=!!(t.effectiveTo&&t.effectiveTo<bcLocalISO());return `<tr>
     <td><strong>${escapeHtml(t.code)}</strong></td><td>${escapeHtml(t.name)}</td><td class="right">${Number(t.rate).toFixed(2)}%</td>
     <td>${t.effectiveFrom?fmtDate(t.effectiveFrom):'—'}</td><td>${t.effectiveTo?fmtDate(t.effectiveTo):'—'}</td>
     <td class="center"><span class="badge ${t.active&&!expired?'badge-won':'badge-expired'}">${expired?'Expired':t.active?'Active':'Inactive'}</span></td>
@@ -1506,18 +1513,23 @@ function normalizedQuotationDate(q){
   const created=String(q?.created||'').slice(0,10);
   if(/^\d{4}-\d{2}-\d{2}$/.test(created) && quoteDateISOFromDisplay(created)) return created;
 
-  return new Date().toISOString().slice(0,10);
+  return bcLocalISO();
 }
 function validUntil(q) {
   const iso=normalizedQuotationDate(q);
   const d=new Date(iso+'T00:00:00');
   d.setDate(d.getDate()+(parseInt(q?.validity)||7));
-  return d.toISOString().split('T')[0];
+  return bcLocalISO(d);   // V270.4.9: was the UTC date (one day early in Riyadh)
 }
 
+/** V270.4.9: a date as YYYY-MM-DD in the user's own time zone (Riyadh). toISOString() gives the UTC date, which is
+ *  yesterday's date between midnight and 03:00 in Riyadh — every "today" default and date calculation uses this instead. */
+function bcLocalISO(d){d=d instanceof Date?d:new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 /* ── v103 Central document numbering ── */
 const DOC_NUMBERING_DEFAULTS={
-  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},paymentReceipt:{label:'Payment Receipt',prefix:'RCT',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'},supplierPayment:{label:'Supplier Payment',prefix:'SP',reset:'monthly'}
+  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},paymentReceipt:{label:'Payment Receipt',prefix:'RCT',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'},supplierPayment:{label:'Supplier Payment',prefix:'SP',reset:'monthly'},
+  // V270.4.9: master codes — system-generated on save, one running sequence (never reset), no date part
+  customer:{label:'Customer',prefix:'CUS',reset:'never',dateFormat:'none',digits:5},supplier:{label:'Supplier',prefix:'SUP',reset:'never',dateFormat:'none',digits:5},product:{label:'Product',prefix:'ITM',reset:'never',dateFormat:'none',digits:6},employee:{label:'Employee',prefix:'EMP',reset:'never',dateFormat:'none',digits:4}
 };
 /* V270.2.5 — Number format and sequence reset are set separately.
    A number is  PREFIX + sep1 + DATE PART + sep2 + SEQUENCE  (the date part is optional).
@@ -1532,7 +1544,7 @@ const DOC_RESETS_FOR_FORMAT={none:['never'],YY:['yearly','never'],YYYY:['yearly'
 const DOC_RESET_LABELS={yearly:'Yearly',monthly:'Monthly',never:'Never'};
 const DOC_SEPARATORS=['-','/','.',''];
 const DOC_DIGITS=[3,4,5,6];
-const DOC_NUMBERING_GROUPS=[['Sales',['rfq','pricing','quotation','salesOrder','deliveryNote','customerInvoice','creditNote','paymentReceipt']],['Purchases',['purchaseOrder','purchaseInvoice','supplierPayment']]];
+const DOC_NUMBERING_GROUPS=[['Sales',['rfq','pricing','quotation','salesOrder','deliveryNote','customerInvoice','creditNote','paymentReceipt']],['Purchases',['purchaseOrder','purchaseInvoice','supplierPayment']],['Master Data',['customer','supplier','product','employee']]];
 function cleanDocPrefix(v){return String(v||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8);}
 function normalizeDocNumberingConfig(type,raw){
   const d=DOC_NUMBERING_DEFAULTS[type]||{},c={...(raw||{})};
@@ -1576,6 +1588,8 @@ async function allocateDocumentNumber(type,date=new Date()){
   return provisionalDocNumber(x);
 }
 function existingDocumentNumbers(type){
+  // V270.4.9: master codes
+  if(type==='customer')return customers.map(x=>x.code||''); if(type==='supplier')return suppliers.map(x=>x.code||''); if(type==='product')return products.map(x=>x.code||''); if(type==='employee')return employees.map(x=>x.code||'');
   if(type==='rfq')return rfqs.map(x=>x.rfqNo||''); if(type==='quotation')return quotations.map(x=>x.qno||''); if(type==='salesOrder')return salesOrders.map(x=>x.soNo||'');
   if(type==='deliveryNote')return salesOrders.flatMap(s=>(s.deliveries||[]).map(x=>x.dnNo||'')); if(type==='customerInvoice')return salesOrders.flatMap(s=>(s.invoices||[]).map(x=>x.invNo||'')); if(type==='creditNote')return salesOrders.flatMap(s=>(s.creditNotes||[]).map(x=>x.cnNo||'')); if(type==='paymentReceipt')return (typeof receiptsCache!=='undefined'?receiptsCache:[]).map(x=>x.rctNo||''); if(type==='purchaseInvoice')return (window.BizCorePI?window.BizCorePI.invoices:[]).map(x=>x.piNo||''); if(type==='supplierPayment')return (window.BizCorePI?window.BizCorePI.payments:[]).map(x=>x.spNo||''); return [];
 }
@@ -1799,6 +1813,35 @@ async function finalizeProvisionalNumbers(){
 // keep the old name working
 const renumberProvisionalQuotations = finalizeProvisionalNumbers;
 window.addEventListener('online', function() { setTimeout(finalizeProvisionalNumbers, 3000); });
+/* V270.4.9 — master codes for records that have none yet: a temporary offline code (…-OFF-…) gets its real code (any
+   user), and records saved before codes existed get theirs in name order (administrators, once per session, ONE
+   transaction reserves the block). Nothing else in the records changes. */
+let _bcMasterCodesBusy=false,_bcMasterCodesDone=false;
+async function bcAssignMasterCodes(){
+  if(_bcMasterCodesBusy||!navigator.onLine||!window.BizCoreMasters||!window.FB) return;
+  _bcMasterCodesBusy=true;
+  const C=BizCoreMasters.core, lists={customers,suppliers,products,employees}, savers={customers:saveCustomers,suppliers:saveSuppliers,products:saveProducts,employees:saveEmployees};
+  let given=0;
+  try{
+    for(const [col,list] of Object.entries(lists)){
+      for(const r of list.filter(x=>x&&C.isTempCode(x.code))){ try{ await BizCoreMasters.save(col,r); given++; }catch(e){ console.warn('[BizCore] code for',col,r.id,e.message); } }
+    }
+    if(!_bcMasterCodesDone&&bcIsAdmin()){
+      _bcMasterCodesDone=true;
+      for(const [col,list] of Object.entries(lists)){
+        const t=C.MASTER_TYPES[col], todo=list.filter(x=>x&&!x.code&&!x._deletedAt).sort((a,b)=>String(a[t.nameField]||'').localeCompare(String(b[t.nameField]||'')));
+        if(!todo.length) continue;
+        const codes=await BizCoreMasters.reserveCodes(col,todo.length);
+        todo.forEach((r,i)=>{ r.code=codes[i]; });
+        if((await savers[col]())===false){ todo.forEach(r=>{ delete r.code; }); console.warn('[BizCore] master codes not saved for',col); continue; }
+        given+=todo.length;
+      }
+    }
+  }catch(e){ console.warn('[BizCore] master codes',e); }
+  finally{ _bcMasterCodesBusy=false; }
+  if(given){ try{ renderCustomers(); renderSuppliers(); renderProducts(); renderEmployees(); }catch(_){} }
+}
+window.addEventListener('online', function() { setTimeout(bcAssignMasterCodes, 3500); });
 setInterval(() => { if (navigator.onLine) finalizeProvisionalNumbers(); }, 120000);
 
 /* ── RENDER ALL ── */
@@ -2144,47 +2187,79 @@ function showMasterDeleteBlocked(type, blocked) {
   );
 }
 
+/* V270.4.9: a small progress window for longer work (master delete): shows at once, the page is locked behind it. */
+const bcProgress = {
+  open(title, sub) {
+    let o = document.getElementById('bc-progress-overlay');
+    if (!o) { o = document.createElement('div'); o.id = 'bc-progress-overlay'; o.className = 'bc-progress-overlay'; o.setAttribute('role', 'alertdialog'); o.setAttribute('aria-live', 'polite');
+      o.innerHTML = '<div class="bc-progress-card"><div class="bcp-t"></div><div class="imp-bar"><i></i></div><div class="bcp-n"></div><div class="bcp-s"></div></div>'; document.body.appendChild(o); }
+    o.querySelector('.bcp-t').textContent = title; o.querySelector('.bcp-s').textContent = sub || 'Please wait…';
+    o.querySelector('.bcp-n').textContent = ''; o.querySelector('.imp-bar i').style.width = '0%';
+    return new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));   // painted before the work starts
+  },
+  set(done, total, text) {
+    const o = document.getElementById('bc-progress-overlay'); if (!o) return;
+    o.querySelector('.imp-bar i').style.width = (total ? Math.round(done / total * 100) : 0) + '%';
+    o.querySelector('.bcp-n').textContent = text || (done + ' of ' + total);
+  },
+  close() { document.getElementById('bc-progress-overlay')?.remove(); },
+};
+let _masterDeleteBusy = false;
 async function requestMasterDelete(type, ids, sourceModalId='') {
+  if (_masterDeleteBusy) return false;   // pressed again while checking / moving: nothing
   const records = [...new Set((ids || []).filter(Boolean))].map(id => masterCollection(type).find(x => x.id === id)).filter(Boolean);
   if (!records.length) return false;
-  const blocked = records.map(record => ({record, dependencies:getMasterDependencies(type, record)})).filter(x => x.dependencies.length);
-  if (blocked.length) { showMasterDeleteBlocked(type, blocked); return false; }
-  const olderBlocked = await bcOlderDependencies(type, records);   // V269.1: records that aren't loaded (older than the window)
-  if (olderBlocked.length) { showMasterDeleteBlocked(type, olderBlocked); return false; }
-
   const singular = type === 'customers' ? 'customer' : type === 'suppliers' ? 'supplier' : 'product';
   const label = records.length === 1 ? masterRecordLabel(type, records[0]) : `${records.length} ${singular}s`;
-  const first = await showConfirmAsync({
-    icon:'🗑️',
-    title:`Move ${label} to Recycle Bin?`,
-    message:`${records.length===1?'This record':'These records'} will be removed from active Master Data and moved to the Recycle Bin. ${records.length===1?'It can':'They can'} be restored later.`,
-    confirmText:'Continue'
-  });
-  if (!first) return false;
-  const second = await showConfirmAsync({
-    icon:'⚠️',
-    title:'Final confirmation',
-    message:`This is the second confirmation. Move ${label} to the Recycle Bin now?`,
-    confirmText:'Move to Recycle Bin'
-  });
-  if (!second) return false;
+  _masterDeleteBusy = true;
+  try {
+    // V270.4.9: the check shows at once; the older documents are asked about many records per question
+    await bcProgress.open(`Checking ${label}…`, 'Looking for documents that still use ' + (records.length === 1 ? 'it' : 'them') + '.');
+    const blocked = records.map(record => ({record, dependencies:getMasterDependencies(type, record)})).filter(x => x.dependencies.length);
+    if (blocked.length) { bcProgress.close(); showMasterDeleteBlocked(type, blocked); return false; }
+    const olderBlocked = await bcOlderDependencies(type, records, (d, t) => bcProgress.set(d, t, `Checked ${d} of ${t} document lists`));   // V269.1
+    bcProgress.close();
+    if (olderBlocked.length) { showMasterDeleteBlocked(type, olderBlocked); return false; }
 
-  // V269.5: the records stay in Firebase with a Recycle Bin mark (restored from the Recycle Bin)
-  if (!(await bcSoftDeleteRecords(type, records))) return false;
-  const idsSet = new Set(records.map(r=>r.id));
-  if (type === 'customers') customers = customers.filter(r=>!idsSet.has(r.id));
-  else if (type === 'suppliers') suppliers = suppliers.filter(r=>!idsSet.has(r.id));
-  else if (type === 'products') products = products.filter(r=>!idsSet.has(r.id));
-  records.forEach(r => masterSelection[type].delete(r.id));
+    const first = await showConfirmAsync({
+      icon:'🗑️',
+      title:`Move ${label} to Recycle Bin?`,
+      message:`${records.length===1?'This record':'These records'} will be removed from active Master Data and moved to the Recycle Bin. ${records.length===1?'It can':'They can'} be restored later.`,
+      confirmText:'Continue'
+    });
+    if (!first) return false;
+    const second = await showConfirmAsync({
+      icon:'⚠️',
+      title:'Final confirmation',
+      message:`This is the second confirmation. Move ${label} to the Recycle Bin now?`,
+      confirmText:'Move to Recycle Bin'
+    });
+    if (!second) return false;
 
-  if (!window.FB) { const saveFn = type === 'customers' ? saveCustomers : type === 'suppliers' ? saveSuppliers : saveProducts; await saveFn(); }
-  else { try { localStorage.setItem('dtq_' + type, JSON.stringify(type === 'customers' ? customers : type === 'suppliers' ? suppliers : products)); } catch (e) {} }
-  if (sourceModalId) { clearDirty(); closeModal(sourceModalId); }
-  if (type === 'customers') { renderCustomers(); renderSetupCustTable(); }
-  else if (type === 'suppliers') renderSuppliers();
-  else if (type === 'products') renderProducts();
-  showToast(`${label} moved to Recycle Bin`, 'success');
-  return true;
+    // V269.5: the records stay in Firebase with a Recycle Bin mark (restored from the Recycle Bin); V270.4.9: in a few saves
+    await bcProgress.open(`Moving ${label} to the Recycle Bin…`, 'Please keep BizCore open until it finishes.');
+    const res = await bcSoftDeleteMany(type, records, (d, t) => bcProgress.set(d, t, `${d} of ${t} moved`));
+    bcProgress.close();
+    const idsSet = new Set(res.done);
+    if (idsSet.size) {
+      if (type === 'customers') customers = customers.filter(r=>!idsSet.has(r.id));
+      else if (type === 'suppliers') suppliers = suppliers.filter(r=>!idsSet.has(r.id));
+      else if (type === 'products') products = products.filter(r=>!idsSet.has(r.id));
+      records.forEach(r => { if (idsSet.has(r.id)) masterSelection[type].delete(r.id); });
+      if (!window.FB) { const saveFn = type === 'customers' ? saveCustomers : type === 'suppliers' ? saveSuppliers : saveProducts; await saveFn(); }
+      else { try { localStorage.setItem('dtq_' + type, JSON.stringify(type === 'customers' ? customers : type === 'suppliers' ? suppliers : products)); } catch (e) {} }
+      if (type === 'customers') { renderCustomers(); renderSetupCustTable(); }
+      else if (type === 'suppliers') renderSuppliers();
+      else if (type === 'products') renderProducts();
+    }
+    if (!res.ok) {
+      showValidationDialog('Not moved to the Recycle Bin', (idsSet.size ? `${idsSet.size} of ${records.length} were moved. ` : 'Nothing was deleted. ') + (navigator.onLine === false ? 'You are offline. ' : 'The database did not confirm the change. ') + 'Please try again for the rest.', '', '');
+      return false;
+    }
+    if (sourceModalId) { clearDirty(); closeModal(sourceModalId); }
+    showToast(`${label} moved to Recycle Bin`, 'success');
+    return true;
+  } finally { bcProgress.close(); _masterDeleteBusy = false; }
 }
 
 function deleteSelectedMasterRecords(type) {
@@ -3283,7 +3358,7 @@ async function saveCustomer() {
   if(!validOptionalEmail(email)){ showToast('Enter a valid customer email address','error'); return; }
   const c = {
     ...(editingCustId ? (customers.find(x=>x.id===editingCustId)||{}) : {}),
-    id: editingCustId || (Date.now().toString(36)),
+    id: editingCustId || (window.BizCoreMasters?BizCoreMasters.core.newMasterId('c'):Date.now().toString(36)),
     company,
     companyAr:getPartyField('cm-company-ar'), vat:getPartyField('cm-vat'), mobile:getPartyField('cm-mobile'), email,
     shortAddress:getPartyField('cm-short-address'), buildingNo:getPartyField('cm-building-no'), street:getPartyField('cm-street'), streetAr:getPartyField('cm-street-ar'),
@@ -3293,9 +3368,17 @@ async function saveCustomer() {
     contact: defaultContact?.name || '',
     phone: defaultContact?.phone || getPartyField('cm-mobile')
   };
+  // V270.4.9: VAT No. used by another customer → refused; same / similar name → asked; a used customer renamed → asked
+  const prevCust = editingCustId ? (customers.find(x=>x.id===editingCustId)||null) : null;
+  if (window.BCMasterUI) { const chk = await BCMasterUI.beforeSave('customers', prevCust, c); if (!chk.ok) return; BCMasterUI.addHistory(c, chk.log); }
   if (editingCustId) { const idx = customers.findIndex(x=>x.id===editingCustId); if(idx>-1) customers[idx]=c; }
   else customers.push(c);
-  await saveCustomers();
+  if ((await saveCustomers()) === false) {
+    // not saved (e.g. the VAT No. was taken a moment ago by another user): the list goes back, the form stays open
+    const i = customers.findIndex(x=>x.id===c.id); if (i>-1) { if (prevCust) customers[i]=prevCust; else customers.splice(i,1); }
+    if (window.BCMasterUI) BCMasterUI.explainFailure('customers'); else showToast('Customer not saved','error');
+    return;
+  }
   clearDirty(); closeModal('cust-modal');
   document.getElementById('cust-modal').style.zIndex = '';
   renderCustomers(); renderSetupCustTable();
@@ -3343,9 +3426,11 @@ async function saveProduct() {
   showBusyOverlay('prod-modal', 'Saving product…');
   try {
   const imageData = imgArea._imageData || null;
+  const prevProd = editingProdId ? (products.find(x=>x.id===editingProdId)||null) : null;   // V270.4.9
   const p = {
-    id: editingProdId || ('p'+Date.now().toString(36)),
-    name, code: document.getElementById('pm-code').value.trim(),
+    ...(prevProd || {}),   // keeps the system code and history
+    id: editingProdId || (window.BizCoreMasters?BizCoreMasters.core.newMasterId('p'):('p'+Date.now().toString(36))),
+    name, code: prevProd?.code || '',
     brand: document.getElementById('pm-brand').value.trim(),
     model: document.getElementById('pm-model').value.trim(),
     category,
@@ -3357,9 +3442,14 @@ async function saveProduct() {
     imagePath: imgArea._imagePath || null
   };
   const isNew = !editingProdId;
+  if (window.BCMasterUI) { hideBusyOverlay('prod-modal'); const chk = await BCMasterUI.beforeSave('products', prevProd, p); if (!chk.ok) return; BCMasterUI.addHistory(p, chk.log); showBusyOverlay('prod-modal', 'Saving product…'); }
   if (editingProdId) { const i=products.findIndex(x=>x.id===editingProdId); if(i>-1) products[i]=p; }
   else products.unshift(p);
-  await saveProducts();
+  if ((await saveProducts()) === false) {
+    const i = products.findIndex(x=>x.id===p.id); if (i>-1) { if (prevProd) products[i]=prevProd; else products.splice(i,1); }
+    if (window.BCMasterUI) BCMasterUI.explainFailure('products'); else showToast('Product not saved','error');
+    return;
+  }
   clearDirty(); closeModal('prod-modal');
   document.getElementById('prod-modal').style.zIndex = '';
   renderProducts();
@@ -4005,7 +4095,7 @@ function renderCustomers() {
     if(q.status==='Won') st.won+=calcQuote(q).net;
   });
   const list=customers.filter(c=>!search||c.company.toLowerCase().includes(search)||
-    (c.contact||'').toLowerCase().includes(search));
+    (c.contact||'').toLowerCase().includes(search)||String(c.code||'').toLowerCase().includes(search)||String(c.vat||'').includes(search));   // V270.4.9: code / VAT No.
   const sortedList=sortRegisterRows(list,'customers',{company:c=>c.company,contact:c=>{const a=c.contacts||(c.contact?[{name:c.contact}]:[]);return (a.find(x=>x.isDefault)||a[0]||{}).name||''},title:c=>{const a=c.contacts||[];return (a.find(x=>x.isDefault)||a[0]||{}).title||''},city:c=>c.city,phone:c=>{const a=c.contacts||[];return (a.find(x=>x.isDefault)||a[0]||{}).phone||c.phone||''},quotes:c=>(stats[c.id]||{}).count||0,total:c=>(stats[c.id]||{}).total||0});
   const customerPages=Math.ceil(sortedList.length/PER_PAGE)||1;
   if(customerPage>customerPages) customerPage=1;
@@ -4020,7 +4110,7 @@ function renderCustomers() {
     const extraCount = contacts.length > 1 ? `<span style="font-size:10px;background:var(--blue-pale);color:var(--blue);border-radius:10px;padding:1px 6px;margin-left:4px">+${contacts.length-1} more</span>` : '';
     return `<tr class="master-clickable-row${selected?' master-row-selected':''}" data-master-type="customers" data-master-id="${c.id}" tabindex="0" role="button" aria-label="Open customer ${c.company}" onclick="viewCustomer('${c.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewCustomer('${c.id}');}">
       <td class="master-select-col" onclick="event.stopPropagation()"><input class="master-row-check" type="checkbox" ${selected?'checked':''} onkeydown="event.stopPropagation()" aria-label="Select ${c.company}" onchange="toggleMasterSelection('customers','${c.id}',this.checked)"></td>
-      <td><strong>${c.company}</strong></td>
+      <td><strong>${c.company}</strong>${c.code?`<span class="bcm-list-code">${escapeHtml(c.code)}</span>`:''}</td>
       <td>${defaultCt?.name||'—'}${extraCount}</td>
       <td>${defaultCt?.title||'—'}</td>
       <td>${c.city||'—'}</td>
@@ -4621,7 +4711,7 @@ async function exportPricingRegisterExcel(includeLines=false,prefetchedRows=null
       for(let r=7;r<=lineRows.length+6;r++){['M','N','P','Q','R'].forEach(c=>{if(lws[`${c}${r}`])lws[`${c}${r}`].z='#,##0.00';});['O','S'].forEach(c=>{if(lws[`${c}${r}`])lws[`${c}${r}`].z='0.00';});}
       XLSX.utils.book_append_sheet(wb,lws,'Pricing Line Items');
     }
-    const dateStamp=now.toISOString().slice(0,10); XLSX.writeFile(wb,`BizCore_Pricing_Register_${dateStamp}.xlsx`,{compression:true});
+    const dateStamp=bcLocalISO(now); XLSX.writeFile(wb,`BizCore_Pricing_Register_${dateStamp}.xlsx`,{compression:true});
     showToast(`Pricing Excel exported: ${rows.length} document${rows.length===1?'':'s'}${includeLines?` and ${lineCount} line${lineCount===1?'':'s'}`:''}.`,'success');
   }catch(err){console.error('Pricing Excel export failed',err);showToast('Could not create the Pricing Excel export. Please try again.','error');}
 }
@@ -5145,7 +5235,7 @@ function editQuotation(id, skipVatCheck=false) {
   document.getElementById('modal-title').textContent='Edit — '+q.qno;
 
   // restore customer selection
-  const c=customers.find(x=>x.company===q.company);
+  const c=(q.custId&&customers.find(x=>String(x.id)===String(q.custId)))||customers.find(x=>x.company===q.company);   // V270.4.9: by the customer's id first (a rename keeps the link)
   if(c) {
     selectedCustId=c.id;
     document.getElementById('f-cust-search').value=c.company;
@@ -5727,7 +5817,7 @@ async function saveQuotation(mode='save', opts={}) {
   const q={
     id:capturedEditingId||qno, qno,
     origin: capturedRFQId ? 'RFQ/Pricing' : (window._pendingQuotationOrigin || 'Direct'),
-    date:quoteDateISOFromDisplay(document.getElementById('f-date').value)||new Date().toISOString().slice(0,10),
+    date:quoteDateISOFromDisplay(document.getElementById('f-date').value)||bcLocalISO(),
     company, contact:document.getElementById('f-contact').value.trim(),
     city:document.getElementById('f-city').value.trim(),
     ref:document.getElementById('f-ref').value.trim(),
@@ -6143,7 +6233,7 @@ function createQuotationRevision(id){
 
   document.getElementById('modal-title').textContent='Revise quotation — '+q.qno;
 
-  const c=customers.find(x=>x.company===q.company);
+  const c=(q.custId&&customers.find(x=>String(x.id)===String(q.custId)))||customers.find(x=>x.company===q.company);   // V270.4.9: by the customer's id first (a rename keeps the link)
   if(c){
     selectedCustId=c.id;
     document.getElementById('f-cust-search').value=c.company;
@@ -6234,7 +6324,7 @@ async function duplicateQuotation(id) {
   const newQno = numResult.qno;
   const copy={...JSON.parse(JSON.stringify(q)),id:newQno,qno:newQno,
     rfqId:null, // don't inherit RFQ link — it's a new quotation
-    date:new Date().toISOString().split('T')[0],
+    date:bcLocalISO(),
     status:'Draft',
     created:new Date().toISOString(),
     updated:new Date().toISOString()};
@@ -6420,6 +6510,15 @@ async function bcSoftDeleteRecords(col, records) {
     }
   }
   return true;
+}
+/** V270.4.9: many records at once (a few saves) → { done: [ids], ok }. */
+async function bcSoftDeleteMany(col, records, onProgress) {
+  const ids = records.map(r => r.id);
+  if (!window.FB) return { done: ids, ok: true };   // local-only mode: removed from the list as before
+  if (window.FB.fbSoftDeleteMany) return window.FB.fbSoftDeleteMany(col, ids, onProgress);
+  const done = [];
+  for (const id of ids) { if (!(await window.FB.fbSoftDelete(col, id))) return { done, ok: false }; done.push(id); if (onProgress) onProgress(done.length, ids.length); }
+  return { done, ok: true };
 }
 async function saveRecycleBin() { return true; }   // V269.5: nothing to save — the mark is on the record
 async function loadRecycleBin() {
@@ -6919,6 +7018,7 @@ async function deleteCustomer(id, sourceModalId='') {
 
 function closeModal(id) {
   if(id==='dn-dispatch-action-modal' && document.getElementById(id)?._saving)return;
+  if(id==='import-modal' && typeof _importBusy!=='undefined' && _importBusy)return;   // V270.4.9: not while importing
   const overlay = document.getElementById(id);
   if(overlay?.classList.contains('open') && !modalNavExcluded.has(id)){lastClosedModal=id;lastClosedModalAt=Date.now();}
   forgetFinishedEntryScreen(id);
@@ -7287,7 +7387,8 @@ function viewRFQFromQuote(btn) {
 ══════════════════════════════════════════════════ */
 async function saveSuppliers() {
   try { localStorage.setItem('dtq_suppliers', JSON.stringify(suppliers)); } catch(e) {}
-  if (window.FB) await window.FB.fbSave('suppliers', suppliers);
+  if (window.FB) return await window.FB.fbSave('suppliers', suppliers);
+  return true;
 }
 /* V269: an RFQ whose pricing changed is saved on its own, together with its pricing version documents, in one batch.
    The other changed RFQs are saved as before. Returns false when something was not saved. */
@@ -7310,7 +7411,7 @@ async function saveRFQs() {
 
 function renderSuppliers() {
   const search = (document.getElementById('sup-search')?.value||'').toLowerCase();
-  const list = suppliers.filter(s => !search || `${s.company} ${s.contact} ${s.cat}`.toLowerCase().includes(search));
+  const list = suppliers.filter(s => !search || `${s.company} ${s.contact} ${s.cat} ${s.code||''} ${s.vat||''}`.toLowerCase().includes(search));   // V270.4.9: code / VAT No.
   const tbody = document.getElementById('suppliers-tbody');
   if (!tbody) return;
   const sortedList=sortRegisterRows(list,'suppliers',{company:x=>x.company,contact:x=>x.contact,phone:x=>x.phone,email:x=>x.email,category:x=>x.cat,city:x=>x.city,quotes:x=>rfqs.filter(r=>recordBelongsToSupplier(r,x)).length});
@@ -7324,7 +7425,7 @@ function renderSuppliers() {
     const quoteCount = rfqs.filter(r => recordBelongsToSupplier(r,s)).length;
     return `<tr class="master-clickable-row${selected?' master-row-selected':''}" data-master-type="suppliers" data-master-id="${s.id}" tabindex="0" role="button" aria-label="Open supplier ${s.company}" onclick="viewSupplier('${s.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewSupplier('${s.id}');}">
       <td class="master-select-col" onclick="event.stopPropagation()"><input class="master-row-check" type="checkbox" ${selected?'checked':''} onkeydown="event.stopPropagation()" aria-label="Select ${s.company}" onchange="toggleMasterSelection('suppliers','${s.id}',this.checked)"></td>
-      <td><strong>${s.company}</strong></td>
+      <td><strong>${s.company}</strong>${s.code?`<span class="bcm-list-code">${escapeHtml(s.code)}</span>`:''}</td>
       <td>${s.contact||'—'}</td>
       <td>${s.phone||'—'}</td>
       <td>${s.email||'—'}</td>
@@ -7395,15 +7496,21 @@ async function saveSupplier() {
   if(!validOptionalEmail(email)){ showToast('Enter a valid supplier email address','error'); return; }
   const s = {
     ...(editingSupId ? (suppliers.find(x=>x.id===editingSupId)||{}) : {}),
-    id: editingSupId || ('s'+Date.now().toString(36)),
+    id: editingSupId || (window.BizCoreMasters?BizCoreMasters.core.newMasterId('s'):('s'+Date.now().toString(36))),
     company, companyAr:getPartyField('sm-company-ar'), contact:getPartyField('sm-contact'), contactAr:getPartyField('sm-contact-ar'),
     mobile:getPartyField('sm-mobile'), phone:getPartyField('sm-phone'), email, whatsapp:getPartyField('sm-whatsapp'), cat:getPartyField('sm-cat'), vat:getPartyField('sm-vat'),
     shortAddress:getPartyField('sm-short-address'), buildingNo:getPartyField('sm-building-no'), street:getPartyField('sm-street'), streetAr:getPartyField('sm-street-ar'), secondaryNo:getPartyField('sm-secondary-no'),
     postalCode:getPartyField('sm-postal-code'), district:getPartyField('sm-district'), districtAr:getPartyField('sm-district-ar'), city:getPartyField('sm-city'), cityAr:getPartyField('sm-city-ar'), country:getPartyField('sm-country')||'Saudi Arabia', notes:getPartyField('sm-notes')
   };
+  const prevSup = editingSupId ? (suppliers.find(x=>x.id===editingSupId)||null) : null;   // V270.4.9
+  if (window.BCMasterUI) { const chk = await BCMasterUI.beforeSave('suppliers', prevSup, s); if (!chk.ok) return; BCMasterUI.addHistory(s, chk.log); }
   if (editingSupId) { const i=suppliers.findIndex(x=>x.id===editingSupId); if(i>-1) suppliers[i]=s; }
   else suppliers.push(s);
-  await saveSuppliers();
+  if ((await saveSuppliers()) === false) {
+    const i = suppliers.findIndex(x=>x.id===s.id); if (i>-1) { if (prevSup) suppliers[i]=prevSup; else suppliers.splice(i,1); }
+    if (window.BCMasterUI) BCMasterUI.explainFailure('suppliers'); else showToast('Supplier not saved','error');
+    return;
+  }
   clearDirty(); closeModal('sup-modal');
   renderSuppliers();
   showToast(editingSupId?'Supplier updated':'Supplier added','success');
@@ -7485,7 +7592,7 @@ function rfqAge(rfq) {
 }
 
 function renderRFQPage() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = bcLocalISO();
   const getRfqDisplayStatus = r => {
     const stage = getRFQWorkflowStage(r);
     if (['Quoted','Sales Order','No Bid'].includes(stage)) return stage;
@@ -8029,7 +8136,7 @@ function openEmployeeForm(id=null) {
   editingEmployeeId=id;
   const e=id?employees.find(x=>x.id===id):null;
   document.getElementById('employee-form-title').textContent=e?'Edit employee':'New employee';
-  document.getElementById('emp-code').value=e?.code||getNextEmployeeCode();
+  document.getElementById('emp-code').value=e?.code||'';document.getElementById('emp-code').placeholder='Given on save';   // V270.4.9
   employeePhotoUploadPromise=null; employeePhotoUploadFailed=false; // discard any stale/stuck upload from a previous attempt
   employeePhotoPath=e?.photoPath||null;
   employeePhotoDraft=e?.photo||''; updateEmployeePhotoPreview();
@@ -8052,23 +8159,22 @@ function openEmployeeForm(id=null) {
 }
 function closeEmployeeForm(){editingEmployeeId=null;document.getElementById('employee-form-panel').style.display='none';}
 async function saveEmployee() {
-  const name=document.getElementById('emp-name').value.trim(), code=document.getElementById('emp-code').value.trim();
-  if(!code){showValidationDialog('Employee code required','Enter a unique employee code.',document.getElementById('emp-code'));return;}
+  // V270.4.9: the employee code is given by BizCore on save (EMP-0001 …) and never changes
+  const name=document.getElementById('emp-name').value.trim(), code=(editingEmployeeId?(employees.find(e=>e.id===editingEmployeeId)||{}).code:'')||'';
   if(!name){showValidationDialog('Employee name required','Enter the employee name.',document.getElementById('emp-name'));return;}
-  if(employees.some(e=>e.code.toLowerCase()===code.toLowerCase()&&e.id!==editingEmployeeId)){showValidationDialog('Duplicate employee code','This employee code is already in use.',document.getElementById('emp-code'));return;}
   const iqamaInput=document.getElementById('emp-iqama'), licenseInput=document.getElementById('emp-license');
   const iqamaNo=iqamaInput.value.trim(), licenseNo=licenseInput.value.trim();
   if(iqamaNo && !/^\d{10}$/.test(iqamaNo)){showValidationDialog('Invalid Iqama number','Iqama number must contain exactly 10 digits — not less or more.',iqamaInput);return;}
   if(licenseNo && !/^\d+$/.test(licenseNo)){showValidationDialog('Invalid driving licence number','Driving licence number can contain numbers only.',licenseInput);return;}
   if (employeePhotoUploadPromise) { showToast('Finishing photo upload…','success'); await employeePhotoUploadPromise; employeePhotoUploadPromise=null; }
   if (employeePhotoUploadFailed) { showValidationDialog('Photo upload failed','The employee photo could not be uploaded. Check your connection and try selecting the photo again, or remove it and save without one.',document.getElementById('emp-photo-input')); return; }
-  const record={id:editingEmployeeId||('emp-'+Date.now().toString(36)),code,name,photo:employeePhotoDraft,photoPath:employeePhotoPath,department:document.getElementById('emp-department').value.trim(),designation:document.getElementById('emp-designation').value.trim(),email:document.getElementById('emp-email').value.trim(),mobile:document.getElementById('emp-mobile').value.trim(),roles:[...document.querySelectorAll('#employee-role-grid input:checked')].map(x=>x.value),iqamaNo:iqamaNo,iqamaExpiry:document.getElementById('emp-iqama-expiry').value,passportNo:document.getElementById('emp-passport').value.trim(),passportExpiry:document.getElementById('emp-passport-expiry').value,licenseNo:licenseNo,licenseExpiry:document.getElementById('emp-license-expiry').value,active:document.getElementById('emp-active').value==='true',updated:new Date().toISOString()};
+  const record={id:editingEmployeeId||(window.BizCoreMasters?BizCoreMasters.core.newMasterId('emp-'):('emp-'+Date.now().toString(36))),code,name,photo:employeePhotoDraft,photoPath:employeePhotoPath,department:document.getElementById('emp-department').value.trim(),designation:document.getElementById('emp-designation').value.trim(),email:document.getElementById('emp-email').value.trim(),mobile:document.getElementById('emp-mobile').value.trim(),roles:[...document.querySelectorAll('#employee-role-grid input:checked')].map(x=>x.value),iqamaNo:iqamaNo,iqamaExpiry:document.getElementById('emp-iqama-expiry').value,passportNo:document.getElementById('emp-passport').value.trim(),passportExpiry:document.getElementById('emp-passport-expiry').value,licenseNo:licenseNo,licenseExpiry:document.getElementById('emp-license-expiry').value,active:document.getElementById('emp-active').value==='true',updated:new Date().toISOString()};
   const existing=editingEmployeeId?employees.find(e=>e.id===editingEmployeeId):null;
   const persist=async()=>{
     showBusyOverlay('employee-form-panel', 'Saving employee…');
     try {
       if(editingEmployeeId){const i=employees.findIndex(e=>e.id===editingEmployeeId);if(i>-1)employees[i]=record;}else employees.unshift(record);
-      await saveEmployees();
+      if((await saveEmployees())===false){const i=employees.findIndex(e=>e.id===record.id);if(i>-1){if(existing)employees[i]=existing;else employees.splice(i,1);}if(window.BCMasterUI)BCMasterUI.explainFailure('employees');else showToast('Employee not saved','error');return;}
       closeEmployeeForm();renderEmployees();populateRFQAssignees();showToast(existing?'Employee updated':'Employee added','success');editingEmployeeId=null;
     } finally { hideBusyOverlay('employee-form-panel'); }
   };
@@ -10859,7 +10965,7 @@ function openCreateSO(quotationId) {
   modal._editingSOId=null;modal._quotationId=quotationId;modal._remainingItems=progress.remaining;modal._vatRate=vatRate(q);modal._poAttachment=null;modal._saveOperationId=(globalThis.crypto?.randomUUID?.()||('so-'+Date.now()+'-'+Math.random().toString(36).slice(2)));
   document.getElementById('so-create-title').textContent='Create Sales Order';
   document.getElementById('so-create-subtitle').textContent=`Create from ${q.qno} · ${progress.linked.length?progress.linked.length+' previous order'+(progress.linked.length===1?'':'s'):'first order'}`;
-  document.getElementById('so-save-btn-text').textContent='Save Sales Order';document.getElementById('so-no').value='Auto on Save';document.getElementById('so-date').value=new Date().toISOString().split('T')[0];
+  document.getElementById('so-save-btn-text').textContent='Save Sales Order';document.getElementById('so-no').value='Auto on Save';document.getElementById('so-date').value=bcLocalISO();
   ['so-po-no','so-po-date','so-project','so-contact','so-expected-delivery','so-notes','so-internal-note'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   document.getElementById('so-customer').value=q.company||'';document.getElementById('so-quote-ref').value=q.qno+' — '+fmtDate(q.date);document.getElementById('so-payment').value=q.payment||settings.payment||'';document.getElementById('so-delivery').value=q.delivery||settings.delivery||'';
   const fi=document.getElementById('so-po-file');if(fi)fi.value='';modal._poAttachment=null;modal._poAttachmentRemoved=false;soRenderPOAttachment();clearFieldValidation(document.getElementById('so-po-no'));
@@ -10932,7 +11038,7 @@ async function _saveSalesOrderCore() {
     usedLineIds.add(id);
     it.lineId = id;
   });
-  const soNumber = existingSO?.soNo || await allocateDocumentNumber('salesOrder',new Date((document.getElementById('so-date').value||new Date().toISOString().slice(0,10))+'T00:00:00'));
+  const soNumber = existingSO?.soNo || await allocateDocumentNumber('salesOrder',new Date((document.getElementById('so-date').value||bcLocalISO())+'T00:00:00'));
   let poAttachment=modal._poAttachmentRemoved?null:(modal._poAttachment||existingSO?.poAttachment||null);
   const poFile=document.getElementById('so-po-file')?.files?.[0];
   if(poFile&&window.FB?.uploadFile){try{const url=await window.FB.uploadFile('sales-orders/'+soNumber+'/customer-po',poFile);if(url)poAttachment={name:poFile.name,url,size:poFile.size||0,type:poFile.type||''};}catch(e){showToast('Customer PO attachment could not be uploaded. Please try again.','error','Upload Failed');return;}}
@@ -11427,7 +11533,7 @@ function getDNBadgeClass(status){
 function allDeliveryNotes(){const rows=[];salesOrders.forEach(so=>(so.deliveries||[]).forEach((d,i)=>rows.push({so,d,i,status:getDNStatus(d)})));return rows;}
 let dnKpiFilter='all';
 let dnDateFilter={mode:'all',from:null,to:null};
-function dnISO(d){return d.toISOString().slice(0,10)}
+function dnISO(d){return bcLocalISO(d)}
 function filterDNDate(mode){
  const now=new Date(), today=new Date(now.getFullYear(),now.getMonth(),now.getDate()); let from=null,to=null;
  if(mode==='today') from=to=dnISO(today);
@@ -11535,7 +11641,7 @@ function dnDeliveredByValue(prefix){
 function dnDeliveredByFields(v){return v?{deliveredBy:v.name,deliveredByType:v.type,deliveredByEmployeeId:v.employeeId||''}:{};}
 function openRecordDelivery(soId) {
   const so=salesOrders.find(x=>x.id===soId);if(!so)return;currentSOId=soId;
-  document.getElementById('dn-title').textContent='Create Delivery Note — '+so.soNo;document.getElementById('dn-no').value='Auto on Save';document.getElementById('dn-date').value=new Date().toISOString().split('T')[0];document.getElementById('dn-vehicle').value='';document.getElementById('dn-remarks').value='';document.getElementById('dn-po').value=so.poNo||'—';document.getElementById('dn-so-ref').value=so.soNo||'—';dnDeliveredByMount('dn',null);
+  document.getElementById('dn-title').textContent='Create Delivery Note — '+so.soNo;document.getElementById('dn-no').value='Auto on Save';document.getElementById('dn-date').value=bcLocalISO();document.getElementById('dn-vehicle').value='';document.getElementById('dn-remarks').value='';document.getElementById('dn-po').value=so.poNo||'—';document.getElementById('dn-so-ref').value=so.soNo||'—';dnDeliveredByMount('dn',null);
   const accepted={};(so.deliveries||[]).filter(d=>!d.voided).forEach(d=>(d.items||[]).forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;accepted[idx]=roundQtyForUom((accepted[idx]||0)+deliveryAcceptedQty(d,it),it.uom)}));
   const transit={};(so.deliveries||[]).filter(d=>!d.customerConfirmed&&!d.voided).forEach(d=>(d.items||[]).forEach(it=>{const idx=it.origIdx!==undefined?it.origIdx:it.soIdx;transit[idx]=roundQtyForUom((transit[idx]||0)+(Number(it.qty)||0),it.uom)}));
   const remaining=(so.items||[]).map((it,i)=>{const idx=it.origIdx!==undefined?it.origIdx:i;const rem=roundQtyForUom(Math.max(0,(Number(it.qty)||0)-(accepted[idx]||0)-(transit[idx]||0)),it.uom);return {...it,soIdx:i,origIdx:idx,acceptedQty:accepted[idx]||0,remainingQty:rem}}).filter(it=>it.remainingQty>0);
@@ -11803,7 +11909,7 @@ async function _saveDeliveryAcceptanceCore(operationId){
  }
  const backup=JSON.parse(JSON.stringify(d));const previousSnapshot=d.customerConfirmed?dnAcceptanceSnapshot(d):null;if(mode!=='confirm')ensureDNAcceptanceHistory(d);
  lineUpdates.forEach((u,i)=>{const it=d.items[i];it.acceptedQty=u.a;it.rejectedQty=u.r;it.rejectionReason=u.r>0?u.reason:'';it.rejectionDisposition=u.disposition;it.acceptanceRemarks=u.remarks});
- d.customerConfirmed=true;d.customerConfirmedDate=d.customerConfirmedDate||new Date().toISOString().split('T')[0];if(mode==='confirm'){d.confirmedAt=new Date().toISOString();d.confirmedBy=deliveryActor();}d.receivedBy=receivedBy;d.customerRemarks=document.getElementById('dn-customer-remarks').value.trim();d.confirmationOperationId=mode==='confirm'?operationId:(d.confirmationOperationId||operationId);d.status=getDNStatus(d);if(mode!=='confirm'){const now=new Date().toISOString();d.acceptanceHistory.push({id:mode+'-'+Date.now(),type:mode,label:mode==='correction'?'Confirmation corrected':'Customer acceptance revised',reason:changeReason,actor:deliveryActor(),at:now,before:previousSnapshot,snapshot:dnAcceptanceSnapshot(d)});d.lastAcceptanceChangeAt=now;d.lastAcceptanceChangeBy=deliveryActor();}
+ d.customerConfirmed=true;d.customerConfirmedDate=d.customerConfirmedDate||bcLocalISO();if(mode==='confirm'){d.confirmedAt=new Date().toISOString();d.confirmedBy=deliveryActor();}d.receivedBy=receivedBy;d.customerRemarks=document.getElementById('dn-customer-remarks').value.trim();d.confirmationOperationId=mode==='confirm'?operationId:(d.confirmationOperationId||operationId);d.status=getDNStatus(d);if(mode!=='confirm'){const now=new Date().toISOString();d.acceptanceHistory.push({id:mode+'-'+Date.now(),type:mode,label:mode==='correction'?'Confirmation corrected':'Customer acceptance revised',reason:changeReason,actor:deliveryActor(),at:now,before:previousSnapshot,snapshot:dnAcceptanceSnapshot(d)});d.lastAcceptanceChangeAt=now;d.lastAcceptanceChangeBy=deliveryActor();}
  window._dnLocalConfirmationIds=window._dnLocalConfirmationIds||new Set();window._dnLocalConfirmationIds.add(d.id);
  const saved=await saveSalesOrders();
  if(saved===false){Object.keys(d).forEach(k=>delete d[k]);Object.assign(d,backup);window._dnLocalConfirmationIds.delete(d.id);throw new Error('Delivery confirmation could not be synchronized')}
@@ -11919,10 +12025,19 @@ function dnCompanyProfile(){
   return {name:s.coname||'Downtown Trading Est.',nameAr:s.conameAr||'',logo:s.logo||'',tagline:s.tagline||'',address:addr,pobox:s.pobox||'',phone:s.phone||'',mobile:s.mobile||'',email:s.email||'',website:s.website||'',cr:s.cr||'',vat:s.vat||''};
 }
 function dnCustomerProfile(so){
-  const c=customers.find(x=>x.id===so.customerId)||customers.find(x=>(x.company||'').trim()===(so.customer||'').trim())||{};
+  const c=customers.find(x=>x.id===so.customerId)||(so.custId&&customers.find(x=>String(x.id)===String(so.custId)))||customers.find(x=>(x.company||'').trim()===(so.customer||'').trim())||{};   // V270.4.9
   return {name:so.customer||c.company||'—',address:[c.building,c.street,c.district,c.city,c.postal,c.country].filter(Boolean).join(', '),phone:c.phone||'',contact:c.contact||'',title:c.title||''};
 }
-function dnItemCode(it,soItem){return it.code||it.itemCode||it.productCode||soItem?.code||soItem?.itemCode||soItem?.productCode||''}
+/** V270.4.9: master codes are shown inside BizCore only. A line's code is printed on customer documents only when it is
+ *  not a product's system code (ITM-000123); a code typed on purpose (e.g. the customer's part number) still prints. */
+function docPrintItemCode(code){
+  const c=String(code||'').trim(); if(!c) return '';
+  if(products.some(p=>p&&p.code&&String(p.code).trim()===c)) return '';
+  try{ const px=docNumberParts('product').numbering.displayPrefix; if(px&&c.startsWith(px)&&/^\d+$/.test(c.slice(px.length))) return ''; }catch(_){}
+  if(/-OFF-/.test(c)) return '';   // a temporary (offline) system code
+  return c;
+}
+function dnItemCode(it,soItem){return docPrintItemCode(it.code||it.itemCode||it.productCode||soItem?.code||soItem?.itemCode||soItem?.productCode||'')}
 function dnQtyProgress(so,d,deliveryIdx,it){
   const idx=it.origIdx!==undefined?it.origIdx:(it.soIdx!==undefined?it.soIdx:null), soItem=idx!=null?(so.items||[])[idx]:null;
   const ordered=Number(soItem?.qty??it.orderedQty??it.qty)||0;
@@ -12381,8 +12496,8 @@ function openCreateInvoice(soId, opts) {
   if(typeof invoiceModeRoute==='function'){const routed=invoiceModeRoute(soId, opts);if(routed!=='legacy')return routed;}
   const so=salesOrders.find(x=>x.id===soId);if(!so)return;currentSOId=soId;
   const lines=invoiceAvailableLines(so),availableLines=lines.filter(x=>x.availableQty>0.001);
-  const today=new Date().toISOString().split('T')[0],dueDate=new Date();dueDate.setDate(dueDate.getDate()+14);
-  document.getElementById('inv-modal-title').textContent='Create Invoice — '+so.soNo;document.getElementById('inv-date').value=today;document.getElementById('inv-zoho').value='';document.getElementById('inv-due').value=dueDate.toISOString().split('T')[0];document.getElementById('inv-notes').value='';
+  const today=bcLocalISO(),dueDate=new Date();dueDate.setDate(dueDate.getDate()+14);
+  document.getElementById('inv-modal-title').textContent='Create Invoice — '+so.soNo;document.getElementById('inv-date').value=today;document.getElementById('inv-zoho').value='';document.getElementById('inv-due').value=bcLocalISO(dueDate);document.getElementById('inv-notes').value='';
   const body=document.getElementById('inv-items-list');body.innerHTML=availableLines.map((it,i)=>`<tr><td>${i+1}</td><td class="inv-item-description">${escapeHtml(it.desc||'—')}</td><td>${formatQuantity(it.acceptedQty)}</td><td>${formatQuantity(it.invoicedQty)}</td><td class="inv-available">${formatQuantity(it.availableQty)}</td><td>${escapeHtml(it.uom||'—')}</td><td>${documentMoney('customerInvoice','unitPrice',Number(it.up)||0)}</td><td><input class="inv-qty-input bc-spin" id="inv-qty-${i}" type="number" min="0" max="${it.availableQty}" step="${qtyStep(it.uom)}" value="${it.availableQty}" oninput="recalcInvoiceSummary()"></td><td class="inv-line-amount" id="inv-line-amount-${i}">—</td></tr>`).join('');
   document.getElementById('inv-empty-note').hidden=availableLines.length>0;document.querySelector('#so-invoice-modal .inv-items-table-wrap').style.display=availableLines.length?'block':'none';
   const modal=document.getElementById('so-invoice-modal');modal._soId=soId;modal._invoiceLines=availableLines;modal._invoiceTotals={subtotal:0,vat:0,total:0};openModalWithSize('so-invoice-modal');recalcInvoiceSummary();
@@ -12412,7 +12527,7 @@ function openRecordPayment(soId) {
   document.getElementById('pay-modal-title').textContent = 'Record Payment — ' + so.soNo;
   document.getElementById('pay-outstanding-info').innerHTML =
     ((typeof invIndependentMode==='function'&&invIndependentMode()&&typeof soBilledTotal==='function')?`<strong>Invoiced so far (net):</strong> ${fmt(soBilledTotal(so))} &nbsp;·&nbsp; `:'')+`<strong>Order total:</strong> ${fmt(so.total)} &nbsp;·&nbsp; <strong>Paid so far:</strong> ${fmt(totalPaid)} &nbsp;·&nbsp; <strong>Outstanding:</strong> <span style="color:var(--red);font-weight:700">${fmt(outstanding)}</span>`;
-  document.getElementById('pay-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('pay-date').value = bcLocalISO();
   document.getElementById('pay-amount').value = outstanding.toFixed(2);
   document.getElementById('pay-method').value = 'Bank transfer';
   document.getElementById('pay-ref').value = '';
@@ -14216,7 +14331,7 @@ const IMPORT_SCHEMAS = {
     label: 'Products',
     columns: [
       { key:'name',     label:'Product Name *', required:true,  hint:'Full product name' },
-      { key:'code',     label:'Product Code',   required:false, hint:'e.g. PP-A4-500' },
+      { key:'oldCode',  label:'Old Code',       required:false, hint:'Your previous item code (kept for reference — BizCore gives ITM codes)', aliases:['Product Code'] },
       { key:'brand',    label:'Brand',          required:false, hint:'e.g. Roco, Deluxe' },
       { key:'model',    label:'Model',          required:false, hint:'e.g. A4-500' },
       { key:'category', label:'Category',       required:false, hint:'Stationery / Electronics' },
@@ -14225,15 +14340,15 @@ const IMPORT_SCHEMAS = {
       { key:'notes',    label:'Notes',          required:false, hint:'Product description or notes' },
     ],
     example: [
-      { 'Product Name *':'Roco Printing Paper A4','Product Code':'PP-A4-500','Brand':'Roco','Model':'A4-500','Category':'Stationery','Unit of Measure':'Box','Default Price':'79','Notes':'500 pcs per ream, 5 reams per box' },
-      { 'Product Name *':'Deluxe Binder Clip 32mm','Product Code':'BC-32MM','Brand':'Deluxe','Model':'32mm','Category':'Stationery','Unit of Measure':'Pkt','Default Price':'25','Notes':'12 pcs per packet' },
+      { 'Product Name *':'Roco Printing Paper A4','Old Code':'PP-A4-500','Brand':'Roco','Model':'A4-500','Category':'Stationery','Unit of Measure':'Box','Default Price':'79','Notes':'500 pcs per ream, 5 reams per box' },
+      { 'Product Name *':'Deluxe Binder Clip 32mm','Old Code':'BC-32MM','Brand':'Deluxe','Model':'32mm','Category':'Stationery','Unit of Measure':'Pkt','Default Price':'25','Notes':'12 pcs per packet' },
     ]
   },
 
   employees: {
     label: 'Employees',
     columns: [
-      { key:'code',        label:'Employee Code *', required:true,  hint:'Unique code e.g. EMP001' },
+      { key:'oldCode',     label:'Old Code',        required:false, hint:'Previous employee code (kept for reference — BizCore gives EMP codes)', aliases:['Employee Code *','Employee Code'] },
       { key:'name',        label:'Full Name *',     required:true,  hint:'Employee full name' },
       { key:'department',  label:'Department',      required:false, hint:'e.g. Sales, Operations' },
       { key:'designation', label:'Designation',     required:false, hint:'e.g. Sales Executive' },
@@ -14245,14 +14360,15 @@ const IMPORT_SCHEMAS = {
       { key:'passportExpiry',label:'Passport Expiry',required:false,hint:'YYYY-MM-DD' },
     ],
     example: [
-      { 'Employee Code *':'EMP001','Full Name *':'Mohammed Al-Otaibi','Department':'Sales','Designation':'Sales Executive','Email':'m.otaibi@downtown.com','Mobile':'+966 50 123 4567','Iqama Number':'2300000001','Iqama Expiry':'2026-12-31','Passport Number':'A12345678','Passport Expiry':'2028-06-30' },
-      { 'Employee Code *':'EMP002','Full Name *':'Fatima Al-Zahrani','Department':'Operations','Designation':'Operations Manager','Email':'f.zahrani@downtown.com','Mobile':'+966 55 987 6543','Iqama Number':'','Iqama Expiry':'','Passport Number':'','Passport Expiry':'' },
+      { 'Old Code':'EMP001','Full Name *':'Mohammed Al-Otaibi','Department':'Sales','Designation':'Sales Executive','Email':'m.otaibi@downtown.com','Mobile':'+966 50 123 4567','Iqama Number':'2300000001','Iqama Expiry':'2026-12-31','Passport Number':'A12345678','Passport Expiry':'2028-06-30' },
+      { 'Old Code':'EMP002','Full Name *':'Fatima Al-Zahrani','Department':'Operations','Designation':'Operations Manager','Email':'f.zahrani@downtown.com','Mobile':'+966 55 987 6543','Iqama Number':'','Iqama Expiry':'','Passport Number':'','Passport Expiry':'' },
     ]
   }
 };
 
 /* ── Open the import modal ── */
 function openImportModal(module) {
+  if (typeof _importBusy !== 'undefined' && _importBusy) return;   // V270.4.9: an import is still running
   _importModule = module;
   _importRows   = [];
   _importErrors = [];
@@ -14265,6 +14381,8 @@ function openImportModal(module) {
   document.getElementById('import-preview-area').innerHTML = '';
   document.getElementById('import-file-input').value = '';
   document.getElementById('import-confirm-btn').disabled = true;
+  document.getElementById('import-confirm-btn').onclick = null; document.getElementById('import-confirm-btn').setAttribute('onclick', 'confirmImport()');
+  document.getElementById('import-confirm-btn').innerHTML = '<i class="ti ti-check"></i> Import Records';
   document.getElementById('import-confirm-btn').style.opacity = '.5';
   document.getElementById('import-confirm-btn').style.cursor = 'not-allowed';
   document.getElementById('import-step3-num').style.background = 'var(--gray-light)';
@@ -14325,6 +14443,7 @@ function handleImportFile(e) {
 
 /* ── Parse the uploaded Excel file ── */
 function processImportFile(file) {
+  if (typeof _importBusy !== 'undefined' && _importBusy) return;   // V270.4.9: not while importing
   if (!file.name.match(/\.xlsx?$/i)) {
     showToast('Please upload an .xlsx or .xls file', 'error'); return;
   }
@@ -14361,12 +14480,13 @@ function processImportFile(file) {
       // Map column label → key
       const colMap = {};
       schema.columns.forEach(col => {
-        const hi = headers.findIndex(h => h === col.label);
+        const hi = headers.findIndex(h => h === col.label || (col.aliases || []).includes(h));   // V270.4.9: old templates still read
         if (hi >= 0) colMap[hi] = col.key;
       });
 
       _importRows   = [];
       _importErrors = [];
+      const seenNames = new Map(), seenVat = new Map();   // V270.4.9: repeats inside the file
 
       dataRows.forEach((row, ri) => {
         // Skip completely blank rows (like the hint row in our template)
@@ -14388,23 +14508,24 @@ function processImportFile(file) {
           return;
         }
 
-        // Module-specific duplicate check against existing data
-        let duplicate = false;
-        if (_importModule === 'customers') {
-          duplicate = customers.some(c => c.company.toLowerCase() === (record.company||'').toLowerCase());
-        } else if (_importModule === 'suppliers') {
-          duplicate = suppliers.some(s => s.company.toLowerCase() === (record.company||'').toLowerCase());
-        } else if (_importModule === 'products') {
-          duplicate = record.code && products.some(p => p.code && p.code.toLowerCase() === record.code.toLowerCase());
-        } else if (_importModule === 'employees') {
-          duplicate = employees.some(e => e.code.toLowerCase() === (record.code||'').toLowerCase());
-        }
-
-        if (duplicate) {
-          _importErrors.push({ row: ri + headerRowIdx + 2, record, reason: 'Duplicate — already exists in BizCore' });
+        // V270.4.9: duplicates — against BizCore (name with capitals / spaces / dots ignored, or the VAT No.) and inside
+        // the file itself (only the first row of a repeat is imported)
+        const C = window.BizCoreMasters && BizCoreMasters.core;
+        const nameKey = _importModule === 'customers' || _importModule === 'suppliers' ? 'company' : 'name';
+        const rowNo = ri + headerRowIdx + 2, nm = record[nameKey] || '';
+        const norm = v => C ? (_importModule === 'products' ? C.normName(v).replace(/ /g, '') : C.normName(v)) : String(v||'').trim().toLowerCase();
+        const vk = (_importModule === 'customers' || _importModule === 'suppliers') && C ? C.normVat(record.vat) : '';
+        const list = { customers, suppliers, products, employees }[_importModule] || [];
+        const firstRow = seenNames.get(norm(nm)) || (vk && seenVat.get(vk));
+        if (firstRow) {
+          _importErrors.push({ row: rowNo, record, kind: 'repeat', reason: seenNames.get(norm(nm)) ? (seenNames.get(norm(nm)).name === nm ? `same as row ${seenNames.get(norm(nm)).row}` : `same name as row ${seenNames.get(norm(nm)).row} “${seenNames.get(norm(nm)).name}” (capitals, spaces and dots ignored)`) : `same VAT No. as row ${seenVat.get(vk).row}` });
           return;
         }
-
+        const sameName = C ? C.findSimilar(list, nm, { nameField: nameKey, products: _importModule === 'products' }).find(h => h.kind === 'same') : list.find(x => norm(x[nameKey]) === norm(nm)) && { record: list.find(x => norm(x[nameKey]) === norm(nm)) };
+        if (sameName) { _importErrors.push({ row: rowNo, record, kind: 'exists', reason: `already in BizCore as “${sameName.record[nameKey]}”${sameName.record.code ? ' (' + sameName.record.code + ')' : ''}` }); return; }
+        const vatOwner = vk && C ? C.findVatOwner(list, record.vat) : null;
+        if (vatOwner) { _importErrors.push({ row: rowNo, record, kind: 'exists', reason: `VAT No. ${record.vat} already belongs to “${vatOwner.company}”` }); return; }
+        seenNames.set(norm(nm), { row: rowNo, name: nm }); if (vk) seenVat.set(vk, { row: rowNo });
         _importRows.push(record);
       });
 
@@ -14418,184 +14539,101 @@ function processImportFile(file) {
 
 /* ── Render preview/summary after parsing ── */
 function renderImportPreview() {
+  // V270.4.9 (mockup IM_1): four tiles — found, ready, repeated in the file, already in BizCore / errors
   const schema   = IMPORT_SCHEMAS[_importModule];
   const previewEl = document.getElementById('import-preview-area');
   const btnEl     = document.getElementById('import-confirm-btn');
   const step3num  = document.getElementById('import-step3-num');
-
-  const readyCount = _importRows.length;
-  const errCount   = _importErrors.length;
-  const total      = readyCount + errCount;
-
-  // Activate step 3
+  const repeats = _importErrors.filter(e => e.kind === 'repeat'), others = _importErrors.filter(e => e.kind !== 'repeat');
+  const readyCount = _importRows.length, total = readyCount + _importErrors.length;
   step3num.style.background = readyCount > 0 ? 'var(--blue)' : '#e74c3c';
   step3num.style.color = '#fff';
-
-  let html = '';
-
-  // Summary bar
-  html += '<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
-  html += `<div style="flex:1;min-width:120px;background:var(--c-eaf2fa);border-radius:8px;padding:12px 16px;text-align:center">
-    <div style="font-size:24px;font-weight:800;color:var(--blue)">${total}</div>
-    <div style="font-size:11px;color:var(--gray);margin-top:2px">Rows found</div></div>`;
-  html += `<div style="flex:1;min-width:120px;background:${readyCount>0?'#e8f8f0':'#f8f9fa'};border-radius:8px;padding:12px 16px;text-align:center">
-    <div style="font-size:24px;font-weight:800;color:${readyCount>0?'#16a34a':'var(--gray)'}">${readyCount}</div>
-    <div style="font-size:11px;color:var(--gray);margin-top:2px">Ready to import</div></div>`;
-  html += `<div style="flex:1;min-width:120px;background:${errCount>0?'#fef3f2':'#f8f9fa'};border-radius:8px;padding:12px 16px;text-align:center">
-    <div style="font-size:24px;font-weight:800;color:${errCount>0?'#e74c3c':'var(--gray)'}">${errCount}</div>
-    <div style="font-size:11px;color:var(--gray);margin-top:2px">Skipped (errors)</div></div>`;
-  html += '</div>';
-
-  // Ready rows preview (first 5)
-  if (readyCount > 0) {
-    const firstKey = schema.columns.find(c => c.required)?.key || schema.columns[0].key;
-    const secondKey = schema.columns[1]?.key;
-    html += `<div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:6px">
-      <i class="ti ti-circle-check" style="margin-right:4px"></i>Records ready to import:</div>`;
-    html += '<div style="border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;margin-bottom:12px">';
-    _importRows.slice(0, 5).forEach((r, i) => {
-      html += `<div style="padding:7px 12px;font-size:12px;${i>0?'border-top:1px solid #f0f0f0':''}">
-        <span style="font-weight:600;color:var(--blue)">${r[firstKey]}</span>
-        ${r[secondKey] ? `<span style="color:var(--gray);margin-left:8px">${r[secondKey]}</span>` : ''}
-      </div>`;
-    });
-    if (readyCount > 5) {
-      html += `<div style="padding:7px 12px;font-size:11px;color:var(--gray);background:#fafafa;border-top:1px solid #f0f0f0">
-        + ${readyCount - 5} more records...</div>`;
-    }
-    html += '</div>';
-  }
-
-  // Error rows
-  if (errCount > 0) {
-    html += `<div style="font-size:12px;font-weight:700;color:#e74c3c;margin-bottom:6px">
-      <i class="ti ti-alert-circle" style="margin-right:4px"></i>Rows skipped (will NOT be imported):</div>`;
-    html += '<div style="border:1px solid #fecaca;border-radius:6px;overflow:hidden;margin-bottom:12px">';
-    _importErrors.slice(0, 5).forEach((e, i) => {
-      const firstKey = schema.columns[0].key;
-      html += `<div style="padding:7px 12px;font-size:12px;${i>0?'border-top:1px solid #fee2e2':''}">
-        <span style="color:var(--gray)">Row ${e.row}:</span>
-        <span style="margin-left:6px;font-weight:600">${e.record[firstKey]||'(blank)'}</span>
-        <span style="margin-left:8px;color:#e74c3c;font-size:11px">${e.reason}</span>
-      </div>`;
-    });
-    if (errCount > 5) {
-      html += `<div style="padding:7px 12px;font-size:11px;color:#e74c3c;background:#fff5f5;border-top:1px solid #fee2e2">
-        + ${errCount - 5} more errors...</div>`;
-    }
-    html += '</div>';
-  }
-
-  if (readyCount === 0 && errCount === 0) {
-    html += '<div style="text-align:center;color:var(--gray);padding:20px;font-size:13px">No data rows found in the file. Make sure to fill in data from row 4 onwards in the template.</div>';
-  }
-
+  const firstKey = schema.columns.find(c => c.required)?.key || schema.columns[0].key, secondKey = schema.columns.find(c => c.key !== firstKey && c.key !== 'oldCode')?.key;
+  const tile = (n, label, cls) => `<div class="imp-tile ${cls}"><b>${n}</b><span>${label}</span></div>`;
+  const rows = (list, cls) => `<div class="imp-list ${cls}">${list.slice(0, 6).map(e => `<div><span class="imp-row">Row ${e.row}</span><b>${escapeHtml(e.record[firstKey] || '—')}</b><span class="imp-why">${escapeHtml(e.reason)}</span></div>`).join('')}${list.length > 6 ? `<div class="imp-more">… ${list.length - 6} more</div>` : ''}</div>`;
+  let html = `<div class="imp-tiles">${tile(total, 'Rows found', 't1')}${tile(readyCount, 'Ready to import', 't2')}${tile(repeats.length, 'Repeated in this file', 't3')}${tile(others.length, 'Already in BizCore / errors', 't4')}</div>`;
+  if (readyCount) html += `<div class="imp-h">Records ready to import (${readyCount})</div><div class="imp-list">${_importRows.slice(0, 5).map(r => `<div><b>${escapeHtml(r[firstKey])}</b>${r[secondKey] ? `<span class="imp-sub">${escapeHtml(r[secondKey])}</span>` : ''}</div>`).join('')}${readyCount > 5 ? `<div class="imp-more">… ${readyCount - 5} more</div>` : ''}</div>`;
+  if (repeats.length) html += `<div class="imp-h a">Repeated in this file — only the first one is imported (${repeats.length})</div>` + rows(repeats, 'a');
+  if (others.length) html += `<div class="imp-h r">Not imported (${others.length})</div>` + rows(others, 'r');
+  if (!total) html += '<div class="imp-empty">No data rows found in the file. Make sure to fill in data from row 4 onwards in the template.</div>';
+  html += `<div class="imp-note">${_importModule === 'products' ? 'Products: the same product name is not imported again (capitals, spaces and dots ignored). BizCore gives each product its ITM code; an Old Code column is kept for reference.' : _importModule === 'employees' ? 'BizCore gives each employee its EMP code; an Old Code column is kept for reference.' : 'Same company name (capitals, spaces and dots ignored) or the same VAT No. is not imported again. BizCore gives each record its code in file order.'}</div>`;
   previewEl.innerHTML = html;
   previewEl.style.display = 'block';
-
-  // Enable/disable import button
-  if (readyCount > 0) {
-    btnEl.disabled = false;
-    btnEl.style.opacity = '1';
-    btnEl.style.cursor = 'pointer';
-    btnEl.innerHTML = '<i class="ti ti-check"></i> Import ' + readyCount + ' Record' + (readyCount>1?'s':'');
-  } else {
-    btnEl.disabled = true;
-    btnEl.style.opacity = '.5';
-    btnEl.style.cursor = 'not-allowed';
-    btnEl.innerHTML = '<i class="ti ti-check"></i> Import Records';
-  }
+  btnEl.disabled = !readyCount; btnEl.style.opacity = readyCount ? '1' : '.5'; btnEl.style.cursor = readyCount ? 'pointer' : 'not-allowed';
+  btnEl.innerHTML = '<i class="ti ti-check"></i> Import ' + (readyCount ? readyCount + ' Record' + (readyCount > 1 ? 's' : '') : 'Records');
 }
 
 /* ── Confirm and save imported records ── */
+/* V270.4.9 (mockups IM_2 / IM_3): ONE press only — the button, Cancel and ✕ are locked while importing, a progress bar
+   shows "n of N saved", and the window closes only with Close. Each record gets a truly unique id and its code in file
+   order; customers / suppliers are saved one by one (their VAT No. is checked by the database). */
+let _importBusy = false;
+function importLock(on){
+  const m = document.getElementById('import-modal'); if (!m) return;
+  m.querySelectorAll('.modal-header .close-btn, .modal-footer .btn').forEach(b => { b.disabled = on; b.style.pointerEvents = on ? 'none' : ''; b.style.opacity = on ? '.45' : ''; });
+  m.classList.toggle('imp-busy', on);
+  let ov = m.querySelector('.imp-progress');
+  if (on && !ov) { ov = document.createElement('div'); ov.className = 'imp-progress'; ov.innerHTML = '<div class="imp-p-t">Importing…</div><div class="imp-bar"><i></i></div><div class="imp-p-n"></div><div class="imp-p-s">Please keep this window open until it finishes.</div>'; m.querySelector('.modal').appendChild(ov); }
+  if (!on && ov) ov.remove();
+}
+function importProgress(done, total, what){
+  const m = document.getElementById('import-modal'), ov = m && m.querySelector('.imp-progress'); if (!ov) return;
+  ov.querySelector('.imp-p-t').textContent = 'Importing ' + what + '…';
+  ov.querySelector('.imp-bar i').style.width = (total ? Math.round(done / total * 100) : 0) + '%';
+  ov.querySelector('.imp-p-n').innerHTML = `<b>${done}</b> of ${total} saved`;
+  const b = document.getElementById('import-confirm-btn'); if (b) b.innerHTML = `<span class="imp-spin"></span> Importing… ${done} / ${total}`;
+}
 async function confirmImport() {
-  if (!_importRows.length || !_importModule) return;
-
-  const count = _importRows.length;
-
-  if (_importModule === 'customers') {
-    _importRows.forEach(r => {
-      const contacts = r.contact ? [{ name:r.contact, title:'', phone:r.phone||'', isDefault:true }] : [];
-      customers.push({
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
-        company:  r.company,
-        city:     r.city||'',
-        vat:      r.vat||'',
-        contacts,
-        contact:  r.contact||'',
-        phone:    r.phone||'',
-        email:    r.email||''
-      });
-    });
-    await saveCustomers();
-    renderCustomers();
-    if (typeof renderSetupCustTable === 'function') renderSetupCustTable();
-
-  } else if (_importModule === 'suppliers') {
-    _importRows.forEach(r => {
-      suppliers.push({
-        id:       's' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
-        company:  r.company,
-        contact:  r.contact||'',
-        phone:    r.phone||'',
-        email:    r.email||'',
-        whatsapp: r.whatsapp||'',
-        city:     r.city||'',
-        cat:      r.cat||'',
-        vat:      r.vat||'',
-        notes:    r.notes||''
-      });
-    });
-    saveSuppliers();
-    renderSuppliers();
-
-  } else if (_importModule === 'products') {
-    _importRows.forEach(r => {
-      products.push({
-        id:       'p' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
-        name:     r.name,
-        code:     r.code||'',
-        brand:    r.brand||'',
-        model:    r.model||'',
-        category: r.category||'',
-        uom:      r.uom||'Pcs',
-        price:    parseFloat(r.price)||0,
-        notes:    r.notes||'',
-        specs:    [],
-        image:    null
-      });
-    });
-    await saveProducts();
-    renderProducts();
-
-  } else if (_importModule === 'employees') {
-    _importRows.forEach(r => {
-      employees.push({
-        id:             'emp-' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
-        code:           r.code,
-        name:           r.name,
-        department:     r.department||'',
-        designation:    r.designation||'',
-        email:          r.email||'',
-        mobile:         r.mobile||'',
-        roles:          [],
-        iqamaNo:        r.iqamaNo||'',
-        iqamaExpiry:    r.iqamaExpiry||'',
-        passportNo:     r.passportNo||'',
-        passportExpiry: r.passportExpiry||'',
-        licenseNo:      '',
-        licenseExpiry:  '',
-        active:         true,
-        photo:          null
-      });
-    });
-    await saveEmployees();
-    renderEmployees();
-  }
-
-  closeModal('import-modal');
-  showToast(count + ' ' + IMPORT_SCHEMAS[_importModule].label.slice(0,-1) + (count>1?'s':'') + ' imported successfully', 'success');
-  _importRows = []; _importErrors = []; _importModule = null;
+  if (_importBusy || !_importRows.length || !_importModule) return;   // a second press does nothing
+  if (!navigator.onLine) { showValidationDialog('Connection needed', 'Importing needs a connection: BizCore gives every record its code and checks VAT numbers in the database.'); return; }
+  if (!window.BizCoreMasters) { showToast('Import is not ready yet — please try again in a moment.', 'warning'); return; }
+  _importBusy = true; importLock(true);
+  const mod = _importModule, rows = _importRows.slice(), total = rows.length, label = IMPORT_SCHEMAS[mod].label.toLowerCase();
+  const M = BizCoreMasters, C = M.core, notSaved = [];
+  let done = 0; importProgress(0, total, label);
+  const build = r => {
+    if (mod === 'customers') { const contacts = r.contact ? [{ name: r.contact, title: '', phone: r.phone || '', isDefault: true }] : [];
+      return { id: C.newMasterId('c'), company: r.company, city: r.city || '', vat: r.vat || '', contacts, contact: r.contact || '', phone: r.phone || '', email: r.email || '', importedAt: new Date().toISOString() }; }
+    if (mod === 'suppliers') return { id: C.newMasterId('s'), company: r.company, contact: r.contact || '', phone: r.phone || '', email: r.email || '', whatsapp: r.whatsapp || '', city: r.city || '', cat: r.cat || '', vat: r.vat || '', notes: r.notes || '', importedAt: new Date().toISOString() };
+    if (mod === 'products') return { id: C.newMasterId('p'), name: r.name, code: '', oldCode: r.oldCode || '', brand: r.brand || '', model: r.model || '', category: r.category || '', uom: r.uom || 'Pcs', price: parseFloat(r.price) || 0, notes: r.notes || '', specs: [], image: null, importedAt: new Date().toISOString() };
+    return { id: C.newMasterId('emp-'), code: '', oldCode: r.oldCode || '', name: r.name, department: r.department || '', designation: r.designation || '', email: r.email || '', mobile: r.mobile || '', roles: [],
+      iqamaNo: r.iqamaNo || '', iqamaExpiry: r.iqamaExpiry || '', passportNo: r.passportNo || '', passportExpiry: r.passportExpiry || '', licenseNo: '', licenseExpiry: '', active: true, photo: null, importedAt: new Date().toISOString() };
+  };
+  try {
+    if (mod === 'customers' || mod === 'suppliers') {
+      const list = mod === 'customers' ? customers : suppliers;
+      for (const r of rows) {
+        const rec = build(r);
+        try { await M.save(mod, rec); list.push(rec); }
+        catch (e) { notSaved.push({ name: rec.company, reason: e.code === 'duplicate-vat' ? e.message : (e.message || 'not saved') }); }
+        importProgress(++done, total, label);
+      }
+    } else {
+      const list = mod === 'products' ? products : employees;
+      const recs = rows.map(build), codes = await M.reserveCodes(mod, recs.length);
+      recs.forEach((rec, i) => { rec.code = codes[i]; });
+      for (let i = 0; i < recs.length; i += 50) {
+        const part = recs.slice(i, i + 50);
+        list.push(...part);
+        const ok = await window.FB.fbSave(mod, list, { onlyIds: part.map(x => x.id) });
+        if (ok === false) { part.forEach(x => { const k = list.indexOf(x); if (k > -1) list.splice(k, 1); notSaved.push({ name: x.name, reason: 'not saved' }); }); }
+        done += part.length; importProgress(done, total, label);
+      }
+    }
+  } catch (e) { notSaved.push({ name: '—', reason: e.message || String(e) }); }
+  finally { _importBusy = false; }
+  try { if (mod === 'customers') { renderCustomers(); if (typeof renderSetupCustTable === 'function') renderSetupCustTable(); } else if (mod === 'suppliers') renderSuppliers(); else if (mod === 'products') renderProducts(); else { renderEmployees(); if (typeof populateRFQAssignees === 'function') populateRFQAssignees(); } } catch (_) {}
+  importLock(false);
+  // IM_3 — finished: what was imported and what was left out; Close closes
+  const saved = total - notSaved.length, skipped = _importErrors.length;
+  const area = document.getElementById('import-preview-area');
+  const doneBox = `<div class="imp-done${notSaved.length ? ' warn' : ''}"><div class="c">${notSaved.length ? '!' : '✓'}</div><div><b>${saved} ${label} imported</b><div>${skipped ? skipped + ' row' + (skipped > 1 ? 's' : '') + ' from the file were not imported (repeated or already in BizCore). ' : ''}${notSaved.length ? notSaved.length + ' could not be saved: ' + notSaved.slice(0, 3).map(x => escapeHtml(x.name) + ' — ' + escapeHtml(x.reason)).join('; ') : ''}</div></div></div>`;
+  area.insertAdjacentHTML('afterbegin', doneBox);
+  const btn = document.getElementById('import-confirm-btn');
+  btn.innerHTML = '<i class="ti ti-check"></i> Close'; btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer';
+  btn.onclick = () => { btn.onclick = null; btn.setAttribute('onclick', 'confirmImport()'); closeModal('import-modal'); };
+  _importRows = []; _importModule = null;
+  showToast(saved + ' ' + label + ' imported', notSaved.length ? 'warning' : 'success');
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -15317,35 +15355,44 @@ window.bcHealOpenOrders = bcHealOpenOrders;
 (function(){ const go = () => { if (window.__bcDataReady) bcHealOpenOrders(); }; setTimeout(go, 8000); setInterval(go, 60000); })();
 
 /* ── before a customer / product / supplier is deleted: is it used by a record that isn't loaded? ── */
-async function bcOlderDependencies(type, records){
+async function bcOlderDependencies(type, records, onProgress){
+  // V270.4.9: the same checks as before, but up to 30 records per question and all questions at the same time
+  // (it was one question per record and document list, one after the other — about 300 for 50 customers)
   if (!bcWinOn() || !window.BCWin.anyWhere) return [];
-  const out = [];
-  for (const rec of records) {
-    const deps = [];
-    try {
-      const any = async (col, field, op, value) => value != null && value !== '' && window.BCWin.anyWhere(col, field, op, value);
-      if (type === 'customers') {
-        if (await any('quotations', 'custId', '==', rec.id) || await any('quotations', 'company', '==', rec.company)) deps.push('older quotations');
-        if (await any('rfqs', 'custId', '==', rec.id) || await any('rfqs', 'company', '==', rec.company)) deps.push('older RFQs');
-        if (await any('salesOrders', 'custId', '==', rec.id) || await any('salesOrders', 'customer', '==', rec.company)) deps.push('older sales orders');
-      } else if (type === 'products') {
-        const code = String(rec.code || '').trim().toLowerCase();
-        for (const [col, label] of [['quotations', 'older quotations'], ['rfqs', 'older RFQ/pricing documents'], ['salesOrders', 'older sales orders']])
-          if (await any(col, 'productIds', 'array-contains', rec.id) || (code && await any(col, 'productCodes', 'array-contains', code))) deps.push(label);
-        // V269.4 (data plan 2c): purchasing and stock — any age, one small question each
-        const C = window.BizCorePI && window.BizCorePI.core;
-        const key = C ? C.itemKeyOf({ productId: rec.id }) : 'p_' + String(rec.id).replace(/[^A-Za-z0-9_-]/g, '-');
-        if (await any('purchaseInvoices', 'itemKeys', 'array-contains', key)) deps.push('purchase invoices');
-        if (await any('stockItems', 'itemKey', '==', key)) deps.push('stock');
-      } else if (type === 'suppliers') {
-        if (await any('rfqs', 'supplierIds', 'array-contains', rec.id)) deps.push('older RFQ/pricing documents');
-        if (await any('purchaseInvoices', 'supplierId', '==', rec.id)) deps.push('purchase invoices');   // V269.4
-        if (await any('supplierPayments', 'supplierId', '==', rec.id)) deps.push('supplier payments');
-      }
-    } catch (e) { deps.push(e && e.code === 'bc-no-permission' ? 'records your role can\'t see (ask an administrator to delete it)' : 'records that could not be checked (' + (navigator.onLine === false ? 'offline' : 'no connection') + ') — try again'); }
-    if (deps.length) out.push({ record: rec, dependencies: deps });
+  const W = window.BCWin, checks = [];
+  const add = (col, field, op, valueOf, label) => checks.push({ col, field, op, valueOf, label });
+  if (type === 'customers') {
+    add('quotations', 'custId', '==', r => r.id, 'older quotations'); add('quotations', 'company', '==', r => r.company, 'older quotations');
+    add('rfqs', 'custId', '==', r => r.id, 'older RFQs'); add('rfqs', 'company', '==', r => r.company, 'older RFQs');
+    add('salesOrders', 'custId', '==', r => r.id, 'older sales orders'); add('salesOrders', 'customer', '==', r => r.company, 'older sales orders');
+  } else if (type === 'products') {
+    const C = window.BizCorePI && window.BizCorePI.core;
+    const keyOf = r => C ? C.itemKeyOf({ productId: r.id }) : 'p_' + String(r.id).replace(/[^A-Za-z0-9_-]/g, '-');
+    const codeOf = r => String(r.code || '').trim().toLowerCase();
+    for (const [col, label] of [['quotations', 'older quotations'], ['rfqs', 'older RFQ/pricing documents'], ['salesOrders', 'older sales orders']]) {
+      add(col, 'productIds', 'array-contains', r => r.id, label); add(col, 'productCodes', 'array-contains', codeOf, label);
+    }
+    add('purchaseInvoices', 'itemKeys', 'array-contains', keyOf, 'purchase invoices');   // V269.4: purchasing and stock — any age
+    add('stockItems', 'itemKey', '==', keyOf, 'stock');
+  } else if (type === 'suppliers') {
+    add('rfqs', 'supplierIds', 'array-contains', r => r.id, 'older RFQ/pricing documents');
+    add('purchaseInvoices', 'supplierId', '==', r => r.id, 'purchase invoices');
+    add('supplierPayments', 'supplierId', '==', r => r.id, 'supplier payments');
   }
-  return out;
+  const deps = new Map(records.map(r => [r, new Set()]));
+  let done = 0; if (onProgress) onProgress(0, checks.length);
+  await Promise.all(checks.map(async ch => {
+    try {
+      const used = W.usedValues ? await W.usedValues(ch.col, ch.field, ch.op, records.map(ch.valueOf))
+        : new Set((await Promise.all(records.map(async r => { const v = ch.valueOf(r); return v != null && v !== '' && await W.anyWhere(ch.col, ch.field, ch.op, v) ? v : null; }))).filter(v => v != null));
+      records.forEach(r => { const v = ch.valueOf(r); if (v != null && v !== '' && used.has(v)) deps.get(r).add(ch.label); });
+    } catch (e) {
+      const why = e && e.code === 'bc-no-permission' ? 'records your role can\'t see (ask an administrator to delete it)' : 'records that could not be checked (' + (navigator.onLine === false ? 'offline' : 'no connection') + ') — try again';
+      records.forEach(r => deps.get(r).add(why));
+    }
+    done++; if (onProgress) onProgress(done, checks.length);
+  }));
+  return records.filter(r => deps.get(r).size).map(r => ({ record: r, dependencies: [...deps.get(r)] }));
 }
 
 /* ── Reports: a note and "Include older records" ── */
@@ -15358,3 +15405,28 @@ async function bcRenderAnalyticsWindowNote(){
   note.innerHTML = all ? '<i class="ti ti-database"></i><span>All records are included.</span>'
     : '<i class="ti ti-database"></i><span>Figures include open records and everything since ' + fmtDate(c.cutoff) + '.</span> <button type="button" class="btn btn-secondary btn-sm" onclick="bcEnsureOlder([\'quotations\',\'rfqs\',\'salesOrders\'],\'\',renderAnalytics)">Include older records</button>';
 }
+
+
+/* ── V270.4.9 — master record forms: code, same / similar name notice, VAT No. block, rename (js/master-ui.js) ── */
+(function bcBindMasterForms(){
+  if(!window.BCMasterUI) return;
+  const same=(a,b)=>String(a||'').trim().toLowerCase()===String(b||'').trim().toLowerCase();
+  const usageCustomer=c=>{ if(!c) return 0; const mine=x=>(x.custId&&x.custId===c.id)||(x.customerId&&x.customerId===c.id)||(!x.custId&&!x.customerId&&same(x.company||x.customer,c.company));
+    return quotations.filter(mine).length+rfqs.filter(r=>(r.custId&&r.custId===c.id)||(!r.custId&&same(r.customer||r.company,c.company))).length+salesOrders.filter(mine).length+(typeof invoicesCache!=='undefined'?invoicesCache.filter(mine).length:0); };
+  const usageSupplier=s=>{ if(!s) return 0; const pis=(window.BizCorePI&&window.BizCorePI.invoices)||(typeof piInvoices==='function'?piInvoices():[]);
+    return (pis||[]).filter(x=>(x.supplierId&&x.supplierId===s.id)||same(x.supplierName,s.company)).length+rfqs.filter(r=>JSON.stringify(r.pricing||r.items||'').includes('"'+s.id+'"')).length; };
+  const usageProduct=p=>{ if(!p) return 0; const has=list=>(list||[]).some(it=>it&&((it.prodId&&it.prodId===p.id)||(it.productId&&it.productId===p.id)));
+    return quotations.filter(q=>has(q.items)).length+salesOrders.filter(o=>has(o.items)).length; };
+  const reopen=(modal,fn)=>id=>{ try{clearDirty();}catch(_){} closeModal(modal); setTimeout(()=>fn(id),50); };
+  BCMasterUI.bind({col:'customers',boxId:'cust-modal',titleSel:'#cust-modal-title',nameId:'cm-company',vatId:'cm-vat',nameField:'company',label:'customer',
+    list:()=>customers,getId:()=>editingCustId,current:()=>editingCustId?customers.find(x=>x.id===editingCustId):null,open:reopen('cust-modal',openEditCustomer),
+    meta:c=>[c.city,c.contact].filter(Boolean).join(' · '),usage:usageCustomer});
+  BCMasterUI.bind({col:'suppliers',boxId:'sup-modal',titleSel:'#sup-modal-title',nameId:'sm-company',vatId:'sm-vat',nameField:'company',label:'supplier',
+    list:()=>suppliers,getId:()=>editingSupId,current:()=>editingSupId?suppliers.find(x=>x.id===editingSupId):null,open:reopen('sup-modal',openEditSupplier),
+    meta:s=>[s.city,s.contact].filter(Boolean).join(' · '),usage:usageSupplier});
+  BCMasterUI.bind({col:'products',boxId:'prod-modal',titleSel:'#prod-modal-title',nameId:'pm-name',nameField:'name',label:'product',
+    list:()=>products,getId:()=>editingProdId,current:()=>editingProdId?products.find(x=>x.id===editingProdId):null,open:reopen('prod-modal',openEditProduct),
+    meta:p=>[p.brand,p.uom].filter(Boolean).join(' · '),usage:usageProduct});
+  BCMasterUI.bind({col:'employees',boxId:'employee-form-panel',titleSel:'#employee-form-title',nameId:'emp-name',nameField:'name',label:'employee',
+    list:()=>employees,getId:()=>editingEmployeeId,current:()=>editingEmployeeId?employees.find(x=>x.id===editingEmployeeId):null,open:id=>openEmployeeForm(id)});
+})();

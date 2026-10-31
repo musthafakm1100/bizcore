@@ -9289,3 +9289,48 @@ img,svg,canvas{max-width:100%}
 .qdoc-page-footer>span{display:flex!important;justify-content:space-between;flex-wrap:wrap;gap:2px 10px}
 .qdoc-sheet>:has(+ .qdoc-page-footer){margin-bottom:8mm}
 .qdoc-sheet{padding-bottom:8mm!important}
+
+/* V270.4.9 — master record forms: code chip, same / similar name notice, VAT No. already used (mockup IM_4) */
+.bcm-code{display:inline-flex;align-items:center;margin-left:10px;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,.16);color:inherit;font:600 12px/1.6 Arial,sans-serif;letter-spacing:.2px;vertical-align:middle}
+.bcm-code.bcm-code-new{font-weight:400;opacity:.8}
+.employee-form-head .bcm-code,#employee-form-title+.bcm-code{background:#eaf1f9;color:#173a5e}
+.bcm-name-note{display:flex;gap:8px;align-items:flex-start;margin-top:6px;padding:8px 10px;border:1px solid #f1d9a6;background:#fff8e8;border-radius:8px;color:#7a5410;font-size:12px;line-height:1.45}
+.bcm-name-note[hidden],.bcm-vat-err[hidden]{display:none}
+.bcm-name-note i{font-size:15px;margin-top:1px}
+.bcm-name-note b{font-weight:600}
+.bcm-name-note .bcm-c{font-size:11px;color:#173a5e;background:#eaf1f9;border-radius:4px;padding:0 5px}
+.bcm-name-note .bcm-link{border:0;background:none;padding:0;margin-left:8px;color:#173a5e;font:600 12px Arial,sans-serif;text-decoration:underline;cursor:pointer}
+.bcm-vat-err{margin-top:4px;font-size:11.5px;color:#c0392b;line-height:1.4}
+input.bcm-invalid{border-color:#dc2626!important;box-shadow:0 0 0 3px rgba(220,38,38,.12)!important}
+.bcm-list-code{display:block;margin-top:1px;font-size:11px;color:#64748b;font-weight:400;letter-spacing:.2px}
+
+/* V270.4.9 import review / progress (mockups IM_1–IM_3) */
+.imp-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:6px 0 12px}
+@media(max-width:600px){.imp-tiles{grid-template-columns:repeat(2,1fr)}}
+.imp-tile{border:1px solid var(--border,#dde3ea);border-radius:8px;padding:8px 10px;text-align:center}
+.imp-tile b{display:block;font-size:20px;line-height:1.2}
+.imp-tile span{font-size:11px;color:var(--text-muted,#6b7785)}
+.imp-tile.t2 b{color:#1e8449}.imp-tile.t3 b{color:#b9770e}.imp-tile.t4 b{color:#c0392b}
+.imp-h{font-size:12px;font-weight:700;margin:10px 0 4px}.imp-h.a{color:#b9770e}.imp-h.r{color:#c0392b}
+.imp-list{border:1px solid var(--border,#dde3ea);border-radius:6px;font-size:12px;max-height:170px;overflow:auto}
+.imp-list>div{display:flex;gap:8px;align-items:baseline;padding:5px 8px;border-top:1px solid var(--border,#eef1f4)}
+.imp-list>div:first-child{border-top:0}
+.imp-list.a{background:rgba(243,156,18,.07)}.imp-list.r{background:rgba(231,76,60,.06)}
+.imp-row{color:var(--text-muted,#6b7785);min-width:48px}.imp-why{margin-left:auto;color:var(--text-muted,#6b7785);text-align:right}
+.imp-sub{color:var(--text-muted,#6b7785)}.imp-more{color:var(--text-muted,#6b7785);font-style:italic}
+.imp-note{font-size:11px;color:var(--text-muted,#6b7785);margin-top:10px}
+.imp-empty{padding:12px;color:#c0392b;font-size:12px}
+#import-modal .modal{position:relative}
+.imp-progress{position:absolute;left:0;right:0;bottom:64px;margin:0 20px;padding:12px 14px;border-radius:8px;background:var(--card-bg,#fff);border:1px solid var(--blue,#2e86de);box-shadow:0 4px 18px rgba(0,0,0,.12);z-index:5}
+.imp-p-t{font-weight:700;font-size:13px}.imp-p-n{font-size:12px;margin-top:4px}.imp-p-s{font-size:11px;color:var(--text-muted,#6b7785)}
+.imp-bar{height:8px;border-radius:4px;background:rgba(46,134,222,.15);margin-top:8px;overflow:hidden}
+.imp-bar i{display:block;height:100%;width:0;background:var(--blue,#2e86de);transition:width .2s}
+.imp-spin{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.5);border-top-color:#fff;border-radius:50%;animation:impspin .8s linear infinite;vertical-align:-2px}
+@keyframes impspin{to{transform:rotate(360deg)}}
+.imp-done{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;background:rgba(39,174,96,.1);border:1px solid rgba(39,174,96,.4);margin-bottom:10px;font-size:12px}
+.imp-done .c{width:24px;height:24px;border-radius:50%;background:#27ae60;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+.imp-done.warn{background:rgba(243,156,18,.1);border-color:rgba(243,156,18,.5)}.imp-done.warn .c{background:#f39c12}
+/* V270.4.9 progress window (master delete) */
+.bc-progress-overlay{position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.35);display:flex;align-items:center;justify-content:center;padding:16px}
+.bc-progress-card{background:var(--card-bg,#fff);color:var(--text,#1f2937);border-radius:10px;padding:16px 18px;width:min(380px,100%);box-shadow:0 10px 30px rgba(0,0,0,.2)}
+.bcp-t{font-weight:700;font-size:14px}.bcp-n{font-size:12px;margin-top:6px}.bcp-s{font-size:11px;color:var(--text-muted,#6b7785);margin-top:2px}

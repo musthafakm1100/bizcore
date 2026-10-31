@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="css/mobile-zoom.css?v=270.49"/>
 <script src="js/doc-zoom.js?v=270.48"></script>
 <script src="js/doc-pages.js?v=270.51"></script>
+<script src="js/master-ui.js?v=270.53"></script>
 <title>BizCore — Downtown Trading Est.</title>
 <meta content="#ffffff" name="theme-color"/>
 <link rel="manifest" href="manifest.json"/>
@@ -17,7 +18,7 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=270.51" rel="stylesheet"/>
+<link href="css/main.css?v=270.53" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=266.5" rel="stylesheet"/>
 <link href="css/typography.css?v=215" rel="stylesheet"/>
 <link href="css/masters.css?v=266.5" rel="stylesheet"/>
@@ -1689,7 +1690,7 @@ document.addEventListener('error', function(e) {
 <!-- LEFT: all form fields -->
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
 <div class="form-group form-full"><label>Product name *</label><input id="pm-name" placeholder="e.g. Insect Killer Light 32W Round"/></div>
-<div class="form-group"><label>Item code / SKU</label><input id="pm-code" placeholder="e.g. IKL-32W-RD"/></div>
+<div class="form-group"><label>Item code</label><input id="pm-code" placeholder="Given on save" readonly="" tabindex="-1" title="Given by BizCore when the product is saved — never changes"/></div>
 <div class="form-group">
 <label>Category</label>
 <select id="pm-cat" onchange="onCategoryChange()">
@@ -2295,6 +2296,7 @@ import * as LockCore from './js/lock-service.mjs?v=266.0';
 import * as InvCore from './js/invoice-core.mjs?v=266.0';
 import { createInvoiceService } from './js/invoice-service.mjs?v=270.43';
 import { createNumbering, nextSequence, formatSequence } from './js/numbering.mjs?v=270.25';
+import * as MasterCore from './js/master-service.mjs?v=270.53';   // V270.4.9: master codes + VAT numbers
 import * as RctCore from './js/receipt-core.mjs?v=270.43';
 import { createReceiptService } from './js/receipt-service.mjs?v=270.43';
 import * as AccCore from './js/account-core.mjs?v=268.2';
@@ -2514,6 +2516,58 @@ function _safeDocId(id) { return String(id).replace(/\//g, '_'); }
 // collections (a deleted quotation, a deleted RFQ, ...), so a
 // record's own id alone isn't guaranteed unique within recycleBin —
 // namespace it by its original collection to avoid any collision.
+/* ── V270.4.9: master records (js/master-service.mjs) ── */
+let _bcMasterSvc = null;
+function _bcMasters() {
+  if (!_bcMasterSvc) _bcMasterSvc = MasterCore.createMasterService({ db, doc, runTransaction }, {
+    docIdFor: (c, r) => _docIdFor(c, r),
+    format: formatSequence,
+    numberingFor: t => (typeof window.docNumberParts === 'function' ? window.docNumberParts(t).numbering : { counterKey: 'doc_' + t + '_all', displayPrefix: { customer: 'CUS-', supplier: 'SUP-', product: 'ITM-', employee: 'EMP-' }[t], digits: { customer: 5, supplier: 5, product: 6, employee: 4 }[t], floor: 0 }),
+    actor: () => { const u = auth.currentUser, cu = window.currentUser || {}; return u ? { uid: u.uid, name: cu.name || u.displayName || u.email || u.uid } : {}; },
+  });
+  return _bcMasterSvc;
+}
+function _bcMasterTempCode(col) {
+  const t = MasterCore.MASTER_TYPES[col].numberingType;
+  const prefix = (typeof window.docNumberParts === 'function' ? window.docNumberParts(t).numbering.displayPrefix : t.slice(0, 3).toUpperCase()).replace(/[-/.]+$/, '');
+  return prefix + '-OFF-' + (typeof window.getDeviceTag === 'function' ? window.getDeviceTag() : 'dev') + '-' + String(Date.now()).slice(-5);
+}
+/** Writes that need the master transaction are done here (one by one); the rest is returned for the normal save. */
+async function _bcMasterWrites(col, writes, cache, origById) {
+  const t = MasterCore.MASTER_TYPES[col], rest = [];
+  for (const w of writes) {
+    let prev = null; try { prev = cache[w.docId] ? JSON.parse(cache[w.docId]) : null; } catch (_) {}
+    const vatNow = t.vat ? MasterCore.normVat(w.data.vat) : '';
+    const vatBefore = t.vat && prev ? (prev.vatKey != null ? prev.vatKey : MasterCore.normVat(prev.vat)) : '';
+    const vatChanged = t.vat && vatNow !== vatBefore && !(w.data._deletedAt);
+    if (!MasterCore.needsCode(w.data) && !vatChanged) { rest.push(w); continue; }
+    if (!navigator.onLine) {
+      if (vatChanged && vatNow) { const e = new Error('A VAT number can be saved only with a connection (BizCore checks that no other ' + (col === 'customers' ? 'customer' : 'supplier') + ' has it). Please reconnect and save again.'); e.code = 'offline-vat'; throw e; }
+      if (!w.data.code) w.data.code = _bcMasterTempCode(col);   // a temporary code; the real one is given when back online
+      if (t.vat) w.data.vatKey = vatNow;
+      w.json = JSON.stringify(w.data); rest.push(w); continue;
+    }
+    const r = await _bcMasters().save(col, w.data);
+    Object.assign(w.data, r.record);
+    const o = origById.get(String(w.data.id)); if (o && o !== w.data) Object.assign(o, { code: r.record.code, vatKey: r.record.vatKey, tempCode: r.record.tempCode, createdAt: r.record.createdAt, createdBy: r.record.createdBy, createdByUid: r.record.createdByUid });
+    cache[w.docId] = JSON.stringify(w.data);
+  }
+  return rest;
+}
+window.BizCoreMasters = {
+  core: MasterCore,
+  /** One record through the transaction (code + VAT); its list's browser cache is updated. → { record, code, assigned } */
+  async save(col, record) {
+    const r = await _bcMasters().save(col, record);
+    Object.assign(record, r.record);
+    const cache = _lastSynced[col] || (_lastSynced[col] = {}); cache[_docIdFor(col, record)] = JSON.stringify(record);
+    return r;
+  },
+  reserveCodes: (col, n) => _bcMasters().reserveCodes(col, n),
+  releaseVat: (col, record) => _bcMasters().releaseVat(col, record),
+  /** The last save's error (fbSave returns false and keeps it here). */
+  lastError: () => window.BizCoreStorageDiagnostics && window.BizCoreStorageDiagnostics.lastSaveError,
+};
 function _docIdFor(col, record) {
   if (col === 'recycleBin' && record.originalCollection) {
     return _safeDocId(record.originalCollection + '__' + record.id);
@@ -2842,7 +2896,7 @@ async function fbSave(col, arr, opts = {}) {
     await _migrateCollectionIfNeeded(col);
     const cache = _lastSynced[col] || (_lastSynced[col] = {});
     const currentIds = new Set();
-    const writes = []; // {docId, data, json}
+    let writes = []; // {docId, data, json}
     const tooLarge = [];   // V269.6
     const only = Array.isArray(opts.onlyIds) ? new Set(opts.onlyIds.map(String)) : null;
     const skip = Array.isArray(opts.skipIds) ? new Set(opts.skipIds.map(String)) : null;   // V269: records whose own save failed — not written, not deleted
@@ -2868,6 +2922,9 @@ async function fbSave(col, arr, opts = {}) {
         writes.push({ docId, data: record, json });
       }
     }
+    // V270.4.9: customers / suppliers / products / employees — a record that needs its code, or whose VAT number changed,
+    // is saved through the master transaction (code from the counter + VAT claim); the others go on as before.
+    if (MasterCore.MASTER_TYPES[col] && writes.length) writes = await _bcMasterWrites(col, writes, cache, origById);
     // V269.5: only records the app deleted on purpose (fbMarkDeleted) — never because they are missing from the list
     const marked = _bcExplicitDeletes[col] || new Set();
     const deletes = Object.keys(cache).filter(id => !currentIds.has(id) && (!only || only.has(id)) && marked.has(id));
@@ -3006,6 +3063,24 @@ async function fbSoftDelete(col, id) {
     window.BizCoreStorageDiagnostics.lastSaveError = { collection: col, code: e?.code || 'unknown', message: String(e?.message || e), timestamp: new Date().toISOString() };
     console.warn('[BizCore] move to Recycle Bin failed:', col, id, e.code || '', e.message); return false;
   }
+}
+/** V270.4.9: many records to the Recycle Bin in a few saves (400 per save) instead of one save each.
+ *  → { done: [ids moved], ok } — onProgress(done, total) after each save. */
+async function fbSoftDeleteMany(col, ids, onProgress) {
+  const fields = { _deletedAt: new Date().toISOString(), _deletedBy: _bcWho() }, done = [];
+  for (let i = 0; i < ids.length; i += 400) {
+    const part = ids.slice(i, i + 400), b = writeBatch(db);
+    part.forEach(id => b.set(doc(db, col, _safeDocId(id)), fields, { merge: true }));
+    try { await b.commit(); }
+    catch (e) {
+      window.BizCoreStorageDiagnostics.lastSaveError = { collection: col, code: e?.code || 'unknown', message: String(e?.message || e), timestamp: new Date().toISOString() };
+      console.warn('[BizCore] move to Recycle Bin failed:', col, e.code || '', e.message); return { done, ok: false };
+    }
+    const c = _lastSynced[col];
+    part.forEach(id => { const k = _safeDocId(id); if (c && c[k]) { const o = JSON.parse(c[k]); Object.assign(o, fields); c[k] = JSON.stringify(o); } done.push(id); });
+    if (onProgress) try { onProgress(done.length, ids.length); } catch (_) {}
+  }
+  return { done, ok: true };
 }
 /** The records of `col` in the Recycle Bin (read only when the bin is opened). */
 async function fbDeletedRecords(col) {
@@ -3399,6 +3474,20 @@ window.BCWin = {
     if (!_bcReadable(col) || _bcOwnUid(col)) { const e = new Error('Your role can\'t see all ' + col + ' to check this.'); e.code = 'bc-no-permission'; throw e; }
     const s = await getDocs(query(collection(db, col), where(field, op, value), limit(1)));
     return !s.empty;
+  },
+  /** V270.4.9: which of `values` does ANY record use (field == value, or op 'array-contains')? Up to 30 values per
+   *  question, the questions at the same time — instead of one question per value. → Set of the values found. */
+  async usedValues(col, field, op, values) {
+    if (!_bcReadable(col) || _bcOwnUid(col)) { const e = new Error('Your role can\'t see all ' + col + ' to check this.'); e.code = 'bc-no-permission'; throw e; }
+    const vals = [...new Set((values || []).filter(v => v != null && v !== ''))], found = new Set(), qop = op === '==' ? 'in' : 'array-contains-any', LIM = 200;
+    const chunks = []; for (let i = 0; i < vals.length; i += 30) chunks.push(vals.slice(i, i + 30));
+    await Promise.all(chunks.map(async ch => {
+      const s = await getDocs(query(collection(db, col), where(field, qop, ch), limit(LIM)));
+      s.forEach(d => { const v = d.data()[field]; (op === '==' ? [v] : Array.isArray(v) ? v : []).forEach(x => { if (ch.includes(x)) found.add(x); }); });
+      // many records for these values: the ones not seen yet are asked one by one (rare)
+      if (s.size >= LIM) for (const v of ch) if (!found.has(v) && await this.anyWhere(col, field, op, v)) found.add(v);
+    }));
+    return found;
   },
 };
 function _winListen(col, onUpdate, onError) {
@@ -4251,7 +4340,7 @@ window.BizCoreRct = {
   },
 };
 /* Expose to app.js */
-window.FB = { fbSave, fbLoad, fbSaveRecordWith, fbMergeFields, fbCount, fbLargest, fbMarkDeleted, fbSoftDelete, fbDeletedRecords, fbRestoreRecord, fbPurgeRecord, fbSyncedJSON, fbReadDoc, fbReadAll, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
+window.FB = { fbSave, fbLoad, fbSaveRecordWith, fbMergeFields, fbCount, fbLargest, fbMarkDeleted, fbSoftDelete, fbSoftDeleteMany, fbDeletedRecords, fbRestoreRecord, fbPurgeRecord, fbSyncedJSON, fbReadDoc, fbReadAll, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
   getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, finalizeProvisionalNumber, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
 
   /* ═══════════════════════════════════════════════════
@@ -4382,12 +4471,12 @@ onAuthStateChanged(auth, async user => {
   if (!document.getElementById('bizcore-app-script') && !document.getElementById('bizcore-invoicing-script')) {
     const inv = document.createElement('script');
     inv.id  = 'bizcore-invoicing-script';
-    inv.src = 'js/invoicing.js?v=270.51';
+    inv.src = 'js/invoicing.js?v=270.53';
     const start = () => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.51';
+      s.src = 'js/app.js?v=270.53';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4407,7 +4496,7 @@ onAuthStateChanged(auth, async user => {
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js
-    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=270.43'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
+    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=270.53'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
     // V268.3: supplier-payments.js (Supplier Payments, advances, edits) after purchases.js
     // V268.4: stock.js (Purchasing → Stock) after supplier-payments.js
     const loadStock = () => { const st = document.createElement('script'); st.id = 'bizcore-stock-script'; st.src = 'js/stock.js?v=268.61'; st.onload = start; st.onerror = () => { console.error('[BizCore] stock.js could not be loaded'); start(); }; document.body.appendChild(st); };

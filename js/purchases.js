@@ -1417,10 +1417,11 @@ async function bcSaveNewSupplier(){
   if (sameVat) { fail(`VAT no. ${v} is already used by “${sameVat.company || sameVat.name}”.`); return; }
   const sim = m._sim || [], key = sim.map(x => x.id).join(',');
   if (sim.length && m._warned !== key) { m._warned = key; bcNewSupplierCheck(); document.getElementById('bns-save').innerHTML = '<i class="ti ti-plus"></i>Yes, add a new supplier'; return; }
-  const sup = { id: 's' + Date.now().toString(36), company, contact: document.getElementById('bns-contact').value.trim(), phone: document.getElementById('bns-phone').value.trim(), mobile: '', email: '',
+  const sup = { id: window.BizCoreMasters ? BizCoreMasters.core.newMasterId('s') : 's' + Date.now().toString(36), company, contact: document.getElementById('bns-contact').value.trim(), phone: document.getElementById('bns-phone').value.trim(), mobile: '', email: '',
     vat: v, city: document.getElementById('bns-city').value.trim(), createdFrom: 'purchasing', createdBy: (window.currentUser && window.currentUser.name) || '', createdAt: new Date().toISOString() };
   try {
-    await bcBusy('Adding supplier…', async () => { suppliers.push(sup); try { await saveSuppliers(); } catch (e) { suppliers.splice(suppliers.indexOf(sup), 1); throw e; } });
+    await bcBusy('Adding supplier…', async () => { suppliers.push(sup); let ok; try { ok = await saveSuppliers(); } catch (e) { suppliers.splice(suppliers.indexOf(sup), 1); throw e; }
+      if (ok === false) { suppliers.splice(suppliers.indexOf(sup), 1); const le = window.BizCoreStorageDiagnostics && window.BizCoreStorageDiagnostics.lastSaveError; throw new Error((le && le.message) || 'not saved'); } });   // V270.4.9
   } catch (e) { fail('The supplier could not be saved: ' + (e && e.message || e)); return; }
   if (typeof renderSuppliers === 'function') try { renderSuppliers(); } catch (e) {}
   const sel = m._sel;
@@ -1519,7 +1520,7 @@ function piOpenNewProduct(lineIdx, typed){
       <div id="pnp-dup"></div>
       <div class="pi-np-grid">
         <div class="form-group pi-np-wide"><label for="pnp-name">Product name *</label><input id="pnp-name" maxlength="200" value="${piEsc(typed || '')}" oninput="piNewProductCheck()"></div>
-        <div class="form-group"><label for="pnp-code">Item code / SKU <em>Optional</em></label><input id="pnp-code" maxlength="100" placeholder="e.g. PEL7600-B" oninput="piNewProductCheck()"></div>
+        <div class="form-group"><label for="pnp-code">Item code</label><input id="pnp-code" placeholder="Given on save" readonly tabindex="-1" title="Given by BizCore when the product is saved"></div>
         <div class="form-group"><label for="pnp-cat">Category</label><select id="pnp-cat"><option value="">— Choose —</option>${piProdCategories().map(c => `<option>${piEsc(c)}</option>`).join('')}</select></div>
         <div class="form-group"><label class="bc-label-row" for="pnp-uom"><span>Unit *</span><button class="bc-label-link" type="button" onclick="openQuickUom('pnp-uom')"><i class="ti ti-plus"></i>New Unit</button></label><select id="pnp-uom">${units.map(u => `<option value="${piEsc(u.code)}"${u.code === defUom ? ' selected' : ''}>${piEsc(u.code)} — ${piEsc(u.name)}</option>`).join('')}</select></div>
         <div class="form-group"><label for="pnp-brand">Brand <em>Optional</em></label><input id="pnp-brand" maxlength="100"></div>
@@ -1559,10 +1560,11 @@ async function piSaveNewProduct(){
   const sim = m._sim || [], key = sim.map(p => p.id).join(',');
   if (sim.length && m._warned !== key) { m._warned = key; piNewProductCheck(); document.getElementById('pnp-save').innerHTML = '<i class="ti ti-plus"></i>Yes, add a new product'; return; }
   if (!piCanAddProduct()) { err.textContent = 'Only administrators may add a new product (Administration → Purchase Settings).'; err.hidden = false; return; }
-  const p = { id: 'p' + Date.now().toString(36), name, code, brand: document.getElementById('pnp-brand').value.trim(), model: '', category: document.getElementById('pnp-cat').value, uom, price: 0, notes: '', specs: [], image: null, imagePath: null,
+  const p = { id: window.BizCoreMasters ? BizCoreMasters.core.newMasterId('p') : 'p' + Date.now().toString(36), name, code: '', brand: document.getElementById('pnp-brand').value.trim(), model: '', category: document.getElementById('pnp-cat').value, uom, price: 0, notes: '', specs: [], image: null, imagePath: null,
     createdFrom: 'purchase-invoice', createdBy: (window.currentUser && window.currentUser.name) || '', createdAt: new Date().toISOString() };
   try {
-    await bcBusy('Adding product…', async () => { products.unshift(p); try { await saveProducts(); } catch (e) { products.splice(products.indexOf(p), 1); throw e; } });
+    await bcBusy('Adding product…', async () => { products.unshift(p); let ok; try { ok = await saveProducts(); } catch (e) { products.splice(products.indexOf(p), 1); throw e; }
+      if (ok === false) { products.splice(products.indexOf(p), 1); const le = window.BizCoreStorageDiagnostics && window.BizCoreStorageDiagnostics.lastSaveError; throw new Error((le && le.message) || 'not saved'); } });   // V270.4.9
   } catch (e) { err.textContent = 'The product could not be saved: ' + (e && e.message || e); err.hidden = false; return; }
   if (typeof renderProducts === 'function') try { renderProducts(); } catch (e) {}
   piCloseNewProduct();
