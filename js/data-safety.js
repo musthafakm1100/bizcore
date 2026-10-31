@@ -356,7 +356,7 @@ function pricingCtx(){
     return { r, version, ref, pct: Math.round(m.pct * 100) / 100, minMargin: Number(ps.minMargin || 0), totalSell: Math.round(m.totalSell * 100) / 100, totalCost: Math.round(m.totalCost * 100) / 100, customer: r.company || r.customer || '' };
   } catch (e) { return null; }
 }
-function approvalsFor(c){ const S = shared(); return ((S && S.approvals) || []).filter(a => a.kind === 'pricing' && a.rfqId === c.r.id && Number(a.version) === c.version).sort((a, b) => String(b.id).localeCompare(String(a.id))); }
+function approvalsFor(c){ const S = shared(); return ((S && S.approvals) || []).filter(a => a.kind === (c.kind || 'pricing') && a.rfqId === c.r.id && Number(a.version) === c.version).sort((a, b) => String(b.id).localeCompare(String(a.id))); }
 /** V270.4.3: who may decide pricing approvals — the owner(s) and every active user whose role has the Special Right
  *  "Approve pricing below the minimum margin" (the Administrator role has every right). */
 const canApprove = () => (typeof window.bcRight === 'function' ? window.bcRight('approveMargin') : isAdmin());
@@ -387,6 +387,22 @@ async function bcPricingApproval(){
   return new Promise(resolve => openAsk(c, list.find(a => a.status === 'Declined') || null, resolve));
 }
 window.bcPricingApproval = bcPricingApproval;
+/** V270.4.14 (DQ_1): a quotation with its own costs (no Pricing) below the minimum margin — the same approval as
+ *  Pricing, kind 'quotation' (rfqId = the quotation id, version = its revision no.). ctx = { id, qno, version, pct,
+ *  minMargin, totalSell, totalCost, customer }. checkOnly: only "already allowed?" (self / approved) → result or null. */
+function bcQuoteApproval(ctx, { checkOnly = false } = {}){
+  const me = (window.currentUser && window.currentUser.name) || 'Administrator';
+  if (isAdmin() || (typeof window.bcRight === 'function' && window.bcRight('sellBelowMargin'))) return { by: me, at: new Date().toISOString(), id: isAdmin() ? 'admin-self' : 'right-self' };
+  const c = { kind: 'quotation', r: { id: ctx.id, rfqNo: ctx.qno }, version: Number(ctx.version || 0), ref: ctx.qno + (Number(ctx.version) > 0 ? ' Rev ' + ctx.version : ''), pct: Math.round(Number(ctx.pct) * 100) / 100, minMargin: Number(ctx.minMargin || 0), totalSell: Math.round(Number(ctx.totalSell) * 100) / 100, totalCost: Math.round(Number(ctx.totalCost) * 100) / 100, customer: ctx.customer || '' };
+  const list = c.r.id ? approvalsFor(c) : [];
+  const ok = list.find(a => a.status === 'Approved' && Number(a.marginPct) <= c.pct + 0.005);
+  if (ok) return { by: ok.decidedBy || '', at: whenIso(ok.decidedAt), id: ok.id };
+  if (checkOnly) return null;
+  const pend = list.find(a => a.status === 'Pending');
+  if (pend) { toast('Waiting for ' + (pend.approverName || 'an administrator') + ' to approve ' + c.ref + '. You can mark it as Sent once it is approved.', 'warning'); return Promise.resolve(null); }
+  return new Promise(resolve => openAsk(c, list.find(a => a.status === 'Declined') || null, resolve));
+}
+window.bcQuoteApproval = bcQuoteApproval;
 
 function openAsk(c, declined, resolve){
   const admins = adminList();
@@ -412,13 +428,13 @@ window.bcAskGo = async () => {
   const name = sel.options[sel.selectedIndex].text;
   try {
     await (window.bcBusy || ((t, f) => f()))('Sending the request…', () => shared().askApproval({
-      kind: 'pricing', rfqId: c.r.id, rfqNo: String(c.r.rfqNo || ''), ref: c.ref, version: c.version, customer: String(c.customer || '').slice(0, 200),
+      kind: c.kind || 'pricing', rfqId: c.r.id, rfqNo: String(c.r.rfqNo || ''), ref: c.ref, version: c.version, customer: String(c.customer || '').slice(0, 200),
       marginPct: c.pct, minMargin: c.minMargin, totalSell: c.totalSell, totalCost: c.totalCost,
       note: String(document.getElementById('dsa-note').value || '').trim().slice(0, 300), approverUid: uid, approverName: name.slice(0, 120),
     }));
   } catch (e) { err.textContent = 'The request could not be sent: ' + (e && e.message || e); err.hidden = false; return; }
   const r = m._resolve; m._resolve = null; closeM('ds-ask-modal'); if (r) r(null);
-  toast('Asked ' + name + ' to approve ' + c.ref + '. You will get a notification; save again once it is approved.', 'success');
+  toast('Asked ' + name + ' to approve ' + c.ref + '. You will get a notification; ' + (c.kind === 'quotation' ? 'mark it as Sent' : 'save again') + ' once it is approved.', 'success');
 };
 
 /* Notifications: administrators get the requests, the requester gets the decision. */
@@ -426,14 +442,14 @@ function onApprovals(list){
   if (typeof addBizCoreNotification !== 'function') return;
   const uid = myUid(), weekAgo = Date.now() - 7 * 864e5;
   (list || []).forEach(a => {
-    if (a.kind !== 'pricing') return;
+    if (a.kind !== 'pricing' && a.kind !== 'quotation') return;
     if (a.status === 'Pending' && canApprove() && (!a.approverUid || a.approverUid === uid)) {
       addBizCoreNotification({ id: 'apr:' + a.id, type: 'approval', approvalId: a.id, title: 'Approval needed: ' + (a.ref || ''), message: (a.requestedBy || '') + ' · margin ' + Number(a.marginPct || 0).toFixed(1) + '% (min. ' + Number(a.minMargin || 0).toFixed(1) + '%)' + (a.customer ? ' · ' + a.customer : ''), severity: 'attention', actor: a.requestedBy || '' });
     }
     if ((a.status === 'Approved' || a.status === 'Declined') && a.requestedByUid === uid) {
       const at = a.decidedAt && a.decidedAt.toDate ? a.decidedAt.toDate().getTime() : Date.now();
       if (at < weekAgo) return;
-      addBizCoreNotification({ id: 'apr-res:' + a.id + ':' + a.status, type: 'approval', approvalId: a.id, title: a.status + ': ' + (a.ref || ''), message: (a.decidedBy || '') + (a.decisionNote ? ' · “' + a.decisionNote + '”' : '') + (a.status === 'Approved' ? ' · You can save the pricing now.' : ''), severity: a.status === 'Approved' ? 'success' : 'critical', actor: a.decidedBy || '' });
+      addBizCoreNotification({ id: 'apr-res:' + a.id + ':' + a.status, type: 'approval', approvalId: a.id, title: a.status + ': ' + (a.ref || ''), message: (a.decidedBy || '') + (a.decisionNote ? ' · “' + a.decisionNote + '”' : '') + (a.status === 'Approved' ? (a.kind === 'quotation' ? ' · You can mark the quotation as Sent now.' : ' · You can save the pricing now.') : ''), severity: a.status === 'Approved' ? 'success' : 'critical', actor: a.decidedBy || '' });
     }
   });
 }
@@ -445,7 +461,7 @@ function bcOpenApproval(id){
   const m = modalEl('ds-dec-modal'); m._id = id;
   const row = (k, v) => `<div class="ds-kv"><span>${k}</span><b>${v}</b></div>`;
   m.innerHTML = `<div class="modal pi-paym" role="dialog" aria-modal="true" aria-labelledby="dsd-title" style="--pi-w:520px">
-    <div class="modal-header"><div><h2 id="dsd-title">Pricing Approval</h2><div class="so-create-subtitle">${esc(a.ref || '')} · ${esc(a.status)}</div></div><button class="close-btn" type="button" onclick="bcDecClose()" aria-label="Close">✕</button></div>
+    <div class="modal-header"><div><h2 id="dsd-title">${a.kind === 'quotation' ? 'Quotation Approval' : 'Pricing Approval'}</h2><div class="so-create-subtitle">${esc(a.ref || '')} · ${esc(a.status)}</div></div><button class="close-btn" type="button" onclick="bcDecClose()" aria-label="Close">✕</button></div>
     <div class="modal-body">
       ${row('Customer', esc(a.customer || '—'))}${row('Asked by', esc(a.requestedBy || '') + ' · ' + esc(fmtWhen(a.requestedAt)))}${row('Margin', Number(a.marginPct || 0).toFixed(1) + '% (minimum ' + Number(a.minMargin || 0).toFixed(1) + '%)')}
       ${row('Selling total', typeof formatNumber === 'function' ? formatNumber(a.totalSell || 0, 2) : a.totalSell)}${row('Total cost', typeof formatNumber === 'function' ? formatNumber(a.totalCost || 0, 2) : a.totalCost)}

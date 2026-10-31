@@ -1,0 +1,95 @@
+/* BizCore V270.4.14 — formatted descriptions (js/quote-rich.js) and the quotation's internal Cost column.
+   Mockups RT_3 (Format bar above the table header) and DQ_1 (Cost 🔒 column, Show cost switch). Regular-weight text. */
+
+/* ── the formatting itself (screen: editor, quotation view; print windows get BCRich.PRINT_CSS) ── */
+.bc-rt,.bc-rtx{line-height:1.45;overflow-wrap:anywhere}
+.bc-rt ol,.bc-rt ul,.bc-rtx ol,.bc-rtx ul{margin:2px 0!important;padding-left:22px!important;list-style-position:outside}
+.bc-rt ol,.bc-rtx ol{list-style-type:decimal}.bc-rt ul,.bc-rtx ul{list-style-type:disc}
+.bc-rt ol ol,.bc-rtx ol ol{list-style-type:lower-alpha}.bc-rt ol ol ol,.bc-rtx ol ol ol{list-style-type:lower-roman}
+.bc-rt ul ul,.bc-rtx ul ul{list-style-type:circle}.bc-rt ul ul ul,.bc-rtx ul ul ul{list-style-type:square}
+.bc-rt li,.bc-rtx li{margin:1px 0}
+.bc-rt b,.bc-rt strong,.bc-rtx b,.bc-rtx strong{font-weight:700}
+.rt-c-n{color:#1F4E79!important}.rt-c-r{color:#b91c1c!important}.rt-c-g{color:#15803d!important}.rt-c-s{color:#64748b!important}
+.rt-z-sm{font-size:.85em}.rt-z-lg{font-size:1.18em}.rt-z-h{font-size:1.38em}
+.rt-hl{background:#fef08a}
+.bc-rtp{white-space:pre-line}
+
+/* ── the editor in a line (looks like the old box: quiet until hovered / focused) ── */
+#quote-modal .qt-table .bc-rt{display:block;width:100%;min-height:52px;outline:0;cursor:text;white-space:normal;word-break:normal;max-height:none}
+#quote-modal .qt-table .quote-special-text.bc-rt{min-height:0}
+.bc-rt.bc-rt-empty::before{content:attr(data-placeholder);color:#b6c0cc;pointer-events:none;position:absolute}
+.bc-rt.bc-rt-empty{position:relative}
+#quote-modal .qt-note .quote-special-text.bc-rt{flex:1 1 auto;min-width:0}
+
+/* ── the Format bar: one slim row joined to the top of the table ── */
+#quote-modal .qt-rtbar{flex:0 0 auto;display:flex;align-items:center;gap:2px;flex-wrap:wrap;padding:3px 8px;border:1px solid var(--qt-line);border-bottom:0;border-radius:10px 10px 0 0;background:#f8fafc;min-height:34px}
+#quote-modal .qt-rtbar + .qt-cards + .qt-gt,#quote-modal .qt-rtbar ~ .qt-gt{border-top-left-radius:0;border-top-right-radius:0}
+.bc-rtbar .rtb-lbl{font-size:11.5px;color:#64748b;margin:0 6px 0 2px}
+.bc-rtbar .rtb{min-width:28px;height:27px;display:inline-flex;align-items:center;justify-content:center;gap:3px;border:0;border-radius:6px;background:none;color:#334155;font:inherit;font-size:12.5px;padding:0 7px;cursor:pointer;line-height:1}
+.bc-rtbar .rtb:hover:not(:disabled){background:#eef2f7}
+.bc-rtbar .rtb.on{background:#dbeafe;color:#1e40af}
+.bc-rtbar .rtb:disabled{color:#c3cbd6;cursor:default}
+.bc-rtbar .rtb b{font-weight:700}
+.bc-rtbar .rtb-sep{width:1px;height:18px;background:#d5dde7;margin:0 5px;font-style:normal}
+.bc-rtbar .rtb-a{font-weight:600;line-height:1;border-bottom:3px solid var(--rtc,#0f172a);padding:0 1px}
+.bc-rtbar .rtb:disabled .rtb-a{border-bottom-color:#d5dde7}
+.bc-rtbar .rtb-hl{background:#fef08a;padding:0 3px;border-radius:2px}
+.bc-rtbar .rtb:disabled .rtb-hl{background:#f1f5f9}
+.bc-rtbar .rtb-off{margin-left:auto;font-size:11.5px;color:#94a3b8;display:none;padding-right:4px}
+.bc-rtbar.rtb-disabled .rtb-off{display:inline}
+.bc-rtbar.rtb-disabled .rtb-lbl{color:#94a3b8}
+.bc-rtpop{position:fixed;z-index:100000;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 8px 22px rgba(15,23,42,.16);padding:5px;display:flex;flex-direction:column;gap:1px;min-width:120px;font-size:13px}
+.bc-rtpop button{border:0;background:none;text-align:left;padding:6px 10px;border-radius:5px;font:inherit;color:#1e293b;cursor:pointer}
+.bc-rtpop button:hover,.bc-rtpop button.on{background:#eff6ff}
+.bc-rtpop .rtp-sw{display:flex;gap:7px;padding:3px}
+.bc-rtpop .rtp-sw button{width:20px;height:20px;padding:0;border-radius:5px;border:1px solid rgba(0,0,0,.08)}
+.bc-rtpop .rtp-sw button:hover{outline:2px solid #93c5fd;outline-offset:1px}
+.bc-rtpop .rt-z-n{font-size:1em}
+
+/* ── phone: the line sheet has its own Format bar (two rows when it doesn't fit) ── */
+@media (max-width:760px){
+  #quote-modal .qt-rtbar{display:none}   /* phone: a service line is edited in its sheet, which has its own Format bar */
+  #quote-modal .qt-rtbar .rtb-off{display:none!important}
+  .qt-sheet .bc-rtbar{display:flex;flex-wrap:wrap;gap:2px;padding:3px 4px;border:1px solid #dfe5ec;border-radius:8px;background:#f8fafc;margin:0 0 6px}
+  .qt-sheet .bc-rtbar .rtb-off,.qt-sheet .bc-rtbar .rtb-lbl{display:none!important}
+  .qt-sheet .qt-shf .bc-rt{border:1px solid #d5dde7;border-radius:8px;padding:8px 10px;min-height:96px;background:#fff;font-size:15px;outline:0}
+  #qt-cards .qt-note .bc-rt{flex:1 1 auto;min-width:0;outline:0;border:0;padding:2px 4px;font-size:14px}
+}
+#qt-cards .qt-ct{white-space:pre-line}
+
+/* ── scope-line marker (Service quotation): grey "Scope line · free text, not linked" ── */
+#quote-modal .qt-lk.is-scope{color:#64748b}
+#quote-modal .qt-lk.is-scope .qt-lk-dot{background:#94a3b8!important}
+
+/* ── V270.4.14 (DQ_1): the internal Cost 🔒 column — only with "Show cost" on (folded to 0 width otherwise, so the
+      lines keep one column set) ── */
+#quote-modal .qt-table th.qt-th-cost{width:118px!important;background:#eef2f7!important;color:#334155!important}
+#quote-modal .qt-table td.qt-kc{background:#fafbfd}
+#quote-modal .qt-table:not(.qt-cost-on) th.qt-th-cost{width:0!important;padding:0!important;font-size:0!important;border:0!important}
+#quote-modal .qt-table:not(.qt-cost-on) td.qt-kc{padding:0!important;width:0;background:none}
+#quote-modal .qt-table:not(.qt-cost-on) td.qt-kc>*{display:none!important}
+#quote-modal .qt-kc .qt-inp[readonly]{background:#f1f5f9!important;color:#475569!important}
+#quote-modal .qt-kc-hint{display:block;width:100%;border:0;background:none;padding:0;margin:3px 0 0;font:inherit;font-size:11px;line-height:1.3;color:#2563eb;text-align:right;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#quote-modal .qt-kc-hint:hover{text-decoration:underline}
+#quote-modal .qt-kc-src{display:block;font-size:11px;color:#64748b;text-align:right;margin-top:3px;white-space:nowrap}
+#quote-modal .qt-kc-m{display:block;font-size:11px;text-align:right;margin-top:2px;white-space:nowrap}
+#quote-modal .qt-kc-m.ok{color:#166534}#quote-modal .qt-kc-m.low{color:#b45309}#quote-modal .qt-kc-m.loss{color:#b42318}
+#quote-modal .qt-kc-none{display:block;font-size:11px;color:#94a3b8;text-align:right;margin-top:3px}
+/* the switch in the toolbar */
+#quote-modal .qt-costsw{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 10px;border:1px solid var(--qt-line);border-radius:8px;background:#fff;font:inherit;font-size:12.5px;color:#334155;cursor:pointer;flex:0 0 auto;white-space:nowrap}
+#quote-modal .qt-costsw .qt-tg{width:28px;height:16px;border-radius:9px;background:#cbd5e1;position:relative;flex:0 0 auto;transition:background .15s}
+#quote-modal .qt-costsw .qt-tg::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;background:#fff;transition:left .15s}
+#quote-modal .qt-costsw[aria-pressed="true"] .qt-tg{background:var(--qt-navy)}
+#quote-modal .qt-costsw[aria-pressed="true"] .qt-tg::after{left:14px}
+#quote-modal .qt-costsw[hidden]{display:none}
+@media (max-width:900px){ #quote-modal .qt-costsw .qt-costsw-l{display:none} }
+/* phone card: one extra row with the cost when Show cost is on */
+#qt-cards .qt-ccost{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#475569;padding:6px 2px 0;border-top:1px dashed #e2e8f0;margin-top:6px}
+#qt-cards .qt-ccost input{width:110px;height:34px;border:1px solid #d5dde7;border-radius:7px;padding:0 8px;text-align:right;font:inherit;font-size:14px}
+/* internal box: direct quotations */
+#quote-modal .qt-res .qt-cov{font-size:11.5px;color:#64748b;margin-top:4px}
+/* the quotation view (screen): a formatted description is not all bold */
+.qv-desc-title .bc-rtx,#view-modal .qv-desc-title .bc-rtx{font-weight:400!important;font-size:13px}
+.qv-desc-title .bc-rtx b,#view-modal .qv-desc-title .bc-rtx b{font-weight:700!important}
+/* Sales Order view: a service line's text keeps its line breaks / bullets */
+.sov-item-name b,.sov-item-text{white-space:pre-line}

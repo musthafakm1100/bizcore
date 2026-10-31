@@ -148,7 +148,9 @@ function sovEstimate(so){
   return { status: 'ok', q, r, n, items, extra, factor: material > 0 ? extra / material : 0, supplierName: (v && v.supplierName) || r.supplierName || '' };
 }
 function sovEstimateLine(est, so, it){
-  if (!est || est.status !== 'ok') return null;
+  // V270.4.14: a cost typed on the quotation line (direct quotation, or a line added by hand) is that line's estimate
+  const own = () => { const qi = est && est.q ? (est.q.items || [])[Number(it.origIdx)] || {} : {}; const v = sovN(it.estCost) || sovN(qi.estCost); return v > 0 ? { buy: v, unit: v, supplier: '', own: true } : null; };
+  if (!est || est.status !== 'ok') return own();
   const qi = (est.q.items || [])[Number(it.origIdx)] || {};
   const low = s => String(s || '').trim().toLowerCase();
   const prod = qi.prodId || it.prodId, code = low(qi.code || it.code), desc = low(qi.desc || it.desc);
@@ -156,7 +158,7 @@ function sovEstimateLine(est, so, it){
     || (code && est.items.find(i => low(i.code) === code))
     || est.items.find(i => low(i.desc) === desc);
   const buy = hit ? sovN(hit.buy) : 0;
-  if (!(buy > 0)) return null;
+  if (!(buy > 0)) return own();
   return { buy, unit: buy * (1 + est.factor), supplier: (hit.supplierName || est.supplierName || '').trim() };
 }
 function sovLastPaid(it){
@@ -538,7 +540,7 @@ function sovProfit(m, view){
   const pctCell = (p, c, s) => `<b class="${p < 0 ? 'sov-red' : 'sov-done'}">${sovPct(main(p, c, s))}</b><small>${otherName} ${sovPct(other(p, c, s))}</small>`;
   const est = P.est;
   const switcher = `<div class="sov-seg" role="tablist"><button type="button" role="tab" data-pview="summary" aria-selected="${view !== 'eva'}" class="${view !== 'eva' ? 'on' : ''}">Summary</button><button type="button" role="tab" data-pview="eva" aria-selected="${view === 'eva'}" class="${view === 'eva' ? 'on' : ''}">Estimate vs Actual</button></div>`;
-  const estText = est.status === 'ok' ? `Estimate = Pricing <b>${sovEsc(est.r.rfqNo || '')} V${est.n}</b> (converted to ${sovEsc(est.q.qno)}${est.q.date ? ' on ' + sovDayMonth(est.q.date) : ''} — fixed)` : est.status === 'loading' ? 'Reading the pricing version…' : 'No pricing estimate is linked to this order (direct order or older data) — the last price paid is used where known.';
+  const estText = est.status === 'ok' ? `Estimate = Pricing <b>${sovEsc(est.r.rfqNo || '')} V${est.n}</b> (converted to ${sovEsc(est.q.qno)}${est.q.date ? ' on ' + sovDayMonth(est.q.date) : ''} — fixed)` : est.status === 'loading' ? 'Reading the pricing version…' : P.rows.some(r => r.e && r.e.own) ? 'Estimate = the cost entered on the quotation (Cost 🔒 column) — the last price paid is used for lines without one.' : 'No pricing estimate is linked to this order (direct order or older data) — the last price paid is used where known.';
   if (view !== 'eva') {
     const rows = P.rows.map(r => `<tr><td data-label="#">${r.l.no}</td><td data-label="Item" class="sov-item-name"><b>${sovEsc(r.l.desc)}</b><small>${r.src || '—'}</small></td><td data-label="Qty">${sovQ(r.l.qty, r.l.uom)}</td><td data-label="Selling">${sovMoney(r.selling)}</td><td data-label="Cost">${r.incomplete ? '—' : sovMoney(r.cost)}</td><td data-label="Profit">${r.incomplete ? '—' : `<b class="${r.profit < 0 ? 'sov-red' : 'sov-done'}">${sovMoney(r.profit)}</b>`}</td><td data-label="${mainName} %" class="sov-pct">${r.incomplete ? '—' : pctCell(r.profit, r.cost, r.selling)}</td><td data-label="Cost">${sovPill(r.source[0], r.source[1])}</td></tr>`).join('');
     const none = t.counted === 0, exNote = t.excluded ? `${sovPlural(t.excluded, 'Line')} Without A Cost Left Out` : '';

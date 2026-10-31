@@ -8,7 +8,7 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v27058';
+const CACHE_NAME = 'bizcore-shell-v27059';
 const APP_SHELL = [
   './login.html',
   './delivery.html',
@@ -36,6 +36,7 @@ const APP_SHELL = [
   './css/bc-date.css?v=270.1',
   './css/pricing.css?v=270.22',
   './css/quotation.css?v=270.22',
+  './css/quote-rich.css?v=270.59',
   './css/safe-area.css?v=269.2',
   './css/users.css?v=270.43',
   './js/users.js?v=270.43',
@@ -46,16 +47,18 @@ const APP_SHELL = [
   './js/role-service.mjs?v=270.43',
   './css/mobile-zoom.css?v=270.49',
   './js/doc-zoom.js?v=270.48',
-  './js/doc-pages.js?v=270.51',
+  './js/doc-pages.js?v=270.59',
   './js/master-ui.js?v=270.56',
-  './js/item-link.js?v=270.56',
+  './js/item-link.js?v=270.59',
+  './js/quote-rich.js?v=270.59',
+  './js/quote-cost.js?v=270.59',
   './js/master-service.mjs?v=270.55',
   './js/ui-standard.js?v=269.1',
   './js/responsive.js?v=270.47',
-  './js/app.js?v=270.58',
-  './js/so-view.js?v=270.57',
+  './js/app.js?v=270.59',
+  './js/so-view.js?v=270.59',
   './js/pricing-ui.js?v=270.24',
-  './js/quotation-ui.js?v=270.21',
+  './js/quotation-ui.js?v=270.59',
   './js/bc-date.js?v=270.52',
   './js/deliveries.js?v=265.7',
   './js/delivery-core.mjs?v=266.0',
@@ -64,7 +67,7 @@ const APP_SHELL = [
   './js/lock-service.mjs?v=266.0',
   './js/invoice-core.mjs?v=266.0',
   './js/invoice-service.mjs?v=270.43',
-  './js/invoicing.js?v=270.53',
+  './js/invoicing.js?v=270.59',
   './js/receipts.js?v=270.51',
   './js/receipt-core.mjs?v=270.43',
   './js/accounts.js?v=268.51',
@@ -76,7 +79,7 @@ const APP_SHELL = [
   './js/purchases.js?v=270.57',
   './js/supplier-payments.js?v=269.3',
   './js/stock.js?v=268.61',
-  './js/data-safety.js?v=270.57',
+  './js/data-safety.js?v=270.59',
   './js/purchase-core.mjs?v=270.43',
   './js/purchase-service.mjs?v=270.43',
   './js/account-core.mjs?v=268.2',

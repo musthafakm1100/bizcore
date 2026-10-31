@@ -1320,7 +1320,12 @@ function quotationLineNoteStyle(){const v=ensureQuotationPrintSettings().lineNot
 function quotationNoteStyleKey(v){return QUOTATION_LINE_NOTE_STYLES[v]?v:'';}
 function quotationDocNoteStyle(q){return quotationNoteStyleKey(q?.noteStyle)||quotationNoteStyleKey(q?.noteStyleAtSend)||quotationLineNoteStyle();}
 function quotationEffectiveNoteStyle(q,it){return quotationNoteStyleKey(it?.noteStyle)||quotationDocNoteStyle(q);}
-function quotationPrintLineNoteHtml(text,styleKey){const safe=escapeHtml(String(text||''));const style=quotationNoteStyleKey(styleKey)||quotationLineNoteStyle();if(style==='minimal')return `<div class="inline-note note-minimal"><b>Note:</b> ${safe}</div>`;if(style==='badge')return `<div class="inline-note note-badge"><span>NOTE</span><em>${safe}</em></div>`;if(style==='blueAccent')return `<div class="inline-note note-blue"><b>Note:</b> ${safe}</div>`;return `<div class="inline-note note-highlight"><b>Note:</b> ${safe}</div>`;}
+/* V270.4.14: a line's description / note as a document shows it — the formatting when there is some (js/quote-rich.js),
+   else the text with its line breaks. */
+function bcLineDescHtml(it,empty='—'){ if(it&&it.descHtml&&window.BCRich) return BCRich.show(it.descHtml,it.desc); const t=String(it?.desc||''); return t?(t.includes('\n')?'<span class="bc-rtp">'+escapeHtml(t)+'</span>':escapeHtml(t)):empty; }
+function bcNoteHtml(it){ return it&&it.textHtml&&window.BCRich?BCRich.show(it.textHtml,it.text):escapeHtml(String(it?.text||it?.desc||'')); }
+function bcRichPrintCss(){ return window.BCRich?BCRich.PRINT_CSS+'td .bc-rtx b *{font-weight:700!important}td .bc-rtx i,td .bc-rtx i *{font-style:italic!important}.items tr.bc-rt-row{break-inside:auto!important;page-break-inside:auto!important}':''; }
+function quotationPrintLineNoteHtml(text,styleKey,html){const safe=html&&window.BCRich?BCRich.show(html,text):(String(text||'').includes('\n')?'<span class="bc-rtp">'+escapeHtml(String(text||''))+'</span>':escapeHtml(String(text||'')));const style=quotationNoteStyleKey(styleKey)||quotationLineNoteStyle();if(style==='minimal')return `<div class="inline-note note-minimal"><b>Note:</b> ${safe}</div>`;if(style==='badge')return `<div class="inline-note note-badge"><span>NOTE</span><em>${safe}</em></div>`;if(style==='blueAccent')return `<div class="inline-note note-blue"><b>Note:</b> ${safe}</div>`;return `<div class="inline-note note-highlight"><b>Note:</b> ${safe}</div>`;}
 function renderQuotationPrintSettings(){const cfg=ensureQuotationPrintSettings(),sel=document.getElementById('qprint-line-note-style');if(sel)sel.value=cfg.lineNoteStyle;updateQuotationLineNotePreview();setQuotationPrintDirty(false);}
 function setQuotationPrintDirty(dirty){const st=document.getElementById('quotation-print-change-status'),btn=document.getElementById('quotation-print-apply-btn');if(st){st.textContent=dirty?'Unsaved changes':'No pending changes';st.style.color=dirty?'var(--orange-txt)':'var(--gray)';}if(btn)btn.disabled=!dirty;}
 function markQuotationPrintDirty(){setQuotationPrintDirty(true);updateQuotationLineNotePreview();}
@@ -2654,6 +2659,8 @@ function bcProductUsage(p){
   const mine=it=>!!it&&(String(it.prodId||'')===pid||String(it.productId||'')===pid);
   const n=v=>Number(v)||0;
   (typeof rfqs!=='undefined'?rfqs:[]).forEach(r=>(r.pricingItems||[]).forEach(it=>{ if(mine(it)) docs.push({kind:'pricing',label:'Pricing',id:r.id,no:r.rfqNo||'RFQ',date:r.date||'',party:r.company||r.customer||'',text:it.desc||'',qty:n(it.qty),price:n(it.buy),est:true,sell:n(it.sell),open:`viewPricingReadOnly('${r.id}')`}); }));
+  // V270.4.14: a cost typed on a quotation (no Pricing) is the item's estimate once the quotation is sent
+  (typeof quotations!=='undefined'?quotations:[]).forEach(q=>{ if((q.status||'Draft')==='Draft') return; (q.items||[]).forEach(it=>{ if(mine(it)&&Number(it.estCost)>0&&!(Number(it.pricingBuy)>0)) docs.push({kind:'pricing',label:'Quotation est.',id:q.id,no:q.qno||'Quotation',date:q.date||'',party:q.company||'',text:it.desc||'',qty:n(it.qty),price:n(it.estCost),est:true,sell:n(it.up),open:`viewQuotation('${q.id}')`}); }); });
   (typeof quotations!=='undefined'?quotations:[]).forEach(q=>(q.items||[]).forEach(it=>{ if(mine(it)) docs.push({kind:'quotation',label:'Quotation',id:q.id,no:q.qno||'Quotation',date:q.date||'',party:q.company||'',text:it.desc||'',qty:n(it.qty),price:n(it.up),status:q.status,open:`viewQuotation('${q.id}')`}); }));
   const soById=new Map();
   (typeof salesOrders!=='undefined'?salesOrders:[]).forEach(o=>{ soById.set(String(o.id),o); (o.items||[]).forEach(it=>{ if(mine(it)) docs.push({kind:'so',label:'Sales order',id:o.id,no:o.soNo||'Sales order',date:o.date||'',party:o.customer||o.company||'',text:it.desc||'',qty:n(it.qty),price:n(it.up),open:`viewSO('${o.id}')`}); }); });
@@ -2938,15 +2945,16 @@ function setQuoteType(type, options={}) {
   if (type === 'product') {
     if(pbar) pbar.style.display = '';
     if(sbar) sbar.style.display = 'none';
-    if(thead) thead.innerHTML = `<tr><th class="qt-th-no">#</th><th class="qt-th-code">Code · Brand / Model</th><th class="qt-th-desc">Description &amp; Specifications</th><th class="qt-th-qty qt-c">Qty ${req}</th><th class="qt-th-price qt-r">Unit Price ${req}</th><th class="qt-th-dp qt-r">Disc %</th><th class="qt-th-da qt-r">Disc SAR</th><th class="qt-th-tot qt-r">Line Total</th><th class="qt-th-menu"><span class="qt-sr">Line menu</span></th></tr>`;
-    if(tfoot) tfoot.innerHTML = `<tr class="qt-totrow"><td></td><td colspan="2" id="qt-tot-label">Total · 0 Items</td><td></td><td></td><td></td><td class="qt-r" id="qt-tot-disc"></td><td class="qt-r" id="qt-tot-net">0.00</td><td></td></tr>`;
+    if(thead) thead.innerHTML = `<tr><th class="qt-th-no">#</th><th class="qt-th-code">Code · Brand / Model</th><th class="qt-th-desc">Description &amp; Specifications</th><th class="qt-th-qty qt-c">Qty ${req}</th><th class="qt-th-cost qt-r" title="Internal — never printed">Cost 🔒</th><th class="qt-th-price qt-r">Unit Price ${req}</th><th class="qt-th-dp qt-r">Disc %</th><th class="qt-th-da qt-r">Disc SAR</th><th class="qt-th-tot qt-r">Line Total</th><th class="qt-th-menu"><span class="qt-sr">Line menu</span></th></tr>`;
+    if(tfoot) tfoot.innerHTML = `<tr class="qt-totrow"><td></td><td colspan="2" id="qt-tot-label">Total · 0 Items</td><td></td><td class="qt-kc"></td><td></td><td></td><td class="qt-r" id="qt-tot-disc"></td><td class="qt-r" id="qt-tot-net">0.00</td><td></td></tr>`;
   } else {
     if(pbar) pbar.style.display = 'none';
     if(sbar) sbar.style.display = '';
-    if(thead) thead.innerHTML = `<tr><th class="qt-th-no">#</th><th class="qt-th-scope">Scope Of Work</th><th class="qt-th-qty qt-c">Qty ${req}</th><th class="qt-th-price qt-r">Rate ${req}</th><th class="qt-th-dp qt-r">Disc %</th><th class="qt-th-da qt-r">Disc SAR</th><th class="qt-th-tot qt-r">Line Total</th><th class="qt-th-menu"><span class="qt-sr">Line menu</span></th></tr>`;
-    if(tfoot) tfoot.innerHTML = `<tr class="qt-totrow"><td></td><td id="qt-tot-label">Total · 0 Scope Lines</td><td></td><td></td><td></td><td class="qt-r" id="qt-tot-disc"></td><td class="qt-r" id="qt-tot-net">0.00</td><td></td></tr>`;
+    if(thead) thead.innerHTML = `<tr><th class="qt-th-no">#</th><th class="qt-th-scope">Scope Of Work</th><th class="qt-th-qty qt-c">Qty ${req}</th><th class="qt-th-cost qt-r" title="Internal — never printed">Cost 🔒</th><th class="qt-th-price qt-r">Rate ${req}</th><th class="qt-th-dp qt-r">Disc %</th><th class="qt-th-da qt-r">Disc SAR</th><th class="qt-th-tot qt-r">Line Total</th><th class="qt-th-menu"><span class="qt-sr">Line menu</span></th></tr>`;
+    if(tfoot) tfoot.innerHTML = `<tr class="qt-totrow"><td></td><td id="qt-tot-label">Total · 0 Lines</td><td></td><td class="qt-kc"></td><td></td><td></td><td class="qt-r" id="qt-tot-disc"></td><td class="qt-r" id="qt-tot-net">0.00</td><td></td></tr>`;
   }
   if(typeof qtAfterTypeChange==='function') qtAfterTypeChange(type);
+  if(window.BCQuoteCost) BCQuoteCost.apply();   // V270.4.14
 }
 
 
@@ -5342,10 +5350,11 @@ function setQuotationPricingContext(ctx=null){
   if(summary) summary.hidden=!ctx;
   const none=document.getElementById('quote-commercial-none'); if(none) none.hidden=!!ctx;
   const ref=document.getElementById('qcs-ref'); if(ref) ref.textContent=ctx?.pricingRef||'';
-  if(ctx) updateQuotationCommercialSummary();
+  if(ctx||window.BCQuoteCost) updateQuotationCommercialSummary();   // V270.4.14: also the own costs of a direct quotation
   if(typeof qtPaintHeader==='function') qtPaintHeader();
 }
 function updateQuotationCommercialSummary(){
+  if(window.BCQuoteCost) BCQuoteCost.paint();   // V270.4.14: line costs, hints, margins; the box of a quotation without Pricing
   const ctx=window._pendingQuotationPricingContext;
   const summary=document.getElementById('quote-commercial-summary'); if(!summary||!ctx)return;
   let changed=0;
@@ -5514,7 +5523,7 @@ function qtPricingContextOf(q){
 function qtDiscPctText(p){ const n=Number(p)||0; return n?n.toFixed(2):''; }
 function qtMoneyText(n){ const v=Number(n)||0; return v?v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):''; }
 function addItemRow(item={}) {
-  if(item.lineType==='heading'||item.lineType==='note'){ return addSpecialQuoteRow(item.lineType,item.text||item.desc||'',{noteStyle:item.noteStyle||'',focus:false}); }
+  if(item.lineType==='heading'||item.lineType==='note'){ return addSpecialQuoteRow(item.lineType,item.text||item.desc||'',{noteStyle:item.noteStyle||'',focus:false,html:item.textHtml||''}); }
   const n = document.querySelectorAll('#items-tbody tr:not(.quote-special-row)').length+1;
   const tr = document.createElement('tr');
   tr.dataset.lineType='item';
@@ -5527,6 +5536,8 @@ function addItemRow(item={}) {
   if (item.image) tr.dataset.image = item.image;
   if(item.pricingSell!==undefined&&item.pricingSell!=='') tr.dataset.pricingSell=String(item.pricingSell);
   if(item.pricingBuy!==undefined&&item.pricingBuy!=='') tr.dataset.pricingBuy=String(item.pricingBuy);
+  if(Number(item.estCost)>0) tr.dataset.estCost=String(item.estCost);   // V270.4.14: internal cost (never printed)
+  if(isScopeRow&&item.freeScope) tr.dataset.freeScope='1';             // V270.4.14: scope line on purpose (contracting, not linked)
   const discAmt=quoteLineDisc(item);
   if(discAmt){ tr.dataset.discBy=item.discBy==='pct'?'pct':'amt'; tr.dataset.discPct=String(quoteLineDiscPct(item)); }
   const selectedUom=item.uom||(isProduct?'Pcs':'Job');
@@ -5541,16 +5552,21 @@ function addItemRow(item={}) {
   const qtyCell=`<td class="qt-qc"><div class="qt-qu"><input data-quote-qty type="text" inputmode="decimal" required value="${e(qtyValue)}" onfocus="beginNumberEdit(this)" oninput="calcTotals()" onblur="enforceQuoteQty(this,true)" aria-label="Quantity"><select class="quote-uom-readonly" data-master-uom="${e(selectedUom)}" disabled aria-label="Unit (from the Item / Service Master)" title="From the Item / Service Master">${uomOptions}</select></div></td>`;
   const priceCell=`<td class="qt-pc"><input class="qt-inp" data-quote-price type="text" inputmode="decimal" required value="${e(priceValue)}" onfocus="beginNumberEdit(this)" oninput="calcTotals()" onblur="formatQuotePrice(this)" aria-label="${isProduct?'Unit price':'Rate'}"><button type="button" class="qt-ref" hidden tabindex="-1" onclick="qtUsePricingPrice(this)"></button></td>`;
   const discCells=`<td class="qt-dpc"><input class="qt-inp" data-quote-dpct type="text" inputmode="decimal" value="${e(dpVal)}" placeholder="—" onfocus="beginNumberEdit(this)" oninput="qtDiscInput(this,'pct')" onblur="qtDiscBlur(this,'pct')" aria-label="Discount %"></td><td class="qt-dac"><input class="qt-inp" data-quote-damt type="text" inputmode="decimal" value="${e(daVal)}" placeholder="—" onfocus="beginNumberEdit(this)" oninput="qtDiscInput(this,'amt')" onblur="qtDiscBlur(this,'amt')" aria-label="Discount SAR"></td>`;
+  const costCell=window.BCQuoteCost?BCQuoteCost.cellHtml(item):'<td class="qt-kc"></td>';   // V270.4.14 (DQ_1)
   const tailCells=`<td class="qt-tc"><div class="total-cell">0.00</div><div class="qt-gross"></div></td><td class="qt-mc"><button type="button" class="pr-menu-btn qt-menu-btn" onclick="qtRowMenu(this)" aria-label="Line menu" title="Line menu">⋮</button></td>`;
   if (isProduct) {
     tr.innerHTML = noCell
       +`<td class="qt-cc"><input data-f="code" class="qt-code" placeholder="Code" value="${e(item.code)}" aria-label="Item code" oninput="calcTotals()"><div class="qt-bm"><input data-f="brand" placeholder="Brand" value="${e(item.brand)}" aria-label="Brand" oninput="calcTotals()"><input data-f="model" placeholder="Model" value="${e(item.model)}" aria-label="Model" oninput="calcTotals()"></div></td>`
       +`<td class="qt-dc"><textarea data-f="desc" rows="1" data-max-lines="3" class="qt-desc quote-line-product-search" placeholder="Search or type the item…" autocomplete="off" onfocus="handleQuoteLineDescriptionFocus(this)" oninput="qtAutoGrow(this);handleQuoteLineDescriptionInput(this)" onkeydown="handleQuoteLineDescriptionKeydown(event,this)" onblur="setTimeout(closeProdSearch,200)" aria-label="Description">${e(item.desc)}</textarea><input data-f="specs" class="qt-specs" placeholder="Specifications (e.g. Size: A4 | Weight: 80gsm)" value="${e(item.specs)}" aria-label="Specifications"><button type="button" class="qt-meta" tabindex="-1" onclick="qtEditLine(this.closest('tr'))" title="Item code, brand and model"></button></td>`
-      +qtyCell+priceCell+discCells+tailCells;
+      +qtyCell+costCell+priceCell+discCells+tailCells;
   } else {
     tr.innerHTML = noCell
-      +`<td class="qt-sc"><textarea data-f="desc" rows="2" data-max-lines="8" class="qt-scope" placeholder="Describe the scope of work, deliverables, civil / MEP work…" oninput="qtAutoGrow(this)" aria-label="Scope of work">${e(item.desc)}</textarea></td>`
-      +qtyCell+priceCell+discCells+tailCells;
+      +`<td class="qt-sc"><div data-f="desc" class="qt-scope" aria-label="Scope of work" oninput="calcTotals()"></div></td>`
+      +qtyCell+costCell+priceCell+discCells+tailCells;
+    // V270.4.14 (RT_3): the scope text is a formatted editor (bold, colours, lists…) — .value gives the plain text
+    const ed=tr.querySelector('.qt-scope');
+    if(window.BCRich) BCRich.make(ed,{html:item.descHtml||'',text:item.desc||'',placeholder:'Describe the job or scope of work — the customer\'s wording…'});
+    else { ed.outerHTML=`<textarea data-f="desc" rows="2" data-max-lines="8" class="qt-scope" oninput="qtAutoGrow(this)" aria-label="Scope of work">${e(item.desc)}</textarea>`; }
   }
   document.getElementById('items-tbody').appendChild(tr);
   tr.querySelectorAll('textarea').forEach(qtAutoGrow);
@@ -5596,18 +5612,21 @@ function addSpecialQuoteRow(type='note', text='', opts={}){
   tr.dataset.lineType=type;
   tr.dataset.lineKey='ql'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
   tr.className='quote-special-row '+(type==='heading'?'quote-heading-row qt-hrow':'quote-note-row qt-nrow');
-  const span=currentQuoteType==='contracting'?6:7;
+  const span=currentQuoteType==='contracting'?7:8;   // V270.4.14: + the Cost 🔒 column
   const placeholder=type==='heading'?'e.g. Option 1 – Supply only':'e.g. Installation price is not included.';
   const input=`<input class="quote-special-text" value="${escapeHtml(text)}" placeholder="${placeholder}" onkeydown="handleSpecialQuoteRowKey(event,this)" oninput="markDirty('quote-modal')" aria-label="${type==='heading'?'Heading':'Note'} text">`;
   if(type==='heading'){
     tr.innerHTML=`<td class="qt-no"><span class="qt-grip" title="Drag to reorder" aria-hidden="true">⋮⋮</span></td><td colspan="${span}"><div class="qt-hwrap"><span class="qt-badge">Heading</span>${input}</div></td><td class="qt-mc"><button type="button" class="pr-menu-btn qt-menu-btn" onclick="qtRowMenu(this)" aria-label="Line menu" title="Line menu">⋮</button></td>`;
   } else {
     tr.dataset.noteStyle=quotationNoteStyleKey(opts.noteStyle)||'';
-    tr.innerHTML=`<td class="qt-no"><span class="qt-grip" title="Drag to reorder" aria-hidden="true">⋮⋮</span></td><td colspan="${span}"><div class="qt-nline"><div class="qt-note"><b class="qt-note-b">NOTE</b><b class="qt-note-l">Note:</b>${input}</div><button type="button" class="qt-schip" onclick="qtNoteStyleMenu(this)" aria-label="Note style"></button></div></td><td class="qt-mc"><button type="button" class="pr-menu-btn qt-menu-btn" onclick="qtRowMenu(this)" aria-label="Line menu" title="Line menu">⋮</button></td>`;
+    const noteEd=window.BCRich?`<div class="quote-special-text" aria-label="Note text" oninput="markDirty('quote-modal')"></div>`:input;   // V270.4.14: formatted note
+    tr.innerHTML=`<td class="qt-no"><span class="qt-grip" title="Drag to reorder" aria-hidden="true">⋮⋮</span></td><td colspan="${span}"><div class="qt-nline"><div class="qt-note"><b class="qt-note-b">NOTE</b><b class="qt-note-l">Note:</b>${noteEd}</div><button type="button" class="qt-schip" onclick="qtNoteStyleMenu(this)" aria-label="Note style"></button></div></td><td class="qt-mc"><button type="button" class="pr-menu-btn qt-menu-btn" onclick="qtRowMenu(this)" aria-label="Line menu" title="Line menu">⋮</button></td>`;
   }
+  const nEd=type==='note'&&window.BCRich?tr.querySelector('div.quote-special-text'):null;
+  if(nEd) BCRich.make(nEd,{html:opts.html||'',text,placeholder});
   tbody.appendChild(tr); renumberQuoteItemRows(); calcTotals();
   if(typeof qtPaintNotes==='function') qtPaintNotes();
-  if(opts.focus!==false) tr.querySelector('input')?.focus();   // V270.2.1: at once — a key typed straight after the click must go into the new line, not press the button again
+  if(opts.focus!==false) tr.querySelector('.quote-special-text')?.focus();   // V270.2.1: at once — a key typed straight after the click must go into the new line, not press the button again
   return tr;
 }
 function handleSpecialQuoteRowKey(event,input){
@@ -5865,7 +5884,7 @@ function calcTotals() {
   set('t-net',documentMoney('quotation','grandTotal',net));
   set('t-vat-label',`VAT ${Number(rate).toFixed(2).replace(/\.00$/,'')}%`);
   const svc=currentQuoteType==='contracting';
-  set('qt-tot-label','Total · '+items+(svc?(items===1?' Scope Line':' Scope Lines'):(items===1?' Item':' Items')));
+  set('qt-tot-label','Total · '+items+(svc?(items===1?' Line':' Lines'):(items===1?' Item':' Items')));
   set('qt-tot-disc',lineDisc?'−'+lineDisc.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}):'');
   set('qt-tot-net',lineNet.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}));
   window._qtTotals={gross,lineDisc,lineNet,disc:qd,bvat,vat,net,rate,items,badLines:bad,discBad};
@@ -5875,14 +5894,20 @@ function calcTotals() {
 }
 /* V270.4.11 (mockup PB_2): each priced line shows whether it is linked to an item — green "✓ ITM-… name" or orange
    "Not linked — Link item…". The line text is never changed by linking. Contracting scope lines are not linked. */
+/* V270.4.14 (SQ_1): Service quotation lines are linked too (SRV items); a line made a "scope line" on purpose (⋮ menu)
+   stays free text — grey marker, no reminder, allowed into the Sales Order without a link. */
 function qtRefreshLinkMarks(){
-  if(currentQuoteType==='contracting') { document.querySelectorAll('#items-tbody .qt-lk').forEach(x=>x.remove()); return; }
-  document.querySelectorAll('#items-tbody tr[data-row-kind="product"]').forEach(tr=>{
-    const cell=tr.querySelector('.qt-dc'); if(!cell) return;
+  document.querySelectorAll('#items-tbody tr[data-line-type="item"]').forEach(tr=>{
+    const cell=tr.querySelector('.qt-dc, .qt-sc'); if(!cell) return;
     const desc=(tr.querySelector('[data-f="desc"]')?.value||'').trim();
     let mk=cell.querySelector('.qt-lk');
-    if(!desc&&!tr.dataset.prodId){ if(mk) mk.remove(); return; }
+    if(!desc&&!tr.dataset.prodId&&tr.dataset.freeScope!=='1'){ if(mk) mk.remove(); return; }
     if(!mk){ mk=document.createElement('div'); mk.className='qt-lk'; cell.appendChild(mk); }
+    if(tr.dataset.rowKind==='scope'&&tr.dataset.freeScope==='1'){
+      if(mk.dataset.k==='scope') return; mk.dataset.k='scope'; mk.className='qt-lk is-scope';
+      mk.innerHTML=`<span class="qt-lk-dot"></span>Scope line · free text, not linked <button type="button" class="qt-lk-btn" title="Link this line to a service item instead">Link item…</button>`;
+      return;
+    }
     const p=tr.dataset.prodId?products.find(x=>x.id===tr.dataset.prodId):null;
     const key=(p?'g'+p.id:'o')+'|'+desc;
     if(mk.dataset.k===key) return; mk.dataset.k=key;
@@ -5897,13 +5922,20 @@ document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closes
 async function qtLinkLine(tr){
   if(!window.BCItemLink) return;
   const desc=(tr.querySelector('[data-f="desc"]')?.value||'').trim(), uom=tr.querySelector('select')?.value||'';
-  const L={text:desc,uom,prodId:tr.dataset.prodId||'',label:'Line '+(tr.querySelector('.qt-n')?.textContent||''),makeNote:true};
+  const scope=tr.dataset.rowKind==='scope';
+  const L={text:desc.split('\n')[0],uom,prodId:tr.dataset.prodId||'',label:'Line '+(tr.querySelector('.qt-n')?.textContent||''),makeNote:!scope,makeScope:scope};
   const r=await BCItemLink.open({title:'Link this line to an item',intro:'The line text stays as written — only the link is added.',lines:[L],custId:selectedCustId,mode:'link'});
   if(r.action!=='link') return;
   qtApplyLinkChoice(tr,L);
 }
 /** A link window choice on a quotation edit row: the item id (text unchanged), or the line becomes a note line. */
 function qtApplyLinkChoice(tr,L){
+  if(L._scope){ tr.dataset.freeScope='1'; tr.dataset.prodId=''; markDirty('quote-modal'); qtRefreshLinkMarks(); return; }   // V270.4.14
+  if(L._choice) tr.dataset.freeScope='';
+  if(L._choice&&tr.dataset.rowKind==='scope'){   // V270.4.14: the service item's unit (the unit box follows the Item / Service Master)
+    const p=products.find(x=>x.id===L._choice), sel=tr.querySelector('select');
+    if(p&&p.uom&&sel){ if(![...sel.options].some(o=>o.value===p.uom)){ const o=document.createElement('option'); o.value=o.textContent=p.uom; sel.appendChild(o); } sel.value=p.uom; sel.dataset.masterUom=p.uom; }
+  }
   if(L._note){
     const text=(tr.querySelector('[data-f="desc"]')?.value||'').trim();
     const note=addSpecialQuoteRow('note',text,{focus:false}); if(note){ tr.parentElement.insertBefore(note,tr); tr.remove(); renumberQuoteItemRows(); calcTotals(); }
@@ -5918,20 +5950,36 @@ function qtApplyLinkChoice(tr,L){
 async function saveQuotation(mode='save', opts={}) {
   // V270.4.11 (PB_3): marking as Sent first reminds about lines not linked to an item (Send anyway is allowed)
   const _goingSent=mode==='sent'||(mode==='save'&&document.getElementById('f-status')?.value==='Sent'&&!(editingId&&quotations.find(x=>x.id===editingId)?.status==='Sent'));
-  if(_goingSent&&!opts.linkChecked&&currentQuoteType!=='contracting'&&window.BCItemLink&&!window.__bcTestNoLinks){
-    const rows=[...document.querySelectorAll('#items-tbody tr[data-row-kind="product"]')].filter(tr=>!tr.dataset.prodId&&(tr.querySelector('[data-f="desc"]')?.value||'').trim());
+  if(_goingSent&&!opts.linkChecked&&window.BCItemLink&&!window.__bcTestNoLinks){
+    const linkable=[...document.querySelectorAll('#items-tbody tr[data-line-type="item"]')].filter(tr=>!(tr.dataset.rowKind==='scope'&&tr.dataset.freeScope==='1'));   // V270.4.14: service lines too
+    const rows=linkable.filter(tr=>!tr.dataset.prodId&&(tr.querySelector('[data-f="desc"]')?.value||'').trim());
     if(rows.length){
-      const priced=document.querySelectorAll('#items-tbody tr[data-row-kind="product"]').length;
-      const lines=rows.map(tr=>({tr,text:tr.querySelector('[data-f="desc"]').value.trim(),uom:tr.querySelector('select')?.value||'',prodId:'',label:'Line '+(tr.querySelector('.qt-n')?.textContent||''),makeNote:true}));
+      const priced=linkable.length;
+      const lines=rows.map(tr=>{ const sc=tr.dataset.rowKind==='scope'; return {tr,text:tr.querySelector('[data-f="desc"]').value.trim().split('\n')[0],uom:tr.querySelector('select')?.value||'',prodId:'',label:'Line '+(tr.querySelector('.qt-n')?.textContent||''),makeNote:!sc,makeScope:sc}; });
       const r=await BCItemLink.open({title:'Link items before sending?',intro:`${rows.length} of ${priced} priced line${priced===1?'':'s'} ${rows.length===1?'is':'are'} not linked. Linked lines keep one price history per item (estimated · quoted · bought · sold), whatever the wording.`,lines,custId:selectedCustId,mode:'sent'});
       if(!r.action) return;
-      if(r.action==='link') lines.forEach(L=>{ if(L._choice||L._note) qtApplyLinkChoice(L.tr,L); });
+      if(r.action==='link') lines.forEach(L=>{ if(L._choice||L._note||L._scope) qtApplyLinkChoice(L.tr,L); });
       return saveQuotation(mode,{...opts,linkChecked:true});
     }
   }
+  // V270.4.14 (DQ_1): cost missing → reminder; below the minimum margin → approval (as Pricing); below cost → Pricing Settings
+  window._qtCostApproval=null;
+  if(_goingSent&&!opts.costChecked&&window.BCQuoteCost){
+    calcTotals();
+    const cur=editingId?quotations.find(x=>x.id===editingId):null;
+    const g=await BCQuoteCost.gate(BCQuoteCost.metricsFromScreen(),{id:editingId||'',qno:cur?.qno||'',revisionNo:cur?.revisionNo||(document._pendingQuotationRevision?.revisionNo)||0,company:document.getElementById('f-company')?.value||''},{onEnterCost:x=>BCQuoteCost.focusMissing(x)});
+    if(g.draft){
+      document.getElementById('f-status').value='Draft';
+      const saved=await saveQuotation('draft',{...opts,linkChecked:true,costChecked:true});
+      if(saved){ showToast('Saved as Draft — the margin is below the minimum, so it needs approval before it is sent.','warning'); BCQuoteCost.askAfterDraft(saved,g.ctx); }
+      return saved;
+    }
+    if(!g.go) return;
+    if(g.approval) window._qtCostApproval={...g.approval,pct:BCQuoteCost.metricsFromScreen().pct};
+  }
   if(_goingSent&&window.BCItemLink){   // remember this customer's wording of the linked lines
     const q0=document.getElementById('f-qno')?.value||'';
-    bcRememberDocLinks(selectedCustId,[...document.querySelectorAll('#items-tbody tr[data-row-kind="product"]')].map(tr=>({desc:(tr.querySelector('[data-f="desc"]')?.value||'').trim(),prodId:tr.dataset.prodId||''})),q0);
+    bcRememberDocLinks(selectedCustId,[...document.querySelectorAll('#items-tbody tr[data-line-type="item"]')].map(tr=>({desc:(tr.querySelector('[data-f="desc"]')?.value||'').trim(),prodId:tr.dataset.prodId||''})),q0);
   }
   if(mode==='draft') document.getElementById('f-status').value='Draft';
   if(mode==='sent') document.getElementById('f-status').value='Sent';
@@ -6051,7 +6099,9 @@ async function saveQuotation(mode='save', opts={}) {
   document.querySelectorAll('#items-tbody tr').forEach(tr=>{
     if(tr.dataset.lineType==='heading'||tr.dataset.lineType==='note'){
       const text=(tr.querySelector('.quote-special-text')?.value||'').trim();
-      if(text){ const line={lineType:tr.dataset.lineType,text}; const ns=tr.dataset.lineType==='note'?quotationNoteStyleKey(tr.dataset.noteStyle):''; if(ns) line.noteStyle=ns; items.push(line); }   // V270.2: a note's own style
+      if(text){ const line={lineType:tr.dataset.lineType,text}; const ns=tr.dataset.lineType==='note'?quotationNoteStyleKey(tr.dataset.noteStyle):''; if(ns) line.noteStyle=ns;
+        const th=window.BCRich?BCRich.htmlOf(tr.querySelector('.quote-special-text')):''; if(th) line.textHtml=th;   // V270.4.14: the note's formatting
+        items.push(line); }   // V270.2: a note's own style
       return;
     }
     const qty=parseBizNumber(tr.querySelector('[data-quote-qty]')?.value);
@@ -6074,6 +6124,10 @@ async function saveQuotation(mode='save', opts={}) {
       if(d.amt>0){ line.discAmt=d.amt; line.discPct=Number(d.pct.toFixed(6)); line.discBy=tr.dataset.discBy==='pct'?'pct':'amt'; }
       if(tr.dataset.pricingSell) line.pricingSell=Number(tr.dataset.pricingSell);
       if(tr.dataset.pricingBuy) line.pricingBuy=Number(tr.dataset.pricingBuy);
+      // V270.4.14: formatted scope text, scope line on purpose, internal cost of the line (own lines; Pricing's stays pricingBuy)
+      if(isScope&&window.BCRich){ const dh=BCRich.htmlOf(qtField(tr,'desc')); if(dh) line.descHtml=dh; }
+      if(isScope&&tr.dataset.freeScope==='1') line.freeScope=true;
+      if(!tr.dataset.pricingBuy&&Number(tr.dataset.estCost)>0) line.estCost=Number(tr.dataset.estCost);
       items.push(line);
     }
   });
@@ -6114,6 +6168,8 @@ async function saveQuotation(mode='save', opts={}) {
   // V270.2 (agreed 23 Oct 2026): once a quotation is no longer a Draft its note style is frozen, so it always reprints
   // exactly as it was sent even if the Administration default changes later.
   if(q.status!=='Draft'&&!q.noteStyle) q.noteStyleAtSend=prevQ?.noteStyleAtSend||quotationLineNoteStyle();
+  if(window._qtCostApproval&&q.status==='Sent'){ q.costApproval={by:window._qtCostApproval.by||'',at:window._qtCostApproval.at||'',id:window._qtCostApproval.id||'',pct:Number(window._qtCostApproval.pct)||0}; } else if(prevQ?.costApproval) q.costApproval=prevQ.costApproval;   // V270.4.14
+  window._qtCostApproval=null;
   if(capturedEditingId){
     const idx=quotations.findIndex(x=>x.id===capturedEditingId);
     if(idx>-1) quotations[idx]=q;
@@ -6282,14 +6338,14 @@ function viewQuotation(id, skipVatCheck=false) {
   for(let idx=0; idx<quoteItems.length; idx++){
     const it=quoteItems[idx];
     if(it.lineType==='heading'){ itemRows.push('<tr class="qv-heading"><td colspan="'+qvCols+'">'+escapeHtml(it.text||it.desc||'')+'</td></tr>'); continue; }
-    if(it.lineType==='note'){ itemRows.push('<tr class="qv-note"><td></td><td colspan="'+(qvCols-1)+'">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it))+'</td></tr>'); continue; }
+    if(it.lineType==='note'){ itemRows.push('<tr class="qv-note"><td></td><td colspan="'+(qvCols-1)+'">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it),it.textHtml)+'</td></tr>'); continue; }
     itemNo++;
     const total=quoteLineNet(it), service=it.type==='service';
-    const title=escapeHtml(it.desc||'—');
+    const title=bcLineDescHtml(it);   // V270.4.14
     const sub=[!service&&it.specs?escapeHtml(it.specs):'',!service&&[it.brand,it.model].filter(Boolean).length?escapeHtml([it.brand,it.model].filter(Boolean).join(' / ')):''].filter(Boolean).join(' · ');
     const next=quoteItems[idx+1], inlineNote=(next&&next.lineType==='note')?String(next.text||next.desc||'').trim():'';
     if(inlineNote) idx++;
-    itemRows.push('<tr class="qv-item"><td class="center">'+String(itemNo).padStart(3,'0')+'</td><td><div class="qv-desc-title">'+title+'</div>'+(sub?'<div class="qv-desc-sub">'+sub+'</div>':'')+(inlineNote?quotationPrintLineNoteHtml(inlineNote,quotationEffectiveNoteStyle(q,next)):'')+'</td><td class="center">'+escapeHtml(String(it.qty??''))+'</td><td class="center">'+escapeHtml(it.uom||'')+'</td><td class="num">'+qvLineUnitMoney(it.up)+'</td>'+(qvDisc?'<td class="num qv-disc">'+quoteLineDiscCellHtml(it,qvLineAmountMoney)+'</td>':'')+'<td class="num"><strong>'+qvLineAmountMoney(total)+'</strong></td></tr>');
+    itemRows.push('<tr class="qv-item"><td class="center">'+String(itemNo).padStart(3,'0')+'</td><td><div class="qv-desc-title">'+title+'</div>'+(sub?'<div class="qv-desc-sub">'+sub+'</div>':'')+(inlineNote?quotationPrintLineNoteHtml(inlineNote,quotationEffectiveNoteStyle(q,next),next.textHtml):'')+'</td><td class="center">'+escapeHtml(String(it.qty??''))+'</td><td class="center">'+escapeHtml(it.uom||'')+'</td><td class="num">'+qvLineUnitMoney(it.up)+'</td>'+(qvDisc?'<td class="num qv-disc">'+quoteLineDiscCellHtml(it,qvLineAmountMoney)+'</td>':'')+'<td class="num"><strong>'+qvLineAmountMoney(total)+'</strong></td></tr>');
   }
   const items=itemRows.join('')||'<tr><td colspan="'+qvCols+'" style="padding:20px;text-align:center;color:#64748b">No line items</td></tr>';
 
@@ -6297,8 +6353,10 @@ function viewQuotation(id, skipVatCheck=false) {
   let margin='—', pricingCost=0, hasCost=false;
   if(Number(q.pricingCost)>0){pricingCost=Number(q.pricingCost);hasCost=true;}
   else if(hPricing){pricingCost=lRFQ.pricingItems.reduce((s,i)=>s+(parseFloat(i.buy)||0)*(parseFloat(i.qty)||0),0);hasCost=true;}
-  if(hasCost) margin=pricingPercent(pricingCost,totals.bvat).toFixed(1)+'%';
-  const grossProfit=hasCost?(totals.bvat-pricingCost):null;
+  let costSell=totals.bvat;
+  if(!hasCost&&window.BCQuoteCost&&BCQuoteCost.canSee()){ const m=BCQuoteCost.metricsFromDoc(q); if(m.costed>0){ pricingCost=m.cost; costSell=m.sell; hasCost=true; } }   // V270.4.14: own costs (lines without a cost left out)
+  if(hasCost) margin=pricingPercent(pricingCost,costSell).toFixed(1)+'%';
+  const grossProfit=hasCost?(costSell-pricingCost):null;
   const notes=String(q.notes||'').trim();
   const additionalConditions=quotationAdditionalConditionItems(q);
   const validityDays=parseInt(q.validity,10)||0;
@@ -6426,8 +6484,8 @@ function bcRememberDocLinks(custId, items, docNo){
 }
 /** Lines of a saved quotation that are priced items without a link (contracting scope lines excluded). */
 function bcUnlinkedQuoteLines(q){
-  if(!q||q.type==='contracting'||q.quoteType==='contracting') return [];
-  return (q.items||[]).map((it,i)=>({it,i})).filter(({it})=>it&&(!it.lineType||it.lineType==='item')&&it.rowKind!=='scope'&&it.type!=='contracting'&&!it.prodId&&String(it.desc||'').trim());
+  if(!q) return [];
+  return (q.items||[]).map((it,i)=>({it,i})).filter(({it})=>it&&(!it.lineType||it.lineType==='item')&&!it.freeScope&&!it.prodId&&String(it.desc||'').trim());   // V270.4.14: service lines too, not scope lines
 }
 async function commitStatus(id, newStatus, opts={}) {
   const q = quotations.find(x=>x.id===id); if (!q) return;
@@ -6436,11 +6494,16 @@ async function commitStatus(id, newStatus, opts={}) {
     const open=bcUnlinkedQuoteLines(q);
     if(open.length){
       const priced=(q.items||[]).filter(it=>it&&(!it.lineType||it.lineType==='item')).length;
-      const lines=open.map(({it,i})=>({idx:i,text:String(it.desc).trim(),uom:it.uom||'',prodId:'',label:'Line '+(i+1)}));
+      const lines=open.map(({it,i})=>({idx:i,text:String(it.desc).trim().split('\n')[0],uom:it.uom||'',prodId:'',label:'Line '+(i+1),makeScope:it.rowKind==='scope'}));
       const r=await BCItemLink.open({title:'Link items before sending?',intro:`${open.length} of ${priced} priced line${priced===1?'':'s'} ${open.length===1?'is':'are'} not linked. Linked lines keep one price history per item (estimated · quoted · bought · sold), whatever the wording.`,lines,custId:q.custId,mode:'sent'});
       if(!r.action){ renderStatusBar(q,q.status); return; }
-      if(r.action==='link') lines.forEach(L=>{ if(L._choice) q.items[L.idx]={...q.items[L.idx],prodId:L._choice}; });
+      if(r.action==='link') lines.forEach(L=>{ if(L._choice){ const p=products.find(x=>x.id===L._choice); q.items[L.idx]={...q.items[L.idx],prodId:L._choice,...(q.items[L.idx].rowKind==='scope'&&p&&p.uom?{uom:p.uom}:{})}; } else if(L._scope) q.items[L.idx]={...q.items[L.idx],freeScope:true}; });
     }
+  }
+  if(newStatus==='Sent'&&q.status!=='Sent'&&!opts.costChecked&&window.BCQuoteCost){   // V270.4.14 (DQ_1)
+    const g=await BCQuoteCost.gate(BCQuoteCost.metricsFromDoc(q),q,{onEnterCost:()=>{ showToast('Edit the quotation and enter the cost in the Cost 🔒 column.','info'); }});
+    if(!g.go){ renderStatusBar(q,q.status); return; }
+    if(g.approval) q.costApproval={by:g.approval.by||'',at:g.approval.at||'',id:g.approval.id||'',pct:BCQuoteCost.metricsFromDoc(q).pct};
   }
   if(newStatus==='Sent'&&q.status!=='Sent') bcRememberDocLinks(q.custId,q.items,q.qno);
   const oldStatus = q.status;
@@ -7112,7 +7175,7 @@ function printQuotation(id) {
 
   const itemRows = (q.items||[]).map(function(it,i) {
     if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+escapeHtml(it.text||it.desc||'')+'</td></tr>';
+    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+bcNoteHtml(it)+'</td></tr>';
     const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
     const s2=[it.brand,it.model].filter(Boolean).join(' \u00b7 ');
     return '<tr>'
@@ -11330,7 +11393,7 @@ function soRemovePOFile(event){event?.preventDefault();event?.stopPropagation();
 /* V270.4.11 (mockup PB_4): every line going into the Sales Order must be linked to an item (contracting scope lines
    excepted). Lines not in this order are left as they are. A link of an earlier order of the same quotation line is
    taken over; the customer's earlier wording is suggested ("Use it"). */
-const soNeedsLink=it=>!window.__bcTestNoLinks&&!!it&&(!it.lineType||it.lineType==='item')&&it.rowKind!=='scope'&&it.type!=='contracting';
+const soNeedsLink=it=>!window.__bcTestNoLinks&&!!it&&(!it.lineType||it.lineType==='item')&&!it.freeScope;   // V270.4.14: service lines need a link too; scope lines (on purpose) don't
 function soLinkHtml(it,i){
   if(!soNeedsLink(it)) return '';
   const p=it.prodId?products.find(x=>x.id===it.prodId):null;
@@ -12575,7 +12638,7 @@ function buildDeliveryNoteDocument(so,d,deliveryIdx,format='standard',screenMode
   const screenStatus=screenMode?`<div class="dn-screen-status-row"><span class="dn-screen-status ${dnScreenStatusClass}"><span class="dn-screen-status-dot"></span>${escapeHtml(dnScreenStatus)}</span></div>`:'';
   const internalBlock=internal?`<div class="dn-internal"><div><b>Delivery Status</b><span>${escapeHtml(d.status||'—')}</span></div><div><b>Dispatched By</b><span>${escapeHtml(d.dispatchedBy||'—')}</span></div><div><b>Dispatched At</b><span>${d.dispatchedAt?new Date(d.dispatchedAt).toLocaleString():'—'}</span></div><div><b>Confirmed By</b><span>${escapeHtml(d.confirmedBy||'—')}</span></div><div><b>Confirmed At</b><span>${d.confirmedAt?new Date(d.confirmedAt).toLocaleString():'—'}</span></div></div>`:'';
   return `<div class="dn-a4${screenMode?' dn-a4-screen':''}" data-dn-format="${format}"><style>
-  .dn-a4{width:210mm;min-height:297mm;margin:0 auto;background:#fff;padding:12mm 11mm 10mm;font-family:Arial,sans-serif;color:#17324d;font-size:10.5px;box-sizing:border-box}.dn-a4-screen{border:1px solid #8f9aa6;box-shadow:0 4px 18px rgba(15,23,42,.10)}.dn-a4 *{box-sizing:border-box}.dn-head{display:grid;grid-template-columns:1.22fr .95fr 1.05fr;gap:8px;align-items:start;padding-bottom:10px;border-bottom:2px solid #174b7a}.dn-contact{font-size:9.5px;line-height:1.5;color:#50657a;border-left:1px solid #cbd8e5;padding-left:10px}.dn-title-stack{min-width:0;position:relative}.dn-screen-status-row{position:absolute;right:0;top:-29px;height:auto;display:flex;align-items:center;justify-content:flex-end;z-index:2;pointer-events:none}.dn-screen-status{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:9.5px;font-weight:800;line-height:1.35;white-space:nowrap}.dn-screen-status-dot{width:7px;height:7px;border-radius:50%;background:currentColor}.dn-screen-status--awaiting{color:#53657a;background:#edf2f7}.dn-screen-status--confirmation{color:#9a6700;background:#fff2cc}.dn-screen-status--delivered{color:#147a43;background:#dcfce7}.dn-screen-status--partial{color:#6941c6;background:#eee7ff}.dn-screen-status--rejected{color:#b42318;background:#fee4e2}.dn-titlebox{border:1px solid #b9cce0;min-width:0}.dn-titlebox h1{margin:0;padding:8px 10px;font-size:19px;letter-spacing:.35px;color:#174b7a;background:#f7fafc;white-space:nowrap}.dn-titlebox div{padding:7px 10px;border-top:1px solid #d7e1eb}.dn-titlebox small{display:block;text-transform:uppercase;font-weight:800;color:#5f7489;font-size:8px}.dn-titlebox strong{font-size:13px;color:#17324d}.dn-subtitle{margin:5px 0 10px;text-align:right;font-size:8px;letter-spacing:3px;color:#64788c}.dn-two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}.dn-box{border:1px solid #cbd8e5}.dn-box h3{margin:0;background:#f3f7fa;padding:6px 9px;font-size:9px;text-transform:uppercase;color:#174b7a;border-bottom:1px solid #cbd8e5}.dn-box .content{padding:8px 9px;min-height:55px;line-height:1.45}.dn-box.dn-deliver-to{display:flex;flex-direction:column}.dn-box.dn-deliver-to .content{background:#f3f7fa;flex:1;width:100%}.dn-box .content strong{display:block;font-size:11.5px;margin-bottom:2px}.dn-ref{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:9px 0}.dn-ref.dn-ref-5{grid-template-columns:repeat(5,1fr)}.dn-ref>div{border:1px solid #cbd8e5;background:#f3f7fa;padding:7px 8px;min-height:43px}.dn-ref small{display:block;font-size:7.5px;font-weight:800;text-transform:uppercase;color:#5e7488;margin-bottom:4px}.dn-ref strong{font-size:10px}.dn-items{width:100%;border-collapse:collapse;margin-top:6px}.dn-items th{background:#174b7a;color:#fff;padding:6px 5px;border:1px solid #174b7a;font-size:8px;text-align:left}.dn-items td{padding:6px 5px;border:1px solid #d6e0e9;color:#263f56;font-size:9px}.dn-items tbody tr:last-child td{border-bottom:1px solid #cbd8e5}.dn-items .desc{min-width:190px}.dn-items .num{text-align:center;white-space:nowrap}.dn-remarks{border:1px solid #cbd8e5;margin-top:10px;padding:8px 9px;min-height:50px}.dn-remarks b{display:block;color:#174b7a;font-size:8px;text-transform:uppercase;margin-bottom:5px}.dn-bottom{display:grid;grid-template-columns:1fr 1fr 118px;gap:10px;margin-top:12px}.dn-sign{border:1px solid #cbd8e5;min-height:118px}.dn-sign h4{margin:0;background:#f3f7fa;padding:6px 8px;font-size:8px;color:#174b7a;text-transform:uppercase;border-bottom:1px solid #cbd8e5}.dn-sign div{padding:8px;line-height:1.8}.dn-line{display:inline-block;border-bottom:1px solid #567;width:130px;height:14px}.dn-doc-qr,.dn-doc-qr-slot{border:1px solid #cbd8e5;width:118px;height:118px;display:flex;align-items:center;justify-content:center;padding:3px}.dn-doc-qr canvas,.dn-doc-qr img{max-width:108px!important;max-height:108px!important}.dn-internal{margin-top:10px;border:1px solid #e1e7ed;display:grid;grid-template-columns:repeat(5,1fr)}.dn-internal>div{padding:6px;border-right:1px solid #e1e7ed}.dn-internal>div:last-child{border-right:0}.dn-internal b{display:block;font-size:7px;color:#6b7e90;text-transform:uppercase;margin-bottom:3px}.dn-internal span{font-size:8px}.dn-foot{margin-top:12px;padding-top:7px;border-top:2px solid #174b7a;display:block;color:#52687b;font-size:8px;line-height:1.45}.dn-foot strong{color:#174b7a;font-size:9px}.dn-confirm-result{margin-top:12px;border:1px solid #d7e2ec;border-radius:10px;overflow:hidden;background:#fff}.dn-confirm-result-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f7fafc;border-bottom:1px solid #e1e8ef}.dn-confirm-result-kicker{display:block;font-size:7px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:#6b7e90;margin-bottom:2px}.dn-confirm-result h3{margin:0;font-size:11px;color:#174b7a;display:flex;gap:6px;align-items:center}.dn-confirm-result-badge,.dn-confirm-line-badge{display:inline-flex;align-items:center;border-radius:999px;font-weight:800;white-space:nowrap}.dn-confirm-result-badge{padding:5px 9px;font-size:8px}.dn-confirm-result-badge.accepted,.dn-confirm-line-badge.accepted{background:#dcfce7;color:#147a43}.dn-confirm-result-badge.partial,.dn-confirm-line-badge.partial{background:#fff3d6;color:#a15c00}.dn-confirm-result-badge.rejected,.dn-confirm-line-badge.rejected{background:#fee4e2;color:#b42318}.dn-confirm-result-badge.pending{background:#eef2f6;color:#53657a}.dn-confirm-result-note{margin:0;padding:12px;color:#64748b;font-size:9px}.dn-confirm-summary-row{display:flex;gap:6px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid #edf1f5}.dn-confirm-summary-row span{display:inline-flex;gap:4px;align-items:center;padding:4px 7px;border-radius:7px;background:#f1f5f9;font-size:8px}.dn-confirm-summary-row .accepted{background:#e9f9ef;color:#147a43}.dn-confirm-summary-row .partial{background:#fff5df;color:#a15c00}.dn-confirm-summary-row .rejected{background:#fff0ef;color:#b42318}.dn-confirm-lines{padding:4px 12px}.dn-confirm-line{padding:7px 0;border-bottom:1px solid #edf1f5}.dn-confirm-line:last-child{border-bottom:0}.dn-confirm-line-main{display:grid;grid-template-columns:22px minmax(0,1fr) 62px 62px 64px;gap:7px;align-items:center}.dn-confirm-line-no{width:22px;height:22px;display:grid;place-items:center;border-radius:6px;background:#edf4fa;color:#174b7a;font-weight:800}.dn-confirm-line-desc strong{display:block;font-size:8.5px;color:#263f56;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dn-confirm-line-desc small{display:block;font-size:7.5px;color:#789;margin-top:2px}.dn-confirm-qty{padding:4px 6px;border-radius:6px;text-align:center}.dn-confirm-qty span{display:block;font-size:6.5px;text-transform:uppercase;font-weight:800}.dn-confirm-qty strong{font-size:9px}.dn-confirm-qty.accepted{background:#e9f9ef;color:#147a43}.dn-confirm-qty.rejected{background:#fff0ef;color:#b42318}.dn-confirm-line-badge{justify-content:center;padding:4px 6px;font-size:7px}.dn-confirm-rejection-detail{margin:6px 0 0 29px;padding:7px 8px;background:#fff9f2;border-left:3px solid #f59e0b;display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:7.5px}.dn-confirm-rejection-detail span b{display:block;text-transform:uppercase;font-size:6.5px;color:#8a6d1d;margin-bottom:2px}.dn-confirm-rejection-detail .remarks{grid-column:1/-1}.dn-confirm-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#dfe7ee;border-top:1px solid #dfe7ee}.dn-confirm-meta>div{background:#f8fafc;padding:7px 9px}.dn-confirm-meta .wide{grid-column:1/-1}.dn-confirm-meta span{display:block;font-size:6.5px;text-transform:uppercase;font-weight:800;color:#6b7e90;margin-bottom:2px}.dn-confirm-meta strong{font-size:8px;color:#263f56}.dn-confirm-return-note{display:flex;gap:6px;align-items:center;padding:7px 10px;background:#eff6ff;color:#315b7d;font-size:7.5px}@media print{@page{size:A4 portrait;margin:10mm 11mm 18mm 11mm}
+  .dn-a4{width:210mm;min-height:297mm;margin:0 auto;background:#fff;padding:12mm 11mm 10mm;font-family:Arial,sans-serif;color:#17324d;font-size:10.5px;box-sizing:border-box}.dn-a4 td.desc{white-space:pre-line}.dn-a4-screen{border:1px solid #8f9aa6;box-shadow:0 4px 18px rgba(15,23,42,.10)}.dn-a4 *{box-sizing:border-box}.dn-head{display:grid;grid-template-columns:1.22fr .95fr 1.05fr;gap:8px;align-items:start;padding-bottom:10px;border-bottom:2px solid #174b7a}.dn-contact{font-size:9.5px;line-height:1.5;color:#50657a;border-left:1px solid #cbd8e5;padding-left:10px}.dn-title-stack{min-width:0;position:relative}.dn-screen-status-row{position:absolute;right:0;top:-29px;height:auto;display:flex;align-items:center;justify-content:flex-end;z-index:2;pointer-events:none}.dn-screen-status{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:9.5px;font-weight:800;line-height:1.35;white-space:nowrap}.dn-screen-status-dot{width:7px;height:7px;border-radius:50%;background:currentColor}.dn-screen-status--awaiting{color:#53657a;background:#edf2f7}.dn-screen-status--confirmation{color:#9a6700;background:#fff2cc}.dn-screen-status--delivered{color:#147a43;background:#dcfce7}.dn-screen-status--partial{color:#6941c6;background:#eee7ff}.dn-screen-status--rejected{color:#b42318;background:#fee4e2}.dn-titlebox{border:1px solid #b9cce0;min-width:0}.dn-titlebox h1{margin:0;padding:8px 10px;font-size:19px;letter-spacing:.35px;color:#174b7a;background:#f7fafc;white-space:nowrap}.dn-titlebox div{padding:7px 10px;border-top:1px solid #d7e1eb}.dn-titlebox small{display:block;text-transform:uppercase;font-weight:800;color:#5f7489;font-size:8px}.dn-titlebox strong{font-size:13px;color:#17324d}.dn-subtitle{margin:5px 0 10px;text-align:right;font-size:8px;letter-spacing:3px;color:#64788c}.dn-two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}.dn-box{border:1px solid #cbd8e5}.dn-box h3{margin:0;background:#f3f7fa;padding:6px 9px;font-size:9px;text-transform:uppercase;color:#174b7a;border-bottom:1px solid #cbd8e5}.dn-box .content{padding:8px 9px;min-height:55px;line-height:1.45}.dn-box.dn-deliver-to{display:flex;flex-direction:column}.dn-box.dn-deliver-to .content{background:#f3f7fa;flex:1;width:100%}.dn-box .content strong{display:block;font-size:11.5px;margin-bottom:2px}.dn-ref{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:9px 0}.dn-ref.dn-ref-5{grid-template-columns:repeat(5,1fr)}.dn-ref>div{border:1px solid #cbd8e5;background:#f3f7fa;padding:7px 8px;min-height:43px}.dn-ref small{display:block;font-size:7.5px;font-weight:800;text-transform:uppercase;color:#5e7488;margin-bottom:4px}.dn-ref strong{font-size:10px}.dn-items{width:100%;border-collapse:collapse;margin-top:6px}.dn-items th{background:#174b7a;color:#fff;padding:6px 5px;border:1px solid #174b7a;font-size:8px;text-align:left}.dn-items td{padding:6px 5px;border:1px solid #d6e0e9;color:#263f56;font-size:9px}.dn-items tbody tr:last-child td{border-bottom:1px solid #cbd8e5}.dn-items .desc{min-width:190px}.dn-items .num{text-align:center;white-space:nowrap}.dn-remarks{border:1px solid #cbd8e5;margin-top:10px;padding:8px 9px;min-height:50px}.dn-remarks b{display:block;color:#174b7a;font-size:8px;text-transform:uppercase;margin-bottom:5px}.dn-bottom{display:grid;grid-template-columns:1fr 1fr 118px;gap:10px;margin-top:12px}.dn-sign{border:1px solid #cbd8e5;min-height:118px}.dn-sign h4{margin:0;background:#f3f7fa;padding:6px 8px;font-size:8px;color:#174b7a;text-transform:uppercase;border-bottom:1px solid #cbd8e5}.dn-sign div{padding:8px;line-height:1.8}.dn-line{display:inline-block;border-bottom:1px solid #567;width:130px;height:14px}.dn-doc-qr,.dn-doc-qr-slot{border:1px solid #cbd8e5;width:118px;height:118px;display:flex;align-items:center;justify-content:center;padding:3px}.dn-doc-qr canvas,.dn-doc-qr img{max-width:108px!important;max-height:108px!important}.dn-internal{margin-top:10px;border:1px solid #e1e7ed;display:grid;grid-template-columns:repeat(5,1fr)}.dn-internal>div{padding:6px;border-right:1px solid #e1e7ed}.dn-internal>div:last-child{border-right:0}.dn-internal b{display:block;font-size:7px;color:#6b7e90;text-transform:uppercase;margin-bottom:3px}.dn-internal span{font-size:8px}.dn-foot{margin-top:12px;padding-top:7px;border-top:2px solid #174b7a;display:block;color:#52687b;font-size:8px;line-height:1.45}.dn-foot strong{color:#174b7a;font-size:9px}.dn-confirm-result{margin-top:12px;border:1px solid #d7e2ec;border-radius:10px;overflow:hidden;background:#fff}.dn-confirm-result-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f7fafc;border-bottom:1px solid #e1e8ef}.dn-confirm-result-kicker{display:block;font-size:7px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:#6b7e90;margin-bottom:2px}.dn-confirm-result h3{margin:0;font-size:11px;color:#174b7a;display:flex;gap:6px;align-items:center}.dn-confirm-result-badge,.dn-confirm-line-badge{display:inline-flex;align-items:center;border-radius:999px;font-weight:800;white-space:nowrap}.dn-confirm-result-badge{padding:5px 9px;font-size:8px}.dn-confirm-result-badge.accepted,.dn-confirm-line-badge.accepted{background:#dcfce7;color:#147a43}.dn-confirm-result-badge.partial,.dn-confirm-line-badge.partial{background:#fff3d6;color:#a15c00}.dn-confirm-result-badge.rejected,.dn-confirm-line-badge.rejected{background:#fee4e2;color:#b42318}.dn-confirm-result-badge.pending{background:#eef2f6;color:#53657a}.dn-confirm-result-note{margin:0;padding:12px;color:#64748b;font-size:9px}.dn-confirm-summary-row{display:flex;gap:6px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid #edf1f5}.dn-confirm-summary-row span{display:inline-flex;gap:4px;align-items:center;padding:4px 7px;border-radius:7px;background:#f1f5f9;font-size:8px}.dn-confirm-summary-row .accepted{background:#e9f9ef;color:#147a43}.dn-confirm-summary-row .partial{background:#fff5df;color:#a15c00}.dn-confirm-summary-row .rejected{background:#fff0ef;color:#b42318}.dn-confirm-lines{padding:4px 12px}.dn-confirm-line{padding:7px 0;border-bottom:1px solid #edf1f5}.dn-confirm-line:last-child{border-bottom:0}.dn-confirm-line-main{display:grid;grid-template-columns:22px minmax(0,1fr) 62px 62px 64px;gap:7px;align-items:center}.dn-confirm-line-no{width:22px;height:22px;display:grid;place-items:center;border-radius:6px;background:#edf4fa;color:#174b7a;font-weight:800}.dn-confirm-line-desc strong{display:block;font-size:8.5px;color:#263f56;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dn-confirm-line-desc small{display:block;font-size:7.5px;color:#789;margin-top:2px}.dn-confirm-qty{padding:4px 6px;border-radius:6px;text-align:center}.dn-confirm-qty span{display:block;font-size:6.5px;text-transform:uppercase;font-weight:800}.dn-confirm-qty strong{font-size:9px}.dn-confirm-qty.accepted{background:#e9f9ef;color:#147a43}.dn-confirm-qty.rejected{background:#fff0ef;color:#b42318}.dn-confirm-line-badge{justify-content:center;padding:4px 6px;font-size:7px}.dn-confirm-rejection-detail{margin:6px 0 0 29px;padding:7px 8px;background:#fff9f2;border-left:3px solid #f59e0b;display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:7.5px}.dn-confirm-rejection-detail span b{display:block;text-transform:uppercase;font-size:6.5px;color:#8a6d1d;margin-bottom:2px}.dn-confirm-rejection-detail .remarks{grid-column:1/-1}.dn-confirm-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#dfe7ee;border-top:1px solid #dfe7ee}.dn-confirm-meta>div{background:#f8fafc;padding:7px 9px}.dn-confirm-meta .wide{grid-column:1/-1}.dn-confirm-meta span{display:block;font-size:6.5px;text-transform:uppercase;font-weight:800;color:#6b7e90;margin-bottom:2px}.dn-confirm-meta strong{font-size:8px;color:#263f56}.dn-confirm-return-note{display:flex;gap:6px;align-items:center;padding:7px 10px;background:#eff6ff;color:#315b7d;font-size:7.5px}@media print{@page{size:A4 portrait;margin:10mm 11mm 18mm 11mm}
 .ar{font-family:Tahoma,Arial,sans-serif;direction:rtl;unicode-bidi:isolate}.dn-a4{margin:0!important;width:auto!important;height:auto!important;min-height:0!important;padding:0!important;display:block!important;overflow:visible!important;page-break-after:auto!important}.dn-a4-screen{border:0!important;box-shadow:none!important}.dn-box.dn-deliver-to .content{background:#fff}.dn-items{page-break-inside:auto}.dn-items thead{display:table-header-group}.dn-items tfoot{display:table-footer-group}.dn-items tr{break-inside:avoid;page-break-inside:avoid}.dn-items th,.dn-items td{break-inside:avoid;page-break-inside:avoid}.dn-remarks,.dn-internal,.dn-bottom{break-inside:avoid;page-break-inside:avoid}.dn-foot{position:fixed;left:0;right:0;bottom:0;margin:0;padding-top:5px;background:#fff;border-top:1.5px solid #174b7a;z-index:10}.dn-screen-status-row{display:none!important}}
   </style><div class="dn-head"><div>${logo}</div><div class="dn-contact">${contact||'&nbsp;'}</div><div class="dn-title-stack">${screenStatus}<div class="dn-titlebox"><h1>DELIVERY NOTE</h1>${acceptedCopy?`<div style="font-size:9px;font-weight:700;color:#147a43">ACCEPTED / CUSTOMER COPY${(d.acceptanceHistory||[]).length>1?` · REVISION ${(d.acceptanceHistory||[]).length-1}`:''}</div>`:''}<div><small>DN No.</small><strong>${escapeHtml(d.dnNo||'—')}</strong></div><div><small>Date</small><strong>${fmtDate(d.date)}</strong></div></div></div></div><div class="dn-subtitle">${acceptedCopy?'CUSTOMER ACCEPTED ITEMS ONLY':'GOODS DISPATCHED'}</div>
   <div class="dn-two"><div class="dn-box"><h3>Customer</h3><div class="content"><strong>${escapeHtml(cust.name)}</strong>${cust.address?escapeHtml(cust.address):''}${cust.contact?`<br>Attn: ${escapeHtml(cust.contact)}`:''}${cust.phone?`<br>Tel: ${escapeHtml(cust.phone)}`:''}</div></div><div class="dn-box dn-deliver-to"><h3>Deliver To</h3><div class="content"><strong>${escapeHtml(cust.name)}</strong>${cust.address?escapeHtml(cust.address):''}</div></div></div>
@@ -13066,7 +13129,7 @@ let _printQID = null;
 
 const TEMPLATES = [
   { id:'erpbox',       name:'Product', category:'standard', desc:'Standard product quotation with item details. Suitable for most quotations.', badge:'Recommended' },
-  { id:'servicequote', name:'Contracting', category:'standard', desc:'Service and contracting quotation layout with detailed scope.' },
+  { id:'servicequote', name:'Service', category:'standard', desc:'Service quotation layout: scope of work, qty, unit, rate (V270.4.14: formatted descriptions).' },
   { id:'erpbilingual', name:'Arabic / English', category:'bilingual', desc:'Bilingual quotation layout with English and Arabic labels.' },
   { id:'imageref',     name:'Item Image – Thumbnail', category:'image', desc:'Product quotation with compact thumbnail images.' },
   { id:'imagerefmed',  name:'Item Image – Medium', category:'image', desc:'Product quotation with medium-sized images.' },
@@ -13083,7 +13146,7 @@ const TPL_PREVIEWS = {
   premiumcard: `<div style="padding:7px 8px;background:#fff"><div style="font-size:8px;font-weight:800;color:#1F4E79">CUSTOMER</div><div style="font-size:7px;color:#334155;margin:2px 0 5px">Customer Name · Attention: Name</div><div style="text-align:center;font-size:8px;letter-spacing:1px;color:#64748B;font-weight:800;margin-bottom:3px">QUOTATION</div><div style="border:1px solid #CBD5E1;border-radius:5px;padding:5px;background:#F8FAFC;font-size:6px"><div><b>Quotation No.</b> &nbsp; Q-2606-001</div><div><b>Client Ref</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; RFQ-001</div><div><b>Date</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 27-Jun</div><div><b>Valid Until</b> &nbsp;&nbsp; 27-Jul</div></div><div style="margin-top:5px;background:#1F4E79;height:12px;border-radius:2px"></div></div>`,
   executiveinfo: `<div style="padding:7px 8px;background:#fff"><div style="border-top:2px solid #1F4E79;border-bottom:1px solid #CBD5E1;padding:4px 0;text-align:center;font-size:9px;font-weight:900;color:#1F4E79">QUOTATION</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:5px"><div style="border:1px solid #E2E8F0;border-radius:4px;padding:4px;min-height:36px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div><div style="font-size:6px;color:#64748B">Attention: Name</div></div><div style="border:1px solid #E2E8F0;border-radius:4px;padding:4px;min-height:36px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div><div style="font-size:6px"><b>Client Ref</b> RFQ-001</div><div style="font-size:6px"><b>Date</b> 27-Jun</div></div></div><div style="margin-top:5px;background:#F8FAFC;border:1px solid #E2E8F0;height:10px"></div></div>`,
   erpbilingual: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">QUOTATION / عرض سعر</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER / العميل</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div><div style="font-size:6px;color:#64748B">Attention / عناية</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION / بيانات العرض</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div><div style="font-size:6px"><b>Client Ref</b> RFQ-001</div><div style="font-size:6px"><b>Date</b> 27-Jun</div></div></div><div style="margin-top:5px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"># DESCRIPTION / البيان QTY / الكمية AMOUNT / المبلغ</div></div>`,
-  servicequote: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">CONTRACTING QUOTATION</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div><div style="font-size:6px"><b>Project</b> Site service</div></div></div><div style="margin-top:5px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"># SCOPE OF WORK QTY RATE AMOUNT</div></div>`,
+  servicequote: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">SERVICE QUOTATION</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div><div style="font-size:6px"><b>Project</b> Site service</div></div></div><div style="margin-top:5px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"># SCOPE OF WORK QTY RATE AMOUNT</div></div>`,
   imageref: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">QUOTATION WITH IMAGE REF</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div></div></div><div style="margin-top:5px;display:grid;grid-template-columns:18px 32px 1fr 40px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"><span>#</span><span>IMAGE</span><span>DESCRIPTION</span><span>AMOUNT</span></div></div>`,
   imagerefmed: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">IMAGE REF – MEDIUM</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div></div></div><div style="margin-top:5px;display:grid;grid-template-columns:18px 44px 1fr 34px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"><span>#</span><span>4×3 cm</span><span>DESCRIPTION</span><span>AMOUNT</span></div><div style="margin-top:3px;display:grid;grid-template-columns:18px 44px 1fr 34px;font-size:5px"><span>01</span><span style="height:22px;border:1px solid #CBD5E1;background:#F8FAFC"></span><span>Product description</span><span>SAR</span></div></div>`,
   imagereflarge: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">IMAGE REF – LARGE</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div></div></div><div style="margin-top:5px;display:grid;grid-template-columns:18px 62px 1fr 32px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"><span>#</span><span>6×5 cm</span><span>DESCRIPTION</span><span>AMOUNT</span></div><div style="margin-top:3px;display:grid;grid-template-columns:18px 62px 1fr 32px;font-size:5px"><span>01</span><span style="height:32px;border:1px solid #CBD5E1;background:#F8FAFC"></span><span>Equipment description</span><span>SAR</span></div></div>`,
@@ -13284,6 +13347,7 @@ function _tplOpen(html) {
   html=String(html||'').replace(/<title>[\s\S]*?<\/title>/i,'<title>'+escTitle+'</title>');
   const lifecycle='<scr'+'ipt>(function(){var t='+JSON.stringify(printTitle)+';function setTitle(){try{document.title=t}catch(e){}}setTitle();window.addEventListener("beforeprint",setTitle);window.addEventListener("afterprint",function(){try{if(window.opener&&!window.opener.closed){window.opener.focus();}}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},120);});})();<'+'/script>';
   html=html.replace(/<\/body>/i,lifecycle+'</body>');
+  if(window.BCRich) html=html.replace(/<\/head>/i,'<style>'+bcRichPrintCss()+'</style></head>');   // V270.4.14: formatted descriptions / notes
   // V270.4.8: A4 pages with the footer at the bottom of every page (js/doc-pages.js)
   if(window.BCPages){const cfg=/<table class="pw"/.test(html)?BCPages.SERVICE_QUOTE:/<article class="sheet/.test(html)?BCPages.ERP_QUOTE:null;if(cfg)html=BCPages.apply(html,cfg);}
   w.document.open();
@@ -13322,7 +13386,7 @@ function printQuotationProductA4(id, imageVariant){
   for(let idx=0; idx<quoteItems.length; idx++){
     const it=quoteItems[idx];
     if(it.lineType==='heading'){ rowParts.push('<tr class="heading"><td colspan="'+cols+'">'+escapeHtml(it.text||it.desc||'')+'</td></tr>'); continue; }
-    if(it.lineType==='note'){ rowParts.push('<tr class="note standalone-note"><td></td><td colspan="'+(cols-1)+'">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it))+'</td></tr>'); continue; }
+    if(it.lineType==='note'){ rowParts.push('<tr class="note standalone-note'+(it.textHtml?' bc-rt-row':'')+'"><td></td><td colspan="'+(cols-1)+'">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it),it.textHtml)+'</td></tr>'); continue; }
     itemNo++;
     const total=quoteLineNet(it), service=it.type==='service';
     const sub=[!service&&it.specs?escapeHtml(it.specs):'',!service&&[it.brand,it.model].filter(Boolean).length?escapeHtml([it.brand,it.model].filter(Boolean).join(' / ')):''].filter(Boolean).join(' · ');
@@ -13330,7 +13394,7 @@ function printQuotationProductA4(id, imageVariant){
     const inlineNote=(next&&next.lineType==='note')?String(next.text||next.desc||'').trim():'';
     if(inlineNote) idx++;
     const imageCell=imageMode?'<td class="imgcell">'+(productImage(it)?'<img src="'+productImage(it)+'" alt="">':'<div class="imgph">No image</div>')+'</td>':'';
-    rowParts.push('<tr><td class="c">'+String(itemNo).padStart(3,'0')+'</td>'+imageCell+'<td><div class="desc">'+escapeHtml(it.desc||'—')+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+(inlineNote?quotationPrintLineNoteHtml(inlineNote,quotationEffectiveNoteStyle(q,next)):'')+'</td><td class="c">'+escapeHtml(String(it.qty??''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+qvLineUnitMoney(it.up)+'</td>'+(hasDisc?'<td class="r disc">'+quoteLineDiscCellHtml(it,qvLineAmountMoney)+'</td>':'')+'<td class="r">'+qvLineAmountMoney(total)+'</td></tr>');
+    rowParts.push('<tr'+(it.descHtml||(inlineNote&&next.textHtml)?' class="bc-rt-row"':'')+'><td class="c">'+String(itemNo).padStart(3,'0')+'</td>'+imageCell+'<td><div class="desc">'+bcLineDescHtml(it)+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+(inlineNote?quotationPrintLineNoteHtml(inlineNote,quotationEffectiveNoteStyle(q,next),next.textHtml):'')+'</td><td class="c">'+escapeHtml(String(it.qty??''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+qvLineUnitMoney(it.up)+'</td>'+(hasDisc?'<td class="r disc">'+quoteLineDiscCellHtml(it,qvLineAmountMoney)+'</td>':'')+'<td class="r">'+qvLineAmountMoney(total)+'</td></tr>');
   }
   const rows=rowParts.join('')||'<tr><td colspan="'+cols+'" class="empty">No line items</td></tr>';
   const notes=String(q.notes||'').trim();
@@ -13386,7 +13450,7 @@ function printQuotationInfoLayout(id, layout) {
     : '<div style="font-size:17px;font-weight:900;color:#1F4E79">'+co+'</div>';
   const rows=(q.items||[]).map(function(it,i){
     if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+escapeHtml(it.text||it.desc||'')+'</td></tr>';
+    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+bcNoteHtml(it)+'</td></tr>';
     const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
     const subline=[it.brand,it.model].filter(Boolean).join(' · ');
     return '<tr>'
@@ -13461,7 +13525,7 @@ function printQuotationErpVariant(id, variant) {
   const isImage = ['image','image-medium','image-large','image-attachment'].includes(variant);
   const isImageAttachment = variant === 'image-attachment';
   const imageSize = variant === 'image-medium' ? {w:'40mm',h:'30mm',col:'48mm'} : (variant === 'image-large' ? {w:'60mm',h:'50mm',col:'68mm'} : {w:'58px',h:'46px',col:'78px'});
-  const title = isBi ? 'QUOTATION <span>عرض سعر</span>' : (isContracting ? 'CONTRACTING QUOTATION' : 'QUOTATION');
+  const title = isBi ? 'QUOTATION <span>عرض سعر</span>' : (isContracting ? 'SERVICE QUOTATION' : 'QUOTATION');
   const docTitle = isBi ? 'Quotation / عرض سعر' : 'Quotation';
   const customerTitle = isBi ? 'Customer / العميل' : 'Customer';
   const infoTitle = isBi ? 'Quotation Information / بيانات العرض' : 'Quotation Information';
@@ -13486,19 +13550,20 @@ function printQuotationErpVariant(id, variant) {
     for(let i=0;i<items.length;i++){
       const it=items[i];
       if(it.lineType==='heading'){out.push('<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>');continue;}
-      if(it.lineType==='note'){out.push('<tr><td></td><td colspan="98">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it))+'</td></tr>');continue;}
+      if(it.lineType==='note'){out.push('<tr'+(it.textHtml?' class="bc-rt-row"':'')+'><td></td><td colspan="98">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it),it.textHtml)+'</td></tr>');continue;}
       no++;
       const next=items[i+1], inlineNote=(next&&next.lineType==='note')?String(next.text||next.desc||'').trim():'';
       if(inlineNote)i++;
       const t=quoteLineNet(it);   // V270.2: after the line discount
       const dcell=hasDisc?'<td class="r disc">'+quoteLineDiscCellHtml(it,pdfLineAmountMoney)+'</td>':'';
       const subline=[it.brand,it.model,it.specs].filter(Boolean).join(' · ');
-      const note=inlineNote?quotationPrintLineNoteHtml(inlineNote,quotationEffectiveNoteStyle(q,next)):'';
+      const note=inlineNote?quotationPrintLineNoteHtml(inlineNote,quotationEffectiveNoteStyle(q,next),next.textHtml):'';
+      const rtRow=it.descHtml||(inlineNote&&next.textHtml)?' class="bc-rt-row"':'';   // V270.4.14: a long formatted line may continue on the next page
       if(mode==='image'){
         const img=productImage(it);
-        out.push('<tr><td class="num">'+String(no).padStart(2,'0')+'</td><td class="imgcell">'+(img?'<img src="'+img+'">':'<div class="imgph">No image</div>')+'</td><td><div>'+escapeHtml(it.desc||'')+'</div>'+(subline?'<div class="dsub">'+escapeHtml(subline)+'</div>':'')+note+'</td><td class="c">'+escapeHtml(String(it.qty||''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+pdfLineUnitMoney(it.up)+'</td>'+dcell+'<td class="r">'+pdfLineAmountMoney(t)+'</td></tr>');
+        out.push('<tr'+rtRow+'><td class="num">'+String(no).padStart(2,'0')+'</td><td class="imgcell">'+(img?'<img src="'+img+'">':'<div class="imgph">No image</div>')+'</td><td><div>'+bcLineDescHtml(it,'')+'</div>'+(subline?'<div class="dsub">'+escapeHtml(subline)+'</div>':'')+note+'</td><td class="c">'+escapeHtml(String(it.qty||''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+pdfLineUnitMoney(it.up)+'</td>'+dcell+'<td class="r">'+pdfLineAmountMoney(t)+'</td></tr>');
       }else{
-        out.push('<tr><td class="num">'+String(no).padStart(2,'0')+'</td><td><div>'+escapeHtml(it.desc||'')+'</div>'+(subline?'<div class="dsub">'+escapeHtml(subline)+'</div>':'')+note+'</td><td class="c">'+escapeHtml(String(it.qty||''))+'</td><td class="c">'+escapeHtml(it.uom||(mode==='service'?'Service':''))+'</td><td class="r">'+pdfLineUnitMoney(it.up)+'</td>'+dcell+'<td class="r">'+pdfLineAmountMoney(t)+'</td></tr>');
+        out.push('<tr'+rtRow+'><td class="num">'+String(no).padStart(2,'0')+'</td><td><div>'+bcLineDescHtml(it,'')+'</div>'+(subline?'<div class="dsub">'+escapeHtml(subline)+'</div>':'')+note+'</td><td class="c">'+escapeHtml(String(it.qty||''))+'</td><td class="c">'+escapeHtml(it.uom||(mode==='service'?'Service':''))+'</td><td class="r">'+pdfLineUnitMoney(it.up)+'</td>'+dcell+'<td class="r">'+pdfLineAmountMoney(t)+'</td></tr>');
       }
     }
     return out.join('');
@@ -13518,11 +13583,11 @@ function printQuotationErpVariant(id, variant) {
     +'</div>';
   const docPanel = '<div class="panel"><div class="panel-title">'+infoTitle+'</div>'+infoRows+'</div>';
   const totRow=function(k,v){return '<div class="tot-row"><span>'+k+'</span><b>'+v+'</b></div>';};
-  const termsTitle = isBi ? 'Terms &amp; Conditions / الشروط والأحكام' : (isContracting ? 'Contracting Terms &amp; Conditions' : (isHybrid ? 'Supply &amp; Installation Terms' : 'Terms &amp; Conditions'));
+  const termsTitle = isBi ? 'Terms &amp; Conditions / الشروط والأحكام' : (isContracting ? 'Terms &amp; Conditions' : (isHybrid ? 'Supply &amp; Installation Terms' : 'Terms &amp; Conditions'));
   const terms = isBi
     ? '<li>هذا العرض صالح لمدة '+(q.validity||7)+' أيام من تاريخ الإصدار.</li><li>This quotation is valid for '+(q.validity||7)+' days from the date of issue.</li><li>Delivery terms: '+(q.delivery||'—')+'</li><li>Payment terms: '+(q.payment||'—')+'</li>'
     : (isContracting
-      ? '<li>This contracting quotation is valid for '+(q.validity||7)+' days from the date of issue.</li><li>Scope of work is limited to the listed work descriptions only.</li><li>Delivery / completion terms: '+(q.delivery||'—')+'</li><li>Payment terms: '+(q.payment||'—')+'</li>'
+      ? '<li>This quotation is valid for '+(q.validity||7)+' days from the date of issue.</li><li>Scope of work is limited to the listed work descriptions only.</li><li>Delivery / completion terms: '+(q.delivery||'—')+'</li><li>Payment terms: '+(q.payment||'—')+'</li>'
       : (isHybrid
         ? '<li>This supply &amp; installation quotation is valid for '+(q.validity||7)+' days from the date of issue.</li><li>Material supply and site work are limited to the listed descriptions only.</li><li>Delivery / completion terms: '+(q.delivery||'—')+'</li><li>Payment terms: '+(q.payment||'—')+'</li>'
         : '<li>This quotation is valid for '+(q.validity||7)+' days from the date of issue.</li><li>Delivery terms: '+escapeHtml(q.delivery||'—')+'</li><li>Payment terms: '+escapeHtml(q.payment||'—')+'</li>'+quotationAdditionalConditionItems(q)));;
@@ -13538,7 +13603,7 @@ function printQuotationErpVariant(id, variant) {
   const tableRows = (isImage && !isImageAttachment) ? imageRows : (isContracting ? serviceRows : normalRows);
   const attachmentRows = (q.items||[]).map(function(it,i){
     if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    if(it.lineType==='note') return '<tr><td></td><td colspan="98">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it))+'</td></tr>';
+    if(it.lineType==='note') return '<tr><td></td><td colspan="98">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it),it.textHtml)+'</td></tr>';
     const img=productImage(it);
     const subline=[it.brand,it.model,it.specs].filter(Boolean).join(' · ');
     return '<div class="ref-item"><div class="ref-no">Item '+String(i+1).padStart(2,'0')+'</div>'
@@ -13575,11 +13640,11 @@ function printQuotationClassic(id) {
   const {q,sub,disc,bvat,vat,net,vu,co,f1,f2,headerInfo}=d;
   const rows=(q.items||[]).map(function(it,i){
     if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+escapeHtml(it.text||it.desc||'')+'</td></tr>';
+    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+bcNoteHtml(it)+'</td></tr>';
     const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
     return '<tr style="border-bottom:1px solid #e0e0e0;'+(i%2===0?'background:#fafafa':'')+'">'
       +'<td style="padding:6px 8px;font-size:10.5px;text-align:center;color:#888">'+String(i+1).padStart(2,'0')+'</td>'
-      +'<td style="padding:6px 8px;font-size:10.5px">'+(it.desc||'')+(it.brand?'<br><span style="font-size:9px;color:#666">'+it.brand+'</span>':'')+'</td>'
+      +'<td style="padding:6px 8px;font-size:10.5px">'+bcLineDescHtml(it,'')+(it.brand?'<br><span style="font-size:9px;color:#666">'+it.brand+'</span>':'')+'</td>'
       +'<td style="padding:6px 8px;text-align:center;font-size:10.5px">'+it.qty+'</td>'
       +'<td style="padding:6px 8px;text-align:center;font-size:10px;color:#555">'+(it.uom||'')+'</td>'
       +'<td style="padding:6px 8px;text-align:right;font-size:10.5px">'+Number(it.up).toLocaleString('en',{minimumFractionDigits:2})+'</td>'
@@ -13658,11 +13723,11 @@ function printQuotationModern(id) {
   const {q,sub,disc,bvat,vat,net,vu,co,f1,f2,headerInfo}=d;
   const rows=(q.items||[]).map(function(it,i){
     if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+escapeHtml(it.text||it.desc||'')+'</td></tr>';
+    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+bcNoteHtml(it)+'</td></tr>';
     const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
     return '<tr style="'+(i%2===0?'background:#F0F7FF':'background:#fff')+'">'
       +'<td style="padding:7px 10px;font-size:10px;color:#888;border-bottom:1px solid #e8f0fb;text-align:center">'+String(i+1).padStart(2,'0')+'</td>'
-      +'<td style="padding:7px 10px;font-size:10.5px;border-bottom:1px solid #e8f0fb">'+(it.desc||'')+(it.brand?'<br><span style="font-size:9px;color:#888">'+it.brand+'</span>':'')+'</td>'
+      +'<td style="padding:7px 10px;font-size:10.5px;border-bottom:1px solid #e8f0fb">'+bcLineDescHtml(it,'')+(it.brand?'<br><span style="font-size:9px;color:#888">'+it.brand+'</span>':'')+'</td>'
       +'<td style="padding:7px 10px;text-align:center;font-size:10.5px;border-bottom:1px solid #e8f0fb">'+it.qty+'</td>'
       +'<td style="padding:7px 10px;text-align:center;font-size:10px;color:#666;border-bottom:1px solid #e8f0fb">'+(it.uom||'')+'</td>'
       +'<td style="padding:7px 10px;text-align:right;font-size:10.5px;border-bottom:1px solid #e8f0fb">'+Number(it.up).toLocaleString('en',{minimumFractionDigits:2})+'</td>'
@@ -13742,12 +13807,12 @@ function printQuotationExecutive(id) {
   const {q,sub,disc,bvat,vat,net,vu,co,f1,f2,headerInfo}=d;
   const rows=(q.items||[]).map(function(it,i){
     if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
-    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+escapeHtml(it.text||it.desc||'')+'</td></tr>';
+    if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+bcNoteHtml(it)+'</td></tr>';
     const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
     const subline=[it.brand,it.model].filter(Boolean).join(' \u00b7 ');
     return '<tr>'
       +'<td style="padding:9px 8px;text-align:center;color:#94A3B8;border-bottom:1px solid #E8EEF5;font-size:10px">'+String(i+1).padStart(2,'0')+'</td>'
-      +'<td style="padding:9px 8px;border-bottom:1px solid #E8EEF5;font-size:10.5px;line-height:1.35"><div style="font-weight:600;color:#1E293B">'+(it.desc||'')+'</div>'
+      +'<td style="padding:9px 8px;border-bottom:1px solid #E8EEF5;font-size:10.5px;line-height:1.35"><div style="font-weight:600;color:#1E293B">'+bcLineDescHtml(it,'')+'</div>'
       +(subline?'<div style="font-size:9px;color:#64748B;margin-top:2px">'+subline+'</div>':'')
       +(it.specs?'<div style="font-size:9px;color:#64748B;margin-top:2px">'+it.specs+'</div>':'')+'</td>'
       +'<td style="padding:9px 8px;text-align:center;border-bottom:1px solid #E8EEF5;font-size:10.5px">'+it.qty+'</td>'

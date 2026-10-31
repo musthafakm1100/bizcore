@@ -133,6 +133,38 @@
         }
         function contentCount() { return page.children.length - 1; }   // minus the footer
         function put(n) { page.insertBefore(n, page.querySelector('.bcp-foot')); }
+        /* V270.4.14: a row with a formatted description (.bc-rtx) taller than the room left is cut between its paragraphs /
+           list items: the first part stays here, the rest goes on in a continuation row (numbering carried on). → the
+           continuation row, or null when it can't be cut (then the whole row moves, as before). */
+        function splitRow(row, item) {
+          var box = row.querySelector('.bc-rtx'); if (!box) return null;
+          var rows = row.parentNode.rows, room = limit - (row.getBoundingClientRect().top - page.getBoundingClientRect().top);
+          if (room < 40) return null;   // not even a few lines fit — move the whole row
+          var rest = row.cloneNode(true), rbox = rest.querySelector('.bc-rtx');
+          Array.prototype.forEach.call(rest.cells, function (c) { if (!c.contains(rbox)) c.innerHTML = ''; });
+          var host = rbox.parentNode; while (host && host.tagName !== 'TD') { Array.prototype.slice.call(host.parentNode.children).forEach(function (sib) { if (sib !== host) sib.remove(); }); host = host.parentNode; }
+          Array.prototype.slice.call(rbox.parentNode.children).forEach(function (sib) { if (sib !== rbox) sib.remove(); });
+          rbox.innerHTML = '';
+          rest.classList.add('bcp-cont');
+          var moved = 0, guard = 0;
+          while (bottom(item) > limit && guard++ < 400) {
+            var last = box.lastElementChild || box.lastChild; if (!last) break;
+            if ((last.tagName === 'OL' || last.tagName === 'UL') && last.children.length > 1) {
+              var list = rbox.firstChild && rbox.firstChild.__from === last ? rbox.firstChild : null;
+              if (!list) { list = last.cloneNode(false); list.__from = last; rbox.insertBefore(list, rbox.firstChild); }
+              list.insertBefore(last.lastElementChild, list.firstChild);
+              if (last.tagName === 'OL') list.setAttribute('start', String((Number(last.getAttribute('start')) || 1) + last.children.length));
+              moved++; continue;
+            }
+            if (box.childNodes.length <= 1) break;
+            rbox.insertBefore(last, rbox.firstChild); moved++;
+          }
+          if (!moved || !box.childNodes.length || bottom(item) > limit) {   // could not cut → put everything back
+            while (rbox.firstChild) { var n = rbox.firstChild; if (n.__from) { while (n.firstChild) n.__from.appendChild(n.firstChild); n.remove(); } else box.appendChild(n); }
+            return null;
+          }
+          return rest;
+        }
         page = newPage();
         var queue = items.slice();
         while (queue.length) {
@@ -142,7 +174,12 @@
           var t = splitTable(item);
           if (t) {
             var body = t.tBodies[0], carry = [];
-            while (body.rows.length && bottom(item) > limit) { carry.unshift(body.rows[body.rows.length - 1]); body.removeChild(body.rows[body.rows.length - 1]); }
+            while (body.rows.length && bottom(item) > limit) {
+              var lastRow = body.rows[body.rows.length - 1];
+              var cont = splitRow(lastRow, item);   // V270.4.14: a long formatted line continues on the next page
+              if (cont) { carry.unshift(cont); break; }
+              carry.unshift(lastRow); body.removeChild(lastRow);
+            }
             if (body.rows.length && carry.length) {
               // the rest of the table continues on the next page (header repeated, table footer only on the last part)
               var rest = item.cloneNode(true), rt = splitTable(rest) || (rest.tagName === 'TABLE' ? rest : rest.querySelector('table'));

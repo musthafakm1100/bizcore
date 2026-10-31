@@ -118,6 +118,7 @@
     try {
       if (typeof updateValidUntil === 'function') updateValidUntil();
       qtPaintHeader(); qtPaintNotes(); paintDots(); renderPreview(); renderCards();
+      if (window.BCQuoteCost) BCQuoteCost.apply();   // V270.4.14: the Cost 🔒 column for this user
       if (typeof calcTotals === 'function') calcTotals();
       rowsAll().forEach(tr => tr.querySelectorAll('textarea').forEach(t => typeof qtAutoGrow === 'function' && qtAutoGrow(t)));
     } finally { painting = false; }
@@ -306,7 +307,7 @@
     afterRows(); markChanged();
     if (!tr) return;
     if (isPhone()) { const card = document.querySelector(`#qt-cards [data-k="${tr.dataset.lineKey}"]`); card?.scrollIntoView({ block: 'nearest' }); if (tr.dataset.lineType === 'item') qtEditLine(tr); else card?.querySelector('input')?.focus(); return; }
-    (tr.querySelector('textarea[data-f="desc"]') || tr.querySelector('.quote-special-text'))?.focus();   // at once (V270.2.1)
+    (tr.querySelector('[data-f="desc"]') || tr.querySelector('.quote-special-text'))?.focus();   // at once (V270.2.1)
     tr.scrollIntoView({ block: 'nearest' });
   }
   function qtMoreMenu(btn) {
@@ -325,32 +326,43 @@
   function qtRowMenu(btn, trArg) {
     const tr = trArg || btn.closest('tr') || rowByKey(btn.closest('[data-k]')?.dataset.k); if (!tr) return;
     if (pop && pop.anchor === btn) { closePop(); return; }
-    const rows = rowsAll(), i = rows.indexOf(tr), item = tr.dataset.lineType === 'item', prod = tr.dataset.rowKind === 'product';
+    const rows = rowsAll(), i = rows.indexOf(tr), item = tr.dataset.lineType === 'item', prod = tr.dataset.rowKind === 'product', scope = item && tr.dataset.rowKind === 'scope', free = scope && tr.dataset.freeScope === '1';
     const hasDisc = item && !!(tr.dataset.discBy && (tr.querySelector('[data-quote-dpct]')?.value || tr.querySelector('[data-quote-damt]')?.value));
     const html = (isPhone() && item ? mi('edit', 'Edit Line…') : '')
       + mi('above', 'Insert Line Above') + (item ? mi('dup', 'Duplicate Line') : '')
       + mi('up', 'Move Up', { key: 'Alt+↑', disabled: i <= 0 }) + mi('down', 'Move Down', { key: 'Alt+↓', disabled: i >= rows.length - 1 })
       + (item && prod ? sep + mi('hist', 'Price History…', { key: 'F2', sub: 'Selling and buying prices of this item' }) : '')
+      + (scope ? sep + mi('link', tr.dataset.prodId ? 'Change Linked Item…' : 'Link Item…', { sub: 'A service item (SRV) — price history, reports, unit' }) + mi('scope', (free ? '✓ ' : '') + 'Scope Line (Free Text)', { sub: free ? 'Click to make it a linked service line again' : 'Contracting work priced for this job only — not linked' }) : '')
       + (hasDisc ? mi('nodisc', 'Clear Line Discount') : '')
       + sep + mi('del', 'Delete Line', { key: 'Ctrl+Del', cls: 'pr-mi-del' });
     openPop(btn, html, {
       width: 272, title: esc(lineLabel(tr)),
-      onClick: act => { closePop(); ({ edit: () => qtEditLine(tr), above: () => insertAbove(tr), dup: () => duplicate(tr), up: () => move(tr, -1), down: () => move(tr, 1), hist: () => priceHistory(tr), nodisc: () => clearDisc(tr), del: () => confirmDelete(tr) })[act]?.(); },
+      onClick: act => { closePop(); ({ link: () => typeof qtLinkLine === 'function' && qtLinkLine(tr), scope: () => toggleScope(tr), edit: () => qtEditLine(tr), above: () => insertAbove(tr), dup: () => duplicate(tr), up: () => move(tr, -1), down: () => move(tr, 1), hist: () => priceHistory(tr), nodisc: () => clearDisc(tr), del: () => confirmDelete(tr) })[act]?.(); },
     });
+  }
+  /** V270.4.14 (SQ_1): a Service quotation line becomes a scope line (contracting, free text, not linked) or back */
+  function toggleScope(tr) {
+    const free = tr.dataset.freeScope === '1';
+    tr.dataset.freeScope = free ? '' : '1'; if (!free) tr.dataset.prodId = '';
+    markChanged(); if (typeof qtRefreshLinkMarks === 'function') qtRefreshLinkMarks();
+    toast(free ? 'Line ' + (tr.querySelector('.qt-n')?.textContent || '') + ' is a service line again — link it to a service item' : 'Line ' + (tr.querySelector('.qt-n')?.textContent || '') + ' is a scope line (free text, not linked)');
   }
   function rowItem(tr) {
     const it = { rowKind: tr.dataset.rowKind, prodId: tr.dataset.prodId || '', image: tr.dataset.image || '', code: qtFieldVal(tr, 'code'), brand: qtFieldVal(tr, 'brand'), model: qtFieldVal(tr, 'model'), desc: qtFieldVal(tr, 'desc'), specs: qtFieldVal(tr, 'specs'),
       qty: parseBizNumber(tr.querySelector('[data-quote-qty]')?.value), uom: tr.querySelector('select')?.value || '', up: parseBizNumber(tr.querySelector('[data-quote-price]')?.value) };
     if (tr.dataset.pricingSell) it.pricingSell = Number(tr.dataset.pricingSell); if (tr.dataset.pricingBuy) it.pricingBuy = Number(tr.dataset.pricingBuy);
+    if (Number(tr.dataset.estCost) > 0) it.estCost = Number(tr.dataset.estCost);   // V270.4.14
+    if (tr.dataset.freeScope === '1') it.freeScope = true;
+    if (window.BCRich) { const h = BCRich.htmlOf(qtField(tr, 'desc')); if (h) it.descHtml = h; }
     const g = (Number(it.qty) || 0) * (Number(it.up) || 0), d = typeof qtLineDiscount === 'function' ? qtLineDiscount(tr, g) : { amt: 0 };
     if (d.amt > 0) { it.discAmt = d.amt; it.discPct = d.pct; it.discBy = tr.dataset.discBy; }
     return it;
   }
   function afterRows() { if (typeof renumberQuoteItemRows === 'function') renumberQuoteItemRows(); qtPaintNotes(); if (typeof calcTotals === 'function') calcTotals(); renderCards(); }
-  function focusRow(tr, sel) { setTimeout(() => { if (isPhone()) { document.querySelector(`#qt-cards [data-k="${tr.dataset.lineKey}"]`)?.scrollIntoView({ block: 'nearest' }); return; } const f = tr.querySelector(sel || 'textarea, input'); f?.focus(); tr.scrollIntoView({ block: 'nearest' }); }, 30); }
+  function focusRow(tr, sel) { setTimeout(() => { if (isPhone()) { document.querySelector(`#qt-cards [data-k="${tr.dataset.lineKey}"]`)?.scrollIntoView({ block: 'nearest' }); return; } const f = tr.querySelector(sel || 'textarea, input, [contenteditable="true"]'); f?.focus(); tr.scrollIntoView({ block: 'nearest' }); }, 30); }
   function insertAbove(tr) {
     const nr = tr.dataset.lineType === 'item' ? (tr.dataset.rowKind === 'scope' ? addServiceRow() : addItemRow()) : (currentQuoteType === 'contracting' ? addServiceRow() : addItemRow());
-    tr.parentNode.insertBefore(nr, tr); afterRows(); markChanged(); focusRow(nr, 'textarea[data-f="desc"]');
+    tr.parentNode.insertBefore(nr, tr); afterRows(); markChanged(); focusRow(nr, '[data-f="desc"]');
   }
   function duplicate(tr) {
     const nr = addItemRow(rowItem(tr)); tr.parentNode.insertBefore(nr, tr.nextSibling); afterRows(); markChanged();
@@ -475,7 +487,7 @@
     host.innerHTML = rows.map((tr, i) => {
       const k = esc(tr.dataset.lineKey), menu = `<button type="button" class="pr-menu-btn qt-cmenu" data-act="menu" aria-label="Line menu">⋮</button>`;
       if (tr.dataset.lineType === 'heading') return `<div class="qt-card qt-card-h" data-k="${k}"><span class="qt-badge">Heading</span><input data-p="text" value="${esc(tr.querySelector('.quote-special-text')?.value)}" placeholder="Heading text" aria-label="Heading text">${menu}</div>`;
-      if (tr.dataset.lineType === 'note') { const st = tr.dataset.noteStyle || ds; return `<div class="qt-card qt-card-n${rows[i - 1]?.dataset.lineType === 'item' ? ' qt-att' : ''}" data-k="${k}"><div class="qt-note qt-ns-${st}"><b class="qt-note-b">NOTE</b><b class="qt-note-l">Note:</b><input data-p="text" value="${esc(tr.querySelector('.quote-special-text')?.value)}" placeholder="Note text" aria-label="Note text"></div><div class="qt-card-nf"><button type="button" class="qt-schip${tr.dataset.noteStyle ? ' qt-own' : ''}" data-act="style">${tr.dataset.noteStyle ? '<i aria-hidden="true"></i>' : ''}${esc(styleName(st))} ▾</button>${menu}</div></div>`; }
+      if (tr.dataset.lineType === 'note') { const st = tr.dataset.noteStyle || ds; return `<div class="qt-card qt-card-n${rows[i - 1]?.dataset.lineType === 'item' ? ' qt-att' : ''}" data-k="${k}"><div class="qt-note qt-ns-${st}"><b class="qt-note-b">NOTE</b><b class="qt-note-l">Note:</b>${window.BCRich && tr.querySelector('.quote-special-text')?.isContentEditable ? '<div data-p="text" class="qt-card-rt" aria-label="Note text"></div>' : `<input data-p="text" value="${esc(tr.querySelector('.quote-special-text')?.value)}" placeholder="Note text" aria-label="Note text">`}</div><div class="qt-card-nf"><button type="button" class="qt-schip${tr.dataset.noteStyle ? ' qt-own' : ''}" data-act="style">${tr.dataset.noteStyle ? '<i aria-hidden="true"></i>' : ''}${esc(styleName(st))} ▾</button>${menu}</div></div>`; }
       const prod = tr.dataset.rowKind === 'product', n = tr.querySelector('.qt-n')?.textContent || '';
       const meta = prod ? [qtFieldVal(tr, 'code'), [qtFieldVal(tr, 'brand'), qtFieldVal(tr, 'model')].filter(Boolean).join(' ')].filter(Boolean).join(' · ') : '';
       const v = s => esc(tr.querySelector(s)?.value || '');
@@ -484,8 +496,11 @@
         + `<div class="qt-cf"><label><span>Qty</span><span class="qt-cq"><input data-p="qty" inputmode="decimal" value="${v('[data-quote-qty]')}" aria-label="Quantity"><em>${esc(tr.querySelector('select')?.value || '')}</em></span></label>`
         + `<label><span>${prod ? 'Unit Price' : 'Rate'}</span><input data-p="price" inputmode="decimal" value="${v('[data-quote-price]')}" aria-label="${prod ? 'Unit price' : 'Rate'}"></label>`
         + `<label><span>Disc %</span><input data-p="dpct" inputmode="decimal" value="${v('[data-quote-dpct]')}" placeholder="—" aria-label="Discount %"></label></div>`
+        + (window.BCQuoteCost && BCQuoteCost.isOn() ? `<div class="qt-ccost"><span>Cost 🔒 <em data-o="cm"></em></span><input data-p="cost" inputmode="decimal" value="${v('[data-quote-cost]')}" placeholder="—" aria-label="Unit cost (internal)"${tr.querySelector('[data-quote-cost]')?.readOnly ? ' readonly' : ''}></div>` : '')
         + `<div class="qt-cfoot"><small data-o="disc"></small><b data-o="net"></b></div></div>`;
-    }).join('') + `<button type="button" class="qt-card-add" onclick="qtAddLine('${currentQuoteType === 'contracting' ? 'scope' : 'item'}')">+ ${currentQuoteType === 'contracting' ? 'Add Scope Line' : 'Add Item'}</button>`;
+    }).join('') + `<button type="button" class="qt-card-add" onclick="qtAddLine('${currentQuoteType === 'contracting' ? 'scope' : 'item'}')">+ ${currentQuoteType === 'contracting' ? 'Add Service Line' : 'Add Item'}</button>`;
+    // V270.4.14: formatted notes stay formatted on the cards
+    host.querySelectorAll('.qt-card-rt').forEach(el => { const tr = rowByKey(el.closest('[data-k]')?.dataset.k), src = tr && tr.querySelector('.quote-special-text'); if (src) BCRich.make(el, { html: src.innerHTML, placeholder: 'Note text' }); });
     paintCardTotals();
   }
   const renderCardsSoon = () => { clearTimeout(cardsTimer); cardsTimer = setTimeout(renderCards, 80); };
@@ -497,13 +512,14 @@
       if (net) net.textContent = tr.querySelector('.total-cell')?.textContent || '0.00';
       if (d) { const da = tr.querySelector('[data-quote-damt]')?.value, g = tr.querySelector('.qt-gross')?.textContent || ''; d.textContent = da && !tr.dataset.discErr ? 'Disc −' + da + ' · ' + g : tr.dataset.discErr ? tr.dataset.discErr : 'Line Total'; d.classList.toggle('qt-err', !!tr.dataset.discErr); }
       const p = c.querySelector('[data-p="dpct"]'), src = tr.querySelector('[data-quote-dpct]'); if (p && src && document.activeElement !== p) p.value = src.value;
+      const cm = c.querySelector('[data-o="cm"]'); if (cm) cm.textContent = tr.querySelector('.qt-kc-m')?.textContent || '';
     });
   }
-  const PROXY = { qty: '[data-quote-qty]', price: '[data-quote-price]', dpct: '[data-quote-dpct]', damt: '[data-quote-damt]', text: '.quote-special-text', desc: '[data-f="desc"]', specs: '[data-f="specs"]', code: '[data-f="code"]', brand: '[data-f="brand"]', model: '[data-f="model"]' };
+  const PROXY = { cost: '[data-quote-cost]', qty: '[data-quote-qty]', price: '[data-quote-price]', dpct: '[data-quote-dpct]', damt: '[data-quote-damt]', text: '.quote-special-text', desc: '[data-f="desc"]', specs: '[data-f="specs"]', code: '[data-f="code"]', brand: '[data-f="brand"]', model: '[data-f="model"]' };
   function proxyTarget(el) { const card = el.closest('[data-k]'); const tr = card ? rowByKey(card.dataset.k) : (sheet && sheet.tr); return tr ? tr.querySelector(PROXY[el.dataset.p]) : null; }
-  document.addEventListener('input', e => { const el = e.target; if (!el?.dataset?.p || !el.closest('#qt-cards, .qt-sheet')) return; const t = proxyTarget(el); if (!t) return; t.value = el.value; t.dispatchEvent(new Event('input', { bubbles: true })); if (sheet) paintSheet(); });
-  document.addEventListener('focusin', e => { const el = e.target; if (!el?.dataset?.p || !el.closest('#qt-cards, .qt-sheet')) return; const t = proxyTarget(el); if (t && /qty|price|dpct|damt/.test(el.dataset.p)) { t.dispatchEvent(new Event('focus')); el.value = t.value; } });
-  document.addEventListener('focusout', e => { const el = e.target; if (!el?.dataset?.p || !el.closest('#qt-cards, .qt-sheet')) return; const t = proxyTarget(el); if (!t) return; t.dispatchEvent(new Event('blur')); el.value = t.value; if (sheet) paintSheet(); else if (el.dataset.p !== 'text') renderCardsSoon(); });
+  document.addEventListener('input', e => { const el = e.target; if (!el?.dataset?.p || !el.closest('#qt-cards, .qt-sheet')) return; const t = proxyTarget(el); if (!t) return; if (el.isContentEditable) t.innerHTML = el.innerHTML; else t.value = el.value; t.dispatchEvent(new Event('input', { bubbles: true })); if (sheet) paintSheet(); });
+  document.addEventListener('focusin', e => { const el = e.target; if (!el?.dataset?.p || !el.closest('#qt-cards, .qt-sheet')) return; const t = proxyTarget(el); if (t && /qty|price|dpct|damt|cost/.test(el.dataset.p)) { t.dispatchEvent(new Event('focus')); el.value = t.value; } });
+  document.addEventListener('focusout', e => { const el = e.target; if (!el?.dataset?.p || !el.closest('#qt-cards, .qt-sheet')) return; const t = proxyTarget(el); if (!t) return; if (el.isContentEditable) return; t.dispatchEvent(new Event('blur')); el.value = t.value; if (sheet) paintSheet(); else if (el.dataset.p !== 'text') renderCardsSoon(); });
   document.addEventListener('click', e => {
     const b = e.target.closest('#qt-cards [data-act]'); if (!b) return;
     const tr = rowByKey(b.closest('[data-k]')?.dataset.k); if (!tr) return;
@@ -522,16 +538,18 @@
     const el = document.createElement('div'); el.className = 'pr-sheet qt-sheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Edit line');
     el.innerHTML = `<div class="pr-grab"></div><div class="qt-sh-hd"><b>Line ${esc(tr.querySelector('.qt-n')?.textContent || '')}<small>${prod ? (tr.dataset.prodId ? 'From the Product Master' : 'Typed item') : 'Scope of work'}</small></b><button type="button" class="qt-sh-x" data-sh="done" aria-label="Close">✕</button></div>
       <div class="qt-sh-bd">
-        <label class="qt-shf"><span>${prod ? 'Description' : 'Scope of work'}</span><textarea data-p="desc" rows="${prod ? 2 : 4}">${esc(qtFieldVal(tr, 'desc'))}</textarea></label>
+        ${!prod && window.BCRich && qtField(tr, 'desc')?.isContentEditable ? '<div class="qt-shf"><span>Scope of work</span><div class="qt-sh-rtbar"></div><div data-p="desc" class="qt-sh-rt" aria-label="Scope of work"></div></div>' : `<label class="qt-shf"><span>${prod ? 'Description' : 'Scope of work'}</span><textarea data-p="desc" rows="${prod ? 2 : 4}">${esc(qtFieldVal(tr, 'desc'))}</textarea></label>`}
         ${prod ? `<label class="qt-shf"><span>Specifications</span><input data-p="specs" value="${v('[data-f="specs"]')}"></label>
         <div class="qt-sh3"><label class="qt-shf"><span>Item Code</span><input data-p="code" value="${v('[data-f="code"]')}"></label><label class="qt-shf"><span>Brand</span><input data-p="brand" value="${v('[data-f="brand"]')}"></label><label class="qt-shf"><span>Model</span><input data-p="model" value="${v('[data-f="model"]')}"></label></div>` : ''}
         <div class="qt-sh2"><label class="qt-shf"><span>Qty</span><span class="qt-cq"><input data-p="qty" inputmode="decimal" value="${v('[data-quote-qty]')}"><em>${u}</em></span></label><label class="qt-shf"><span>${prod ? 'Unit Price' : 'Rate'}</span><input data-p="price" inputmode="decimal" value="${v('[data-quote-price]')}"></label></div>
+        ${window.BCQuoteCost && BCQuoteCost.isOn() ? `<label class="qt-shf"><span>Cost 🔒 <small>Internal — never printed</small></span><input data-p="cost" inputmode="decimal" value="${v('[data-quote-cost]')}" placeholder="—"${tr.querySelector('[data-quote-cost]')?.readOnly ? ' readonly' : ''}></label>` : ''}
         <div class="qt-shdisc"><div class="qt-h4">Line Discount</div><div class="qt-sh2"><label class="qt-shf"><span>Disc %</span><input data-p="dpct" inputmode="decimal" value="${v('[data-quote-dpct]')}" placeholder="—"></label><label class="qt-shf"><span>Disc SAR</span><input data-p="damt" inputmode="decimal" value="${v('[data-quote-damt]')}" placeholder="—"></label></div><div class="qt-help" data-o="hint"></div></div>
         <div class="qt-shlt"><span>Line Total (before VAT)</span><b data-o="net"></b></div>
       </div>
       <div class="qt-sh-ft"><button type="button" class="pr-btn pr-danger-o" data-sh="del">Delete Line</button><button type="button" class="pr-btn pr-pri" data-sh="done">Done</button></div>`;
     document.body.append(dim, el);
     sheet = { el, dim, tr };
+    const shEd = el.querySelector('.qt-sh-rt'); if (shEd) { BCRich.make(shEd, { html: qtField(tr, 'desc').innerHTML, placeholder: 'Describe the job or scope of work…' }); BCRich.wireBar(el.querySelector('.qt-sh-rtbar')); }
     el.querySelectorAll('textarea').forEach(t => t.addEventListener('input', () => { t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight + 2, 200) + 'px'; }));
     el.addEventListener('click', e => { const b = e.target.closest('[data-sh]'); if (!b) return; if (b.dataset.sh === 'del') { closeSheet(); confirmDelete(tr); } else closeSheet(); });
     paintSheet();
@@ -595,6 +613,7 @@
 
   function qtAfterRowsChange() { afterRows(); }
   function qtAfterTypeChange() { renderCardsSoon(); }
+  window.qtRenderCardsSoon = renderCardsSoon;
 
   Object.assign(window, {
     qtOnOpen, qtAfterOpen, qtPaintHeader, qtOpenFlow, qtStatusMenu, qtFold, qtDetails, qtShowTab, qtPaintNotes, qtDocNoteStyleMenu, qtNoteStyleMenu,

@@ -4,7 +4,8 @@
  *  - a priced line is "linked" when it carries the product id (prodId). The line text keeps the customer's wording and
  *    is printed as written; the link works in the background (one price history per item, whatever the wording).
  *  - Mark as Sent = a reminder ("Link items before sending?" — or Send anyway). Create Sales Order = required for the
- *    lines going into the order. Contracting scope lines stay free text.
+ *    lines going into the order. V270.4.14: Service quotation lines are linked too (SRV items); a line made a "scope
+ *    line" on purpose stays free text (contracting work).
  *  - Customer wording memory: per customer, wording → item, suggested next time. Kept on the customer record
  *    (customers/{id}.wordings, one small entry per wording) — the customers are already loaded, so no extra reads.
  */
@@ -91,11 +92,11 @@
     return `<div class="bcl-line" data-i="${i}"><div class="bcl-lh"><span class="bcl-dot ${L.prodId ? 'g' : 'o'}"></span><b>${esc(L.label || 'Line ' + (i + 1))}</b> <span class="bcl-text">${esc(L.text)}</span><span style="flex:1"></span><span class="bcl-pill ${L.prodId ? 'g' : 'o'}">${L.prodId ? 'Linked' : 'Not linked'}</span></div>
       <div class="bcl-lb">${sug.length ? '<div class="bcl-sub">Closest matches</div>' + sug.map(opt).join('') : '<div class="bcl-sub">No close match in the Item Master.</div>'}
       <div class="bcl-search" hidden><input type="search" placeholder="Search items by name, brand, code…" aria-label="Search items"><div class="bcl-res"></div></div>
-      <div class="bcl-acts"><button type="button" class="btn btn-secondary btn-sm" data-a="search"><i class="ti ti-search"></i>Search items…</button><button type="button" class="btn btn-secondary btn-sm" data-a="new"><i class="ti ti-plus"></i>New Product</button>${L.makeNote ? '<button type="button" class="btn btn-secondary btn-sm" data-a="note"><i class="ti ti-notes"></i>Make it a note line</button>' : ''}</div></div></div>`;
+      <div class="bcl-acts"><button type="button" class="btn btn-secondary btn-sm" data-a="search"><i class="ti ti-search"></i>Search items…</button><button type="button" class="btn btn-secondary btn-sm" data-a="new"><i class="ti ti-plus"></i>${L.makeScope ? 'New Service' : 'New Product'}</button>${L.makeNote ? '<button type="button" class="btn btn-secondary btn-sm" data-a="note"><i class="ti ti-notes"></i>Make it a note line</button>' : ''}${L.makeScope ? '<button type="button" class="btn btn-secondary btn-sm" data-a="scope" title="Contracting work priced for this job only — stays free text, not linked"><i class="ti ti-file-text"></i>Scope line (free text)</button>' : ''}</div></div></div>`;
   }
   function wireLine(root, L, refresh) {
     const box = root.querySelector('.bcl-search'), inp = box.querySelector('input'), res = box.querySelector('.bcl-res');
-    root.querySelectorAll('input[type=radio]').forEach(r => r.onchange = () => { L._choice = r.value; L._note = false; root.querySelectorAll('.bcl-opt').forEach(o => o.classList.toggle('sel', o.querySelector('input').checked)); });
+    root.querySelectorAll('input[type=radio]').forEach(r => r.onchange = () => { L._choice = r.value; L._note = false; L._scope = false; root.querySelectorAll('.bcl-opt').forEach(o => o.classList.toggle('sel', o.querySelector('input').checked)); });
     const search = () => {
       const q = toks(inp.value);
       const hits = q.length ? prods().filter(p => !p._deletedAt && q.every(w => norm([p.name, p.brand, p.model, p.code].join(' ')).includes(w))).slice(0, 8) : [];
@@ -105,13 +106,14 @@
     inp.oninput = search;
     root.querySelector('[data-a=search]').onclick = () => { box.hidden = !box.hidden; if (!box.hidden) { inp.value = L.text; search(); inp.focus(); inp.select(); } };
     root.querySelector('[data-a=new]').onclick = () => newProduct(L, refresh);
+    const sb = root.querySelector('[data-a=scope]'); if (sb) sb.onclick = () => { L._scope = !L._scope; L._choice = ''; root.classList.toggle('as-note', L._scope); sb.classList.toggle('on', L._scope); root.querySelectorAll('input[type=radio]').forEach(r => { r.checked = false; }); root.querySelectorAll('.bcl-opt').forEach(o => o.classList.remove('sel')); };   // V270.4.14
     const nb = root.querySelector('[data-a=note]'); if (nb) nb.onclick = () => { L._note = !L._note; L._choice = ''; root.classList.toggle('as-note', L._note); nb.classList.toggle('on', L._note); root.querySelectorAll('input[type=radio]').forEach(r => { r.checked = false; }); root.querySelectorAll('.bcl-opt').forEach(o => o.classList.remove('sel')); };
   }
   /** + New Product from the link window: the product form opens with the line text; once saved it is chosen. */
   function newProduct(L, refresh) {
     const ov = shell(); ov.hidden = true;
     window._bcLinkNewProduct = p => { window._bcLinkNewProduct = null; L._choice = p.id; L._note = false; ov.hidden = false; refresh(); };
-    if (typeof openAddProduct === 'function') openAddProduct();
+    if (typeof openAddProduct === 'function') openAddProduct(L.makeScope ? 'service' : undefined);   // V270.4.14: a service line → a new service
     const n = document.getElementById('pm-name'); if (n) { n.value = L.text; n.dispatchEvent(new Event('input', { bubbles: true })); }
     const u = document.getElementById('pm-uom'); if (u && L.uom && [...u.options].some(o => o.value === L.uom)) u.value = L.uom;
     const pm = document.getElementById('prod-modal');
@@ -148,7 +150,7 @@
       foot.querySelector('[data-f=back]').onclick = () => done(null);
       const any = foot.querySelector('[data-f=anyway]'); if (any) any.onclick = () => done('anyway');
       foot.querySelector('[data-f=link]').onclick = () => {
-        if (mode !== 'sent' && !lines.some(l => l._choice || l._note)) { if (typeof showToast === 'function') showToast('Choose an item, or search for one', 'warning'); return; }
+        if (mode !== 'sent' && !lines.some(l => l._choice || l._note || l._scope)) { if (typeof showToast === 'function') showToast('Choose an item, or search for one', 'warning'); return; }
         done('link');
       };
       ov.hidden = false;
