@@ -93,3 +93,6 @@
 .qv-desc-title .bc-rtx b,#view-modal .qv-desc-title .bc-rtx b{font-weight:700!important}
 /* Sales Order view: a service line's text keeps its line breaks / bullets */
 .sov-item-name b,.sov-item-text{white-space:pre-line}
+/* V270.4.14.1: service units are often longer (Lumpsum, Month, Visit) — a wider unit box on Service quotations */
+#quote-modal .qt-table.qt-svc th.qt-th-qty{width:136px!important}
+#quote-modal .qt-table.qt-svc .qt-qu{grid-template-columns:minmax(0,1fr) 70px}

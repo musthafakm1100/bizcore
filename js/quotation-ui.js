@@ -116,6 +116,7 @@
   function qtAfterOpen() {
     painting = true;
     try {
+      if (typeof qtLinesFollowTemplate === 'function' && typeof currentQuoteType !== 'undefined') { qtLinesFollowTemplate(currentQuoteType); if (typeof calcTotals === 'function') calcTotals(); }   // V270.4.14.1
       if (typeof updateValidUntil === 'function') updateValidUntil();
       qtPaintHeader(); qtPaintNotes(); paintDots(); renderPreview(); renderCards();
       if (window.BCQuoteCost) BCQuoteCost.apply();   // V270.4.14: the Cost 🔒 column for this user

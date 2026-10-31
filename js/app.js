@@ -2927,6 +2927,9 @@ function handleQuoteProductSearchKey(event) {
 /* ── QUOTATION TYPE ── */
 function setQuoteType(type, options={}) {
   type = (type === 'contracting') ? 'contracting' : 'product';
+  // V270.4.14.1: a locked template is never switched by a click (only when the screen opens)
+  const segL=document.getElementById('qt-template');
+  if(!options.locked&&segL&&segL.classList.contains('template-locked')&&type!==currentQuoteType) return;
   currentQuoteType = type;
   const seg=document.getElementById('qt-template');
   if(seg){seg.classList.toggle('template-locked',!!options.locked);seg.setAttribute('aria-label',quotationTypeLabel(type)+' template');}
@@ -2953,8 +2956,23 @@ function setQuoteType(type, options={}) {
     if(thead) thead.innerHTML = `<tr><th class="qt-th-no">#</th><th class="qt-th-scope">Scope Of Work</th><th class="qt-th-qty qt-c">Qty ${req}</th><th class="qt-th-cost qt-r" title="Internal — never printed">Cost 🔒</th><th class="qt-th-price qt-r">Rate ${req}</th><th class="qt-th-dp qt-r">Disc %</th><th class="qt-th-da qt-r">Disc SAR</th><th class="qt-th-tot qt-r">Line Total</th><th class="qt-th-menu"><span class="qt-sr">Line menu</span></th></tr>`;
     if(tfoot) tfoot.innerHTML = `<tr class="qt-totrow"><td></td><td id="qt-tot-label">Total · 0 Lines</td><td></td><td class="qt-kc"></td><td></td><td></td><td class="qt-r" id="qt-tot-disc"></td><td class="qt-r" id="qt-tot-net">0.00</td><td></td></tr>`;
   }
+  qtLinesFollowTemplate(type);   // V270.4.14.1: the lines always match the columns of the template
   if(typeof qtAfterTypeChange==='function') qtAfterTypeChange(type);
   if(window.BCQuoteCost) BCQuoteCost.apply();   // V270.4.14
+}
+/** V270.4.14.1: lines built for the other template (e.g. product lines on a Service quotation) are rebuilt in this
+    template's layout — text, qty, unit, price, discount, link, cost and Pricing figures kept. */
+function qtLinesFollowTemplate(type){
+  const want=type==='contracting'?'scope':'product';
+  [...document.querySelectorAll('#items-tbody tr[data-line-type="item"]')].forEach(tr=>{
+    if(tr.dataset.rowKind===want) return;
+    const it=(window.qtDebug&&qtDebug.rowItem)?qtDebug.rowItem(tr):{desc:qtFieldVal(tr,'desc'),qty:parseBizNumber(tr.querySelector('[data-quote-qty]')?.value),uom:tr.querySelector('select')?.value||'',up:parseBizNumber(tr.querySelector('[data-quote-price]')?.value),prodId:tr.dataset.prodId||''};
+    if(want==='scope'){ if(it.specs) it.desc=[it.desc,it.specs].filter(Boolean).join('\n'); delete it.code; delete it.brand; delete it.model; delete it.specs; }
+    else { delete it.descHtml; delete it.freeScope; }
+    it.rowKind=want; it.type=type; it.lineKey=tr.dataset.lineKey;
+    const nr=addItemRow(it); if(nr){ tr.parentNode.insertBefore(nr,tr); tr.remove(); }
+  });
+  [...document.querySelectorAll('#items-tbody tr.quote-special-row td[colspan]')].forEach(td=>{ td.colSpan=type==='contracting'?7:8; });
 }
 
 
@@ -5565,7 +5583,8 @@ function addItemRow(item={}) {
       +qtyCell+costCell+priceCell+discCells+tailCells;
     // V270.4.14 (RT_3): the scope text is a formatted editor (bold, colours, lists…) — .value gives the plain text
     const ed=tr.querySelector('.qt-scope');
-    if(window.BCRich) BCRich.make(ed,{html:item.descHtml||'',text:item.desc||'',placeholder:'Describe the job or scope of work — the customer\'s wording…'});
+    const scopeText=!item.descHtml&&item.specs?[item.desc,item.specs].filter(Boolean).join('\n'):(item.desc||'');   // V270.4.14.1: a product line shown as a service line keeps its specifications
+    if(window.BCRich) BCRich.make(ed,{html:item.descHtml||'',text:scopeText,placeholder:'Describe the job or scope of work — the customer\'s wording…'});
     else { ed.outerHTML=`<textarea data-f="desc" rows="2" data-max-lines="8" class="qt-scope" oninput="qtAutoGrow(this)" aria-label="Scope of work">${e(item.desc)}</textarea>`; }
   }
   document.getElementById('items-tbody').appendChild(tr);
@@ -10492,7 +10511,9 @@ async function convertToQuotation() {
   currentQuoteVatRate=Number(activeTaxSettings().rate)||0;   // V270.2: was never set here, so the VAT figure showed 0.00
   currentQuoteNoteStyle='';
   // Items — from pricing, use sell prices
-  currentQuoteType='product'; setQuoteType('product',{locked:true});   // V270.2: the template is set by Pricing
+  // V270.4.14.1: a Service RFQ becomes a Service quotation (its lines = service lines); Product / Mixed → Products
+  const fromPricingType=r.requestType==='service'?'contracting':'product';
+  currentQuoteType=fromPricingType; setQuoteType(fromPricingType,{locked:true});   // V270.2: the template is set by Pricing
   document.getElementById('items-tbody').innerHTML='';
   const pricingRef='PR-'+String(r.rfqNo||pricingRFQId||'').replace(/^RFQ-?/i,'')+'-V'+Number(activePricingVersion?.version||r.currentPricingVersion||1);
   const pricingCost=r.pricingItems.reduce((s,it)=>s+(Number(it.buy)||0)*(Number(it.qty)||0),0);
@@ -10503,7 +10524,7 @@ async function convertToQuotation() {
     const byCode=!byId && it.code ? products.filter(p=>String(p.code||'').trim().toLowerCase()===String(it.code).trim().toLowerCase()) : [];
     const byName=!byId && byCode.length!==1 && it.desc ? products.filter(p=>String(p.name||'').trim().toLowerCase()===String(it.desc).trim().toLowerCase()) : [];
     const product=byId || (byCode.length===1 ? byCode[0] : (byCode.length===0 && byName.length===1 ? byName[0] : null));
-    addItemRow({desc:it.desc, qty:it.qty, uom:it.uom||product?.uom||'Pcs', up:it.sell, pricingSell:it.sell, pricingBuy:it.buy,
+    addItemRow({desc:it.desc, qty:it.qty, uom:it.uom||product?.uom||(fromPricingType==='contracting'?'Job':'Pcs'), up:it.sell, pricingSell:it.sell, pricingBuy:it.buy,
       code:product?.code||it.code||'', brand:product?.brand||'', model:product?.model||'',
       specs:(product?.specs||[]).filter(s=>s.k&&s.v).map(s=>`${s.k}: ${s.v}`).join(' | '),
       prodId:product?.id||it.productId||''});

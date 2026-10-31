@@ -44,7 +44,7 @@
 <link href="css/bc-date.css?v=270.1" rel="stylesheet"/>
 <link href="css/pricing.css?v=270.22" rel="stylesheet"/>
 <link href="css/quotation.css?v=270.22" rel="stylesheet"/>
-<link href="css/quote-rich.css?v=270.59" rel="stylesheet"/>
+<link href="css/quote-rich.css?v=270.60" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <link href="css/users.css?v=270.43" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
@@ -4549,7 +4549,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.59';
+      s.src = 'js/app.js?v=270.60';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4557,7 +4557,7 @@ onAuthStateChanged(auth, async user => {
         // V270.1: the Pricing screen (tabs, line menu, price references, phone cards)
         const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.24'; document.body.appendChild(pu);
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
-        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=270.59'; document.body.appendChild(qu);
+        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=270.60'; document.body.appendChild(qu);
         // V270.2.6: the RFQ entry screen (request type, product / service lines, requirements)
         const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=270.43'; document.body.appendChild(rq);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
