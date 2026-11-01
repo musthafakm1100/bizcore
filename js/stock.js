@@ -87,6 +87,7 @@ function renderStockRegister(){
 
 /* ═══════════════════════════════ ITEM VIEW (mockup ST_2) ═══════════════════════════════ */
 const ST_MOVE = { purchase: ['Bought', 'in'], 'purchase-cancelled': ['Invoice cancelled', 'can'], 'purchase-edited': ['Invoice changed', 'ed'], allocated: ['Allocated to order', 'out'], 'allocation-cancelled': ['Allocation cancelled', 'can'],
+  'issued-to-job': ['Issued to job', 'out'], 'job-issue-cancelled': ['Job issue cancelled', 'can'],   // V271.3
   'changed-to': ['Changed to →', 'out'], 'changed-from': ['Changed from ←', 'in'], 'change-cancelled': ['Change cancelled', 'can'] };   // V268.5
 const stChanges = () => (piLib() && piLib().changes) || [];
 function stModalEl(id){
@@ -99,6 +100,9 @@ function stMoveDoc(mv){
   if (mv.changeId) {   // V268.5 Change Item
     const other = mv.otherKey && stItemOf(mv.otherKey);
     return `${other ? `<button type="button" class="sp-link" onclick="openStockItem('${piEsc(mv.otherKey)}')">${piEsc(mv.otherDesc || other.desc)}</button>` : `<span>${piEsc(mv.otherDesc || '')}</span>`}<div class="pi-sub">${mv.note ? '“' + piEsc(mv.note) + '”' : ''}</div>`;
+  }
+  if (mv.allocationId && mv.jobId) {   // V271.3 issued to a contracting job
+    return `<button type="button" class="sp-link st-so" onclick="window.BCJobs&&BCJobs.view('${piEsc(mv.jobId)}')">${piEsc(mv.jobNo || mv.jobId)}</button><div class="pi-sub">Job${mv.note ? ' · “' + piEsc(mv.note) + '”' : ''}</div>`;
   }
   if (mv.allocationId) {
     const a = stAllocs().find(x => x.id === mv.allocationId);
@@ -130,7 +134,7 @@ function stRenderItem(m, moves){
     const sorted = moves.slice().sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')) || String(a.id).localeCompare(String(b.id)));
     let bal = 0;
     const rows = sorted.map(mv => { bal = Math.round((bal + piN(mv.qty)) * 1e6) / 1e6; const k = ST_MOVE[mv.kind] || [mv.kind, 'can'];
-      const a = mv.kind === 'allocated' ? stAllocs().find(x => x.id === mv.allocationId) : null;
+      const a = mv.kind === 'allocated' || mv.kind === 'issued-to-job' ? stAllocs().find(x => x.id === mv.allocationId) : null;
       const c = (mv.kind === 'changed-to' || mv.kind === 'changed-from') ? stChanges().find(x => x.id === mv.changeId) : null;
       const cancel = a && a.status !== 'Voided' ? `<button type="button" class="pi-cancel-pay" onclick="stAskCancelAlloc('${piEsc(a.id)}')">Cancel</button>` : a && a.status === 'Voided' ? '<span class="pi-muted">Cancelled</span>'
         : c && c.status !== 'Voided' ? (piIsAdmin() ? `<button type="button" class="pi-cancel-pay" onclick="stAskCancelChange('${piEsc(c.id)}')">Cancel</button>` : '') : c && c.status === 'Voided' ? '<span class="pi-muted">Cancelled</span>' : '';
@@ -152,7 +156,60 @@ function stRenderItem(m, moves){
           <p class="pi-note">Only open sales order lines for the <b>same item</b> (same product, or same code / description and unit) are listed.</p></section>
       </div>
     </div>
-    <div class="modal-footer"><button class="btn btn-secondary" type="button" disabled title="A stock count / adjustment comes later"><i class="ti ti-adjustments"></i>Stock Count <small class="pi-muted">· later</small></button>${piIsAdmin() && inStock ? `<button class="btn btn-secondary" type="button" onclick="openChangeItem('${piEsc(item.itemKey)}')" title="The wrong item was chosen on a purchase invoice"><i class="ti ti-switch-horizontal"></i>Change Item</button>` : ''}<span style="flex:1"></span><button class="btn btn-secondary" type="button" onclick="closeModal('st-view-modal')">Close</button></div></div>`;
+    <div class="modal-footer"><button class="btn btn-secondary" type="button" disabled title="A stock count / adjustment comes later"><i class="ti ti-adjustments"></i>Stock Count <small class="pi-muted">· later</small></button>${piIsAdmin() && inStock ? `<button class="btn btn-secondary" type="button" onclick="openChangeItem('${piEsc(item.itemKey)}')" title="The wrong item was chosen on a purchase invoice"><i class="ti ti-switch-horizontal"></i>Change Item</button>` : ''}${inStock && window.BCJobs ? `<button class="btn btn-secondary" type="button" onclick="openIssueToJob('${piEsc(item.itemKey)}')" title="Material from stock used on a contracting job"><i class="ti ti-briefcase"></i>Issue to Job</button>` : ''}<span style="flex:1"></span><button class="btn btn-secondary" type="button" onclick="closeModal('st-view-modal')">Close</button></div></div>`;
+}
+
+/* ═══════════════════════════════ V271.3 ISSUE TO JOB ═══════════════════════════════
+   Material taken from stock for a contracting job — at the average cost, it becomes the job's actual cost
+   (Material). No money moves. Cancelled like an allocation (the stock comes back). */
+async function openIssueToJob(key){
+  const item = stItemOf(key); if (!item) return;
+  try { await window.BCJobs.load(); } catch (e) {}
+  const jobs = window.BCJobs.list().filter(j => !/^(closed|cancelled)$/i.test(String(j.status || '')));
+  if (!jobs.length) { if (typeof showToast === 'function') showToast('There is no open job. A job is created from a won Contracting quotation.', 'warning'); return; }
+  const m = stModalEl('st-job-modal'); m._key = key; m._op = stNewOp('stj');
+  m.innerHTML = `<div class="modal pi-paym" role="dialog" aria-modal="true" aria-labelledby="stj-title" style="--pi-w:640px">
+    <div class="modal-header"><div><h2 id="stj-title">Issue Stock to a Job</h2><div class="so-create-subtitle">${piEsc(item.desc)} · ${stQty(item.qty, item.uom)} in stock · avg. cost ${piF(piCore().avgCostOf(item))}</div></div><button class="close-btn" type="button" onclick="closeModal('st-job-modal')" aria-label="Close">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label for="stj-job">Job *</label><select id="stj-job" onchange="stJobRecalc()"><option value="">Choose the job…</option>${jobs.map(j => `<option value="${piEsc(j.id)}">${piEsc(j.jobNo)}${j.project ? ' · ' + piEsc(j.project) : ''}${j.company ? ' · ' + piEsc(j.company) : ''}</option>`).join('')}</select></div>
+      <div class="st-alloc-grid">
+        <div class="form-group"><label for="stj-qty">Quantity *</label><input id="stj-qty" class="pi-money" inputmode="decimal" oninput="stJobRecalc()"><small>At most ${piQ(item.qty)} in stock</small></div>
+        <div class="form-group"><label for="stj-date">Date *</label><input id="stj-date" type="date" value="${piToday()}" max="${piToday()}" onchange="stJobRecalc()"></div>
+        <div class="form-group"><label for="stj-note">Note <em>Optional</em></label><input id="stj-note" maxlength="200" placeholder="e.g. taken to site by Rashid"></div>
+      </div>
+      <div id="stj-result"></div>
+      <div class="pi-match adv st-info"><i class="ti ti-info-circle"></i><span>No money moves — the stock was already paid on its purchase invoices. The value becomes the job's actual <b>Material</b> cost.</span></div>
+      <div class="inv-error" id="stj-err" hidden></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" type="button" onclick="closeModal('st-job-modal')">Cancel</button><button class="btn btn-primary" type="button" id="stj-save" onclick="stSaveIssueToJob()" disabled><i class="ti ti-device-floppy"></i>Issue to Job</button></div></div>`;
+  if (jobs.length === 1) document.getElementById('stj-job').value = jobs[0].id;
+  stJobRecalc();
+  if (typeof openModalWithSize === 'function') openModalWithSize('st-job-modal'); else m.classList.add('open');
+  setTimeout(() => document.getElementById(jobs.length === 1 ? 'stj-qty' : 'stj-job').focus(), 60);
+}
+function stJobInput(){ const m = stModalEl('st-job-modal'); return { itemKey: m._key, jobId: document.getElementById('stj-job').value, qty: document.getElementById('stj-qty').value, date: document.getElementById('stj-date').value, note: document.getElementById('stj-note').value, costType: 'material' }; }
+function stJobRecalc(){
+  const m = stModalEl('st-job-modal'), item = stItemOf(m._key); if (!item) return;
+  const inp = stJobInput(), job = window.BCJobs.list().find(j => j.id === inp.jobId) || null;
+  const v = piCore().validateJobAllocation(inp, { item, job, today: piToday() });
+  const box = document.getElementById('stj-result');
+  box.innerHTML = !String(inp.qty || '').trim() || !inp.jobId ? '' : v.ok
+    ? `<div class="pi-match ok st-res"><i class="ti ti-circle-check"></i><span>Stock goes ${piQ(item.qty)} → <b>${piQ(piN(item.qty) - v.value.qty)}</b>. Cost for ${piEsc(job.jobNo)}: ${piQ(v.value.qty)} × ${piF(v.value.unitCost)} = <b>${piF(v.value.value)}</b> (Material).</span></div>`
+    : `<div class="pi-match bad st-res"><i class="ti ti-alert-triangle"></i><span>${piEsc(v.errors.map(e => e.message).join(' '))}</span></div>`;
+  document.getElementById('stj-save').disabled = !v.ok;
+  m._v = v;
+}
+async function stSaveIssueToJob(){
+  stJobRecalc();
+  const m = stModalEl('st-job-modal'), err = document.getElementById('stj-err'), v = m._v;
+  if (!v || !v.ok) return;
+  const btn = document.getElementById('stj-save'); btn.disabled = true; err.hidden = true;
+  try {
+    const r = await bcBusy('Issuing to the job…', () => piLib().service.allocateStockToJob({ ...stJobInput(), operationId: m._op }));
+    closeModal('st-job-modal');
+    if (typeof showToast === 'function') showToast(`${piQ(r.allocation.qty)} ${r.allocation.uom || ''} ${r.allocation.desc} issued to ${r.allocation.jobNo}`, 'success');
+    const vm = document.getElementById('st-view-modal'); if (vm && vm.classList.contains('open') && vm._key) openStockItem(vm._key);
+  } catch (e) { err.hidden = false; err.textContent = e.code === 'permission-denied' ? 'The server refused it. Please reload and try again.' : (e.message || 'Could not issue to the job.'); btn.disabled = false; }
 }
 
 /* ═══════════════════════════════ ALLOCATE TO ORDER (mockup ST_3) ═══════════════════════════════ */
@@ -232,7 +289,7 @@ function stAskCancelAlloc(id){
   const m = stModalEl('st-cancel-modal'); m._id = id; m._op = stNewOp('stav');
   m.innerHTML = `<div class="modal pi-paym" role="dialog" aria-modal="true" aria-labelledby="stc-title" style="--pi-w:480px">
     <div class="modal-header"><div class="modal-header-title-wrap"><h2 id="stc-title">Cancel allocation</h2></div><button class="close-btn" type="button" onclick="closeModal('st-cancel-modal')" aria-label="Close">✕</button></div>
-    <div class="modal-body"><p class="pi-note" style="margin-top:0">${piQ(a.qty)} ${piEsc(a.uom || '')} ${piEsc(a.desc)} go back to stock (${piF(a.value)}), and ${piEsc(a.soNo)} needs them again. The allocation stays in the movements, marked Cancelled.</p>
+    <div class="modal-body"><p class="pi-note" style="margin-top:0">${piQ(a.qty)} ${piEsc(a.uom || '')} ${piEsc(a.desc)} go back to stock (${piF(a.value)}), and ${a.jobId ? `the cost comes off ${piEsc(a.jobNo)}` : `${piEsc(a.soNo)} needs them again`}. The allocation stays in the movements, marked Cancelled.</p>
       <div class="form-group"><label for="stc-why">Reason *</label><input id="stc-why" maxlength="300" placeholder="e.g. wrong order"></div><div class="inv-error" id="stc-err" hidden></div></div>
     <div class="modal-footer"><button class="btn btn-secondary" type="button" onclick="closeModal('st-cancel-modal')">Go back</button><button class="btn btn-danger" type="button" id="stc-save" onclick="stDoCancelAlloc()"><i class="ti ti-ban"></i>Cancel allocation</button></div></div>`;
   if (typeof openModalWithSize === 'function') openModalWithSize('st-cancel-modal'); else m.classList.add('open');

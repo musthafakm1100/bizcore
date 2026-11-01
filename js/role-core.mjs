@@ -177,7 +177,8 @@ export const READ_MODULES = Object.freeze({
   rfqs: ['rfq', 'pricing', 'quotation'],
   quotations: ['quotation'],
   salesOrders: ['salesOrder'],
-  jobs: ['salesOrder', 'quotation'],   // V271.2: Contracting jobs (the Sales Orders rights)
+  jobs: ['salesOrder', 'quotation', 'purchaseInvoice', 'cash', 'stock'],   // V271.2: Contracting jobs (V271.3: also read by who charges costs to a job)
+  jobExpenses: ['salesOrder', 'quotation', 'cash'],   // V271.3
   deliveryNotes: ['deliveryNote', 'invoice'],
   customerInvoices: ['invoice', 'receipt'],
   creditNotes: ['invoice', 'receipt'],
@@ -197,7 +198,7 @@ export const OWN_COLLECTIONS = Object.freeze({ rfqs: 'rfq', quotations: 'quotati
 
 /** Screens (data-nav-page) → the modules that open them. */
 export const PAGE_MODULES = Object.freeze({
-  rfq: ['rfq'], costing: ['pricing'], quotations: ['quotation'], salesorders: ['salesOrder'], jobs: ['salesOrder'],
+  rfq: ['rfq'], costing: ['pricing'], quotations: ['quotation'], salesorders: ['salesOrder'], jobs: ['salesOrder', 'cash'],
   deliverynotes: ['deliveryNote'], deliveries: ['deliveryNote'], customerinvoices: ['invoice'], receipts: ['receipt'],
   supplierrfqs: ['purchaseInvoice'], purchaseorders: ['purchaseInvoice'], purchaseinvoices: ['purchaseInvoice'],
   supplierpayments: ['supplierPayment'], stock: ['stock'], cashbank: ['cash'],

@@ -861,7 +861,8 @@ function quotationItemKeysField(items){
 }
 async function saveQuotations() {
   try { void 0 /* V269.4: no browser copy of quotations */; } catch(e) {}
-  if (window.FB) await window.FB.fbSave('quotations', quotations);
+  if (window.FB) return await window.FB.fbSave('quotations', quotations);   // V271.3.1: false = not saved
+  return true;
 }
 async function saveCustomers() {
   try { localStorage.setItem('dtq_customers', JSON.stringify(customers)); } catch(e) {}
@@ -1532,7 +1533,7 @@ function validUntil(q) {
 function bcLocalISO(d){d=d instanceof Date?d:new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 /* ── v103 Central document numbering ── */
 const DOC_NUMBERING_DEFAULTS={
-  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},paymentReceipt:{label:'Payment Receipt',prefix:'RCT',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'},supplierPayment:{label:'Supplier Payment',prefix:'SP',reset:'monthly'},job:{label:'Job (Contracting)',prefix:'JOB',reset:'monthly'},
+  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},paymentReceipt:{label:'Payment Receipt',prefix:'RCT',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'},supplierPayment:{label:'Supplier Payment',prefix:'SP',reset:'monthly'},job:{label:'Job (Contracting)',prefix:'JOB',reset:'monthly'},jobExpense:{label:'Job Expense',prefix:'JE',reset:'monthly'},
   // V270.4.9: master codes — system-generated on save, one running sequence (never reset), no date part
   customer:{label:'Customer',prefix:'CUS',reset:'never',dateFormat:'none',digits:5},supplier:{label:'Supplier',prefix:'SUP',reset:'never',dateFormat:'none',digits:5},product:{label:'Product (goods)',prefix:'ITM',reset:'never',dateFormat:'none',digits:6},service:{label:'Product (service)',prefix:'SRV',reset:'never',dateFormat:'none',digits:6},employee:{label:'Employee',prefix:'EMP',reset:'never',dateFormat:'none',digits:4}
 };
@@ -1549,7 +1550,7 @@ const DOC_RESETS_FOR_FORMAT={none:['never'],YY:['yearly','never'],YYYY:['yearly'
 const DOC_RESET_LABELS={yearly:'Yearly',monthly:'Monthly',never:'Never'};
 const DOC_SEPARATORS=['-','/','.',''];
 const DOC_DIGITS=[3,4,5,6];
-const DOC_NUMBERING_GROUPS=[['Sales',['rfq','pricing','quotation','salesOrder','job','deliveryNote','customerInvoice','creditNote','paymentReceipt']],['Purchases',['purchaseOrder','purchaseInvoice','supplierPayment']],['Master Data',['customer','supplier','product','service','employee']]];
+const DOC_NUMBERING_GROUPS=[['Sales',['rfq','pricing','quotation','salesOrder','job','jobExpense','deliveryNote','customerInvoice','creditNote','paymentReceipt']],['Purchases',['purchaseOrder','purchaseInvoice','supplierPayment']],['Master Data',['customer','supplier','product','service','employee']]];
 function cleanDocPrefix(v){return String(v||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8);}
 function normalizeDocNumberingConfig(type,raw){
   const d=DOC_NUMBERING_DEFAULTS[type]||{},c={...(raw||{})};
@@ -1596,6 +1597,7 @@ function existingDocumentNumbers(type){
   // V270.4.9: master codes
   if(type==='customer')return customers.map(x=>x.code||''); if(type==='supplier')return suppliers.map(x=>x.code||''); if(type==='product')return products.filter(x=>x.type!=='service').map(x=>x.code||''); if(type==='service')return products.filter(x=>x.type==='service').map(x=>x.code||''); if(type==='employee')return employees.map(x=>x.code||'');
   if(type==='job')return (window.BCJobs?BCJobs.list():[]).map(x=>x.jobNo||'');   // V271.2
+  if(type==='jobExpense')return (window.BCJobs&&BCJobs.expenseNos?BCJobs.expenseNos():[]);   // V271.3
   if(type==='rfq')return rfqs.map(x=>x.rfqNo||''); if(type==='quotation')return quotations.map(x=>x.qno||''); if(type==='salesOrder')return salesOrders.map(x=>x.soNo||'');
   if(type==='deliveryNote')return salesOrders.flatMap(s=>(s.deliveries||[]).map(x=>x.dnNo||'')); if(type==='customerInvoice')return salesOrders.flatMap(s=>(s.invoices||[]).map(x=>x.invNo||'')); if(type==='creditNote')return salesOrders.flatMap(s=>(s.creditNotes||[]).map(x=>x.cnNo||'')); if(type==='paymentReceipt')return (typeof receiptsCache!=='undefined'?receiptsCache:[]).map(x=>x.rctNo||''); if(type==='purchaseInvoice')return (window.BizCorePI?window.BizCorePI.invoices:[]).map(x=>x.piNo||''); if(type==='supplierPayment')return (window.BizCorePI?window.BizCorePI.payments:[]).map(x=>x.spNo||''); return [];
 }
@@ -6241,9 +6243,9 @@ async function saveQuotation(mode='save', opts={}) {
   }
 
   // Link back to RFQ if converted from pricing
-  let _rfqNeedsSave=false;
+  let _rfqNeedsSave=false, _linkedRfq=null;
   if (capturedRFQId && !capturedEditingId) {
-    const rfq = rfqs.find(x=>x.id===capturedRFQId);
+    const rfq = rfqs.find(x=>x.id===capturedRFQId); _linkedRfq = rfq || null;
     if (rfq) {
       const _pvIndex=ensurePricingVersions(rfq);   // V269: index entries; saveRFQs writes the version documents
       const pv=_pvIndex.find(v=>Number(v.version)===Number(document._pendingPricingVersion||rfq.currentPricingVersion||1));
@@ -6260,17 +6262,27 @@ async function saveQuotation(mode='save', opts={}) {
       rfq.quotationIds=Array.from(new Set([...(rfq.quotationIds||[]),q.id]));
       rfq.quotationId=q.id; rfq.quotedDate=q.date; rfq.status='Quoted'; _rfqNeedsSave=true;
     }
+    var _pendingBack={rfq:document._pendingRFQId,pv:document._pendingPricingVersion,rev:document._pendingQuotationRevision};   // V271.3.1: restored if the save fails
     document._pendingRFQId = null; document._pendingPricingVersion=null; document._pendingQuotationRevision=null;
   }
 
   // Every mutation above is in-memory only up to this point — persist
   // the final state in one round trip per collection (run together,
   // not one after another) instead of saving after each intermediate step.
-  await Promise.all([
-    saveQuotations(),
-    _rfqNeedsSave ? saveRFQs() : Promise.resolve()
-  ]);
-  if (_rfqNeedsSave) renderRFQPage();
+  // V271.3.1: the quotation first; the RFQ is marked Quoted only once the quotation is in Firebase (this RFQ only)
+  const _qSaved = await saveQuotations();
+  if (_qSaved !== false && _rfqNeedsSave) {
+    if (!(await saveRFQs([_linkedRfq].filter(Boolean)))) showToast('The quotation is saved, but its RFQ was not updated — open the RFQ and save it again. ' + rfqSaveFailedMessage(), 'warning', 'RFQ not updated');
+    renderRFQPage();
+  }
+  // V271.3.1: "created / updated" only when Firebase has the quotation; otherwise the form stays open to try again
+  if (_qSaved === false) {
+    if (capturedEditingId) { const i = quotations.findIndex(x => x.id === q.id); if (i > -1 && prevQ) quotations[i] = prevQ; }
+    else quotations = quotations.filter(x => x.id !== q.id);
+    if (typeof _pendingBack !== 'undefined' && _pendingBack) { document._pendingRFQId = _pendingBack.rfq; document._pendingPricingVersion = _pendingBack.pv; document._pendingQuotationRevision = _pendingBack.rev; }
+    showToast(rfqSaveFailedMessage(), 'error', 'Quotation not saved');
+    return;
+  }
 
   clearDirty(); window._pendingQuotationOrigin=null; window._pendingEstimate=null; setQuotationPricingContext(null); closeModal('quote-modal');
   if(!capturedEditingId) resetQuotationRegisterFiltersForNewRecord();
@@ -6787,7 +6799,7 @@ async function deleteQuotation(id) {
   // All three collections above are independent of each other — save
   // them together in one round trip each instead of one after another.
   await Promise.all([
-    linkedRFQ ? saveRFQs() : Promise.resolve(),
+    linkedRFQ ? saveRFQs([linkedRFQ]) : Promise.resolve(),   // V271.3.1
     saveQuotations()
   ]);
 
@@ -7765,12 +7777,12 @@ async function confirmNoBid(btn) {
   if(!reason){showValidationDialog('Reason required','Select why this RFQ will not be quoted.','rfq-no-bid-reason','Select a reason');return;}
   const r=rfqs.find(x=>x.id===id); if(!r)return;
   r.status='No Bid'; r.noBidReason=reason; r.noBidNote=note; r.closedDate=new Date().toISOString();
-  await saveRFQs(); document.getElementById('rfq-no-bid-overlay')?.remove(); renderRFQPage(); viewRFQ(id); showToast('RFQ closed as No Bid','success');
+  if(!(await saveRFQs([r]))){showToast(rfqSaveFailedMessage(),'error','RFQ not saved');return;} document.getElementById('rfq-no-bid-overlay')?.remove(); renderRFQPage(); viewRFQ(id); showToast('RFQ closed as No Bid','success');
 }
 async function reopenRFQ(id) {
   const r=rfqs.find(x=>x.id===id); if(!r)return;
   r.status=(r.pricingItems&&r.pricingItems.length)?'Pricing':'New'; r.noBidReason=''; r.noBidNote=''; r.closedDate=null;
-  await saveRFQs(); renderRFQPage(); viewRFQ(id); showToast('RFQ reopened','success');
+  if(!(await saveRFQs([r]))){showToast(rfqSaveFailedMessage(),'error','RFQ not saved');return;} renderRFQPage(); viewRFQ(id); showToast('RFQ reopened','success');
 }
 function deleteRFQRecord(id) {
   const r=rfqs.find(x=>x.id===id); if(!r)return;
@@ -7825,7 +7837,7 @@ async function revisePricingFromRO(btn) {
   const _before=pvSnapshot(r);
   if(viewing) syncRFQFromPricingVersion(r,viewing);
   r.currentPricingVersion=nextVersion; r.status='Pricing'; pvViewing=null;
-  if(!(await saveRFQs())){
+  if(!(await saveRFQs([r]))){
     r.pricingIndex=r.pricingIndex.filter(v=>Number(v.version)!==nextVersion); pvRestore(r,_before);
     showToast(rfqSaveFailedMessage(),'error','Not saved'); return;
   }
@@ -7870,9 +7882,27 @@ async function saveSuppliers() {
 }
 /* V269: an RFQ whose pricing changed is saved on its own, together with its pricing version documents, in one batch.
    The other changed RFQs are saved as before. Returns false when something was not saved. */
-async function saveRFQs() {
+/* V271.3.1: saveRFQs(only) — only these RFQs, each written as its own record straight to Firebase. The screen's list of
+   RFQs can be replaced by a refresh from the server while a save waits (another PC changing RFQs at the same time); a
+   save that reads the list after waiting could then miss the RFQ just entered and still report success. With `only`
+   the records themselves are written, put back in the list if a refresh removed them, and success means they are in
+   Firebase. */
+function bcKeepInList(r) { const i = rfqs.findIndex(x => x && x.id === r.id); if (i > -1) rfqs[i] = r; else rfqs.unshift(r); }
+async function saveRFQs(only) {
   try { void 0 /* V269.4: no browser copy of rfqs */; } catch(e) {}
   if (!window.FB) return true;
+  if (Array.isArray(only)) {
+    let okAll = true;
+    for (const r of only) {
+      if (!r || r.id == null) continue;
+      const extras = pvPrepareSave(r) || [];
+      const synced = window.FB.fbSyncedJSON ? window.FB.fbSyncedJSON('rfqs', r.id) : null;
+      if (!extras.length && synced && synced === JSON.stringify(r)) { bcKeepInList(r); continue; }   // nothing changed
+      if (await window.FB.fbSaveRecordWith('rfqs', r, extras, { ownRev: true })) { pvLegacy.delete(String(r.id)); bcKeepInList(r); }
+      else okAll = false;
+    }
+    return okAll;
+  }
   let ok = true; const failed = []; let firstError = null;
   if (window.FB.fbSaveRecordWith) for (const r of rfqs) {
     if (!r || r.id == null) continue;
@@ -8979,7 +9009,7 @@ async function saveRFQ() {
   if (editingRFQId) { if(listIndex>-1) rfqs[listIndex]=r; }
   else rfqs.unshift(r);
   // V270.2.6: success only when Firebase confirms the save; otherwise the form stays open with the entry
-  if (!(await saveRFQs())) {
+  if (!(await saveRFQs([r]))) {   // V271.3.1: this RFQ itself, not the list on the screen
     if (editingRFQId) { if(listIndex>-1&&previousRFQ) rfqs[listIndex]=previousRFQ; }
     else { const k=rfqs.indexOf(r); if(k>-1) rfqs.splice(k,1); rfqPendingNew={id:r.id,rfqNo:r.rfqNo,date:receivedISO}; }
     showToast(rfqSaveFailedMessage(),'error','RFQ not saved');
@@ -9491,7 +9521,7 @@ async function autoSavePricingDraftAfterReorder(wasDirtyBeforeReorder,sequence) 
   r.currentPricingVersion=Number(version.version)||1;
   version.status=version.status==='Revision Draft'?'Revision Draft':'Saved';
   version.updated=new Date().toISOString();
-  if(!(await saveRFQs())){showToast(rfqSaveFailedMessage(),'error','Line order not saved');markPricingDirty();return;}
+  if(!(await saveRFQs([r]))){showToast(rfqSaveFailedMessage(),'error','Line order not saved');markPricingDirty();return;}
   if(wasDirtyBeforeReorder) {
     markPricingDirty();
     const note=document.getElementById('pricing-save-note');
@@ -10459,7 +10489,7 @@ async function savePricing() {
   if (r.status==='New') r.status='Pricing';
   // V270.2.3: Custom costs with no value are not saved (readInternalCosts) — they leave the screen too, with a message
   const blankCustom=[...document.querySelectorAll('#internal-costs-tbody tr')].filter(tr=>!tr.dataset.masterId&&!(parseFloat(String(tr.querySelector('[data-cost-role="value"]')?.value||'').replace(/,/g,''))||0));
-  if (!(await saveRFQs())) { showToast(rfqSaveFailedMessage(),'error','Pricing not saved'); return false; }
+  if (!(await saveRFQs([r]))) { showToast(rfqSaveFailedMessage(),'error','Pricing not saved'); return false; }
   if (blankCustom.length) { blankCustom.forEach(tr=>tr.remove()); calcPricingSummary(); if(typeof prFillCostPick==='function') prFillCostPick(); if(typeof prAfterCostsChange==='function') prAfterCostsChange(); }
   setPricingSavedState(true);
   { const sp=document.getElementById('pr-status-pill'); if(sp && sp.textContent==='Draft') sp.textContent='Saved'; }   // V270.1
@@ -11696,7 +11726,7 @@ async function _saveSalesOrderCore() {
   }
   const [soSaved] = await Promise.all([
     saveSalesOrders({ onlyIds: [so.id] }),
-    linkedRFQ ? saveRFQs() : Promise.resolve()
+    linkedRFQ ? saveRFQs([linkedRFQ]) : Promise.resolve()   // V271.3.1
   ]);
   if (soSaved === false) {
     // Not stored: restore the previous in-memory state so the screen does not show unsaved data.

@@ -338,3 +338,114 @@
 #items-tbody tr.qt-est-line [data-quote-dpct],#items-tbody tr.qt-est-line [data-quote-damt]{color:#94a3b8!important;font-size:12px!important}
 #page-jobs .jb-reg-table td:nth-child(1),#page-jobs .jb-reg-table td:nth-child(2),#page-jobs .jb-reg-table td:nth-child(5),#page-jobs .jb-reg-table td:nth-child(8),#page-jobs .jb-reg-table td:nth-child(9),#page-jobs .jb-reg-table td:nth-child(10){white-space:nowrap}
 #page-jobs .jb-reg-table .jv-st{white-space:nowrap}
+
+/* ═══ V271.3 — Contracting actual cost (mockups CC_1 · CC_2 · CJ_2) ═══ */
+/* cost type chips (same colours as the estimate's Cost Build-up) */
+.jv-ct{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:7px;background:#eef2f6;color:#475569;white-space:nowrap}
+.jv-ct.material{background:#e8f0fb;color:#1e4f86}.jv-ct.manpower{background:#fdecdc;color:#9a3d0a}.jv-ct.subcontract{background:#d9f3ee;color:#0f5f58}.jv-ct.other{background:#eef2f6;color:#475569}
+/* job view: tabs, Estimate vs Actual, costs, activity, progress */
+#job-view-modal .jv-tabs{display:flex;gap:2px;padding:0 18px;border-bottom:1px solid #e2e8f0;background:#fff;overflow-x:auto;flex:0 0 auto}
+#job-view-modal .jv-tab{border:0;background:none;padding:11px 14px 10px;font-size:13.5px;color:#64748b;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+#job-view-modal .jv-tab.on{color:#173a5e;font-weight:600;border-bottom-color:#2e75b6}
+#job-view-modal .jv-tab:focus-visible{outline:2px solid #2e75b6;outline-offset:-2px}
+#job-view-modal .jv-card b.amber{color:#b45309}#job-view-modal .jv-card b.red{color:#b42318}
+.jv-eva td{vertical-align:middle}
+.jv-eva tr.jv-eva-r{cursor:pointer}.jv-eva tr.jv-eva-r:hover td{background:#f8fafc}
+.jv-eva .jv-cnt{display:inline-block;margin-left:6px;font-size:10.5px;color:#64748b;background:#f1f5f9;border-radius:999px;padding:0 6px}
+.jv-eva td.neg,.jv-costs td.neg{color:#b42318!important}
+.jv-eva td.jv-used{white-space:nowrap;width:220px}
+.jv-bar{display:inline-block;vertical-align:middle;width:150px;height:7px;border-radius:99px;background:#edf1f5;overflow:hidden}
+.jv-bar i{display:block;height:100%;border-radius:99px;background:#2e75b6}
+.jv-bar i.jv-bar-manpower{background:#ea6a10}.jv-bar i.jv-bar-subcontract{background:#0f766e}.jv-bar i.jv-bar-other{background:#94a3b8}.jv-bar i.jv-bar-direct{background:#173a5e}
+.jv-bar i.amber{background:#d97706!important}.jv-bar i.red{background:#dc2626!important}
+.jv-pct{display:inline-block;min-width:58px;margin-left:8px;font-size:12.5px;font-variant-numeric:tabular-nums;color:#334155}
+.jv-pct.amber{color:#b45309;font-weight:600}.jv-pct.red{color:#b42318;font-weight:600}
+.jv-eva tr.jv-dim td{color:#94a3b8!important}
+.jv-hint{font-size:12px;color:#64748b;line-height:1.5;margin:8px 2px 0}
+.jv-hint b.amber{color:#b45309}.jv-hint b.red{color:#b42318}
+#job-view-modal .jv-prog h4,#job-view-modal .jv-box h4{display:flex;align-items:center;gap:8px}
+.jv-edit{margin-left:auto;border:1px solid #d5dde7;background:#fff;border-radius:7px;font-size:11.5px;padding:2px 8px;color:#1e4f86;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:500}
+.jv-wd{font-weight:600!important}
+.jv-pnote{font-size:12px;color:#64748b;margin:4px 0 0;line-height:1.45}.jv-pnote b.red{color:#b42318}
+.jv-act{list-style:none;margin:0;padding:0}
+.jv-act li{display:grid;grid-template-columns:12px 1fr auto;gap:8px;align-items:start;padding:6px 0;font-size:12.5px;color:#1f2937;border-bottom:1px solid #f1f5f9}
+.jv-act li:last-child{border-bottom:0}.jv-act small{color:#94a3b8;white-space:nowrap}
+.jv-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;background:#94a3b8}
+.jv-dot.material{background:#2e75b6}.jv-dot.manpower{background:#ea6a10}.jv-dot.subcontract{background:#0f766e}.jv-dot.direct,.jv-dot.start{background:#173a5e}
+.jv-more{border:0;background:none;color:#1e4f86;font-size:12px;padding:6px 0 0;cursor:pointer}
+.jv-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px}
+.jv-chip{border:1px solid #d5dde7;background:#fff;border-radius:999px;padding:4px 12px;font-size:12.5px;color:#334155;cursor:pointer}
+.jv-chip.on{background:#173a5e;border-color:#173a5e;color:#fff}
+.jv-scroll,.je-scroll{overflow-x:auto}
+.jv-costs td small,.jv-costs td small{display:block;font-size:11px;color:#94a3b8}
+.jv-costs .nw{white-space:nowrap}
+.jv-none{text-align:center;color:#64748b;padding:18px!important}
+.jv-link{border:0;background:none;padding:0;color:#1e4f86;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-size:12.5px;text-decoration:none}
+.jv-link:hover{text-decoration:underline}
+.jv-warn{display:flex;gap:8px;align-items:center;font-size:12.5px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:9px;padding:8px 10px;margin-bottom:10px}
+#job-prog-modal .modal.jp-win{width:min(440px,calc(100vw - 32px))!important;max-width:none!important;height:auto!important}
+/* Job Expense (CC_2) */
+#je-modal .modal.je-win{width:min(1000px,calc(100vw - 36px))!important;max-width:none!important;border-radius:12px!important;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100dvh - 36px)!important}
+#je-view-modal .modal.je-vwin{width:min(760px,calc(100vw - 36px))!important;max-width:none!important;border-radius:12px!important;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100dvh - 36px)!important;height:auto!important}
+:is(#je-modal,#je-view-modal) .modal-header.jb-hd{background:#173a5e!important;color:#fff;display:flex;align-items:center;gap:10px;padding:10px 16px!important;border:0!important;border-radius:0!important;min-height:56px}
+:is(#je-modal,#je-view-modal) .jb-hd h2{color:#fff!important;font-size:15.5px!important;font-weight:600!important;margin:0!important}
+:is(#je-modal,#je-view-modal) .jb-sub{font-size:12px;opacity:.85;margin-top:2px;color:#fff}
+:is(#je-modal,#je-view-modal) .jb-hd > div:first-child{flex:1;min-width:0}
+:is(#je-modal,#je-view-modal) .jb-hd .close-btn{color:#fff!important;background:transparent!important;border:0!important;font-size:19px;opacity:.85}
+:is(#je-modal,#je-view-modal) .jb-hd .smart-back-btn{display:none!important}
+:is(#je-modal,#je-view-modal) .modal-footer.jb-ft{display:flex;align-items:center;gap:8px;padding:10px 18px!important;border-top:1px solid #dfe5ec}
+:is(#je-modal,#je-view-modal) .jb-sp{flex:1}
+#je-modal .jb-chk{font-size:12px;color:#166534}#je-modal .jb-chk.is-todo{color:#b45309}
+:is(#je-modal,#je-view-modal) .je-body{padding:14px 18px!important;overflow:auto}
+#je-modal .je-grid{display:grid;grid-template-columns:2fr 1fr 1.3fr 1fr;gap:12px;margin-bottom:12px}
+#je-modal .jb-f{display:flex;flex-direction:column;gap:4px;min-width:0}
+#je-modal .jb-f label{font-size:11.5px!important;color:#64748b!important;font-weight:400!important}
+#je-modal .jb-f label em,#je-modal .je-lines th em{font-style:normal;color:#94a3b8;font-weight:400}
+#je-modal .jb-req{color:#b42318;font-weight:500}
+#je-modal .jb-f :is(input,select){height:34px;border:1px solid #d5dde7;border-radius:8px;padding:0 10px;font-size:13px!important;background:#fff;width:100%}
+#je-modal .je-lines{min-width:760px}
+#je-modal .je-lines td{padding:5px 6px!important;vertical-align:middle}
+#je-modal .je-lines :is(input,select){height:32px;border:1px solid #d5dde7;border-radius:7px;padding:0 8px;font-size:13px!important;background:#fff;width:100%}
+#je-modal .je-lines input.r{text-align:right;font-variant-numeric:tabular-nums}
+#je-modal .je-lines td .jv-ct{margin-top:4px;font-size:10.5px}
+#je-modal .je-lines .cs-x{border:0;background:none;color:#94a3b8;cursor:pointer;font-size:14px}
+#je-modal .je-add{margin:4px 2px}
+#je-modal .je-tot{display:flex;justify-content:flex-end;gap:22px;font-size:13px;color:#64748b;padding:10px 4px;border-bottom:1px solid #edf1f5}
+#je-modal .je-tot b{color:#1f2937;font-variant-numeric:tabular-nums;margin-left:6px}
+#je-modal .je-tot .je-paid b{font-size:15px}
+#je-modal .je-foot{display:flex;gap:14px;align-items:flex-end;margin-top:12px}
+#je-modal .je-note{flex:1}
+#je-modal .je-rcpt{display:flex;gap:8px;align-items:center;font-size:12px;color:#64748b}
+#je-modal .je-fname{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#je-view-modal .jv-kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:12.5px;color:#64748b}
+#je-view-modal .jv-kv b{color:#1f2937;font-weight:400;text-align:right}
+#je-view-modal .je-cancel{margin-top:12px;display:flex;flex-direction:column;gap:4px}
+#je-view-modal .je-cancel label{font-size:11.5px;color:#64748b}
+#je-view-modal .je-cancel input{height:34px;border:1px solid #d5dde7;border-radius:8px;padding:0 10px;font-size:13px}
+/* purchase invoice: a line charged to a job (CC_1) */
+.pi-job-tag{color:#9a3d0a;font-size:12px;font-weight:600;white-space:nowrap}
+#pe-lines .pi-job-desc{width:100%!important;max-width:none!important;text-align:left!important}
+.pi-job-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:5px}
+#pe-lines .pi-job-row :is(select,input){height:28px!important;font-size:12px!important;border:1px solid #d5dde7;border-radius:7px;padding:0 6px;background:#fff;text-align:left!important}
+#pe-lines .pi-job-row .pi-job-sel{flex:1 1 200px;min-width:160px;max-width:300px}
+#pe-lines .pi-job-row .pi-job-type{flex:0 0 auto;width:auto!important}
+#pe-lines .pi-job-row .pi-job-uom{width:84px!important;flex:0 0 84px}
+#pe-lines tr.pi-job-line .pi-c-goes{white-space:normal}
+#pe-lines select.pi-bad,#pe-lines input.pi-bad{border-color:#f59e0b!important;background:#fffbeb!important}
+.pi-dest.job{background:#fdf2e9;border-color:#f7c9a3;color:#9a3d0a;cursor:pointer}
+.pi-ctype{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:7px;background:#e8f0fb;color:#1e4f86;margin-left:4px}
+.pi-ctype.manpower{background:#fdecdc;color:#9a3d0a}.pi-ctype.subcontract{background:#d9f3ee;color:#0f5f58}.pi-ctype.other{background:#eef2f6;color:#475569}
+@media (max-width:900px){
+  #je-modal .je-grid{grid-template-columns:1fr 1fr}
+  .jv-eva td.jv-used{width:auto}.jv-bar{width:80px}
+}
+@media (max-width:640px){
+  #je-modal.modal-overlay,#je-view-modal.modal-overlay{padding:0!important}
+  #je-modal .modal.je-win,#je-view-modal .modal.je-vwin{width:100vw!important;max-height:100dvh!important;height:100dvh!important;border-radius:0!important}
+  #je-modal .je-grid{grid-template-columns:1fr}
+  #je-modal .je-foot{flex-direction:column;align-items:stretch}
+  :is(#je-modal,#je-view-modal) .modal-footer.jb-ft{padding:8px 12px calc(10px + env(safe-area-inset-bottom))!important;flex-wrap:wrap}
+  #je-modal .jb-chk{flex-basis:100%}
+  #job-view-modal .jv-tabs{padding:0 8px}
+  .jv-bar{display:none}
+}

@@ -40,6 +40,15 @@ export const DEFAULT_PURCHASE_SETTINGS = Object.freeze({
   newProductRight: 'everyone',               // V268.5: who may add a product with + New Product
   estimateFlagPct: 5,                        // V269.7: Sales Order → Profit: flag a line whose cost is more than this % above its estimate
 });
+/** V271.3: the contracting cost types (as in the estimate's Cost Build-up). */
+export const JOB_COST_TYPES = Object.freeze(['material', 'manpower', 'subcontract', 'other']);
+/** V271.3: the actual cost of each job line of an invoice, by job and cost type (landed: its share of extra costs / discount). */
+export function jobCostsOf(pi) {
+  const out = [];
+  if (!pi || pi.status === PURCHASE_STATUS.voided) return out;
+  (pi.lines || []).forEach(l => { if (l && l.kind === 'job' && l.jobId) out.push({ jobId: l.jobId, jobNo: l.jobNo || '', costType: l.costType || 'material', amount: r2(Number(l.landedAmount != null ? l.landedAmount : l.amount) || 0), desc: l.desc || '', qty: l.qty, uom: l.uom || '' }); });
+  return out;
+}
 export const LIMITS = Object.freeze({ lines: 300, costs: 20, text: 300, reason: 300, invNo: 60 });
 
 export const r2 = n => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -205,7 +214,7 @@ export function validatePurchaseInvoice(input = {}, ctx = {}) {
   const lines = [];
   rawLines.forEach((l, i) => {
     const n = i + 1;
-    const kind = l.kind === 'stock' ? 'stock' : 'order';
+    const kind = l.kind === 'stock' ? 'stock' : l.kind === 'job' ? 'job' : 'order';
     const qty = rq(num(l.qty)), unitCost = r4(num(l.unitCost));
     const discountPct = lineMode ? (Number.isFinite(num(l.discountPct)) ? r2(num(l.discountPct)) : 0) : 0;
     if (!(qty > 0)) err('qty', `Line ${n}: enter the quantity bought.`, i);
@@ -242,13 +251,20 @@ export function validatePurchaseInvoice(input = {}, ctx = {}) {
           }
         } else err('extra', `Line ${n}: ${extra} more than ${so.soNo} needs — choose where they go.`, i);
       }
+    } else if (kind === 'job') {
+      // V271.3: a cost charged to a contracting job — no stock, no sales order; the job's actual cost by cost type
+      Object.assign(line, { jobId: clean(l.jobId, 120), jobNo: clean(l.jobNo, 40), costType: JOB_COST_TYPES.includes(l.costType) ? l.costType : '',
+        productId: clean(l.productId, 120), code: clean(l.code, 100), desc: clean(l.desc, 500), uom: clean(l.uom, 30) || 'Nos' });
+      if (!line.desc) err('desc', `Line ${n}: enter what was bought.`, i);
+      if (!line.jobId) err('job', `Line ${n}: choose the job.`, i);
+      if (!line.costType) err('costType', `Line ${n}: choose the cost type.`, i);
     } else {
       Object.assign(line, { productId: clean(l.productId, 120), code: clean(l.code, 100), desc: clean(l.desc, 500), uom: clean(l.uom, 30) || 'Pcs', stockQty: qty });
       if (!line.desc) err('desc', `Line ${n}: enter the item.`, i);
       // V268.5: an item for stock must be a product from Master Data (or added with + New Product)
       else if (!line.productId) err('product', `Line ${n}: choose a product from the list, or add it with + New Product.`, i);
     }
-    line.itemKey = itemKeyOf(line);
+    line.itemKey = kind === 'job' ? '' : itemKeyOf(line);   // V271.3: job costs keep no stock and no last price
     // cost against the estimate / last paid price
     const ref = l.reference && Number(l.reference.unit) > 0 ? { unit: r4(l.reference.unit), source: l.reference.source === 'lastPaid' ? 'lastPaid' : 'pricing', refNo: clean(l.reference.refNo, 60), refDate: clean(l.reference.refDate, 10) } : { unit: 0, source: 'none', refNo: '', refDate: '' };
     const chk = Number.isFinite(unitCost) ? costCheck(unitCost, ref, settings) : { kind: 'none', pct: null };
@@ -301,7 +317,8 @@ export function validatePurchaseInvoice(input = {}, ctx = {}) {
     },
     paid: 0, balance: total, payStatus: PAY_STATUS.unpaid,
     profit: { sales: r2(sales), cost: r2(cost), profit: r2(sales - cost) },
-    soIds: [...deltas.keys()], itemKeys: [...new Set(lines.map(l => l.itemKey))],
+    soIds: [...deltas.keys()], itemKeys: [...new Set(lines.map(l => l.itemKey).filter(Boolean))],
+    jobIds: [...new Set(lines.filter(l => l.kind === 'job' && l.jobId).map(l => l.jobId))],
     // for the future chart of accounts: Dr inventory/cost + input VAT (+ rounding) ; Cr supplier payable
     accounting: {
       debit: [{ side: 'purchases', amount: t.subtotal }, { side: 'input-vat', amount: t.vatAmount }, ...(t.rounding && t.rounding > 0 ? [{ side: 'rounding', amount: t.rounding }] : [])],
@@ -703,6 +720,25 @@ export function validateAllocation(input = {}, { item = null, so = null, ledger 
   return { ok: errors.length === 0, errors, value: { itemKey: item ? item.itemKey : '', desc: item ? clean(item.desc, 500) : '', uom: item ? clean(item.uom, 30) : '',
     soId: so ? so.id : '', soNo: so ? clean(so.soNo, 40) : '', customer: so ? clean(so.customer, 200) : '', soLineId: line ? line.lineId : '',
     qty, unitCost, value, sellUnit: line ? r4(Number(line.up) || 0) : 0, date, note, left } };
+}
+
+/** V271.3: stock issued to a contracting job (its Material cost) — at the average cost; no sales order.
+ *  input { itemKey, jobId, qty, date, note, costType }  ctx { item, job, today } */
+export function validateJobAllocation(input = {}, { item = null, job = null, today = new Date().toISOString().slice(0, 10) } = {}) {
+  const errors = [], err = (field, message) => errors.push({ field, message });
+  const qty = rq(num(input.qty)), date = String(input.date || '').slice(0, 10), note = clean(input.note, 200);
+  if (!item) err('item', 'This stock item no longer exists.');
+  if (!job) err('job', 'Choose the job.');
+  else if (/^(closed|cancelled)$/i.test(String(job.status || ''))) err('job', `${job.jobNo} is ${String(job.status).toLowerCase()}.`);
+  if (!isDate(date)) err('date', 'Enter the date.'); else if (date > today) err('date', 'The date can\'t be in the future.');
+  if (!(qty > 0)) err('qty', 'Enter the quantity.');
+  else if (item && qty > (Number(item.qty) || 0) + 1e-9) err('qty', `Only ${Number(item.qty) || 0} in stock.`);
+  const unitCost = avgCostOf(item);
+  const all = item && Math.abs(qty - (Number(item.qty) || 0)) < 1e-9;
+  const value = all ? r2(Number(item.value) || 0) : r2(unitCost * (Number.isFinite(qty) ? qty : 0));
+  return { ok: errors.length === 0, errors, value: { itemKey: item ? item.itemKey : '', desc: item ? clean(item.desc, 500) : '', uom: item ? clean(item.uom, 30) : '',
+    jobId: job ? clean(job.id, 120) : '', jobNo: job ? clean(job.jobNo, 40) : '', customer: job ? clean(job.company, 200) : '',
+    costType: JOB_COST_TYPES.includes(input.costType) ? input.costType : 'material', qty, unitCost, value, date, note } };
 }
 
 /* ───────── V268.5: Change Item (the wrong item was chosen on a purchase invoice) ─────────

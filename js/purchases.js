@@ -176,9 +176,9 @@ function piEnsureModal(){
             <div class="pi-f-match" id="pe-adv"></div>
           </div>
         </section>
-        <section class="so-entry-card"><div class="so-entry-card-title so-items-title"><span><i class="ti ti-list-details"></i>What was bought</span><span class="pi-actions"><button type="button" class="btn btn-primary btn-sm" onclick="piOpenPicker()"><i class="ti ti-shopping-cart-plus"></i>Add from sales orders</button><button type="button" class="btn btn-secondary btn-sm" onclick="piAddStockLine()"><i class="ti ti-box"></i>Add item for stock</button></span></div>
+        <section class="so-entry-card"><div class="so-entry-card-title so-items-title"><span><i class="ti ti-list-details"></i>What was bought</span><span class="pi-actions"><button type="button" class="btn btn-primary btn-sm" onclick="piOpenPicker()"><i class="ti ti-shopping-cart-plus"></i>Add from sales orders</button><button type="button" class="btn btn-secondary btn-sm" onclick="piAddStockLine()"><i class="ti ti-box"></i>Add item for stock</button><button type="button" class="btn btn-secondary btn-sm" id="pe-add-job" onclick="piAddJobLine()" hidden><i class="ti ti-briefcase"></i>Charge to a job</button></span></div>
           <div class="pi-lines-wrap"><table class="pi-lines"><thead id="pe-lines-head"></thead><tbody id="pe-lines"></tbody></table></div>
-          <p class="pi-note">Qty bought starts at what is still to buy — change it if the supplier delivered less. If you buy more than an order needs, you choose where the extra goes.</p>
+          <p class="pi-note">Qty bought starts at what is still to buy — change it if the supplier delivered less. If you buy more than an order needs, you choose where the extra goes. <span id="pe-job-note" hidden><b>Charge to a job</b>: manpower, subcontract work, materials or rental used on a contracting job — the cost type starts from the supplier (manpower agency → Manpower, subcontractor → Subcontract, others → Material).</span></p>
         </section>
         <section class="so-entry-card"><div class="so-entry-card-title so-items-title"><span class="pi-title-ic"><i class="ti ti-receipt-2"></i><span id="pe-costs-title">Additional costs &amp; discount</span></span><span class="pi-actions"><button type="button" class="btn btn-secondary btn-sm" id="pe-add-disc" onclick="piAddDiscount()"><i class="ti ti-discount"></i>Add discount</button><button type="button" class="btn btn-secondary btn-sm" onclick="piAddCost()"><i class="ti ti-plus"></i>Add cost</button></span></div>
           <div id="pe-costs"></div>
@@ -222,11 +222,13 @@ function openNewPurchaseInvoice(){
   document.getElementById('pe-subtitle').textContent = `Number assigned on save · ${x.displayPrefix}…`;
   document.getElementById('pe-error').hidden = true;
   piRenderLines(); piRenderCosts(); piRenderPays(); piRecalc();
+  piJobButton(); piPrepareJobs();   // V271.3
   if (typeof openModalWithSize === 'function') openModalWithSize('pi-new-modal'); else m.classList.add('open');
   setTimeout(() => bcPickFocus('pe-supplier'), 60);
 }
 function piHeadChanged(dateChanged){
   const s = piState(); if (!s) return;
+  if (s.lines.some(l => l.kind === 'job' && !l.costTouched)) { const t = piDefaultCostType(); s.lines.forEach(l => { if (l.kind === 'job' && !l.costTouched) l.costType = t; }); piRenderLines(); }
   const key = piSupplierKey();
   if (s.pays.some(p => p.advanceId && (piAdvOf(p.advanceId) || {}).supplierKey !== key)) { s.pays = s.pays.filter(p => !p.advanceId || (piAdvOf(p.advanceId) || {}).supplierKey === key); piRenderPays(); }
   if (dateChanged) {
@@ -251,6 +253,50 @@ function piAddStockLine(){
   piRenderLines(); piRecalc();
   setTimeout(() => { const el = document.querySelectorAll('#pe-lines .pi-stock-desc'); if (el.length) el[el.length - 1].focus(); }, 30);
 }
+/* V271.3 (mockup CC_1): a cost charged to a contracting job */
+const piJobs = () => (window.BCJobs && window.BCJobs.list ? window.BCJobs.list() : []).filter(j => !/^(closed|cancelled)$/i.test(String(j.status || '')));
+const PI_COST_TYPES = [['material', 'Material'], ['manpower', 'Manpower'], ['subcontract', 'Subcontract'], ['other', 'Equipment / Other']];
+function piDefaultCostType(){
+  const sel = document.getElementById('pe-supplier');
+  const sup = sel && (typeof suppliers !== 'undefined' ? suppliers : []).find(x => x.id === sel.value);
+  const k = sup && Array.isArray(sup.supplierKinds) ? sup.supplierKinds : [];
+  return k.includes('manpower') ? 'manpower' : k.includes('subcontractor') ? 'subcontract' : 'material';
+}
+function piJobButton(){
+  const b = document.getElementById('pe-add-job'), n = document.getElementById('pe-job-note'); if (!b) return;
+  const show = !!(window.BCJobs && piJobs().length);
+  b.hidden = !show; if (n) n.hidden = !show;
+}
+async function piPrepareJobs(){
+  if (!window.BCJobs || !window.BCJobs.load) return;
+  try { await window.BCJobs.load(); } catch (e) {}
+  piJobButton();
+}
+function piAddJobLine(){
+  const s = piState(); if (!s) return;
+  const jobs = piJobs(), last = [...s.lines].reverse().find(l => l.kind === 'job');
+  const j = last ? jobs.find(x => x.id === last.jobId) : jobs.length === 1 ? jobs[0] : null;
+  s.lines.push({ kind: 'job', desc: '', code: '', uom: 'Nos', productId: '', qty: 1, unitCost: '', reference: null, costReason: '', jobId: j ? j.id : '', jobNo: j ? j.jobNo : '', costType: piDefaultCostType(), costTouched: false });
+  piRenderLines(); piRecalc();
+  setTimeout(() => { const el = document.querySelectorAll('#pe-lines .pi-job-desc'); if (el.length) el[el.length - 1].focus(); }, 30);
+}
+function piSetJob(i, jobId){
+  const s = piState(), l = s && s.lines[i]; if (!l) return;
+  const j = piJobs().find(x => x.id === jobId); l.jobId = j ? j.id : ''; l.jobNo = j ? j.jobNo : '';
+  piRenderLines(); piRecalc();
+}
+function piJobCells(l, i){
+  const jobs = piJobs();
+  if (l.jobId && !jobs.some(j => j.id === l.jobId)) jobs.unshift({ id: l.jobId, jobNo: l.jobNo || l.jobId, project: '', company: '' });
+  const units = (window.BCEst && window.BCEst.UNITS) || ['Nos', 'Day', 'LS'];
+  const jobSel = `<select class="pi-cell pi-job-sel${l.jobId ? '' : ' pi-bad'}" aria-label="Job" onchange="piSetJob(${i},this.value)"><option value="">Choose the job…</option>${jobs.map(j => `<option value="${piEsc(j.id)}"${j.id === l.jobId ? ' selected' : ''}>${piEsc(j.jobNo)}${j.project ? ' · ' + piEsc(j.project) : j.company ? ' · ' + piEsc(j.company) : ''}</option>`).join('')}</select>`;
+  const typeSel = `<select class="pi-cell pi-job-type" aria-label="Cost type" onchange="piState().lines[${i}].costTouched=true;piSetLine(${i},'costType',this.value,true)">${PI_COST_TYPES.map(([k, t]) => `<option value="${k}"${k === l.costType ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
+  const item = `<td class="pi-c-item"><input class="pi-cell pi-job-desc${String(l.desc || '').trim() ? '' : ' pi-bad'}" value="${piEsc(l.desc)}" maxlength="500" placeholder="What was bought / done…" aria-label="Description" oninput="this.classList.toggle('pi-bad',!this.value.trim());piSetLine(${i},'desc',this.value)">
+    <div class="pi-job-row"><span class="pi-job-tag"><i class="ti ti-briefcase"></i> Charge to</span>${jobSel}${typeSel}<input class="pi-cell pi-job-uom" list="pi-units" value="${piEsc(l.uom)}" maxlength="30" aria-label="Unit" title="Unit" oninput="piSetLine(${i},'uom',this.value)"></div><datalist id="pi-units">${units.map(u => `<option value="${piEsc(u)}">`).join('')}</datalist></td>`;
+  const tl = (PI_COST_TYPES.find(x => x[0] === l.costType) || ['', ''])[1];
+  const goes = `<td class="pi-c-goes">${l.jobId ? `<span class="pi-dest job"><i class="ti ti-briefcase"></i>${piEsc(l.jobNo || l.jobId)}</span>` : '<span class="pi-sub pi-red">Choose the job</span>'}${tl ? `<span class="pi-ctype ${piEsc(l.costType)}">${tl}</span>` : ''}</td>`;
+  return { item, goes };
+}
 function piRemoveLine(i){ const s = piState(); s.lines.splice(i, 1); piRenderLines(); piRecalc(); }
 function piLeftFor(line, i){
   // still to buy on this order line, less what earlier lines of this invoice already take
@@ -265,6 +311,7 @@ function piOtherOrdersFor(line){
 }
 function piCostTag(line){
   const C = piCore(), set = piSettings();
+  if (line.kind === 'job') return { chk: { kind: 'none', pct: null }, html: '' };   // V271.3: compared with the job budget instead
   const chk = C.costCheck(piN(line.unitCost), line.reference, set);
   const what = line.reference && line.reference.source === 'lastPaid' ? 'vs last paid' : '';
   if (chk.kind === 'none') return { chk, html: '<span class="pi-var att"><i class="ti ti-info-circle"></i> No estimate or previous price</span>' };
@@ -296,6 +343,7 @@ function piLinePL(vl, factor){
 }
 function piPLHtml(vl, factor){
   if (vl && vl.kind === 'stock') return '<span class="pi-sub">For stock</span>';
+  if (vl && vl.kind === 'job') return `<span class="pi-sub">Job cost${vl.jobNo ? ' · ' + piEsc(vl.jobNo) : ''}</span>`;
   const p = piLinePL(vl, factor); if (!p) return '<span class="pi-sub">—</span>';
   const loss = p.profit < -0.005, c = loss ? 'pi-red' : 'pi-green';
   return `<span class="pi-sub">Sell ${piF(p.sell)}</span><b class="pi-plv ${c}">${p.profit > 0.005 ? '+' : ''}${piF(p.profit)}</b><span class="pi-plp ${c}">${p.pct == null ? '' : p.pct.toFixed(1) + '%'}${p.partial ? ` · ${piQ(p.q)} for the order` : ''}</span>`;
@@ -319,7 +367,7 @@ function piRenderLines(){
     const costTd = `<td class="num pi-c-cost" data-label="Unit cost"><input class="pi-cell pi-cost" inputmode="decimal" value="${l.unitCost === '' ? '' : piEsc(l.unitCost)}" aria-label="Unit cost" onchange="piSetLine(${i},'unitCost',this.value,true)" oninput="piSetLine(${i},'unitCost',this.value)">${piRefLine(l.reference)}${tag.html}</td>`;
     const discTd = lineDisc ? `<td class="num pi-c-disc" data-label="Disc. %"><input class="pi-cell pi-disc" inputmode="decimal" value="${piEsc(l.discountPct || '')}" aria-label="Discount %" onchange="piSetLine(${i},'discountPct',this.value,true)"></td>` : '';
     const amtTd = `<td class="num pi-c-amt" data-label="Amount"><span class="pi-amt">${piF(amount)}</span></td>`;
-    const plTd = pl ? `<td class="num pi-c-pl pi-pl">${l.kind === 'stock' ? '<span class="pi-sub">For stock</span>' : ''}</td>` : '';
+    const plTd = pl ? `<td class="num pi-c-pl pi-pl">${l.kind === 'stock' ? '<span class="pi-sub">For stock</span>' : l.kind === 'job' ? '<span class="pi-sub">Job cost</span>' : ''}</td>` : '';
     const xTd = `<td class="pi-c-x"><button type="button" class="pi-x" title="Remove line" aria-label="Remove line" onclick="piRemoveLine(${i})"><i class="ti ti-x"></i></button></td>`;
     let rows = '';
     if (l.kind === 'order') {
@@ -334,6 +382,9 @@ function piRenderLines(){
           ${others.map(x => `<button type="button" class="pi-opt" onclick="piPlaceExtra(${i},'order','${piEsc(x.so.id)}','${piEsc(x.it.lineId)}')"><i class="ti ti-shopping-cart"></i>${piEsc(x.so.soNo)} · needs ${piQ(x.left)}</button>`).join('')}
           <button type="button" class="pi-opt" onclick="piSetLine(${i},'qty','${piQ(left)}',true)"><i class="ti ti-pencil"></i>Correct quantity to ${piQ(left)}</button></div></td></tr>`;
       } else if (extra > 0 && l.extra) rows += `<tr class="pi-ask-row"><td colspan="${cols}"><div class="pi-placed"><i class="ti ti-circle-check"></i>${piQ(extra)} extra → ${l.extra.to === 'stock' ? 'Unassigned stock' : piEsc(l.extra.soNo)} <button type="button" class="pi-link" onclick="piPlaceExtra(${i},null)">change</button></div></td></tr>`;
+    } else if (l.kind === 'job') {
+      const c = piJobCells(l, i);
+      rows = `<tr class="pi-line pi-job-line" data-i="${i}">${c.item}${qtyTd}${costTd}${discTd}${amtTd}${plTd}${c.goes}${xTd}</tr>`;
     } else {
       // V268.5: the item must be a product (approved mockup V5_2) — type to search, or + New Product
       const bad = !l.productId && String(l.desc || '').trim();
@@ -351,7 +402,7 @@ function piFillLinePL(v){
   const s = piState();
   document.querySelectorAll('#pe-lines tr.pi-line').forEach(tr => {
     const i = Number(tr.dataset.i), l = s.lines[i], td = tr.querySelector('.pi-pl'); if (!td || !l) return;
-    td.innerHTML = l.kind === 'stock' ? '<span class="pi-sub">For stock</span>' : (l.unitCost === '' || l.unitCost == null) ? '<span class="pi-sub">—</span>' : piPLHtml(v.value.lines[i]);
+    td.innerHTML = l.kind === 'stock' ? '<span class="pi-sub">For stock</span>' : l.kind === 'job' ? '<span class="pi-sub">Job cost</span>' : (l.unitCost === '' || l.unitCost == null) ? '<span class="pi-sub">—</span>' : piPLHtml(v.value.lines[i]);
   });
 }
 function piSetLine(i, field, value, rerender){
@@ -451,6 +502,7 @@ function piReadInput(){
     vat: s.vatTouched ? s.vat : null,
     costs: s.costs.map(c => ({ label: c.label, amount: piN(c.amount) })), discount: s.discount && piN(s.discount.value) > 0 ? { mode: s.discount.mode, value: piN(s.discount.value) } : null,
     lines: s.lines.map(l => ({ kind: l.kind, soId: l.soId, soLineId: l.soLineId, productId: l.productId, code: l.code, desc: l.desc, uom: l.uom, qty: l.qty, unitCost: l.unitCost === '' ? NaN : l.unitCost,
+      ...(l.kind === 'job' ? { jobId: l.jobId, jobNo: l.jobNo, costType: l.costType } : {}),
       discountPct: l.discountPct, reference: l.reference, costReason: l.costReason, extra: l.extra ? { to: l.extra.to, soId: l.extra.soId, soLineId: l.extra.soLineId } : null })),
     payments: piPayGroups(s.pays, document.getElementById('pe-date').value),
   };
@@ -647,7 +699,7 @@ function piRecalc(keepVatFocus){
   if (!s.lines.length) chips.push('<span class="pi-todo-c">Add lines</span>');
   const nReason = errs.filter(e => e.field === 'costReason').length; if (nReason) chips.push(`<span class="pi-todo-c">${nReason} Reason${nReason > 1 ? 's' : ''}</span>`);
   const nExtra = errs.filter(e => e.field === 'extra').length; if (nExtra) chips.push(`<span class="pi-todo-c">${nExtra} Extra qty to place</span>`);
-  const nLine = errs.filter(e => ['qty', 'unitCost', 'desc', 'product', 'soLine', 'discountPct'].includes(e.field)).length; if (nLine) chips.push(`<span class="pi-todo-c">${nLine} Line${nLine > 1 ? 's' : ''} to complete</span>`);
+  const nLine = errs.filter(e => ['qty', 'unitCost', 'desc', 'product', 'soLine', 'discountPct', 'job', 'costType'].includes(e.field)).length; if (nLine) chips.push(`<span class="pi-todo-c">${nLine} Line${nLine > 1 ? 's' : ''} to complete</span>`);
   if (has(['costs', 'discount', 'vat'])) chips.push('<span class="pi-todo-c">Costs / discount / VAT</span>');
   chips.push(has(['supplierTotal']) ? '<span class="pi-todo-c">Supplier total</span>' : '<span class="pi-todo-c ok"><i class="ti ti-check"></i>Supplier total matches</span>');
   if (pc.errors.length) chips.push('<span class="pi-todo-c">Payments to complete</span>');
@@ -730,10 +782,11 @@ function openPurchaseInvoiceView(id, retried){
   const C = piCore(), f = C.costFactorOf(pi), money = C.invoiceMoneyOf(pi);
   const pays = piPaymentsOf(pi), livePays = pays.filter(p => p.status !== 'Voided');
   const lines = (pi.lines || []).map(l => {
-    const goes = (l.allocations || []).map(a => `<span class="pi-dest"><i class="ti ti-shopping-cart"></i>${piEsc(a.soNo)} · ${piQ(a.qty)}</span>`).join('') + (piN(l.stockQty) > 0 ? `<span class="pi-dest stock"><i class="ti ti-box"></i>Unassigned stock · ${piQ(l.stockQty)}</span>` : '');
+    const goes = l.kind === 'job' ? `<span class="pi-dest job" role="button" tabindex="0" title="Open the job" onclick="window.BCJobs&&BCJobs.view('${piEsc(l.jobId)}')"><i class="ti ti-briefcase"></i>${piEsc(l.jobNo || l.jobId)}</span><span class="pi-ctype ${piEsc(l.costType)}">${piEsc((PI_COST_TYPES.find(x => x[0] === l.costType) || ['', 'Material'])[1])}</span>`
+      : (l.allocations || []).map(a => `<span class="pi-dest"><i class="ti ti-shopping-cart"></i>${piEsc(a.soNo)} · ${piQ(a.qty)}</span>`).join('') + (piN(l.stockQty) > 0 ? `<span class="pi-dest stock"><i class="ti ti-box"></i>Unassigned stock · ${piQ(l.stockQty)}</span>` : '');
     const ref = l.reference && l.reference.unit ? `${l.reference.source === 'lastPaid' ? 'Last paid ' : 'Est. '}${piF(l.reference.unit)}` : 'No reference';
     const pct = l.costPct != null ? ` (${l.costPct > 0 ? '+' : ''}${Number(l.costPct).toFixed(1)}%)` : '';
-    const sub = l.kind === 'stock' ? `${piEsc(l.uom)} · <span class="pi-stock-tag"><i class="ti ti-box"></i> for stock</span>` : `${piEsc(l.uom)} · <span class="pi-so">${piEsc(l.soNo)}</span> · ${piEsc(l.customer || '')}`;
+    const sub = l.kind === 'job' ? `${piEsc(l.uom)} · <span class="pi-job-tag"><i class="ti ti-briefcase"></i> job cost</span>` : l.kind === 'stock' ? `${piEsc(l.uom)} · <span class="pi-stock-tag"><i class="ti ti-box"></i> for stock</span>` : `${piEsc(l.uom)} · <span class="pi-so">${piEsc(l.soNo)}</span> · ${piEsc(l.customer || '')}`;
     return `<tr class="pi-line"><td class="pi-c-item"><div class="pi-idesc">${piEsc(l.desc)}</div><div class="pi-sub">${sub}</div>${l.costReason ? `<div class="pi-sub">Reason: ${piEsc(l.costReason)}</div>` : ''}</td>
       <td class="num pi-c-qty" data-label="Qty">${piQ(l.qty)}</td><td class="num pi-c-cost" data-label="Unit cost">${piF(l.unitCost)}<div class="pi-sub ${l.costCheck === 'above' ? 'pi-red' : l.costCheck === 'below' ? 'pi-blue' : ''}">${ref}${pct}</div></td>
       <td class="num pi-c-disc" data-label="Disc.">${piN(l.discountPct) ? piN(l.discountPct) + '%' : '—'}</td><td class="num pi-c-amt" data-label="Amount"><span class="pi-amt">${piF(l.amount)}</span></td><td class="num pi-c-land" data-label="Landed unit cost">${piF(l.landedUnitCost)}</td>
@@ -1103,6 +1156,7 @@ function piOpenFullEdit(id){
   document.getElementById('pe-subtitle').textContent = `${pi.piNo} keeps its number · recorded by ${pi.createdBy || ''}`;
   s.lines = (pi.lines || []).map(l => {
     const base = { kind: l.kind, desc: l.desc, code: l.code || '', uom: l.uom || '', productId: l.productId || '', qty: l.qty, unitCost: l.unitCost, discountPct: l.discountPct || 0, reference: l.reference && l.reference.unit ? l.reference : null, costReason: l.costReason || '' };
+    if (l.kind === 'job') return { ...base, jobId: l.jobId || '', jobNo: l.jobNo || '', costType: l.costType || 'material', costTouched: true };   // V271.3
     if (l.kind !== 'order') return base;
     const so = piSOs().find(x => x.id === l.soId), it = so && (so.items || []).find(x => x.lineId === l.soLineId);
     const second = (l.allocations || [])[1];
@@ -1115,6 +1169,7 @@ function piOpenFullEdit(id){
   if (t.vat != null && t.vatCalculated != null && Math.abs(t.vat - t.vatCalculated) > 0.0049) { s.vatTouched = true; s.vat = piF(t.vat); }
   s.pays = [];
   piRenderLines(); piRenderCosts(); piRenderPays(); piRecalc();
+  piJobButton(); piPrepareJobs();   // V271.3
   return true;
 }
 

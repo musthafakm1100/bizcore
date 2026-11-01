@@ -22,11 +22,11 @@
       return { title, sub };
     }
     // V268.2: supplier payment / cash back (details: reference, bank charge, card)
-    if (r.kind === 'supplier-payment' || r.kind === 'supplier-cashback' || r.kind === 'supplier-advance')   // V268.3 advance
+    if (r.kind === 'supplier-payment' || r.kind === 'supplier-cashback' || r.kind === 'supplier-advance' || r.kind === 'job-expense')   // V268.3 advance · V271.3 job expense
       { const sub = [r.details, 'by ' + (r.recordedByName || '—')].filter(Boolean).join(' · '); return { title: r.description || r.kind, sub: sub.charAt(0).toUpperCase() + sub.slice(1) }; }
     return { title: r.description || r.kind, sub: 'By ' + (r.recordedByName || '—') };
   }
-  const isSupplier = r => r.kind === 'supplier-payment' || r.kind === 'supplier-cashback' || r.kind === 'supplier-advance';
+  const isSupplier = r => r.kind === 'supplier-payment' || r.kind === 'supplier-cashback' || r.kind === 'supplier-advance' || r.kind === 'job-expense';   // paid out; the custodian confirms cash
   /** A card's memo line: paid by card, the money left the linked bank account (no balance change here). */
   const memoHtml = r => r.memoOut ? `<span class="cl-memo" title="Paid by card — taken from the linked bank account">(${money(r.memoOut)})</span>` : '';
 

@@ -23,9 +23,9 @@ import {
   supplierRefIdOf, r2, rq,
   PAYMENT_COLLECTION, PAYMENT_KINDS, paymentIdForOperation, paymentEntryIdOf, validateSupplierPayment, buildSupplierPaymentRecords,
   applyPaymentToInvoice, applyAdvanceUse, editRightOf, validateInvoiceLimitedEdit, validatePaymentLimitedEdit,
-  STOCK_ALLOC_COLLECTION, allocationIdForOperation, validateAllocation,
+  STOCK_ALLOC_COLLECTION, allocationIdForOperation, validateAllocation, validateJobAllocation,
   STOCK_CHANGE_COLLECTION, stockChangeIdForOperation, validateStockChange,
-} from './purchase-core.mjs?v=269.7';
+} from './purchase-core.mjs?v=271.3';
 import { DeliveryError, isSafeId, eventIdForOperation, requireReason, cleanText, assertSize } from './delivery-core.mjs?v=266.0';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
@@ -70,6 +70,7 @@ export function createPurchaseService(fs, options = {}) {
     alloc: id => doc(db, STOCK_ALLOC_COLLECTION, id),
     change: id => doc(db, STOCK_CHANGE_COLLECTION, id),
     product: id => doc(db, 'products', id),
+    job: id => doc(db, 'jobs', id),
   };
   /** V268.3: the advances used by payment lines (read inside the transaction). */
   async function readAdvances(tx, groups) {
@@ -597,6 +598,32 @@ export function createPurchaseService(fs, options = {}) {
       return { alreadyApplied: false, allocation };
     });
   }
+  /* ───────── V271.3: issue stock to a contracting job (and cancel it) ───────── */
+  async function allocateStockToJob(input = {}) {
+    const { operationId, itemKey, jobId } = input;
+    const id = allocationIdForOperation(operationId);
+    ensure(isSafeId(id) && isSafeId(itemKey) && isSafeId(jobId), PURCHASE_ERR.INVALID_INPUT, 'Choose the stock item and the job.');
+    const eventId = eventIdForOperation('alloc', operationId);
+    const actor = actorOf(), at = now();
+    return transact(async tx => {
+      const [aSnap, iSnap, jSnap] = await Promise.all([tx.get(refs.alloc(id)), tx.get(refs.stock(itemKey)), tx.get(refs.job(jobId))]);
+      if (aSnap.exists()) { const ex = aSnap.data(); ensure(ex.operationId === operationId, PURCHASE_ERR.ID_COLLISION, 'Allocation ID already used'); return { alreadyApplied: true, allocation: ex }; }
+      const item = iSnap.exists() ? iSnap.data() : null, job = jSnap.exists() ? { id: jobId, ...jSnap.data() } : null;
+      const v = validateJobAllocation(input, { item, job, today: todayLocal() });
+      if (!v.ok) fail(PURCHASE_ERR.INVALID_INPUT, v.errors.map(e => e.message).join(' '), { errors: v.errors });
+      const val = v.value;
+      const allocation = { id, schemaVersion: PURCHASE_SCHEMA_VERSION, operationId, status: PURCHASE_STATUS.posted, revision: 1, lastEventId: eventId,
+        itemKey, desc: val.desc, uom: val.uom, jobId, jobNo: val.jobNo, customer: val.customer, costType: val.costType,
+        qty: val.qty, unitCost: val.unitCost, value: val.value, date: val.date, note: val.note,
+        created: at, createdBy: actor.name, createdByUid: actor.uid, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid, recordedAt: stamp() };
+      tx.set(refs.alloc(id), allocation);
+      writeStockForAllocation(tx, item, -val.qty, -val.value, { id, eventId, actor, at });
+      const moveId = `${id}__out`;
+      tx.set(refs.move(moveId), { id: moveId, itemKey, kind: 'issued-to-job', qty: -val.qty, value: -val.value, allocationId: id, jobId, jobNo: val.jobNo,
+        eventId, date: val.date, note: val.note, actor: actor.name, actorUid: actor.uid, at });
+      return { alreadyApplied: false, allocation };
+    });
+  }
   async function cancelStockAllocation(input = {}) {
     const { operationId, allocationId } = input;
     ensure(isSafeId(allocationId), PURCHASE_ERR.INVALID_INPUT, 'Allocation reference required');
@@ -608,6 +635,18 @@ export function createPurchaseService(fs, options = {}) {
       ensure(aSnap.exists(), PURCHASE_ERR.NOT_FOUND, 'Allocation not found');
       const a = aSnap.data();
       if (a.status === PURCHASE_STATUS.voided) { ensure(a.lastEventId === eventId, PURCHASE_ERR.INVALID_STATE, 'This allocation is already cancelled.'); return { alreadyApplied: true, allocation: a }; }
+      if (a.jobId) {   // V271.3: stock issued to a job — only the stock comes back
+        const iSnap = await tx.get(refs.stock(a.itemKey));
+        const next = { ...a, status: PURCHASE_STATUS.voided, voidReason: reason, voidedAt: at, voidedBy: actor.name, voidedByUid: actor.uid,
+          revision: a.revision + 1, lastEventId: eventId, updatedAt: at, updatedBy: actor.name, updatedByUid: actor.uid };
+        tx.set(refs.alloc(allocationId), next);
+        const item = iSnap.exists() ? iSnap.data() : { itemKey: a.itemKey, desc: a.desc, uom: a.uom, qty: 0, value: 0, revision: 0 };
+        writeStockForAllocation(tx, item, +a.qty, +a.value, { id: allocationId, eventId, actor, at });
+        const moveId = `${allocationId}__back`;
+        tx.set(refs.move(moveId), { id: moveId, itemKey: a.itemKey, kind: 'job-issue-cancelled', qty: a.qty, value: a.value, allocationId, jobId: a.jobId, jobNo: a.jobNo,
+          eventId, date: todayLocal(), note: reason, actor: actor.name, actorUid: actor.uid, at });
+        return { alreadyApplied: false, allocation: next };
+      }
       const [iSnap, soSnap, lSnap] = await Promise.all([tx.get(refs.stock(a.itemKey)), tx.get(refs.so(a.soId)), tx.get(refs.ledger(a.soId))]);
       const ledger = lSnap.exists() ? lSnap.data() : null;
       const cur = ledger && (ledger.lines || {})[a.soLineId];
@@ -722,5 +761,5 @@ export function createPurchaseService(fs, options = {}) {
     });
   }
 
-  return { createPurchaseInvoice, voidPurchaseInvoice, savePurchaseSettings, recordSupplierPayment, recordSupplierCashBack, voidSupplierPayment, payAdvance, editSupplierPayment, editPurchaseInvoice, allocateStock, cancelStockAllocation, changeStockItem, cancelStockChange };
+  return { createPurchaseInvoice, voidPurchaseInvoice, savePurchaseSettings, recordSupplierPayment, recordSupplierCashBack, voidSupplierPayment, payAdvance, editSupplierPayment, editPurchaseInvoice, allocateStock, allocateStockToJob, cancelStockAllocation, changeStockItem, cancelStockChange };
 }

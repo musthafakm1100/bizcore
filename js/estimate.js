@@ -1110,5 +1110,5 @@ ${CS.expenseCategories.map((x, i) => `<tr><td><input data-ec="${i}" data-f="name
 
   /* ══ public ══ */
   window.bcOpenEstimate = (rfqId, opts) => open(rfqId, opts || {});
-  window.BCEst = { calc, itemCost, lineAmt, distribute, settings, summaryOf, marginState, open, save: () => save(), state: () => E, cache, DEFAULTS };
+  window.BCEst = { UNITS, calc, itemCost, lineAmt, distribute, settings, summaryOf, marginState, open, save: () => save(), state: () => E, cache, DEFAULTS };
 })();

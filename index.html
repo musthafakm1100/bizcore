@@ -47,7 +47,7 @@
 <link href="css/quote-rich.css?v=270.61" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <link href="css/users.css?v=270.43" rel="stylesheet"/>
-<link href="css/estimate.css?v=271.2" rel="stylesheet"/>
+<link href="css/estimate.css?v=271.3" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
 <script src="js/responsive.js?v=270.47" defer></script>
 <script src="js/bc-date.js?v=270.52" defer></script>
@@ -2356,12 +2356,14 @@ import { createAccountService } from './js/account-service.mjs?v=270.43';
 import * as LedgerCore from './js/ledger-core.mjs?v=269.3';
 import { createLedgerService } from './js/ledger-service.mjs?v=270.41';
 import { wrapTransaction, rebuildBalance, BALANCE_COLLECTION, LAST_PRICE_COLLECTION } from './js/running-totals.mjs?v=269.3';
-import * as PurchaseCore from './js/purchase-core.mjs?v=270.43';
-import { createPurchaseService } from './js/purchase-service.mjs?v=270.43';
+import * as PurchaseCore from './js/purchase-core.mjs?v=271.3';
+import { createPurchaseService } from './js/purchase-service.mjs?v=271.3';
+import * as JobCostCore from './js/job-cost-core.mjs?v=271.3';   // V271.3 Contracting actual cost
+import { createJobCostService } from './js/job-cost-service.mjs?v=271.3';
 import * as UserCore from './js/user-core.mjs?v=270.43';
-import { createUserService } from './js/user-service.mjs?v=271.2';
-import * as RoleCore from './js/role-core.mjs?v=271.2';
-import { createRoleService } from './js/role-service.mjs?v=271.2';
+import { createUserService } from './js/user-service.mjs?v=271.3';
+import * as RoleCore from './js/role-core.mjs?v=271.3';
+import { createRoleService } from './js/role-service.mjs?v=271.3';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile, updatePassword, sendPasswordResetEmail }
@@ -2906,9 +2908,12 @@ function _bcWho() { const u = window.currentUser || {}; return String(u.name || 
 function _bcRevOf(json) { try { const o = json ? JSON.parse(json) : null; return o ? Number(o._rev) || 0 : null; } catch (e) { return null; } }
 function _bcStamp(data, rev) { data._rev = rev; data._savedBy = _bcWho(); data._savedAt = new Date().toISOString(); }
 /** Writes one record with the revision check. → { ok } | { conflict: { no, by, at } }. extras: more writes in the same commit. */
-async function _bcCheckedSet(col, docId, data, cacheJson, extras = []) {
+async function _bcCheckedSet(col, docId, data, cacheJson, extras = [], opts = {}) {
   const ref = doc(db, col, docId);
-  const base = cacheJson != null ? (_bcRevOf(cacheJson) || 0) : (Number(data._rev) || 0);
+  // V271.3.1: opts.ownRev — the revision the screen edited (the record's own _rev) is the base when it has one, so a
+  // change saved meanwhile on another PC is reported, not overwritten
+  const own = opts.ownRev && data && data._rev != null && Number.isFinite(Number(data._rev)) ? Number(data._rev) : null;
+  const base = own != null ? own : cacheJson != null ? (_bcRevOf(cacheJson) || 0) : (Number(data._rev) || 0);
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     _bcStamp(data, base + 1);
     const b = writeBatch(db); b.set(ref, data); extras.forEach(x => x.merge ? b.set(doc(db, ...x.path.map(String)), x.data, { merge: true }) : b.set(doc(db, ...x.path.map(String)), x.data));
@@ -3063,7 +3068,7 @@ function _bcStripUndefined(v) {
   else if (v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) { for (const k of Object.keys(v)) { if (v[k] === undefined) delete v[k]; else _bcStripUndefined(v[k]); } }
   return v;
 }
-async function fbSaveRecordWith(col, record, extras = []) {
+async function fbSaveRecordWith(col, record, extras = [], opts = {}) {
   try {
     window.BizCoreStorageDiagnostics.lastSaveError = null;
     if (!record || record.id == null) return false;
@@ -3076,7 +3081,7 @@ async function fbSaveRecordWith(col, record, extras = []) {
     const estimatedBytes = _bizcoreEncoder.encode(json).length;
     if (estimatedBytes >= BIZCORE_RECORD_WARN_BYTES) console.warn('[BizCore storage size warning]', { collection: col, recordId: docId, estimatedBytes, level: estimatedBytes >= BIZCORE_RECORD_CRITICAL_BYTES ? 'critical' : 'warning' });
     if (_BC_REV_COLS.has(col)) {   // V269.5: revision check
-      const r = await _bcCheckedSet(col, docId, record, (_lastSynced[col] || {})[docId], extras);
+      const r = await _bcCheckedSet(col, docId, record, (_lastSynced[col] || {})[docId], extras, opts);
       if (r.conflict) throw _bcConflictError(col, [r.conflict]);
       (_lastSynced[col] || (_lastSynced[col] = {}))[docId] = JSON.stringify(record);
       return true;
@@ -4325,6 +4330,21 @@ const purchaseService = createPurchaseService({ db, doc, runTransaction: runTran
   actor: () => { const u = auth.currentUser, cu = window.currentUser || {}; return u ? { uid: u.uid, name: cu.name || u.displayName || u.email || u.uid } : {}; },
   formatNumber: (prefix, n) => prefix + String(n).padStart(4, '0'),
 });
+/* V271.3 CONTRACTING ACTUAL COST — jobExpenses (+ their cash-ledger entries) and the costs of one job, read when its
+   view opens: purchase invoices with job lines (jobIds), job expenses and stock issued to the job. No listeners. */
+const jobCostService = createJobCostService({ db, doc, runTransaction: runTransactionWithTotals, serverTimestamp }, {
+  actor: () => { const u = auth.currentUser, cu = window.currentUser || {}; return u ? { uid: u.uid, name: cu.name || u.displayName || u.email || u.uid } : {}; },
+});
+window.BizCoreJobCost = {
+  core: JobCostCore,
+  service: jobCostService,
+  /** The cost documents of a job — reads = the documents returned. A list the role can't read comes back empty (denied). */
+  async costsOf(jobId) {
+    const q = async (col, field, op) => { try { const s = await getDocs(query(collection(db, col), where(field, op, String(jobId)))); const out = []; s.forEach(d => out.push(d.data())); return { rows: out, denied: false }; } catch (e) { if (e && e.code === 'permission-denied') return { rows: [], denied: true }; throw e; } };
+    const [pi, je, sa] = await Promise.all([q('purchaseInvoices', 'jobIds', 'array-contains'), q(JobCostCore.JE_COLLECTION, 'jobId', '=='), q('stockAllocations', 'jobId', '==')]);
+    return { invoices: pi.rows, expenses: je.rows, allocations: sa.rows, denied: { invoices: pi.denied, expenses: je.denied, allocations: sa.denied } };
+  },
+};
 let _piLastPrices = new Map();   // V269.3 itemLastPrices
 let _piUnsubs = null, _piList = [], _piLedgers = new Map(), _piStock = new Map(), _piPays = [], _piAllocs = [], _piChanges = [], _piSettings = PurchaseCore.effectivePurchaseSettings(null);
 const _piListeners = new Set();
@@ -4557,7 +4577,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=271.2';
+      s.src = 'js/app.js?v=271.31';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4569,9 +4589,9 @@ onAuthStateChanged(auth, async user => {
         // V270.2.6: the RFQ entry screen (request type, product / service lines, requirements)
         const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=271.2'; document.body.appendChild(rq);
         // V271.1: Contracting Estimation (estimate window, Cost Build-up, Contracting Settings)
-        const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.2'; document.body.appendChild(es);
+        const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.3'; document.body.appendChild(es);
         // V271.2: Contracting Jobs (Create Job, Jobs register, Job view)
-        const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.2'; document.body.appendChild(jb);
+        const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.3'; document.body.appendChild(jb);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=271.11'; document.body.appendChild(ds);
         // V270.4.1: Administration → Users, Roles & Permissions
@@ -4581,13 +4601,13 @@ onAuthStateChanged(auth, async user => {
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js
-    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=270.57'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
+    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=271.3'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
     // V268.3: supplier-payments.js (Supplier Payments, advances, edits) after purchases.js
     // V268.4: stock.js (Purchasing → Stock) after supplier-payments.js
-    const loadStock = () => { const st = document.createElement('script'); st.id = 'bizcore-stock-script'; st.src = 'js/stock.js?v=268.61'; st.onload = start; st.onerror = () => { console.error('[BizCore] stock.js could not be loaded'); start(); }; document.body.appendChild(st); };
+    const loadStock = () => { const st = document.createElement('script'); st.id = 'bizcore-stock-script'; st.src = 'js/stock.js?v=271.3'; st.onload = start; st.onerror = () => { console.error('[BizCore] stock.js could not be loaded'); start(); }; document.body.appendChild(st); };
     const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=269.3'; sp.onload = loadStock; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
     // V267.2: cash-ui.js + cashbank.js (Cash & Bank) after accounts.js, before app.js
-    const loadCash = () => { const u = document.createElement('script'); u.id = 'bizcore-cashui-script'; u.src = 'js/cash-ui.js?v=269.3'; u.onload = u.onerror = () => { const c = document.createElement('script'); c.id = 'bizcore-cashbank-script'; c.src = 'js/cashbank.js?v=269.3'; c.onload = loadPurchases; c.onerror = () => { console.error('[BizCore] cashbank.js could not be loaded'); loadPurchases(); }; document.body.appendChild(c); }; document.body.appendChild(u); };
+    const loadCash = () => { const u = document.createElement('script'); u.id = 'bizcore-cashui-script'; u.src = 'js/cash-ui.js?v=271.3'; u.onload = u.onerror = () => { const c = document.createElement('script'); c.id = 'bizcore-cashbank-script'; c.src = 'js/cashbank.js?v=269.3'; c.onload = loadPurchases; c.onerror = () => { console.error('[BizCore] cashbank.js could not be loaded'); loadPurchases(); }; document.body.appendChild(c); }; document.body.appendChild(u); };
     // V266: receipts.js (Payment Receipts) after invoicing.js, before app.js
     inv.onload = () => { const r = document.createElement('script'); r.id = 'bizcore-receipts-script'; r.src = 'js/receipts.js?v=270.51'; r.onload = () => { const pa = document.createElement('script'); pa.id = 'bizcore-accounts-script'; pa.src = 'js/accounts.js?v=268.51'; pa.onload = loadCash; pa.onerror = () => { console.error('[BizCore] accounts.js could not be loaded'); loadCash(); }; document.body.appendChild(pa); }; r.onerror = () => { console.error('[BizCore] receipts.js could not be loaded'); start(); }; document.body.appendChild(r); };
     inv.onerror = () => { console.error('[BizCore] invoicing.js could not be loaded'); start(); };

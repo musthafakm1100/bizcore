@@ -13,7 +13,7 @@ import {
   USER_COLLECTION as COL, USER_EVENTS, CUSTODIAN_ROLE, ROLES, validateUserInput, buildUserRecord, describeUserChange, roleOfUser,
 } from './user-core.mjs?v=270.43';
 import { DeliveryError, ERR, isSafeId } from './delivery-core.mjs?v=266.0';
-import { builtInRole, userPermFrom } from './role-core.mjs?v=271.2';
+import { builtInRole, userPermFrom } from './role-core.mjs?v=271.3';
 
 const fail = (code, message, details) => { throw new DeliveryError(code, message, details); };
 const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, details); };
