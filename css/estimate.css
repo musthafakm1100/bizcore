@@ -385,7 +385,7 @@
 .jv-warn{display:flex;gap:8px;align-items:center;font-size:12.5px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:9px;padding:8px 10px;margin-bottom:10px}
 #job-prog-modal .modal.jp-win{width:min(440px,calc(100vw - 32px))!important;max-width:none!important;height:auto!important}
 /* Job Expense (CC_2) */
-#je-modal .modal.je-win{width:min(1000px,calc(100vw - 36px))!important;max-width:none!important;border-radius:12px!important;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100dvh - 36px)!important}
+#je-modal .modal.je-win{width:min(1360px,calc(100vw - 36px))!important;max-width:none!important;border-radius:12px!important;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100dvh - 36px)!important}
 #je-view-modal .modal.je-vwin{width:min(760px,calc(100vw - 36px))!important;max-width:none!important;border-radius:12px!important;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100dvh - 36px)!important;height:auto!important}
 :is(#je-modal,#je-view-modal) .modal-header.jb-hd{background:#173a5e!important;color:#fff;display:flex;align-items:center;gap:10px;padding:10px 16px!important;border:0!important;border-radius:0!important;min-height:56px}
 :is(#je-modal,#je-view-modal) .jb-hd h2{color:#fff!important;font-size:15.5px!important;font-weight:600!important;margin:0!important}
@@ -397,13 +397,13 @@
 :is(#je-modal,#je-view-modal) .jb-sp{flex:1}
 #je-modal .jb-chk{font-size:12px;color:#166534}#je-modal .jb-chk.is-todo{color:#b45309}
 :is(#je-modal,#je-view-modal) .je-body{padding:14px 18px!important;overflow:auto}
-#je-modal .je-grid{display:grid;grid-template-columns:2fr 1fr 1.3fr 1fr;gap:12px;margin-bottom:12px}
+#je-modal .je-grid{display:grid;grid-template-columns:2.1fr 1.4fr 1fr 1fr 1fr;gap:12px;margin-bottom:10px}
 #je-modal .jb-f{display:flex;flex-direction:column;gap:4px;min-width:0}
 #je-modal .jb-f label{font-size:11.5px!important;color:#64748b!important;font-weight:400!important}
 #je-modal .jb-f label em,#je-modal .je-lines th em{font-style:normal;color:#94a3b8;font-weight:400}
 #je-modal .jb-req{color:#b42318;font-weight:500}
 #je-modal .jb-f :is(input,select){height:34px;border:1px solid #d5dde7;border-radius:8px;padding:0 10px;font-size:13px!important;background:#fff;width:100%}
-#je-modal .je-lines{min-width:760px}
+#je-modal .je-lines{min-width:1180px}
 #je-modal .je-lines td{padding:5px 6px!important;vertical-align:middle}
 #je-modal .je-lines :is(input,select){height:32px;border:1px solid #d5dde7;border-radius:7px;padding:0 8px;font-size:13px!important;background:#fff;width:100%}
 #je-modal .je-lines input.r{text-align:right;font-variant-numeric:tabular-nums}
@@ -449,3 +449,47 @@
   #job-view-modal .jv-tabs{padding:0 8px}
   .jv-bar{display:none}
 }
+
+/* ═══ V271.3.2 — Job Expense as a submission (JE_3 / JE_4) ═══ */
+#je-modal .je-bal{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.je-bc{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid #e2e8f0;border-radius:9px;padding:6px 11px;font-size:12px;color:#475569}
+.je-bc b{color:#17212b;font-variant-numeric:tabular-nums}.je-bc.own{border-color:#fcd34d;background:#fffbeb}.je-bc.warn{border-color:#fca5a5;background:#fef2f2;color:#991b1b}
+.je-dot{width:8px;height:8px;border-radius:50%;background:#2e75b6;display:inline-block}.je-dot.own{background:#ea6a10}
+#je-modal .je-lines input[type=date]{padding:0 6px}
+#je-modal tr.je-own td,#je-view-modal tr.je-own td{background:#fff8f1}
+#je-modal select.je-pay.own{border-color:#f7c9a3;background:#fff8f1}
+#je-modal .je-addrow{display:flex;align-items:center;gap:10px;padding:4px 2px}
+.je-tots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:8px}
+.je-tots.rb-tot{grid-template-columns:minmax(0,1fr);max-width:380px;margin-left:auto}
+.je-box{border:1px solid #e2e8f0;border-radius:10px;padding:9px 12px}
+.je-box h4{margin:0 0 5px;font-size:10.5px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.je-kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:2px 0}.je-kv b{font-variant-numeric:tabular-nums;font-weight:600}
+.je-kv .m{color:#94a3b8}.je-kv.big{border-top:1px solid #edf1f5;margin-top:3px;padding-top:4px}.je-kv.big b{font-size:14px}
+#je-view-modal .je-vgrid{display:grid;grid-template-columns:1fr 1fr;gap:4px 20px}
+#rb-modal .modal.je-vwin,#rb-view-modal .modal.je-vwin{width:min(820px,calc(100vw - 36px))!important;max-width:none!important;border-radius:12px!important;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100dvh - 36px)!important;height:auto!important}
+:is(#rb-modal,#rb-view-modal) .modal-header.jb-hd{background:#173a5e!important;color:#fff;display:flex;align-items:center;gap:10px;padding:10px 16px!important;border:0!important;border-radius:0!important;min-height:56px}
+:is(#rb-modal,#rb-view-modal) .jb-hd h2{color:#fff!important;font-size:15.5px!important;font-weight:600!important;margin:0!important}
+:is(#rb-modal,#rb-view-modal) .jb-sub{font-size:12px;opacity:.85;margin-top:2px;color:#fff}
+:is(#rb-modal,#rb-view-modal) .jb-hd > div:first-child{flex:1;min-width:0}
+:is(#rb-modal,#rb-view-modal) .jb-hd .close-btn{color:#fff!important;background:transparent!important;border:0!important;font-size:19px;opacity:.85}
+:is(#rb-modal,#rb-view-modal) .jb-hd .smart-back-btn{display:none!important}
+:is(#rb-modal,#rb-view-modal) .modal-footer.jb-ft{display:flex;align-items:center;gap:8px;padding:10px 18px!important;border-top:1px solid #dfe5ec}
+:is(#rb-modal,#rb-view-modal) .jb-sp{flex:1}
+:is(#rb-modal,#rb-view-modal) .je-body{padding:14px 18px!important;overflow:auto}
+#rb-modal .jb-chk{font-size:12px;color:#166534}#rb-modal .jb-chk.is-todo{color:#b45309}
+#rb-modal .rb-grid{display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:12px}
+#rb-modal .jb-f{display:flex;flex-direction:column;gap:4px}#rb-modal .jb-f label{font-size:11.5px!important;color:#64748b!important;font-weight:400!important}
+#rb-modal .jb-f label em{font-style:normal;color:#94a3b8}#rb-modal .jb-req{color:#b42318;font-weight:500}
+#rb-modal .jb-f :is(input,select){height:34px;border:1px solid #d5dde7;border-radius:8px;padding:0 10px;font-size:13px!important;background:#fff;width:100%}
+#rb-modal .rb-amt{height:30px;border:1px solid #d5dde7;border-radius:7px;padding:0 8px;width:100%;text-align:right;font-size:13px}
+#rb-view-modal .je-cancel{margin-top:12px;display:flex;flex-direction:column;gap:4px}
+#rb-view-modal .je-cancel input{height:34px;border:1px solid #d5dde7;border-radius:8px;padding:0 10px;font-size:13px}
+#rb-view-modal .je-cancel label{font-size:11.5px;color:#64748b}
+.jv-subs tr.jv-void td{color:#94a3b8;text-decoration:line-through}
+.jv-subs tr.jv-void td:last-child{text-decoration:none}
+.jv-sm{display:block;font-size:10.5px;color:#94a3b8}
+.jv-owe-acts{display:flex;gap:8px;margin:4px 0 10px}
+@media (max-width:900px){#je-modal .je-grid{grid-template-columns:1fr 1fr}.je-tots{grid-template-columns:1fr}#rb-modal .rb-grid{grid-template-columns:1fr}}
+/* V271.3.2: Product details — a picture whose file is missing keeps its place */
+.pv-img.pv-missing{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#b45309;background:#fffbeb;border-color:#fcd34d}
+.pv-img.pv-missing i{font-size:26px}.pv-img.pv-missing small{font-size:10.5px;font-weight:600}

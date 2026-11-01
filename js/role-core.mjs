@@ -179,6 +179,7 @@ export const READ_MODULES = Object.freeze({
   salesOrders: ['salesOrder'],
   jobs: ['salesOrder', 'quotation', 'purchaseInvoice', 'cash', 'stock'],   // V271.2: Contracting jobs (V271.3: also read by who charges costs to a job)
   jobExpenses: ['salesOrder', 'quotation', 'cash'],   // V271.3
+  reimbursements: ['salesOrder', 'quotation', 'cash'],   // V271.3.2
   deliveryNotes: ['deliveryNote', 'invoice'],
   customerInvoices: ['invoice', 'receipt'],
   creditNotes: ['invoice', 'receipt'],

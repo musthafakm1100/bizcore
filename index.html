@@ -47,7 +47,7 @@
 <link href="css/quote-rich.css?v=270.61" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <link href="css/users.css?v=270.43" rel="stylesheet"/>
-<link href="css/estimate.css?v=271.3" rel="stylesheet"/>
+<link href="css/estimate.css?v=271.32" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
 <script src="js/responsive.js?v=270.47" defer></script>
 <script src="js/bc-date.js?v=270.52" defer></script>
@@ -2358,12 +2358,12 @@ import { createLedgerService } from './js/ledger-service.mjs?v=270.41';
 import { wrapTransaction, rebuildBalance, BALANCE_COLLECTION, LAST_PRICE_COLLECTION } from './js/running-totals.mjs?v=269.3';
 import * as PurchaseCore from './js/purchase-core.mjs?v=271.3';
 import { createPurchaseService } from './js/purchase-service.mjs?v=271.3';
-import * as JobCostCore from './js/job-cost-core.mjs?v=271.3';   // V271.3 Contracting actual cost
-import { createJobCostService } from './js/job-cost-service.mjs?v=271.3';
+import * as JobCostCore from './js/job-cost-core.mjs?v=271.32';   // V271.3 Contracting actual cost
+import { createJobCostService } from './js/job-cost-service.mjs?v=271.33';
 import * as UserCore from './js/user-core.mjs?v=270.43';
-import { createUserService } from './js/user-service.mjs?v=271.3';
-import * as RoleCore from './js/role-core.mjs?v=271.3';
-import { createRoleService } from './js/role-service.mjs?v=271.3';
+import { createUserService } from './js/user-service.mjs?v=271.32';
+import * as RoleCore from './js/role-core.mjs?v=271.32';
+import { createRoleService } from './js/role-service.mjs?v=271.32';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile, updatePassword, sendPasswordResetEmail }
@@ -3201,6 +3201,11 @@ function fbSyncedJSON(col, id) { const c = _lastSynced[col]; return c ? (c[_safe
 /** One document by path segments → data | null. Throws when the server can't be reached. */
 async function fbReadDoc(...path) { const s = await getDoc(doc(db, ...path.map(String))); return s.exists() ? s.data() : null; }
 /** Every document of a (sub)collection by path segments → [data]. */
+/** V271.3.2: a one-off query (no listener) → [data]. extra: more equality / range filters [[field, op, value]…]. Reads = the documents returned. */
+async function fbQueryWhere(col, field, op, value, extra = []) {
+  const cons = [where(field, op, value), ...(extra || []).map(([f, o, v]) => where(f, o, v))];
+  const s = await getDocs(query(collection(db, col), ...cons)); const out = []; s.forEach(d => out.push(d.data())); return out;
+}
 async function fbReadAll(...path) { const s = await getDocs(collection(db, ...path.map(String))); const out = []; s.forEach(d => out.push(d.data())); return out; }
 
 /* V269.6 (data plan step 4): the company pictures (logo, stamp, signature) are kept in their own records
@@ -4441,7 +4446,7 @@ window.BizCoreRct = {
   },
 };
 /* Expose to app.js */
-window.FB = { fbSave, fbLoad, fbSaveRecordWith, fbMergeFields, fbCount, fbLargest, fbMarkDeleted, fbSoftDelete, fbSoftDeleteMany, fbPurgeMany, fbRestoreMany, fbDeletedRecords, fbRestoreRecord, fbPurgeRecord, fbSyncedJSON, fbReadDoc, fbReadAll, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
+window.FB = { fbSave, fbLoad, fbSaveRecordWith, fbMergeFields, fbQueryWhere, fbCount, fbLargest, fbMarkDeleted, fbSoftDelete, fbSoftDeleteMany, fbPurgeMany, fbRestoreMany, fbDeletedRecords, fbRestoreRecord, fbPurgeRecord, fbSyncedJSON, fbReadDoc, fbReadAll, fbSaveSettings, fbLoadSettings, fbLoadUserPrefs, fbSaveUserPrefs, fbListen, fbListenSettings, fbPublishOperationalEvent, fbListenOperationalEvents,
   getNextDocNumber, getNextDocSequence, getDocSequence, setDocSequence, finalizeProvisionalNumber, uploadDataUrl: fbUploadDataUrl, uploadFile: fbUploadFile, deleteFile: fbDeleteFile,
 
   /* ═══════════════════════════════════════════════════
@@ -4577,7 +4582,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=271.31';
+      s.src = 'js/app.js?v=271.32';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4591,7 +4596,7 @@ onAuthStateChanged(auth, async user => {
         // V271.1: Contracting Estimation (estimate window, Cost Build-up, Contracting Settings)
         const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.3'; document.body.appendChild(es);
         // V271.2: Contracting Jobs (Create Job, Jobs register, Job view)
-        const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.3'; document.body.appendChild(jb);
+        const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.32'; document.body.appendChild(jb);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=271.11'; document.body.appendChild(ds);
         // V270.4.1: Administration → Users, Roles & Permissions
@@ -4607,7 +4612,7 @@ onAuthStateChanged(auth, async user => {
     const loadStock = () => { const st = document.createElement('script'); st.id = 'bizcore-stock-script'; st.src = 'js/stock.js?v=271.3'; st.onload = start; st.onerror = () => { console.error('[BizCore] stock.js could not be loaded'); start(); }; document.body.appendChild(st); };
     const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=269.3'; sp.onload = loadStock; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
     // V267.2: cash-ui.js + cashbank.js (Cash & Bank) after accounts.js, before app.js
-    const loadCash = () => { const u = document.createElement('script'); u.id = 'bizcore-cashui-script'; u.src = 'js/cash-ui.js?v=271.3'; u.onload = u.onerror = () => { const c = document.createElement('script'); c.id = 'bizcore-cashbank-script'; c.src = 'js/cashbank.js?v=269.3'; c.onload = loadPurchases; c.onerror = () => { console.error('[BizCore] cashbank.js could not be loaded'); loadPurchases(); }; document.body.appendChild(c); }; document.body.appendChild(u); };
+    const loadCash = () => { const u = document.createElement('script'); u.id = 'bizcore-cashui-script'; u.src = 'js/cash-ui.js?v=271.32'; u.onload = u.onerror = () => { const c = document.createElement('script'); c.id = 'bizcore-cashbank-script'; c.src = 'js/cashbank.js?v=269.3'; c.onload = loadPurchases; c.onerror = () => { console.error('[BizCore] cashbank.js could not be loaded'); loadPurchases(); }; document.body.appendChild(c); }; document.body.appendChild(u); };
     // V266: receipts.js (Payment Receipts) after invoicing.js, before app.js
     inv.onload = () => { const r = document.createElement('script'); r.id = 'bizcore-receipts-script'; r.src = 'js/receipts.js?v=270.51'; r.onload = () => { const pa = document.createElement('script'); pa.id = 'bizcore-accounts-script'; pa.src = 'js/accounts.js?v=268.51'; pa.onload = loadCash; pa.onerror = () => { console.error('[BizCore] accounts.js could not be loaded'); loadCash(); }; document.body.appendChild(pa); }; r.onerror = () => { console.error('[BizCore] receipts.js could not be loaded'); start(); }; document.body.appendChild(r); };
     inv.onerror = () => { console.error('[BizCore] invoicing.js could not be loaded'); start(); };

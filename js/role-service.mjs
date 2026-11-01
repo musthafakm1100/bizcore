@@ -12,7 +12,7 @@
 import {
   ROLE_COLLECTION as COL, ROLE_CHANGES, BUILT_IN_ROLES, builtInRole, validateRoleInput, buildRoleRecord, describePermChange,
   userPermFrom, samePerm, normalizeRights, normalizePerms, RIGHTS,
-} from './role-core.mjs?v=271.3';
+} from './role-core.mjs?v=271.32';
 import { accessWithRole } from './user-core.mjs?v=270.43';
 import { DeliveryError, ERR, isSafeId } from './delivery-core.mjs?v=266.0';
 

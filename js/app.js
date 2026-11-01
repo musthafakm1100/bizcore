@@ -1533,7 +1533,7 @@ function validUntil(q) {
 function bcLocalISO(d){d=d instanceof Date?d:new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 /* ── v103 Central document numbering ── */
 const DOC_NUMBERING_DEFAULTS={
-  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},paymentReceipt:{label:'Payment Receipt',prefix:'RCT',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'},supplierPayment:{label:'Supplier Payment',prefix:'SP',reset:'monthly'},job:{label:'Job (Contracting)',prefix:'JOB',reset:'monthly'},jobExpense:{label:'Job Expense',prefix:'JE',reset:'monthly'},
+  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},paymentReceipt:{label:'Payment Receipt',prefix:'RCT',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'},supplierPayment:{label:'Supplier Payment',prefix:'SP',reset:'monthly'},job:{label:'Job (Contracting)',prefix:'JOB',reset:'monthly'},jobExpense:{label:'Job Expense',prefix:'JE',reset:'monthly'},reimbursement:{label:'Reimbursement (staff)',prefix:'RB',reset:'monthly'},
   // V270.4.9: master codes — system-generated on save, one running sequence (never reset), no date part
   customer:{label:'Customer',prefix:'CUS',reset:'never',dateFormat:'none',digits:5},supplier:{label:'Supplier',prefix:'SUP',reset:'never',dateFormat:'none',digits:5},product:{label:'Product (goods)',prefix:'ITM',reset:'never',dateFormat:'none',digits:6},service:{label:'Product (service)',prefix:'SRV',reset:'never',dateFormat:'none',digits:6},employee:{label:'Employee',prefix:'EMP',reset:'never',dateFormat:'none',digits:4}
 };
@@ -1550,7 +1550,7 @@ const DOC_RESETS_FOR_FORMAT={none:['never'],YY:['yearly','never'],YYYY:['yearly'
 const DOC_RESET_LABELS={yearly:'Yearly',monthly:'Monthly',never:'Never'};
 const DOC_SEPARATORS=['-','/','.',''];
 const DOC_DIGITS=[3,4,5,6];
-const DOC_NUMBERING_GROUPS=[['Sales',['rfq','pricing','quotation','salesOrder','job','jobExpense','deliveryNote','customerInvoice','creditNote','paymentReceipt']],['Purchases',['purchaseOrder','purchaseInvoice','supplierPayment']],['Master Data',['customer','supplier','product','service','employee']]];
+const DOC_NUMBERING_GROUPS=[['Sales',['rfq','pricing','quotation','salesOrder','job','jobExpense','reimbursement','deliveryNote','customerInvoice','creditNote','paymentReceipt']],['Purchases',['purchaseOrder','purchaseInvoice','supplierPayment']],['Master Data',['customer','supplier','product','service','employee']]];
 function cleanDocPrefix(v){return String(v||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8);}
 function normalizeDocNumberingConfig(type,raw){
   const d=DOC_NUMBERING_DEFAULTS[type]||{},c={...(raw||{})};
@@ -1598,6 +1598,7 @@ function existingDocumentNumbers(type){
   if(type==='customer')return customers.map(x=>x.code||''); if(type==='supplier')return suppliers.map(x=>x.code||''); if(type==='product')return products.filter(x=>x.type!=='service').map(x=>x.code||''); if(type==='service')return products.filter(x=>x.type==='service').map(x=>x.code||''); if(type==='employee')return employees.map(x=>x.code||'');
   if(type==='job')return (window.BCJobs?BCJobs.list():[]).map(x=>x.jobNo||'');   // V271.2
   if(type==='jobExpense')return (window.BCJobs&&BCJobs.expenseNos?BCJobs.expenseNos():[]);   // V271.3
+  if(type==='reimbursement')return [];   // V271.3.2: the counter alone (reimbursements are not kept on the screen)
   if(type==='rfq')return rfqs.map(x=>x.rfqNo||''); if(type==='quotation')return quotations.map(x=>x.qno||''); if(type==='salesOrder')return salesOrders.map(x=>x.soNo||'');
   if(type==='deliveryNote')return salesOrders.flatMap(s=>(s.deliveries||[]).map(x=>x.dnNo||'')); if(type==='customerInvoice')return salesOrders.flatMap(s=>(s.invoices||[]).map(x=>x.invNo||'')); if(type==='creditNote')return salesOrders.flatMap(s=>(s.creditNotes||[]).map(x=>x.cnNo||'')); if(type==='paymentReceipt')return (typeof receiptsCache!=='undefined'?receiptsCache:[]).map(x=>x.rctNo||''); if(type==='purchaseInvoice')return (window.BizCorePI?window.BizCorePI.invoices:[]).map(x=>x.piNo||''); if(type==='supplierPayment')return (window.BizCorePI?window.BizCorePI.payments:[]).map(x=>x.spNo||''); return [];
 }
@@ -2368,6 +2369,8 @@ function pmShowImage(src) {
   const thumb = document.getElementById('pm-img-thumb'), area = document.getElementById('pm-img-area');
   // an empty src fires "error", and the page hides broken images (display:none) — that kept a newly chosen picture
   // invisible until the form was reopened. So: no empty src, and the picture is shown again each time.
+  // V271.3.2: a saved picture whose file is missing says so (instead of an empty box)
+  thumb.onerror = src ? () => { if (thumb.getAttribute('src') !== src) return; document.getElementById('pm-img-preview').style.display = 'none'; document.getElementById('pm-img-placeholder').style.display = 'flex'; pmImgStatus('err', 'Picture missing — paste or choose it again'); } : null;
   if (src) { thumb.style.display = ''; thumb.src = src; } else thumb.removeAttribute('src');
   document.getElementById('pm-img-preview').style.display = src ? 'block' : 'none';
   document.getElementById('pm-img-placeholder').style.display = src ? 'none' : 'flex';
@@ -2453,6 +2456,8 @@ function pmSetType(type, locked) {
   seg.title = locked ? 'The type can’t change once the product has its code' : '';
   pmApplyType();
 }
+/** V271.3.2: a product picture whose file is missing → a "Picture missing" box of the same size. */
+function bcPicMissing(img){ if(!img||!img.parentNode)return; const d=document.createElement('div'); d.className=(img.className||'')+' pv-noimg pv-missing'; d.title='The picture file is missing — open Edit product and add it again'; d.innerHTML='<i class="ti ti-photo-off"></i><small>Picture missing</small>'; img.replaceWith(d); }
 function setProductImageInForm(imageData, imagePath) {
   const area = document.getElementById('pm-img-area');
   area._imageUploadPromise = null; // discard any stale/stuck upload from a previous product session
@@ -2645,8 +2650,7 @@ function openAddProduct(type) {
   document.getElementById('pm-uom').value = 'Pcs';
   document.getElementById('pm-price').value = '';
   document.getElementById('specs-list').innerHTML = '';
-  document.getElementById('pm-img-area')._savedImagePath = null;
-  clearProductImage();
+  setProductImageInForm(null, null);   // V271.3.2: clears the box only — never deletes the previous product's saved picture
   loadCustomCategoriesIntoForm();
   addSpecRow(); addSpecRow();
   pmSetType(type === 'service' ? 'service' : 'goods', false);   // V270.4.10
@@ -2707,7 +2711,8 @@ function viewProduct(id) {
   const histHtml=hist.length?`<div class="pv-table-wrap"><table class="pv-table"><thead><tr><th>Date</th><th>Price</th><th>Kind</th><th>Document</th><th>Customer / supplier</th><th class="r">Qty</th></tr></thead><tbody>${hist.map(d=>`<tr><td>${fmtDate(d.date)||'—'}</td><td><b>${formatNumber(d.price,2)}</b></td><td>${{pricing:'Estimated cost',quotation:'Quoted',so:'Ordered',invoice:'Sold',purchase:'Bought'}[d.kind]}</td><td><button type="button" class="profile-doc-link" onclick="closeModal('prod-view-modal');${d.open}">${esc2(d.no)}</button></td><td>${esc2(d.party)||'—'}</td><td class="r">${formatQuantity(d.qty)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="pv-empty">No prices yet.</div>';
   const histTab=window.BCMasterUI?BCMasterUI.historyHtml(p):'';
   const specs=(p.specs||[]).filter(x=>x.k||x.v);
-  const image=!svc&&p.image?`<img class="pv-img" src="${esc2(p.image)}" alt="${esc2(p.name||'Product')}">`:`<div class="pv-img pv-noimg"><i class="ti ti-${svc?'tool':'package'}"></i></div>`;
+  // V271.3.2: a picture that can't be loaded (file missing) keeps its place — the page hides broken pictures, which pulled the details into the picture column
+  const image=!svc&&p.image?`<img class="pv-img" src="${esc2(p.image)}" alt="${esc2(p.name||'Product')}" onerror="bcPicMissing(this)">`:`<div class="pv-img pv-noimg"><i class="ti ti-${svc?'tool':'package'}"></i></div>`;
   let stock='';
   if(!svc){ try{ const u=bcProductUnitUse(p); stock=u.stock?`${formatQuantity(u.stock)} ${esc2(p.uom||'')}`:'—'; }catch(_){ stock='—'; } }
   const fact=(l,v)=>v?`<div><b>${l}</b>${v}</div>`:'';
@@ -8565,7 +8570,8 @@ function updateEmployeePhotoPreview() {
 }
 let employeePhotoUploadPromise = null;
 let employeePhotoUploadFailed = false;
-let employeePhotoPath = null; // Storage path of the currently-saved photo, for cleanup on replace/remove
+let employeePhotoPath = null; // Storage path of the photo on the form
+let employeePhotoSavedPath = null; // V271.3.2: the photo saved on the employee — deleted only after Save replaces / removes it
 function handleEmployeePhoto(event) {
   const file=event.target.files?.[0]; if(!file)return;
   if(!file.type.startsWith('image/')){showToast('Please choose an image file','error');event.target.value='';return;}
@@ -8582,7 +8588,7 @@ function handleEmployeePhoto(event) {
         URL.revokeObjectURL(localPreview);
         employeePhotoDraft=url; employeePhotoPath=path; employeePhotoUploadFailed=false;
         updateEmployeePhotoPreview();
-        if (oldPath) window.FB.deleteFile(oldPath); // best-effort, don't wait on it
+        if (oldPath && oldPath !== employeePhotoSavedPath) window.FB.deleteFile(oldPath); // an unsaved upload replaced — the saved one goes after Save
       } else {
         employeePhotoUploadFailed = true;
         showToast('Photo upload failed — please try again before saving','error');
@@ -8592,7 +8598,7 @@ function handleEmployeePhoto(event) {
   }
 }
 function removeEmployeePhoto(){
-  if (employeePhotoPath && window.FB) window.FB.deleteFile(employeePhotoPath);
+  if (employeePhotoPath && employeePhotoPath !== employeePhotoSavedPath && window.FB) window.FB.deleteFile(employeePhotoPath);   // only an unsaved upload
   employeePhotoDraft='';employeePhotoUploadPromise=null;employeePhotoUploadFailed=false;employeePhotoPath=null;
   const input=document.getElementById('emp-photo-input');if(input)input.value='';updateEmployeePhotoPreview();
 }
@@ -8649,7 +8655,7 @@ function openEmployeeForm(id=null) {
   document.getElementById('employee-form-title').textContent=e?'Edit employee':'New employee';
   document.getElementById('emp-code').value=e?.code||'';document.getElementById('emp-code').placeholder='Given on save';   // V270.4.9
   employeePhotoUploadPromise=null; employeePhotoUploadFailed=false; // discard any stale/stuck upload from a previous attempt
-  employeePhotoPath=e?.photoPath||null;
+  employeePhotoPath=e?.photoPath||null; employeePhotoSavedPath=employeePhotoPath;
   employeePhotoDraft=e?.photo||''; updateEmployeePhotoPreview();
   const photoInput=document.getElementById('emp-photo-input'); if(photoInput)photoInput.value='';
   document.getElementById('emp-name').value=e?.name||'';
@@ -8686,6 +8692,8 @@ async function saveEmployee() {
     try {
       if(editingEmployeeId){const i=employees.findIndex(e=>e.id===editingEmployeeId);if(i>-1)employees[i]=record;}else employees.unshift(record);
       if((await saveEmployees())===false){const i=employees.findIndex(e=>e.id===record.id);if(i>-1){if(existing)employees[i]=existing;else employees.splice(i,1);}if(window.BCMasterUI)BCMasterUI.explainFailure('employees');else showToast('Employee not saved','error');return;}
+      if(existing&&existing.photoPath&&existing.photoPath!==record.photoPath&&window.FB)window.FB.deleteFile(existing.photoPath);   // V271.3.2: the old photo, once the change is saved
+      employeePhotoSavedPath=record.photoPath||null;
       closeEmployeeForm();renderEmployees();populateRFQAssignees();showToast(existing?'Employee updated':'Employee added','success');editingEmployeeId=null;
     } finally { hideBusyOverlay('employee-form-panel'); }
   };
