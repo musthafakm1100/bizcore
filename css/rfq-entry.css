@@ -210,3 +210,5 @@
   #rfq-view-modal .rv-flow{min-width:0;flex:1 1 100%}
   #rfq-view-modal .rv-tabs{display:flex;width:100%}#rfq-view-modal .rv-tab{flex:1 1 auto;justify-content:center;padding:8px}
 }
+/* V271.1: four request types (Product · Service · Mixed · Contracting) fit the same box */
+#rfq-modal .rq-seg label{padding:0 3px;min-width:0;overflow:hidden;text-overflow:ellipsis}

@@ -1,0 +1,248 @@
+/* ═══════════════════════════════════════════════════════════════
+   V271.1 — Contracting Estimation (approved mockups CE_1, CE_2 · docs/V271_1_ESTIMATION.md)
+   The Pricing window pattern (css/pricing.css): a centred window over the dimmed app, navy header, a bar of
+   fields, tabs, one grid and the summary panel on the right. Cost Build-up opens as a panel over the window.
+   Everything is scoped to #estimate-modal, except the dropdown / menu (.es-dd, .es-menu) on the page body.
+   ═══════════════════════════════════════════════════════════════ */
+#estimate-modal{--es-navy:#173a5e;--es-line:#dfe5ec;--es-line2:#edf1f5;--es-muted:#64748b;--es-ink:#1f2937;--es-soft:#f7f9fc;
+  --es-mat:#2e75b6;--es-man:#ea6a10;--es-sub:#0f766e;--es-oth:#94a3b8;--es-side:300px}
+#estimate-modal.modal-overlay{padding:18px!important;background:rgba(15,23,42,.45)}
+#estimate-modal .modal.es-win{width:min(1320px,calc(100vw - 36px))!important;max-width:none!important;height:calc(100vh - 36px)!important;height:calc(100dvh - 36px)!important;max-height:none!important;
+  border-radius:12px!important;border:0!important;box-shadow:0 20px 50px rgba(15,23,42,.3)!important;display:flex;flex-direction:column;overflow:hidden;font-size:13px;color:var(--es-ink);background:#fff;position:relative}
+#estimate-modal .es-win *{box-sizing:border-box}
+#estimate-modal .es-win :is(input,select,textarea,button){font-family:inherit}
+
+/* header */
+#estimate-modal .modal-header.es-hd{flex:0 0 auto;background:var(--es-navy)!important;color:#fff;display:flex;align-items:center;gap:8px;padding:8px 16px!important;min-height:56px;border:0!important;border-radius:0!important}
+#estimate-modal .es-back{flex:0 0 auto;width:32px;height:32px;margin-left:-6px;border:0;border-radius:8px;background:transparent;color:#fff;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;opacity:.9;padding:0}
+#estimate-modal .es-back:hover{background:rgba(255,255,255,.12);opacity:1}
+#estimate-modal .es-tt{display:flex;flex-direction:column;justify-content:center;min-width:0}
+#estimate-modal .es-hd h2{font-size:15.5px!important;font-weight:600!important;color:#fff!important;white-space:nowrap;margin:0!important;line-height:1.25}
+#estimate-modal .es-sub{font-size:12px;opacity:.85;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff}
+#estimate-modal .es-sp{flex:1}
+#estimate-modal .es-hd .pr-pill{margin-left:4px;font-size:11px!important;font-weight:600!important;padding:3px 9px!important;height:auto!important;min-height:0!important;line-height:1.35!important;border:0!important}
+#estimate-modal .es-pill-type{background:#e0ecff;color:#1e4f86}
+#estimate-modal .es-pill-st{background:#eef2f6;color:#334155}
+#estimate-modal .es-pill-st.is-saved{background:#dcfce7;color:#166534}
+#estimate-modal .es-pill-view{background:#fef3c7;color:#92400e}
+#estimate-modal .es-pill-note{background:#fff4e6;color:#9a3412;cursor:pointer}
+#estimate-modal .es-pill-note i{width:7px;height:7px;border-radius:50%;background:#ea6a10;display:inline-block}
+#estimate-modal .es-hd .close-btn{color:#fff!important;opacity:.85;background:transparent!important;border:0!important;font-size:19px;cursor:pointer}
+#estimate-modal .es-hd .smart-back-btn{display:none!important}
+#estimate-modal [hidden]{display:none!important}
+
+/* field bar */
+#estimate-modal .es-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:0!important;overflow:hidden!important;background:#fff}
+#estimate-modal .es-bar{flex:0 0 auto;display:grid;grid-template-columns:minmax(220px,1.6fr) 150px 150px 190px minmax(0,1fr);gap:12px;align-items:end;padding:10px 18px 12px;background:var(--es-soft);border-bottom:1px solid var(--es-line)}
+#estimate-modal .es-f{display:flex;flex-direction:column;gap:4px;min-width:0}
+#estimate-modal .es-f label{font-size:11px;color:var(--es-muted);margin:0;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#estimate-modal .es-bar :is(input,select){height:32px!important;border:1px solid #d5dde7!important;border-radius:8px!important;background:#fff;padding:0 10px!important;font-size:13px!important;width:100%;min-width:0;color:var(--es-ink);box-shadow:none}
+#estimate-modal :is(input,select,textarea):focus{border-color:#2e75b6!important;box-shadow:0 0 0 3px rgba(46,117,182,.15)!important;outline:0}
+#estimate-modal :is(input,select,textarea):disabled{background:#f8fafc!important;color:#475569!important;opacity:1;cursor:default}
+
+/* work area */
+#estimate-modal .es-work{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) var(--es-side)}
+#estimate-modal .es-main{min-width:0;min-height:0;display:flex;flex-direction:column;padding:8px 18px 0}
+#estimate-modal .es-tabs{flex:0 0 auto;display:flex;gap:4px;border-bottom:1px solid var(--es-line);overflow-x:auto;scrollbar-width:none}
+#estimate-modal .es-tb{padding:9px 12px;font-size:13px;color:#475569;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:6px;white-space:nowrap;background:transparent;cursor:pointer;border-radius:0}
+#estimate-modal .es-tb:hover{color:var(--es-navy)}
+#estimate-modal .es-tb.on{color:var(--es-navy);border-bottom-color:var(--es-navy);font-weight:600}
+#estimate-modal .es-n{font-size:11px;color:var(--es-muted);background:#eef2f6;border-radius:10px;padding:0 7px;font-weight:500;line-height:18px}
+#estimate-modal .es-dot{width:7px;height:7px;border-radius:50%;background:#ea6a10;display:inline-block}
+#estimate-modal .es-panel{display:none;flex:1 1 auto;min-height:0;flex-direction:column;padding-top:10px}
+#estimate-modal .es-panel.on{display:flex}
+#estimate-modal .es-hint{flex:0 0 auto;font-size:11px;color:#94a3b8;padding:7px 2px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* the grid: sections and items */
+#estimate-modal .es-gt{flex:1 1 auto;min-height:0;overflow:auto;border:1px solid var(--es-line);border-radius:10px;background:#fff}
+#estimate-modal table.es-tbl{table-layout:fixed;width:100%;min-width:980px;border-collapse:separate;border-spacing:0;font-size:13px;margin:0}
+#estimate-modal .es-tbl col.c-no{width:52px}#estimate-modal .es-tbl col.c-unit{width:74px}#estimate-modal .es-tbl col.c-qty{width:80px}
+#estimate-modal .es-tbl col.c-amt{width:96px}#estimate-modal .es-tbl col.c-tot{width:104px}#estimate-modal .es-tbl col.c-sell{width:108px}#estimate-modal .es-tbl col.c-menu{width:34px}
+#estimate-modal .es-tbl th{position:sticky;top:0;z-index:3;background:#f1f5f9!important;border:0!important;border-bottom:1px solid #dbe3ec!important;padding:8px!important;font-size:11.5px!important;font-weight:600!important;color:#475569!important;white-space:nowrap;text-align:left;vertical-align:bottom;text-transform:none!important;letter-spacing:0!important;height:auto!important}
+#estimate-modal .es-tbl td{padding:6px 8px;border:0;border-bottom:1px solid var(--es-line2);vertical-align:top;background:#fff;font-size:13px!important;color:var(--es-ink)}
+#estimate-modal :is(input,select,textarea){font-size:13px!important;color:var(--es-ink)!important}
+#estimate-modal td{font-size:13px!important}
+#estimate-modal .es-r{text-align:right!important;font-variant-numeric:tabular-nums;white-space:nowrap}
+#estimate-modal .es-m{color:#94a3b8}
+#estimate-modal .es-tbl td.es-val{padding-top:12px}
+#estimate-modal .es-tbl td.es-no{padding-top:12px;color:#475569;font-size:12.5px}
+#estimate-modal .es-tbl tr.es-sec td{background:#f4f8fc;border-bottom:1px solid #dbe3ec}
+#estimate-modal .es-tbl tr.es-sec td.es-no{color:var(--es-navy);font-weight:600}
+#estimate-modal .es-tbl tr.es-sub td{background:#fbfcfe;color:#475569;font-size:12px;padding-top:7px;padding-bottom:7px}
+#estimate-modal .es-tbl tr.es-it.is-sel td{background:#f7faff}
+#estimate-modal .es-tbl tr.es-it.is-sel td:first-child{box-shadow:inset 3px 0 0 #2e75b6}
+#estimate-modal .es-tbl tr.es-it td.es-cost{cursor:pointer}
+#estimate-modal .es-tbl tr.es-it td.es-cost:hover{background:#f3f7fd}
+#estimate-modal .es-tbl tr.es-it.no-cost td.es-tot{color:#b76800}
+#estimate-modal .es-in{height:30px;width:100%;border:1px solid transparent;border-radius:6px;background:transparent;padding:0 7px;font-size:13px;color:var(--es-ink);min-width:0}
+#estimate-modal .es-in:hover:not(:disabled){border-color:var(--es-line)}
+#estimate-modal .es-in:focus{background:#fff}
+#estimate-modal .es-in.es-num{text-align:right}
+#estimate-modal textarea.es-in{height:auto;min-height:30px;padding:5px 7px;resize:none;line-height:1.4;display:block;overflow:hidden}
+#estimate-modal .es-sec .es-in{font-weight:600!important;color:var(--es-navy)!important}
+#estimate-modal .es-in.is-bad{border-color:#dc2626!important;background:#fff5f5}
+#estimate-modal .es-kbtn{width:26px;height:26px;border:0;border-radius:6px;background:transparent;color:#64748b;cursor:pointer;font-size:16px;line-height:1;margin-top:3px}
+#estimate-modal .es-kbtn:hover{background:#eef2f6;color:#1f2937}
+#estimate-modal .es-tag{font-size:10.5px;padding:1px 6px;border-radius:5px;margin-left:6px;white-space:nowrap;vertical-align:1px}
+#estimate-modal .es-tag.t-sub{background:#ccfbf1;color:#0f766e}
+#estimate-modal .es-tbl tr.es-add td{background:#fafbfd;padding:8px}
+#estimate-modal .es-lnk{border:0;background:none;color:#1d63d8;cursor:pointer;padding:3px 2px;font:inherit;font-size:12.5px}
+#estimate-modal .es-lnk:hover{text-decoration:underline}
+#estimate-modal .es-lnk:disabled{color:#94a3b8;cursor:default;text-decoration:none}
+#estimate-modal .es-tbl tfoot td{position:sticky;bottom:0;z-index:3;background:#f4f7fa;border-top:1px solid var(--es-line);border-bottom:0;padding:9px 8px;color:#2f5d8a;font-weight:600;white-space:nowrap}
+#estimate-modal .es-empty{padding:16px;color:var(--es-muted);font-size:12.5px;text-align:center;border:1px dashed #cbd5e1;border-radius:10px}
+
+/* lists (Manpower, Subcontracts) */
+#estimate-modal .es-list{flex:1 1 auto;min-height:0;overflow:auto;border:1px solid var(--es-line);border-radius:10px}
+#estimate-modal .es-list table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+#estimate-modal .es-list th{position:sticky;top:0;background:#f1f5f9!important;border-bottom:1px solid #dbe3ec;padding:8px!important;font-size:11.5px!important;font-weight:600!important;color:#475569!important;text-align:left;white-space:nowrap;text-transform:none!important;letter-spacing:0!important}
+#estimate-modal .es-list td{padding:8px;border-bottom:1px solid var(--es-line2)}
+#estimate-modal .es-list tr.es-click{cursor:pointer}
+#estimate-modal .es-list tr.es-click:hover td{background:#f7faff}
+#estimate-modal .es-list tfoot td{background:#f4f7fa;font-weight:600;color:#2f5d8a;position:sticky;bottom:0}
+#estimate-modal textarea.es-ta{width:100%;min-height:240px;border:1px solid #d5dde7;border-radius:8px;padding:10px 12px;line-height:1.6;font-size:13px;resize:vertical;color:var(--es-ink)}
+#estimate-modal .es-notehead{display:flex;justify-content:space-between;font-size:12px;color:var(--es-muted);margin-bottom:8px}
+
+/* summary panel */
+#estimate-modal .es-side{border-left:1px solid var(--es-line);background:#fbfcfe;padding:16px 18px;overflow:auto;min-height:0}
+#estimate-modal .es-side h4{font-size:11px;font-weight:600;color:var(--es-muted);letter-spacing:.04em;text-transform:uppercase;margin:0 0 8px;display:flex;justify-content:space-between;gap:8px}
+#estimate-modal .es-side h4 small{font-size:10.5px;text-transform:none;letter-spacing:0;font-weight:400}
+#estimate-modal .es-grp{margin-bottom:16px}
+#estimate-modal .es-kv{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:5px 0;font-size:13px;color:#475569;min-height:30px}
+#estimate-modal .es-kv b{font-weight:400;color:var(--es-ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+#estimate-modal .es-kv.es-sum{border-top:1px solid var(--es-line);margin-top:3px;padding-top:8px}
+#estimate-modal .es-kv.es-sum b,#estimate-modal .es-kv.es-sum span{font-weight:600;color:var(--es-ink)}
+#estimate-modal .es-bar2{height:8px;border-radius:4px;background:#eef2f6;overflow:hidden;display:flex;margin:2px 0 8px}
+#estimate-modal .es-bar2 i{display:block;height:100%}
+#estimate-modal .es-d{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:1px}
+#estimate-modal .es-pct{display:inline-flex;align-items:center;gap:6px}
+#estimate-modal .es-pct input{width:74px;height:28px;border:1px solid #d5dde7;border-radius:7px;text-align:right;padding:0 8px;font-size:13px;background:#fff}
+#estimate-modal .es-pct small{color:#94a3b8;font-size:11px}
+#estimate-modal .es-sell{background:var(--es-navy);color:#fff;border-radius:9px;padding:10px 12px;display:flex;justify-content:space-between;font-weight:600;margin:8px 0 4px;font-variant-numeric:tabular-nums}
+#estimate-modal .es-round{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;font-size:13px;color:#475569}
+#estimate-modal .es-round input{width:120px;height:30px;border:1px solid #d5dde7;border-radius:7px;text-align:right;padding:0 8px;font-size:13px;background:#fff}
+#estimate-modal .es-chip{border:1px solid #bfdbfe;background:#eff6ff;color:#1e4f86;border-radius:999px;font-size:11.5px!important;font-weight:500!important;padding:2px 9px!important;height:auto!important;min-height:0!important;cursor:pointer}
+#estimate-modal .es-chip:disabled{opacity:.5;cursor:default}
+#estimate-modal .es-res{--st:#166534;--st-bg:#f0fdf4;--st-bd:#bbf7d0;border:1px solid var(--st-bd);background:var(--st-bg);border-radius:10px;padding:10px 12px;margin-top:6px}
+#estimate-modal .es-res[data-state="low"]{--st:#9a3412;--st-bg:#fff7ed;--st-bd:#fed7aa}
+#estimate-modal .es-res[data-state="loss"]{--st:#b42318;--st-bg:#fef2f2;--st-bd:#fecaca}
+#estimate-modal .es-res[data-state="none"]{--st:#475569;--st-bg:#f8fafc;--st-bd:#e2e8f0}
+#estimate-modal .es-res .es-kv{color:var(--st);min-height:0;padding:3px 0}
+#estimate-modal .es-res .es-kv b{color:var(--st);font-weight:600}
+#estimate-modal .es-res .es-st{font-size:11.5px;color:var(--st);margin-top:4px}
+#estimate-modal .es-note2{font-size:11.5px;color:#94a3b8;line-height:1.45;margin-top:10px}
+
+/* footer */
+#estimate-modal .modal-footer.es-ft{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:10px 18px!important;border-top:1px solid var(--es-line);background:#fff;flex-wrap:nowrap}
+#estimate-modal .es-ft .btn{height:32px;min-height:32px;padding:0 14px;font-size:12.5px;border-radius:8px;white-space:nowrap}
+#estimate-modal .es-chk{font-size:12px;color:#166534;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#estimate-modal .es-chk.is-todo{color:#b45309}
+
+/* Cost Build-up (panel over the window) */
+#estimate-modal .es-bu{position:absolute;left:0;right:0;bottom:0;top:56px;z-index:20;background:#fff;display:flex;flex-direction:column;border-top:1px solid var(--es-line)}
+#estimate-modal .es-bu-hd{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--es-line);background:#fff}
+#estimate-modal .es-bu-hd .es-back{color:#334155;border:1px solid #d5dde7}
+#estimate-modal .es-bu-hd .es-back:hover{background:#f1f5f9}
+#estimate-modal .es-bu-tt h3{margin:0;font-size:15.5px;font-weight:600;color:var(--es-navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:820px}
+#estimate-modal .es-bu-tt div{font-size:12px;color:var(--es-muted);margin-top:2px}
+#estimate-modal .es-bu-body{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) var(--es-side);overflow:hidden}
+#estimate-modal .es-bu-main{overflow:auto;padding:14px 18px;min-width:0}
+#estimate-modal .es-bu-side{border-left:1px solid var(--es-line);background:#fbfcfe;padding:16px 18px;overflow:auto}
+#estimate-modal .es-grpbox{border:1px solid var(--es-line);border-radius:10px;margin-bottom:12px;overflow:visible}
+#estimate-modal .es-gh{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f8fafc;border-bottom:1px solid var(--es-line);font-weight:600;color:var(--es-navy);font-size:12.5px;border-radius:10px 10px 0 0}
+#estimate-modal .es-gh b{font-weight:600;color:var(--es-ink);font-variant-numeric:tabular-nums}
+#estimate-modal .es-gh .es-d{margin-right:8px}
+#estimate-modal .es-bt{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;table-layout:fixed}
+#estimate-modal .es-bt th{font-weight:500!important;color:#64748b!important;font-size:11.5px!important;text-align:left;padding:7px 8px!important;background:#fff!important;border:0!important;border-bottom:1px solid var(--es-line2)!important;white-space:nowrap;text-transform:none!important;letter-spacing:0!important}
+#estimate-modal .es-bt td{padding:4px 6px;border-bottom:1px solid #f3f5f8;vertical-align:top}
+#estimate-modal .es-bt td.es-val{padding-top:10px}
+#estimate-modal .es-bt .es-in{border-color:#e5eaf0;background:#fff}
+#estimate-modal .es-bt .es-ref{font-size:11px;color:#64748b;padding:2px 7px 0}
+#estimate-modal .es-bt .es-ref button{border:0;background:none;color:#1d63d8;cursor:pointer;padding:0;font-size:11px}
+#estimate-modal .es-src{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px;background:#cbd5e1}
+#estimate-modal .es-src.m{background:#16a34a}
+#estimate-modal .es-wrap{position:relative;display:flex;align-items:center}
+#estimate-modal .es-wrap .es-src{position:absolute;left:8px;top:12px;margin:0}
+#estimate-modal .es-wrap .es-in{padding-left:20px}
+#estimate-modal .es-bt tr.es-add td{padding:8px}
+#estimate-modal .es-x{width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:#94a3b8;cursor:pointer;margin-top:3px}
+#estimate-modal .es-x:hover{background:#fee2e2;color:#b42318}
+#estimate-modal .es-card{background:#fff;border:1px solid var(--es-line);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+#estimate-modal .es-card h4{margin:0 0 8px}
+#estimate-modal .es-copy-in{width:100%;height:32px;border:1px solid #d5dde7;border-radius:8px;padding:0 10px;font-size:13px;margin-top:8px}
+#estimate-modal .es-bu-ft{flex:0 0 auto;display:flex;gap:8px;align-items:center;padding:10px 16px;border-top:1px solid var(--es-line)}
+
+/* dropdown + menu on the page body */
+.es-dd{position:fixed;z-index:3000;background:#fff;border:1px solid #d5dde7;border-radius:10px;box-shadow:0 10px 28px rgba(15,23,42,.18);max-height:300px;overflow:auto;padding:4px;font-size:13px;min-width:260px}
+.es-dd button{display:flex;width:100%;text-align:left;border:0;background:transparent;padding:7px 9px;border-radius:7px;cursor:pointer;gap:8px;align-items:baseline;color:#1f2937;font:inherit}
+.es-dd button:hover,.es-dd button.on{background:#eef4fc}
+.es-dd small{color:#64748b;font-size:11.5px;margin-left:auto;white-space:nowrap}
+.es-dd .es-dd-h{font-size:10.5px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;padding:6px 9px 3px}
+.es-dd .es-dd-e{padding:8px 9px;color:#64748b;font-size:12.5px}
+.es-menu{position:fixed;z-index:3000;background:#fff;border:1px solid #d5dde7;border-radius:10px;box-shadow:0 10px 28px rgba(15,23,42,.18);padding:4px;min-width:210px;font-size:13px}
+.es-menu button{display:flex;justify-content:space-between;width:100%;border:0;background:transparent;padding:8px 10px;border-radius:7px;cursor:pointer;color:#1f2937;font:inherit;text-align:left}
+.es-menu button:hover{background:#f1f5f9}
+.es-menu button:disabled{color:#94a3b8;cursor:default;background:transparent}
+.es-menu button.es-danger{color:#b42318}
+.es-menu hr{border:0;border-top:1px solid #edf1f5;margin:4px 0}
+.es-menu small{color:#94a3b8}
+
+/* Administration → Contracting Settings */
+#bc-contracting-settings .cs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+#bc-contracting-settings .cs-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px}
+#bc-contracting-settings .cs-card h3{margin:0 0 2px;font-size:14px;font-weight:600;color:#173a5e}
+#bc-contracting-settings .cs-card p{margin:0 0 12px;font-size:12px;color:#64748b}
+#bc-contracting-settings .cs-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0;font-size:13px}
+#bc-contracting-settings .cs-row input{width:110px;height:32px;border:1px solid #d5dde7;border-radius:8px;padding:0 10px;text-align:right}
+#bc-contracting-settings .cs-wide{grid-column:1/-1}
+#bc-contracting-settings table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+#bc-contracting-settings th{background:#f1f5f9;color:#475569;font-weight:600;font-size:11.5px;padding:8px;text-align:left;border-bottom:1px solid #dbe3ec}
+#bc-contracting-settings td{padding:5px 6px;border-bottom:1px solid #edf1f5}
+#bc-contracting-settings td input,#bc-contracting-settings td select{width:100%;height:30px;border:1px solid #e2e8f0;border-radius:6px;padding:0 8px;font-size:13px;background:#fff}
+#bc-contracting-settings td input.r{text-align:right}
+#bc-contracting-settings .cs-x{border:0;background:none;color:#94a3b8;cursor:pointer;font-size:15px}
+#bc-contracting-settings .cs-x:hover{color:#b42318}
+#bc-contracting-settings .cs-add{border:0;background:none;color:#1d63d8;cursor:pointer;padding:8px 2px;font-size:12.5px}
+#bc-contracting-settings .cs-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px 16px}
+#bc-contracting-settings .cs-ro{font-size:12px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-bottom:12px}
+
+/* supplier form: Also supplies (Contracting) */
+.bc-supkinds-row{display:flex;gap:18px;flex-wrap:wrap;min-height:36px;align-items:center}
+.bc-chk{display:inline-flex!important;align-items:center;gap:7px;font-size:13px!important;font-weight:400!important;color:#1f2937!important;cursor:pointer;margin:0!important}
+.bc-chk input{width:16px;height:16px;margin:0}
+
+/* narrower windows */
+@media (max-width:1199px){
+  #estimate-modal{--es-side:270px}
+  #estimate-modal .es-bar{grid-template-columns:minmax(200px,1.4fr) 130px 140px 170px}
+}
+@media (max-width:900px){
+  #estimate-modal .es-work,#estimate-modal .es-bu-body{grid-template-columns:minmax(0,1fr)}
+  #estimate-modal .es-side,#estimate-modal .es-bu-side{border-left:0;border-top:1px solid var(--es-line);max-height:none}
+  #estimate-modal .es-work{overflow:auto}
+  #estimate-modal .es-main{min-height:520px}
+  #estimate-modal .es-bu-body{overflow:auto}
+  #estimate-modal .es-bu-main{overflow:visible}
+}
+@media (max-width:760px){
+  #estimate-modal.modal-overlay{padding:0!important}
+  #estimate-modal .modal.es-win{width:100vw!important;height:100vh!important;height:100dvh!important;border-radius:0!important}
+  #estimate-modal .es-bar{grid-template-columns:1fr 1fr;padding:10px 12px}
+  #estimate-modal .es-bar .es-f:first-child{grid-column:1/-1}
+  #estimate-modal .es-main{padding:8px 12px 0}
+  #estimate-modal .es-x2{display:none}
+  #estimate-modal .modal-footer.es-ft{padding:8px 12px calc(10px + env(safe-area-inset-bottom))!important}
+  #estimate-modal .es-ft .es-chk,#estimate-modal .es-ft .es-sp,#estimate-modal .es-ft .es-cl{display:none}
+  #estimate-modal .es-ft .btn{height:44px;flex:1}
+  #estimate-modal .es-bu-ft{padding:8px 12px calc(10px + env(safe-area-inset-bottom))}
+  #estimate-modal .es-bu-ft .btn{height:44px;flex:1}
+  #estimate-modal .es-bu-tt h3{max-width:calc(100vw - 80px)}
+  #estimate-modal .es-bu-hd{flex-wrap:wrap;padding:8px 12px;gap:8px}
+  #estimate-modal .es-bu-hd .es-sp{display:none}
+  #estimate-modal .es-bu-tt{flex:1 1 calc(100% - 50px);min-width:0}
+  #estimate-modal .es-bu-hd .pr-btn{flex:1}
+  #estimate-modal .es-bu-main{padding:10px 12px}
+  #estimate-modal .es-grpbox{overflow-x:auto}
+  #estimate-modal .es-bt{min-width:720px}
+  #estimate-modal .es-bu-ft .es-chk,#estimate-modal .es-bu-ft .es-sp{display:none}
+}

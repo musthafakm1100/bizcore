@@ -25,6 +25,7 @@
     deleteRFQFromBtn: ['rfq', 'x'], deleteRFQRecord: ['rfq', 'x'],
     // Pricing
     openPricingSourceRFQs: ['pricing', 'c'], openPricingFromBtn: ['pricing', 'c'], editPricingFromRO: ['pricing', 'e'], revisePricingFromRO: ['pricing', 'e'],
+    openEstimateFromBtn: ['pricing', 'v'],   // V271.1: Contracting Estimation (read only without Pricing create / edit)
     // Quotations
     openNewQuotation: ['quotation', 'c'], convertToQuotation: ['quotation', 'c'], duplicateQuotation: ['quotation', 'c'], openQuotationWorkflowDialog: ['quotation', 'c'],
     editQuotation: ['quotation', 'e'], createQuotationRevision: ['quotation', 'e'], cancelQuotation: ['quotation', 'x'], deleteQuotation: ['quotation', 'x'],
@@ -85,7 +86,15 @@
 
   /* ── sidebar, pages, master tabs, register "New" buttons ── */
   const pageMods = page => (P() && P().core.PAGE_MODULES[page]) || null;
-  const pageAllowed = page => { const m = pageMods(page); return !m || !P() || P().admin || m.some(x => P().can(x, 'v')); };
+  // V271.1.1: the Special Right "Manage Labour Rates & Expense Categories" opens Administration → Contracting Settings only
+  const ratesOnly = () => !!P() && !P().admin && !P().can('administration', 'v') && window.bcRight('contractingRates');
+  const pageAllowed = page => { const m = pageMods(page); return !m || !P() || P().admin || m.some(x => P().can(x, 'v')) || (page === 'setup' && ratesOnly()); };
+  function applySetupTabs() {
+    const only = ratesOnly(), page = document.getElementById('page-setup'); if (!page) return;
+    page.querySelectorAll('.setup-tab').forEach(t => t.classList.toggle('bc-perm-hidden', only && t.id !== 'stab-contracting-settings'));
+    page.querySelectorAll('.setup-nav-group').forEach(g => { const tabs = g.querySelectorAll('.setup-tab'); if (tabs.length) g.classList.toggle('bc-perm-hidden', [...tabs].every(t => t.classList.contains('bc-perm-hidden'))); });
+    return only;
+  }
   const NEW_BTN = { rfq: 'rfq', quotations: 'quotation', costing: 'pricing', receipts: 'receipt', purchaseinvoices: 'purchaseInvoice', supplierpayments: 'supplierPayment',
     salesorders: 'salesOrder', customerinvoices: 'invoice', deliverynotes: 'deliveryNote', cashbank: 'cash' };
   function applyNav() {
@@ -106,6 +115,7 @@
     // V270.4.3: Excel export buttons follow the Special Right
     ['quotation-export-excel-btn', 'pricing-export-excel-btn'].forEach(id => { const b = document.getElementById(id); if (b) b.classList.toggle('bc-perm-hidden', !window.bcRight('exportExcel')); });
     applyNewButtons();
+    applySetupTabs();
   }
   function applyNewButtons(root) {
     for (const [page, mod] of Object.entries(NEW_BTN)) {
@@ -127,6 +137,7 @@
         return undefined;
       }
       const r = orig.apply(this, arguments);
+      if (page === 'setup' && applySetupTabs() && typeof window.switchSetupTab === 'function') try { window.switchSetupTab('contracting-settings'); } catch (e) {}
       try { applyNewButtons(document.getElementById('page-' + (['customers', 'suppliers', 'products', 'employees', 'units'].includes(page) ? 'masters' : page))); } catch (e) {}
       return r;
     };

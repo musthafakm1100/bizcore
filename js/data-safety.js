@@ -55,6 +55,16 @@ const DS = {
     summary(j){ const a = parse(j) || []; return Array.isArray(a) ? plural(a.length, 'status') .replace('statuss', 'statuses') + (a.length ? ' (' + a.map(x => x.name).join(', ') + ')' : '') : '—'; },
     reload(){ try { if (typeof marginStatusesDirty !== 'undefined' && marginStatusesDirty) return; if (typeof initMarginStatuses === 'function') initMarginStatuses(); if (typeof updateMarginGaugeScale === 'function') updateMarginGaugeScale(); } catch (e) {} },
   },
+  bizcoreContractingSettings: {   // V271.1: Administration → Contracting Settings (estimates, labour rates, expense categories)
+    doc: 'contracting', label: 'Contracting settings', adminOnly: true,
+    summary(j){ const p = parse(j); if (!p) return '—'; return [p.overheadPct != null ? 'overheads ' + p.overheadPct + '%' : '', p.contingencyPct != null ? 'contingency ' + p.contingencyPct + '%' : '', p.markupPct != null ? 'markup ' + p.markupPct + '%' : ''].filter(Boolean).join(' · ') || 'Saved'; },
+    reload(){ try { if (typeof window.bcContractingSettingsReload === 'function') window.bcContractingSettingsReload(); } catch (e) {} },
+  },
+  bizcoreContractingRates: {   // V271.1.1: Labour Rates & Expense Categories (administrators + the Special Right)
+    doc: 'contractingRates', label: 'Labour rates & expense categories', adminOnly: false,
+    summary(j){ const p = parse(j); if (!p) return '—'; return [Array.isArray(p.labourRates) ? plural(p.labourRates.length, 'labour rate') : '', Array.isArray(p.expenseCategories) ? p.expenseCategories.length + ' expense categor' + (p.expenseCategories.length === 1 ? 'y' : 'ies') : ''].filter(Boolean).join(' · ') || 'Saved'; },
+    reload(){ try { if (typeof window.bcContractingSettingsReload === 'function') window.bcContractingSettingsReload(); } catch (e) {} },
+  },
   bizcore_cost_components: {
     doc: 'costComponents', label: 'Cost components', adminOnly: true,
     summary(j){ const a = parse(j) || []; return Array.isArray(a) && a.length ? a.filter(c => c.enabled !== false).map(c => c.name + (c.type === '%' && Number(c.value) ? ' ' + Number(c.value) + '%' : '')).join(', ') : '—'; },

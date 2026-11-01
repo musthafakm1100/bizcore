@@ -44,6 +44,7 @@ export const RIGHTS = Object.freeze([
   { id: 'seeCost', label: 'See cost, margin and profit', hint: 'Profit tab on Sales Orders, Selling → P/L on purchase invoices', group: 'Pricing & profit', was: 'Purchase Settings' },
   { id: 'approveMargin', label: 'Approve pricing below the minimum margin', hint: 'Decides the approval requests (can be chosen as approver)', group: 'Pricing & profit', was: 'admin only' },
   { id: 'sellBelowMargin', label: 'Sell below the minimum margin without approval', group: 'Pricing & profit', was: 'admin only' },
+  { id: 'contractingRates', label: 'Manage Labour Rates & Expense Categories', hint: 'Administration → Contracting Settings (the default % stay with administrators)', group: 'Pricing & profit', was: 'admin only' },   // V271.1.1
   { id: 'orderInvoices', label: 'Issue order invoices (bill before delivery)', group: 'Billing', was: 'Billing Settings' },
   { id: 'advanceInvoices', label: 'Issue advance invoices', group: 'Billing', was: 'Billing Settings' },
   { id: 'creditNotes', label: 'Issue credit notes, cancel & re-issue invoices', group: 'Billing', was: 'Billing Settings' },

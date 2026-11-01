@@ -8,7 +8,7 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v27061';
+const CACHE_NAME = 'bizcore-shell-v27111';
 const APP_SHELL = [
   './login.html',
   './delivery.html',
@@ -40,11 +40,11 @@ const APP_SHELL = [
   './css/safe-area.css?v=269.2',
   './css/users.css?v=270.43',
   './js/users.js?v=270.43',
-  './js/permissions-ui.js?v=270.43',
+  './js/permissions-ui.js?v=271.11',
   './js/user-core.mjs?v=270.43',
-  './js/user-service.mjs?v=270.43',
-  './js/role-core.mjs?v=270.43',
-  './js/role-service.mjs?v=270.43',
+  './js/user-service.mjs?v=271.11',
+  './js/role-core.mjs?v=271.11',
+  './js/role-service.mjs?v=271.11',
   './css/mobile-zoom.css?v=270.49',
   './js/doc-zoom.js?v=270.48',
   './js/doc-pages.js?v=270.59',
@@ -55,7 +55,9 @@ const APP_SHELL = [
   './js/master-service.mjs?v=270.55',
   './js/ui-standard.js?v=269.1',
   './js/responsive.js?v=270.47',
-  './js/app.js?v=270.60',
+  './js/app.js?v=271.1',
+  './js/estimate.js?v=271.11',
+  './css/estimate.css?v=271.1',
   './js/so-view.js?v=270.59',
   './js/pricing-ui.js?v=270.24',
   './js/quotation-ui.js?v=270.60',
@@ -79,7 +81,7 @@ const APP_SHELL = [
   './js/purchases.js?v=270.57',
   './js/supplier-payments.js?v=269.3',
   './js/stock.js?v=268.61',
-  './js/data-safety.js?v=270.59',
+  './js/data-safety.js?v=271.11',
   './js/purchase-core.mjs?v=270.43',
   './js/purchase-service.mjs?v=270.43',
   './js/account-core.mjs?v=268.2',

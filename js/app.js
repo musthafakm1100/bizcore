@@ -3486,6 +3486,7 @@ function switchSetupTab(tab) {
     if(ok)applySettings();
   }
   if (tab === 'data-health' && typeof bcRenderDataHealth==='function') bcRenderDataHealth();
+  if (tab === 'contracting-settings' && typeof window.bcRenderContractingSettings==='function') window.bcRenderContractingSettings();   // V271.1
   if (tab === 'locking' && typeof renderLockingSettings === 'function') renderLockingSettings();
   if (tab === 'billing' && typeof renderBillingSettings === 'function') renderBillingSettings();
   if (tab === 'billing' && typeof renderReceiptSettings === 'function') renderReceiptSettings();
@@ -3519,7 +3520,11 @@ function resetCustomerPartyFields(company='') {
 function resetSupplierPartyFields(company='') {
   const ids=['sm-company-ar','sm-contact','sm-contact-ar','sm-mobile','sm-phone','sm-email','sm-whatsapp','sm-cat','sm-vat','sm-short-address','sm-building-no','sm-street','sm-street-ar','sm-secondary-no','sm-postal-code','sm-district','sm-district-ar','sm-city','sm-city-ar','sm-notes'];
   ids.forEach(id=>setPartyField(id,'')); setPartyField('sm-company',company); setPartyField('sm-country','Saudi Arabia');
+  setSupplierKinds([]);   // V271.1
 }
+/** V271.1: what else a supplier provides for Contracting — 'manpower' (manpower agency) / 'subcontractor'. */
+function setSupplierKinds(k){ const a=Array.isArray(k)?k:[]; ['manpower','subcontractor'].forEach(x=>{const el=document.getElementById('sm-kind-'+x); if(el) el.checked=a.includes(x);}); }
+function getSupplierKinds(){ return ['manpower','subcontractor'].filter(x=>document.getElementById('sm-kind-'+x)?.checked); }
 function validOptionalEmail(value){ return !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value); }
 function partyAddressSummary(r){
   const line1=[r.buildingNo,r.street].filter(Boolean).join(' ');
@@ -7721,6 +7726,7 @@ function editRFQFromView(btn) { transitionToRFQEdit(btn); }
 function viewQuoteFromRFQ(btn){ const id=btn.getAttribute('data-qid'); closeModal('rfq-view-modal'); if(id) viewQuotation(id); }
 function viewPricingROFromBtn(btn) { const id=btn.getAttribute('data-rid'); if(id) viewPricingReadOnly(id); }
 function openPricingFromBtn(btn)   { transitionRFQToPricing(btn); }
+function openEstimateFromBtn(btn)  { const id=btn?.getAttribute('data-rid'); if(id&&typeof window.bcOpenEstimate==='function') window.bcOpenEstimate(id,{fromRfqView:true}); }   // V271.1
 function openNoBidDialogFromBtn(btn) { const id=btn.getAttribute('data-rid'); if(id) openNoBidDialog(id); }
 function deleteRFQFromBtn(btn) { const id=btn.getAttribute('data-rid'); if(id) deleteRFQRecord(id); }
 function reopenRFQFromBtn(btn) { const id=btn.getAttribute('data-rid'); if(id) reopenRFQ(id); }
@@ -7937,6 +7943,7 @@ function openEditSupplier(id) {
   setPartyField('sm-mobile',s.mobile||''); setPartyField('sm-phone',s.phone||''); setPartyField('sm-email',s.email||''); setPartyField('sm-whatsapp',s.whatsapp||''); setPartyField('sm-cat',s.cat||''); setPartyField('sm-vat',s.vat||'');
   setPartyField('sm-short-address',s.shortAddress||''); setPartyField('sm-building-no',s.buildingNo||''); setPartyField('sm-street',s.street||''); setPartyField('sm-street-ar',s.streetAr||''); setPartyField('sm-secondary-no',s.secondaryNo||'');
   setPartyField('sm-postal-code',s.postalCode||''); setPartyField('sm-district',s.district||''); setPartyField('sm-district-ar',s.districtAr||''); setPartyField('sm-city',s.city||''); setPartyField('sm-city-ar',s.cityAr||''); setPartyField('sm-country',s.country||'Saudi Arabia'); setPartyField('sm-notes',s.notes||'');
+  setSupplierKinds(s.supplierKinds);   // V271.1
   openModalWithSize('sup-modal');
 }
 async function saveSupplier() {
@@ -7951,7 +7958,7 @@ async function saveSupplier() {
     company, companyAr:getPartyField('sm-company-ar'), contact:getPartyField('sm-contact'), contactAr:getPartyField('sm-contact-ar'),
     mobile:getPartyField('sm-mobile'), phone:getPartyField('sm-phone'), email, whatsapp:getPartyField('sm-whatsapp'), cat:getPartyField('sm-cat'), vat:getPartyField('sm-vat'),
     shortAddress:getPartyField('sm-short-address'), buildingNo:getPartyField('sm-building-no'), street:getPartyField('sm-street'), streetAr:getPartyField('sm-street-ar'), secondaryNo:getPartyField('sm-secondary-no'),
-    postalCode:getPartyField('sm-postal-code'), district:getPartyField('sm-district'), districtAr:getPartyField('sm-district-ar'), city:getPartyField('sm-city'), cityAr:getPartyField('sm-city-ar'), country:getPartyField('sm-country')||'Saudi Arabia', notes:getPartyField('sm-notes')
+    postalCode:getPartyField('sm-postal-code'), district:getPartyField('sm-district'), districtAr:getPartyField('sm-district-ar'), city:getPartyField('sm-city'), cityAr:getPartyField('sm-city-ar'), country:getPartyField('sm-country')||'Saudi Arabia', notes:getPartyField('sm-notes'), supplierKinds:getSupplierKinds()
   };
   const prevSup = editingSupId ? (suppliers.find(x=>x.id===editingSupId)||null) : null;   // V270.4.9
   if (window.BCMasterUI) { const chk = await BCMasterUI.beforeSave('suppliers', prevSup, s); if (!chk.ok) return; BCMasterUI.addHistory(s, chk.log); }
@@ -8009,6 +8016,7 @@ function getRFQWorkflowStage(r) {
   if ([...quoteIds].some(qid => salesOrders.some(so => soQuoteIds(so).includes(qid)))) return 'Sales Order';
   if (quoteIds.size) return 'Quoted';
   if ((r.pricingItems && r.pricingItems.length) || ensurePricingVersions(r).length) return 'Pricing';
+  if (Array.isArray(r.estimateIndex) && r.estimateIndex.length) return 'Pricing';   // V271.1: a Contracting RFQ with an estimate
   // Repair legacy false-positive status created by older builds that marked Pricing on screen open.
   if (r.status === 'Pricing') return 'New';
   return r.status || 'New';
@@ -9001,7 +9009,7 @@ function viewRFQ(id) {
   const hasPricing = !!(r.pricingItems && r.pricingItems.length);
   const hasQuote = !!r.quotationId;
   const isNoBid = r.status === 'No Bid';
-  const canDelete = !hasPricing && !hasQuote;
+  const canDelete = !hasPricing && !hasQuote && !(Array.isArray(r.estimateIndex) && r.estimateIndex.length);   // V271.1: not once estimated
   // V270.2.9 — RFQ view, Layout A (approved mockup RFQV_2): header = number + status + age badge;
   // strip = Customer · Customer RFQ reference (larger) / Contact · Request type · Received · Response due · Assigned · Entered;
   // next step + progress line; tabs Items · Requirements · Attachments · Activity.
@@ -9025,7 +9033,10 @@ function viewRFQ(id) {
   const created=r.created?new Date(r.created):null;
   const enteredDate=created&&!isNaN(created)?fmtDate(`${created.getFullYear()}-${String(created.getMonth()+1).padStart(2,'0')}-${String(created.getDate()).padStart(2,'0')}`):'—';
   const enteredSub=created&&!isNaN(created)?`${String(created.getHours()).padStart(2,'0')}:${String(created.getMinutes()).padStart(2,'0')}${r.createdBy?' · '+E(r.createdBy):''}`:'';
-  const typeLabel={product:'Product',service:'Service',mixed:'Mixed'}[r.requestType||'product']||'Product';
+  const typeLabel={product:'Product',service:'Service',mixed:'Mixed',contracting:'Contracting'}[r.requestType||'product']||'Product';
+  const isContracting=r.requestType==='contracting';   // V271.1: priced in Estimation, not Pricing
+  const estIdx=isContracting&&Array.isArray(r.estimateIndex)?r.estimateIndex:[];
+  const estCur=estIdx.find(e=>Number(e.version)===Number(r.currentEstimateVersion))||estIdx[estIdx.length-1]||null;
   const kv=[['Contact',`<b>${E(r.contact||'—')}</b>`],['Request type',`<b>${typeLabel}</b>`],['Received',`<b>${fmtDate(r.date)||'—'}</b>${r.channel?`<small>via ${E(r.channel)}</small>`:''}`],
     ['Response due',`<b class="${overdue?'rv-over':''}">${r.due?fmtDate(r.due):'—'}</b>${dueNote?`<small>${dueNote}</small>`:''}`],['Assigned to',`<b>${E(r.assigned||'—')}</b>`],['Entered',`<b>${enteredDate}</b>${enteredSub?`<small>${enteredSub}</small>`:''}`]];
   // documents for the progress line and activity
@@ -9038,6 +9049,7 @@ function viewRFQ(id) {
   const pricedCount=reqItems.filter(isPriced).length;
   const latestQ=qs[qs.length-1];
   const steps=[['RFQ',fmtDate(r.date)||'',1],
+    isContracting?['Estimation',!estCur?'not started':`V${E(estCur.version)} · ${answered?'done':E(estCur.status||'Saved')}`,answered||sos.length?1:estCur?'cur':0]:
     ['Pricing',!hasPricing&&!versions.length?'not started':answered?`V${r.currentPricingVersion||versions.length||1} · done`:`${pricedCount} / ${reqItems.length} priced`,answered||sos.length?1:(hasPricing||versions.length)?'cur':0],
     ['Quotation',latestQ?E(latestQ.qno||''):'—',sos.length?1:latestQ?'cur':0],
     ['Sales Order',sos[0]?E(sos[0].soNo||''):'—',sos.length?'cur':0]];
@@ -9046,6 +9058,8 @@ function viewRFQ(id) {
   if(isNoBid){nT='Closed as No Bid';nC=r.noBidReason?E(r.noBidReason):'Reopen it only when the opportunity becomes active again.';}
   else if(sos.length){nT='Sales Order created';nC=`${E(sos[0].soNo||'')} · continue in Sales Orders.`;}
   else if(latestQ){nT='Quotation created';nC=`${E(latestQ.qno||'')}${latestQ.status?' · '+E(latestQ.status):''} · follow up with the customer.`;}
+  else if(isContracting&&estCur){nT=overdue?'Response is overdue':'Estimate ready';nC=`Estimation V${E(estCur.version)} · ${formatNumber(Number(estCur.offerPrice||estCur.sellTotal)||0,2)} (excl. VAT). The quotation from the estimate comes in the next update.`;}
+  else if(isContracting){nT=overdue?'Response is overdue':'Start estimation';nC=overdue?'Estimate the job now or close it as No Bid.':'Cost the job (material, manpower, subcontract, equipment) and set the selling price.';}
   else if(hasPricing){nT=overdue?'Response is overdue':'Finish pricing';nC=pricedCount<reqItems.length?`${reqItems.length-pricedCount} of ${reqItems.length} lines still need a price; then create the quotation.`:'All lines are priced — create the quotation.';}
   else {nT=overdue?'Response is overdue':'Start pricing';nC=overdue?'Price the RFQ now or close it as No Bid.':'Collect supplier prices and set selling prices for this RFQ.';}
   // items
@@ -9060,7 +9074,7 @@ function viewRFQ(id) {
   } else itemsHtml=`<p class="rv-empty">No lines on this RFQ${r.desc?' — see Requirements.':'.'}</p>`;
   const lineCount=reqItems.length||ownLines.length;
   // requirements
-  const reqDetails=[[r.requestType==='service'?'Site / location':r.requestType==='mixed'?'Delivery / site':'Delivery location',r.site],[r.requestType==='service'?'Required start':r.requestType==='mixed'?'Required by':'Required delivery',r.requiredDate?fmtDate(r.requiredDate):''],['Duration',r.requestType==='product'?'':r.duration]].filter(x=>x[1]);
+  const reqDetails=[[(r.requestType==='service'||isContracting)?'Site / location':r.requestType==='mixed'?'Delivery / site':'Delivery location',r.site],[(r.requestType==='service'||isContracting)?'Required start':r.requestType==='mixed'?'Required by':'Required delivery',r.requiredDate?fmtDate(r.requiredDate):''],['Duration',r.requestType==='product'?'':r.duration]].filter(x=>x[1]);
   const reqHtml=(reqDetails.length?`<div class="rv-reqkv">${reqDetails.map(([k,v])=>`<span>${E(k)} <b>${E(v)}</b></span>`).join('')}</div>`:'')+(r.desc?`<div class="rv-req">${E(r.desc)}</div>`:(reqDetails.length?'':'<p class="rv-empty">No requirements entered.</p>'));
   const hasReq=!!(r.desc||reqDetails.length);
   // activity (from what is stored — no separate log)
@@ -9068,6 +9082,7 @@ function viewRFQ(id) {
   const dt=x=>{const d=new Date(x);return isNaN(d)?(fmtDate(String(x||'').slice(0,10))||''):`${fmtDate(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;};
   if(r.created) act.push([r.created,`RFQ logged${r.createdBy?' by '+E(r.createdBy):''}${r.channel?' ('+E(r.channel)+')':''} · received ${fmtDate(r.date)}`]);
   versions.forEach(v=>{const at=v.updated||v.created; if(at) act.push([at,`Pricing V${E(v.version)} ${E(String(v.status||'Saved').toLowerCase())}`]);});
+  estIdx.forEach(v=>{const at=v.updated||v.created; if(at) act.push([at,`Estimation V${E(v.version)} ${E(String(v.status||'Saved').toLowerCase())}${v.savedBy?' by '+E(v.savedBy):''}`]);});
   qs.forEach(q=>act.push([q.created||q.date,`Quotation ${E(q.qno||'')} created${q.status?' · '+E(q.status):''}`]));
   sos.forEach(so=>act.push([so.created||so.date,`Sales Order ${E(so.soNo||'')} created`]));
   if(isNoBid) act.push([r.closedDate||'',`Closed as No Bid${r.noBidReason?' — '+E(r.noBidReason):''}`]);
@@ -9097,7 +9112,12 @@ function viewRFQ(id) {
     recordActions.push(`<button class="btn btn-secondary" data-rid="${r.id}" onclick="openNoBidDialogFromBtn(this)"><i class="ti ti-circle-off"></i>Close as No Bid</button>`);
   }
 
-  if (!isNoBid) {
+  if (!isNoBid && isContracting) {   // V271.1: a Contracting RFQ is priced in the Estimation screen
+    recordActions.push(estCur
+      ? `<button class="btn btn-primary" data-rid="${r.id}" onclick="openEstimateFromBtn(this)"><i class="ti ti-calculator"></i>${estCur.status==='Saved'?'Edit estimation':'Open estimation'}</button>`
+      : `<button class="btn btn-primary" data-rid="${r.id}" onclick="openEstimateFromBtn(this)"><i class="ti ti-calculator"></i>Start estimation</button>`);
+    if (hasQuote) recordActions.push(`<button class="btn btn-success" data-qid="${r.quotationId}" onclick="viewQuoteFromRFQ(this)"><i class="ti ti-file-text"></i>Open quotation</button>`);
+  } else if (!isNoBid) {
     if (hasPricing) {
       recordActions.push(`<button class="btn btn-secondary" data-rid="${r.id}" onclick="viewPricingROFromBtn(this)"><i class="ti ti-eye"></i>View pricing</button>`);
       if (isPricingVersionLocked(r)) {

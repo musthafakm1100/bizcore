@@ -27,7 +27,7 @@
 <link href="css/masters.css?v=266.5" rel="stylesheet"/>
 <link href="css/administration-typography.css?v=247" rel="stylesheet"/>
 <link href="css/numbering-controls.css?v=270.25" rel="stylesheet"/>
-<link href="css/rfq-entry.css?v=270.29" rel="stylesheet"/>
+<link href="css/rfq-entry.css?v=271.1" rel="stylesheet"/>
 <link href="css/invoicing.css?v=270.50" rel="stylesheet"/>
 <link href="css/register-standard.css?v=268.4" rel="stylesheet"/>
 <link href="css/doc-view.css?v=266.5" rel="stylesheet"/>
@@ -47,6 +47,7 @@
 <link href="css/quote-rich.css?v=270.61" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <link href="css/users.css?v=270.43" rel="stylesheet"/>
+<link href="css/estimate.css?v=271.1" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
 <script src="js/responsive.js?v=270.47" defer></script>
 <script src="js/bc-date.js?v=270.52" defer></script>
@@ -1089,6 +1090,7 @@ document.addEventListener('error', function(e) {
 <button class="setup-tab" id="stab-cost-components" onclick="switchSetupTab('cost-components')"><i class="ti ti-calculator"></i><span class="tab-copy"><span class="tab-title">Cost Components</span></span></button>
 <button class="setup-tab" id="stab-margin-status" onclick="switchSetupTab('margin-status')"><i class="ti ti-chart-line"></i><span class="tab-copy"><span class="tab-title">Margin Status</span></span></button>
 <button class="setup-tab" id="stab-pricing-settings" onclick="switchSetupTab('pricing-settings')"><i class="ti ti-adjustments-dollar"></i><span class="tab-copy"><span class="tab-title">Pricing Settings</span></span></button>
+<button class="setup-tab" id="stab-contracting-settings" onclick="switchSetupTab('contracting-settings')"><i class="ti ti-building-cog"></i><span class="tab-copy"><span class="tab-title">Contracting Settings</span></span></button>
 </div>
 <div class="setup-nav-group">
 <div class="setup-nav-group-title">Maintenance</div>
@@ -1413,6 +1415,7 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="setup-card admin-master-width master-change-bar"><div><div id="currency-display-change-status" style="font-size:12px;font-weight:700;color:var(--gray)">No pending changes</div><div style="font-size:11px;color:var(--gray);margin-top:2px">Presentation only: stored monetary values and historical document data are never changed.</div></div><div class="master-change-actions"><button class="btn btn-secondary" onclick="restoreCurrencyDisplayDefaults()"><i class="ti ti-restore"></i>Restore Defaults</button><button class="btn btn-secondary" onclick="selectAllCurrencyDisplayModules()"><i class="ti ti-checks"></i>Apply to All</button><button class="btn btn-primary" disabled id="currency-display-apply-btn" onclick="applyCurrencyDisplayChanges()"><i class="ti ti-device-floppy"></i>Save Settings</button></div></div>
 </div>
+<div class="setup-tab-content" id="setup-tab-contracting-settings" style="display:none"><div id="bc-contracting-settings"></div></div>
 <div class="setup-tab-content" id="setup-tab-pricing-settings" style="display:none">
 <div class="setup-page-head admin-master-width"><div><h2><i class="ti ti-adjustments-dollar" style="margin-right:7px"></i>Pricing Settings</h2><p>Control default pricing behaviour, selling rules, rounding and approval warnings.</p></div></div>
 <div class="pricing-settings-grid admin-master-width">
@@ -1813,6 +1816,7 @@ document.addEventListener('error', function(e) {
 <div class="form-group"><label>اسم المورد / الشركة</label><input id="sm-company-ar" class="arabic-input" dir="rtl" lang="ar" placeholder="اسم المورد بالعربية"/></div>
 <div class="form-group"><label>Category / Specialty</label><input id="sm-cat" placeholder="e.g. Electrical, Mechanical"/></div>
 <div class="form-group"><label>VAT No. (optional)</label><input id="sm-vat" placeholder="Supplier VAT number"/></div>
+<div class="form-group bc-supkinds"><label>Also supplies (Contracting)</label><div class="bc-supkinds-row"><label class="bc-chk"><input type="checkbox" id="sm-kind-manpower"/><span>Manpower agency</span></label><label class="bc-chk"><input type="checkbox" id="sm-kind-subcontractor"/><span>Subcontractor</span></label></div></div>
 </div></div>
 <div class="party-form-section"><div class="party-form-title"><i class="ti ti-address-book"></i><span>Contact information</span></div>
 <div class="party-form-grid">
@@ -1882,6 +1886,7 @@ document.addEventListener('error', function(e) {
 <label data-type="product"><input type="radio" name="rfq-type" value="product" onchange="rfqSetType(this.value)">Product</label>
 <label data-type="service"><input type="radio" name="rfq-type" value="service" onchange="rfqSetType(this.value)">Service</label>
 <label data-type="mixed"><input type="radio" name="rfq-type" value="mixed" onchange="rfqSetType(this.value)">Mixed</label>
+<label data-type="contracting"><input type="radio" name="rfq-type" value="contracting" onchange="rfqSetType(this.value)">Contracting</label>
 </div></div>
 <div class="rq-fg rq-c2"><label for="rfq-date">Date received</label><input id="rfq-date" autocomplete="off"/></div>
 <div class="rq-fg rq-c2"><label for="rfq-due">Response due <span class="rq-aux" id="rfq-due-hint"></span></label><input id="rfq-due" autocomplete="off"/></div>
@@ -2352,9 +2357,9 @@ import { wrapTransaction, rebuildBalance, BALANCE_COLLECTION, LAST_PRICE_COLLECT
 import * as PurchaseCore from './js/purchase-core.mjs?v=270.43';
 import { createPurchaseService } from './js/purchase-service.mjs?v=270.43';
 import * as UserCore from './js/user-core.mjs?v=270.43';
-import { createUserService } from './js/user-service.mjs?v=270.43';
-import * as RoleCore from './js/role-core.mjs?v=270.43';
-import { createRoleService } from './js/role-service.mjs?v=270.43';
+import { createUserService } from './js/user-service.mjs?v=271.11';
+import * as RoleCore from './js/role-core.mjs?v=271.11';
+import { createRoleService } from './js/role-service.mjs?v=271.11';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile, updatePassword, sendPasswordResetEmail }
@@ -4549,7 +4554,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=270.60';
+      s.src = 'js/app.js?v=271.1';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4559,13 +4564,15 @@ onAuthStateChanged(auth, async user => {
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
         const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=270.60'; document.body.appendChild(qu);
         // V270.2.6: the RFQ entry screen (request type, product / service lines, requirements)
-        const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=270.43'; document.body.appendChild(rq);
+        const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=271.1'; document.body.appendChild(rq);
+        // V271.1: Contracting Estimation (estimate window, Cost Build-up, Contracting Settings)
+        const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.11'; document.body.appendChild(es);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
-        const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=270.59'; document.body.appendChild(ds);
+        const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=271.11'; document.body.appendChild(ds);
         // V270.4.1: Administration → Users, Roles & Permissions
         const us = document.createElement('script'); us.id = 'bizcore-users-script'; us.src = 'js/users.js?v=270.43'; document.body.appendChild(us);
         // V270.4.2: what the screens show for the role (sidebar, guarded actions)
-        const pm = document.createElement('script'); pm.id = 'bizcore-permissions-script'; pm.src = 'js/permissions-ui.js?v=270.43'; document.body.appendChild(pm); };
+        const pm = document.createElement('script'); pm.id = 'bizcore-permissions-script'; pm.src = 'js/permissions-ui.js?v=271.11'; document.body.appendChild(pm); };
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js

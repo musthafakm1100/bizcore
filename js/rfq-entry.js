@@ -19,12 +19,13 @@
   };
   const PRODUCT_UOMS = ['Pcs', 'Nos', 'Set', 'Box', 'Pkt', 'Pair', 'Roll', 'Mtr', 'Kg', 'Ltr', 'EA'];
   const SERVICE_UOMS = ['Lot', 'Job', 'Visit', 'Hour', 'Day', 'Week', 'Month', 'Year', 'LS'];
-  const TYPES = ['product', 'service', 'mixed'];
+  const TYPES = ['product', 'service', 'mixed', 'contracting'];   // V271.1: Contracting = scope items, priced in Estimation
   const $ = id => document.getElementById(id);
   const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const newId = () => 'rl' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const S = { type: 'product', lines: [], locked: false, tab: 'product', datesReady: false };
-  const kinds = () => (S.type === 'mixed' ? ['product', 'service'] : [S.type]);
+  const kinds = () => (S.type === 'mixed' ? ['product', 'service'] : S.type === 'contracting' ? ['service'] : [S.type]);
+  const svcLike = t => t === 'service' || t === 'contracting';
   const ofKind = k => S.lines.filter(l => l.kind === k);
   const filled = l => !!(String(l.desc || '').trim() || l.productId);
   const blank = kind => ({ lineId: newId(), kind, productId: '', code: '', desc: '', qty: '', uom: KIND[kind].uomDefault, remarks: '' });
@@ -62,6 +63,7 @@
   function hasPricing(r) {
     if (!r) return false;
     if (Array.isArray(r.pricingItems) && r.pricingItems.length) return true;
+    if (Array.isArray(r.estimateIndex) && r.estimateIndex.length) return true;   // V271.1: an estimate exists
     try { if (typeof ensurePricingVersions === 'function' && ensurePricingVersions(r).length) return true; } catch (e) {}
     return !!(r.quotationId || (r.quotationIds || []).length);
   }
@@ -131,15 +133,16 @@
     $('rfq-type-seg')?.classList.toggle('is-locked', S.locked);
     const t = S.type;
     const set = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
-    set('rfq-site-lbl', t === 'service' ? 'Site / location' : t === 'mixed' ? 'Delivery / site location' : 'Delivery location');
-    set('rfq-reqdate-lbl', t === 'service' ? 'Required start' : t === 'mixed' ? 'Required by' : 'Required delivery');
-    set('rfq-desc-lbl', t === 'service' ? 'Scope of work' : t === 'mixed' ? 'Scope of work / general requirements' : 'General requirements');
+    set('rfq-site-lbl', svcLike(t) ? 'Site / location' : t === 'mixed' ? 'Delivery / site location' : 'Delivery location');
+    set('rfq-reqdate-lbl', svcLike(t) ? 'Required start' : t === 'mixed' ? 'Required by' : 'Required delivery');
+    set('rfq-desc-lbl', svcLike(t) ? 'Scope of work' : t === 'mixed' ? 'Scope of work / general requirements' : 'General requirements');
     const dw = $('rfq-duration-wrap'); if (dw) dw.hidden = t === 'product';
     const d = $('rfq-desc'); if (d) d.placeholder = t === 'product' ? 'General instructions, approved brands, standards, delivery conditions…' : 'Describe the work, site conditions, working hours, safety / permit needs…';
   }
   function setType(v) {
     if (!TYPES.includes(v) || v === S.type || S.locked) return;
-    const goneKinds = (v === 'mixed' ? [] : ['product', 'service'].filter(k => k !== v));
+    const keepK = v === 'mixed' ? ['product', 'service'] : v === 'contracting' ? ['service'] : [v];
+    const goneKinds = ['product', 'service'].filter(k => !keepK.includes(k));
     const losing = goneKinds.reduce((n, k) => n + ofKind(k).filter(filled).length, 0);
     const apply = () => {
       S.type = v; kinds().forEach(k => { if (!ofKind(k).length) S.lines.push(blank(k)); });
@@ -158,9 +161,9 @@
 
   /* ── tabs ── */
   function tabs() {
-    const t = kinds().map(k => [k, KIND[k].tab, ofKind(k).filter(filled).length]);
+    const t = kinds().map(k => [k, S.type === 'contracting' ? 'Scope Items' : KIND[k].tab, ofKind(k).filter(filled).length]);
     const reqDone = !!(String($('rfq-desc')?.value || '').trim() || String($('rfq-site')?.value || '').trim() || getDate('rfq-reqdate'));
-    t.push(['reqs', S.type === 'service' ? 'Scope of work' : S.type === 'mixed' ? 'Scope & requirements' : 'Requirements', reqDone ? '✓' : '']);
+    t.push(['reqs', svcLike(S.type) ? 'Scope of work' : S.type === 'mixed' ? 'Scope & requirements' : 'Requirements', reqDone ? '✓' : '']);
     let att = 0; try { att = (typeof rfqAttachment !== 'undefined' && rfqAttachment) ? 1 : 0; } catch (e) {}
     t.push(['att', 'Attachments', att || '']);
     return t;
@@ -171,7 +174,7 @@
     host.innerHTML = T.map(([k, t, n], i) => `<button type="button" class="rq-tb${S.tab === k ? ' on' : ''}" role="tab" aria-selected="${S.tab === k}" data-tab="${k}" title="${esc(t)} (Alt+${i + 1})">${esc(t)}${n !== '' ? `<span class="rq-n">${n}</span>` : ''}</button>`).join('');
     ['product', 'service', 'reqs', 'att'].forEach(k => { const p = $('rfq-panel-' + k); if (p) p.hidden = k !== S.tab; });
     const note = $('rfq-tab-note');
-    if (note) note.textContent = S.locked ? 'Pricing has started — the lines are changed in Pricing.' : S.type === 'product' ? 'Lines are optional — an RFQ can be saved with requirements only.' : S.type === 'service' ? 'Service lines are optional — the scope of work can be enough.' : 'Products and services are kept as separate lists.';
+    if (note) note.textContent = S.locked ? (S.type === 'contracting' ? 'Estimation has started — the items are changed in the Estimation.' : 'Pricing has started — the lines are changed in Pricing.') : S.type === 'product' ? 'Lines are optional — an RFQ can be saved with requirements only.' : S.type === 'contracting' ? 'Scope items are optional — they become the first items of the Estimation.' : S.type === 'service' ? 'Service lines are optional — the scope of work can be enough.' : 'Products and services are kept as separate lists.';
   }
   function showTab(k) { S.tab = k; refreshTabs(); }
 
