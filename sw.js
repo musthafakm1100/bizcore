@@ -8,7 +8,7 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v27111';
+const CACHE_NAME = 'bizcore-shell-v27120';
 const APP_SHELL = [
   './login.html',
   './delivery.html',
@@ -21,7 +21,7 @@ const APP_SHELL = [
   './css/administration-typography.css?v=247',
   './css/numbering-controls.css?v=266.5',
   './css/invoicing.css?v=270.50',
-  './css/register-standard.css?v=268.4',
+  './css/register-standard.css?v=271.2',
   './css/doc-view.css?v=266.5',
   './css/delivery-compact.css?v=266.5',
   './css/receipts.css?v=266.5',
@@ -40,11 +40,11 @@ const APP_SHELL = [
   './css/safe-area.css?v=269.2',
   './css/users.css?v=270.43',
   './js/users.js?v=270.43',
-  './js/permissions-ui.js?v=271.11',
+  './js/permissions-ui.js?v=271.2',
   './js/user-core.mjs?v=270.43',
-  './js/user-service.mjs?v=271.11',
-  './js/role-core.mjs?v=271.11',
-  './js/role-service.mjs?v=271.11',
+  './js/user-service.mjs?v=271.2',
+  './js/role-core.mjs?v=271.2',
+  './js/role-service.mjs?v=271.2',
   './css/mobile-zoom.css?v=270.49',
   './js/doc-zoom.js?v=270.48',
   './js/doc-pages.js?v=270.59',
@@ -55,12 +55,13 @@ const APP_SHELL = [
   './js/master-service.mjs?v=270.55',
   './js/ui-standard.js?v=269.1',
   './js/responsive.js?v=270.47',
-  './js/app.js?v=271.1',
-  './js/estimate.js?v=271.11',
-  './css/estimate.css?v=271.1',
+  './js/app.js?v=271.2',
+  './js/estimate.js?v=271.2',
+  './js/jobs.js?v=271.2',
+  './css/estimate.css?v=271.2',
   './js/so-view.js?v=270.59',
   './js/pricing-ui.js?v=270.24',
-  './js/quotation-ui.js?v=270.60',
+  './js/quotation-ui.js?v=271.2',
   './js/bc-date.js?v=270.52',
   './js/deliveries.js?v=265.7',
   './js/delivery-core.mjs?v=266.0',

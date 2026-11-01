@@ -246,3 +246,95 @@
   #estimate-modal .es-bt{min-width:720px}
   #estimate-modal .es-bu-ft .es-chk,#estimate-modal .es-bu-ft .es-sp{display:none}
 }
+
+/* ═══ V271.2 — quotation from the estimate: the Contracting card on the quotation's summary panel ═══ */
+.qt-est-card{border:1px solid #bfdbfe;background:#f5f9ff;border-radius:10px;padding:10px 12px;margin:0 0 12px;font-size:12.5px;color:#1f2937}
+.qt-est-card[hidden]{display:none}
+.qt-est-h{font-size:12px;color:#1e4f86;margin-bottom:8px}
+.qt-est-l{font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin:4px 0 6px}
+.qt-est-o{display:flex!important;gap:8px;align-items:flex-start;border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:7px 8px;margin:0 0 6px!important;cursor:pointer;font-weight:400!important;color:#1f2937!important}
+.qt-est-o:has(input:checked){border-color:#2e75b6;background:#eef4fc}
+.qt-est-o input{margin-top:3px}
+.qt-est-o b{display:block;font-weight:600;font-size:12.5px}
+.qt-est-o small{display:block;color:#64748b;font-size:11.5px}
+.qt-est-c{display:flex!important;gap:7px;align-items:center;font-size:12.5px!important;font-weight:400!important;color:#1f2937!important;margin:4px 0 6px!important;cursor:pointer}
+.qt-est-n{font-size:11.5px;color:#64748b;line-height:1.45}
+#items-tbody tr.qt-est-line [data-quote-qty],#items-tbody tr.qt-est-line [data-quote-price],#items-tbody tr.qt-est-line [data-quote-dpct],#items-tbody tr.qt-est-line [data-quote-damt]{background:#f8fafc!important;color:#475569!important;cursor:default}
+
+/* ═══ V271.2 — Create Job (CJ_1), Job view, Jobs register ═══ */
+#job-modal.modal-overlay,#job-view-modal.modal-overlay{padding:18px!important;background:rgba(15,23,42,.45)}
+#job-modal .modal.jb-win{width:min(860px,calc(100vw - 36px))!important;max-width:none!important;border-radius:12px!important;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100dvh - 36px)!important}
+#job-view-modal .modal.jv-win{width:min(1120px,calc(100vw - 36px))!important;max-width:none!important;border-radius:12px!important;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100dvh - 36px)!important}
+:is(#job-modal,#job-view-modal) .modal-header.jb-hd{background:#173a5e!important;color:#fff;display:flex;align-items:center;gap:10px;padding:10px 16px!important;border:0!important;border-radius:0!important;min-height:56px}
+:is(#job-modal,#job-view-modal) .jb-hd h2{color:#fff!important;font-size:15.5px!important;font-weight:600!important;margin:0!important}
+:is(#job-modal,#job-view-modal) .jb-sub{font-size:12px;opacity:.85;margin-top:2px;color:#fff}
+:is(#job-modal,#job-view-modal) .jb-hd > div:first-child{flex:1;min-width:0}
+:is(#job-modal,#job-view-modal) .jb-hd .close-btn{color:#fff!important;background:transparent!important;border:0!important;font-size:19px;opacity:.85}
+:is(#job-modal,#job-view-modal) .jb-hd .smart-back-btn{display:none!important}
+#job-modal .jb-pill{background:#e8f0fb;color:#1e4f86}
+#job-modal .jb-body{padding:14px 18px!important;overflow:auto}
+#job-modal .jb-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+#job-modal .jb-f{display:flex;flex-direction:column;gap:4px;min-width:0}
+#job-modal .jb-f.jb-wide{grid-column:1/-1}
+#job-modal .jb-f label{font-size:11.5px!important;color:#64748b!important;font-weight:400!important}
+#job-modal .jb-req{color:#b42318;font-weight:500}
+#job-modal .jb-f :is(input,select,textarea){height:34px;border:1px solid #d5dde7;border-radius:8px;padding:0 10px;font-size:13px!important;background:#fff;width:100%}
+#job-modal .jb-f textarea{height:auto;padding:7px 10px;resize:vertical}
+#job-modal .jb-f :is(input,select):disabled{background:#f8fafc;text-align:right;color:#334155!important}
+#job-modal .jb-budget{margin-top:14px}
+.jb-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden}
+.jb-tbl th{background:#f1f5f9!important;color:#475569!important;font-weight:600!important;font-size:11.5px!important;padding:8px 10px!important;text-align:left;text-transform:none!important;letter-spacing:0!important}
+.jb-tbl td{padding:7px 10px!important;border-bottom:1px solid #edf1f5;font-size:13px!important}
+.jb-tbl .r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.jb-tbl tr.jb-tot td{font-weight:600!important;background:#f8fafc}
+.jb-tbl tr.jb-pf td{color:#166534!important;font-weight:600!important}
+.jb-tbl tr.jb-pf.neg td{color:#b42318!important}
+.jb-d{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px}
+.jb-empty{padding:12px;border:1px dashed #cbd5e1;border-radius:10px;color:#64748b;font-size:12.5px}
+:is(#job-modal,#job-view-modal) .modal-footer.jb-ft{display:flex;align-items:center;gap:8px;padding:10px 18px!important;border-top:1px solid #dfe5ec}
+:is(#job-modal,#job-view-modal) .jb-sp{flex:1}
+#job-modal .jb-chk{font-size:12px;color:#166534}
+#job-modal .jb-chk.is-todo{color:#b45309}
+#job-view-modal .jv-body{padding:14px 18px!important;overflow:auto;background:#fff}
+#job-view-modal .jv-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+#job-view-modal .jv-card{border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;min-height:96px}
+#job-view-modal .jv-card span{display:block;font-size:11.5px;color:#64748b;font-weight:600}
+#job-view-modal .jv-card b{display:block;font-size:19px;font-weight:600;margin-top:6px;font-variant-numeric:tabular-nums}
+#job-view-modal .jv-card b.pos{color:#166534}#job-view-modal .jv-card b.neg{color:#b42318}
+#job-view-modal .jv-card b.jv-po{font-size:15px}
+#job-view-modal .jv-card small{display:block;font-size:11.5px;color:#64748b;margin-top:4px}
+#job-view-modal .jv-card.dk{background:#173a5e;border-color:#173a5e;color:#fff}
+#job-view-modal .jv-card.dk span,#job-view-modal .jv-card.dk small{color:#c7d7e8}
+#job-view-modal .jv-two{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px}
+#job-view-modal .jv-box{border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin-bottom:12px}
+#job-view-modal .jv-box h4{margin:0 0 8px;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em}
+#job-view-modal .jv-kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:12.5px;color:#64748b}
+#job-view-modal .jv-kv b{color:#1f2937;font-weight:400;text-align:right}
+#job-view-modal .jv-note{margin:0;font-size:12.5px;white-space:pre-wrap;color:#334155}
+#job-view-modal .jv-next p{margin:0;font-size:12px;color:#64748b;line-height:1.5}
+.jv-st{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;background:#e8f0fb;color:#1e4f86}
+.jv-st.jv-amber{background:#fef3c7;color:#92400e}.jv-st.jv-green{background:#dcfce7;color:#166534}.jv-st.jv-gray{background:#eef2f6;color:#475569}.jv-st.jv-red{background:#fee2e2;color:#991b1b}
+#page-jobs .jb-reg{max-width:1500px}
+#page-jobs .jb-reg-table{width:100%}
+#page-jobs .jb-reg-table td.num,#page-jobs .jb-reg-table th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+#page-jobs .jb-reg-table tbody tr{cursor:pointer}
+#page-jobs .jb-empty-row{text-align:center;color:#64748b;padding:22px!important}
+#page-jobs .jb-reg-hint{font-size:11.5px;color:#94a3b8;margin:8px 4px}
+@media (max-width:900px){
+  #job-modal .jb-grid{grid-template-columns:1fr 1fr}
+  #job-view-modal .jv-cards{grid-template-columns:1fr 1fr}
+  #job-view-modal .jv-two{grid-template-columns:1fr}
+}
+@media (max-width:640px){
+  #job-modal.modal-overlay,#job-view-modal.modal-overlay{padding:0!important}
+  #job-modal .modal.jb-win,#job-view-modal .modal.jv-win{width:100vw!important;max-height:100dvh!important;height:100dvh!important;border-radius:0!important}
+  #job-modal .jb-grid{grid-template-columns:1fr}
+  :is(#job-modal,#job-view-modal) .modal-footer.jb-ft{padding:8px 12px calc(10px + env(safe-area-inset-bottom))!important;flex-wrap:wrap}
+  #job-modal .jb-chk{flex-basis:100%}
+}
+
+/* V271.2: estimate lines are scope lines on purpose — no "Link item…" marker; the halala line discounts stay quiet */
+#items-tbody tr.qt-est-line .qt-lk{display:none}
+#items-tbody tr.qt-est-line [data-quote-dpct],#items-tbody tr.qt-est-line [data-quote-damt]{color:#94a3b8!important;font-size:12px!important}
+#page-jobs .jb-reg-table td:nth-child(1),#page-jobs .jb-reg-table td:nth-child(2),#page-jobs .jb-reg-table td:nth-child(5),#page-jobs .jb-reg-table td:nth-child(8),#page-jobs .jb-reg-table td:nth-child(9),#page-jobs .jb-reg-table td:nth-child(10){white-space:nowrap}
+#page-jobs .jb-reg-table .jv-st{white-space:nowrap}

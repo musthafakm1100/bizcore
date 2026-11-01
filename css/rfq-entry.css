@@ -210,5 +210,7 @@
   #rfq-view-modal .rv-flow{min-width:0;flex:1 1 100%}
   #rfq-view-modal .rv-tabs{display:flex;width:100%}#rfq-view-modal .rv-tab{flex:1 1 auto;justify-content:center;padding:8px}
 }
-/* V271.1: four request types (Product · Service · Mixed · Contracting) fit the same box */
-#rfq-modal .rq-seg label{padding:0 3px;min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* V271.2: four request types (Product · Service · Mixed · Contracting) — the reference box gives one column to the type */
+#rfq-modal .rq-c4{grid-column:span 4}
+#rfq-modal .rq-seg label{padding:0 6px;min-width:0;white-space:nowrap}
+@media (max-width:900px){ #rfq-modal .rq-c4{grid-column:span 6} }

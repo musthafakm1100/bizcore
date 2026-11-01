@@ -27,9 +27,9 @@
 <link href="css/masters.css?v=266.5" rel="stylesheet"/>
 <link href="css/administration-typography.css?v=247" rel="stylesheet"/>
 <link href="css/numbering-controls.css?v=270.25" rel="stylesheet"/>
-<link href="css/rfq-entry.css?v=271.1" rel="stylesheet"/>
+<link href="css/rfq-entry.css?v=271.2" rel="stylesheet"/>
 <link href="css/invoicing.css?v=270.50" rel="stylesheet"/>
-<link href="css/register-standard.css?v=268.4" rel="stylesheet"/>
+<link href="css/register-standard.css?v=271.2" rel="stylesheet"/>
 <link href="css/doc-view.css?v=266.5" rel="stylesheet"/>
 <link href="css/delivery-compact.css?v=266.5" rel="stylesheet"/>
 <link href="css/receipts.css?v=266.5" rel="stylesheet"/>
@@ -47,7 +47,7 @@
 <link href="css/quote-rich.css?v=270.61" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <link href="css/users.css?v=270.43" rel="stylesheet"/>
-<link href="css/estimate.css?v=271.1" rel="stylesheet"/>
+<link href="css/estimate.css?v=271.2" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
 <script src="js/responsive.js?v=270.47" defer></script>
 <script src="js/bc-date.js?v=270.52" defer></script>
@@ -151,6 +151,7 @@ document.addEventListener('error', function(e) {
 <div aria-label="RFQs" class="nav-item" data-nav-page="rfq" onclick="showPage('rfq',this)" role="button" tabindex="0" title="RFQs"><i class="ti ti-inbox"></i><span class="nav-text">RFQs</span><span class="nav-badge nav-badge-workflow" id="rfq-badge" style="display:none" title="RFQs requiring attention"></span></div>
 <div aria-label="Pricing" class="nav-item" data-nav-page="costing" onclick="showPage('costing',this)" role="button" tabindex="0" title="Pricing"><i class="ti ti-calculator"></i><span class="nav-text">Pricing</span><span class="nav-badge nav-badge-workflow" id="pricing-badge" style="display:none"></span></div>
 <div aria-label="Quotations" class="nav-item" data-nav-page="quotations" onclick="showPage('quotations',this)" role="button" tabindex="0" title="Quotations"><i class="ti ti-file-text"></i><span class="nav-text">Quotations</span></div>
+<div aria-label="Jobs" class="nav-item" data-nav-page="jobs" onclick="showPage('jobs',this)" role="button" tabindex="0" title="Jobs (Contracting)"><i class="ti ti-briefcase"></i><span class="nav-text">Jobs</span></div>
 <div aria-label="Sales Orders" class="nav-item" data-nav-page="salesorders" onclick="showPage('salesorders',this)" role="button" tabindex="0" title="Sales Orders"><i class="ti ti-shopping-cart"></i><span class="nav-text">Sales Orders</span><span class="nav-badge nav-badge-workflow" id="so-badge" style="display:none"></span></div>
 <div aria-label="Delivery Notes" class="nav-item" data-nav-page="deliverynotes" onclick="showPage('deliverynotes',this)" role="button" tabindex="0" title="Delivery Notes"><i class="ti ti-truck-delivery"></i><span class="nav-text">Delivery Notes</span><span class="nav-badge nav-badge-workflow" id="dn-badge" style="display:none" title="Delivery notes requiring attention"></span></div>
 <div aria-label="Deliveries" class="nav-item" data-nav-page="deliveries" onclick="showPage('deliveries',this)" role="button" tabindex="0" title="Deliveries — out for delivery"><i class="ti ti-truck"></i><span class="nav-text">Deliveries</span><span class="nav-badge nav-badge-workflow" id="deliveries-badge" style="display:none" title="Out for delivery"></span></div>
@@ -647,6 +648,7 @@ document.addEventListener('error', function(e) {
 </div>
 <!-- V267.2: Finance → Cash & Bank (js/cashbank.js) -->
 <div class="page" id="page-cashbank"><div id="cashbank-root"></div></div>
+<div class="page" id="page-jobs"></div>
 <div class="page" id="page-receipts">
   <!-- V266.6: page header removed — the title is in the top bar, the main button is in the toolbar -->
   <div class="rct-unavailable" id="rct-unavailable" hidden></div>
@@ -1880,8 +1882,8 @@ document.addEventListener('error', function(e) {
 <div class="rq-fg rq-c3"><label for="rfq-contact">Contact person</label><select id="rfq-contact"><option value="">Select customer first</option></select></div>
 <div class="rq-fg rq-c2"><label for="rfq-channel">Received via</label><select id="rfq-channel"><option>Email</option><option>WhatsApp</option><option>Phone</option><option>Portal</option><option>Walk-in</option><option>Other</option></select></div>
 <div class="rq-fg rq-c2"><label for="rfq-assigned">Assigned to</label><select id="rfq-assigned" title="Active employees with the Sales role"><option value="">Select employee</option></select></div>
-<div class="rq-fg rq-c5"><label for="rfq-ref">Customer reference / subject</label><input id="rfq-ref" maxlength="200" placeholder="e.g. RFQ 5512 — Lighting upgrade, Building C"/></div>
-<div class="rq-fg rq-c3"><span class="rq-lbl" id="rfq-type-lbl">Request type</span>
+<div class="rq-fg rq-c4"><label for="rfq-ref">Customer reference / subject</label><input id="rfq-ref" maxlength="200" placeholder="e.g. RFQ 5512 — Lighting upgrade, Building C"/></div>
+<div class="rq-fg rq-c4 rq-type"><span class="rq-lbl" id="rfq-type-lbl">Request type</span>
 <div class="rq-seg" role="radiogroup" aria-labelledby="rfq-type-lbl" id="rfq-type-seg">
 <label data-type="product"><input type="radio" name="rfq-type" value="product" onchange="rfqSetType(this.value)">Product</label>
 <label data-type="service"><input type="radio" name="rfq-type" value="service" onchange="rfqSetType(this.value)">Service</label>
@@ -2357,9 +2359,9 @@ import { wrapTransaction, rebuildBalance, BALANCE_COLLECTION, LAST_PRICE_COLLECT
 import * as PurchaseCore from './js/purchase-core.mjs?v=270.43';
 import { createPurchaseService } from './js/purchase-service.mjs?v=270.43';
 import * as UserCore from './js/user-core.mjs?v=270.43';
-import { createUserService } from './js/user-service.mjs?v=271.11';
-import * as RoleCore from './js/role-core.mjs?v=271.11';
-import { createRoleService } from './js/role-service.mjs?v=271.11';
+import { createUserService } from './js/user-service.mjs?v=271.2';
+import * as RoleCore from './js/role-core.mjs?v=271.2';
+import { createRoleService } from './js/role-service.mjs?v=271.2';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile, updatePassword, sendPasswordResetEmail }
@@ -3286,6 +3288,7 @@ const BC_WIN_SPECS = {
   rfqs:             { date: 'date',      open: [['status', 'in', ['New', 'Pricing']]],   no: 'rfqNo', skipPending: true },
   quotations:       { date: 'date',      open: [['status', 'in', ['Draft', 'Sent']]],    no: 'qno',   skipPending: true },
   salesOrders:      { date: 'date',      open: [['isOpen', '==', true]],                 no: 'soNo',  skipPending: true },
+  jobs:             { date: 'date',      open: [['status', 'in', ['Open', 'In Progress']]], no: 'jobNo', skipPending: true },   // V271.2
   deliveryNotes:    { date: 'date',      open: [['customerConfirmed', '==', false]],     no: 'dnNo' },
   customerInvoices: { date: 'date',      open: [],                                       no: 'invNo' },
   creditNotes:      { date: 'date',      open: [],                                       no: 'cnNo' },
@@ -4554,7 +4557,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=271.1';
+      s.src = 'js/app.js?v=271.2';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4562,17 +4565,19 @@ onAuthStateChanged(auth, async user => {
         // V270.1: the Pricing screen (tabs, line menu, price references, phone cards)
         const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.24'; document.body.appendChild(pu);
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
-        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=270.60'; document.body.appendChild(qu);
+        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=271.2'; document.body.appendChild(qu);
         // V270.2.6: the RFQ entry screen (request type, product / service lines, requirements)
-        const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=271.1'; document.body.appendChild(rq);
+        const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=271.2'; document.body.appendChild(rq);
         // V271.1: Contracting Estimation (estimate window, Cost Build-up, Contracting Settings)
-        const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.11'; document.body.appendChild(es);
+        const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.2'; document.body.appendChild(es);
+        // V271.2: Contracting Jobs (Create Job, Jobs register, Job view)
+        const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.2'; document.body.appendChild(jb);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=271.11'; document.body.appendChild(ds);
         // V270.4.1: Administration → Users, Roles & Permissions
         const us = document.createElement('script'); us.id = 'bizcore-users-script'; us.src = 'js/users.js?v=270.43'; document.body.appendChild(us);
         // V270.4.2: what the screens show for the role (sidebar, guarded actions)
-        const pm = document.createElement('script'); pm.id = 'bizcore-permissions-script'; pm.src = 'js/permissions-ui.js?v=271.11'; document.body.appendChild(pm); };
+        const pm = document.createElement('script'); pm.id = 'bizcore-permissions-script'; pm.src = 'js/permissions-ui.js?v=271.2'; document.body.appendChild(pm); };
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js

@@ -1,0 +1,1627 @@
+rules_version = '2';
+
+// BizCore V260 — Firestore security rules (production foundation).
+//
+// IMPORTANT: Firestore rules are OR-ed. There is deliberately NO catch-all
+// `match /{document=**}` rule: a catch-all would silently re-open the protected
+// Delivery Note, ledger and audit collections below. Every collection the
+// application uses is listed explicitly.
+//
+// Scope: role-based permissions (User Role Management) are postponed. Until then
+// every signed-in employee keeps today's access to the existing modules; the new
+// rules add integrity protection that does not depend on roles:
+//   * audit events are create-only (never updated or deleted)
+//   * a Delivery Note can change only together with a NEW audit event and the
+//     Sales Order ledger, in the same atomic commit, with an incremented revision
+//   * Delivery Notes, events and ledgers can never be deleted from the app
+//   * after cutover, Sales Orders can no longer embed Delivery Notes (blocks old
+//     cached V259 clients), and an SO with delivery activity cannot be deleted
+//   * during migration ("migrating") Sales Orders are read-only
+//   * the storage-mode switch is writable only by the admin tool (Admin SDK)
+//   * V262: Sales Order business changes (DNs, acceptances, ledger, SO lines, invoices,
+//     payments, delete) require the writer to hold a live order lock (locks/salesOrder_{id});
+//     locking settings and force-release are administrator-only (system/accessControl)
+//   * V264: customer invoices and credit notes are independent documents (customerInvoices,
+//     creditNotes) written with an immutable event and the ledger in one commit by the order-lock
+//     holder; order/advance invoices and credit notes follow Administration → Billing Settings;
+//     after the invoice cutover (system/invoiceStorage) Sales Orders can no longer embed invoices
+//   * V264.7: every new invoice carries a Zoho invoice number that no other invoice uses
+//     (invoiceZohoNumbers/{key}, created in the same commit, never changed or deleted)
+//   * V266: payment receipts (customerReceipts) are written with an immutable event and the
+//     invoice payment records (invoicePayments) in one commit; receipt figures never change after
+//     posting (only applying unapplied money or voiding, both with a new event); who may record /
+//     void and whether the Zoho payment no. is mandatory follow Administration (settings/receipts,
+//     administrators only); a Zoho payment no. can be used once (receiptZohoNumbers/{key})
+//   * V266.3: receipts can be edited (limited / full) and invoices get a limited edit (due date, PO, description,
+//     notes, Zoho no. — never the figures), per Administration; receipt changes need the receipt lock, invoice edits
+//     the Sales Order lock. The edit time limit is checked by the service and the screen (not by these rules).
+//   * V268.3: supplier advances (supplierPayments kind 'advance', used on invoice payments); editing purchase invoices and
+//     supplier payments (limited by staff within the edit days, full by administrators); payment events.
+//   * V268.2: supplier payments (supplierPayments + their cash-ledger entries), card → linked bank account.
+//   * V268.1: purchase invoices (purchaseInvoices + events, supplier-invoice-no. claims, purchased qty per SO line,
+//     unassigned stock) written in one commit; Purchase settings for administrators.
+//   * V269: pricing versions are their own documents under the RFQ (rfqs/{id}/pricingVersions/v{N}); a converted /
+//     superseded version keeps its lines (only the status may change).
+//   * V267.2: two kinds of login — office staff (staff()) and cash custodian logins (cashCustodians/{uid}),
+//     which see only My Cash. Cash ledger: balanced cashEntries + cashLines confirmed by each account's custodian.
+//   * V270.4.3: Special Rights (users/{uid}.perm.rightMods): billing "administrators" levels, full edit, edit after the time
+//     limit, force-release locks and pricing approvals follow the right; receipts record / void = the module's Create / Cancel.
+//   * V270.4.2: every business collection follows the role's permissions (roles/{roleId}: View / Create / Edit / Cancel per
+//     module, "Own records only" for RFQs, quotations and Sales Orders via ownerUid). Administrators may do everything.
+//   * V270.4.1: a login is office staff only when an administrator has given it access — an ACTIVE users/{uid}
+//     record (Administration → Users). A login without one (e.g. created by someone with the public API key) is
+//     refused everything. The owner (system/accessControl.adminUids, Firebase Console only) always keeps access.
+//     Administrators: the owner, or an active user whose role in the company is 'administrator'.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    // V268.2: money figures are compared to the halala (they are rounded to 2 decimals by the service)
+    function near(a, b) { return a - b < 0.006 && b - a < 0.006; }
+    function payStatusFor(total, paid, disc) { return total - paid - disc < 0.006 ? 'Paid' : (paid + disc > 0.005 ? 'Part paid' : 'Unpaid'); }
+    // V268.3: who may edit a purchase invoice / supplier payment (Administration → Purchase Settings)
+    function purSettings() {
+      let path = /databases/$(database)/documents/settings/purchasing;
+      return exists(path) ? get(path).data : {};
+    }
+    function purEditRight(rec, full) {
+      let s = purSettings();
+      let mode = s.get('editMode', 'limited-admin');
+      let days = int(s.get('editDays', 7));
+      return rec.status == 'Posted' && mode != 'off'
+        && (request.time < rec.recordedAt + duration.value(days, 'd') || hasRight('editAfterLimit'))
+        && (!full || mode == 'full' || (mode == 'limited-admin' && hasRight('fullEdit')));
+    }
+    // ── V267.2: two kinds of login ──
+    // A cash custodian login (cashCustodians/{uid}, created by an administrator from BizCore) sees only
+    // "My Cash": its own cash account(s) and their ledger lines. Every other login is office staff.
+    // The record is never deleted (only made inactive), so a custodian login can't become staff.
+    function cashOnly() { return signedIn() && exists(/databases/$(database)/documents/cashCustodians/$(request.auth.uid)); }
+    function cashActive() { return cashOnly() && get(/databases/$(database)/documents/cashCustodians/$(request.auth.uid)).data.get('active', true) == true; }
+    // V270.4.1: users/{uid} { active, companyRoles: { default: '<roleId>' }, … } — written only by administrators.
+    // A custodian login never gets a users record (see users/ and cashCustodians/ below), so an active users
+    // record means office staff. The owner (adminUids) stays staff even without / with an inactive record.
+    // V270.4.2: these helpers run many times in one big save, and Firebase allows 1000 evaluated expressions per
+    // request — so each check computes the paths once (let) and every get() is guarded by exists() (an error would make
+    // Firebase evaluate every other allow statement as well).
+    function uPath() { return /databases/$(database)/documents/users/$(request.auth.uid); }
+    function activeUser() { let p = uPath(); return exists(p) && get(p).data.get('active', false) == true; }
+    function roleIn(company) { return get(uPath()).data.get('companyRoles', {}).get(company, ''); }
+    function isOwner() {
+      let p = /databases/$(database)/documents/system/accessControl;
+      return signedIn() && exists(p) && request.auth.uid in get(p).data.get('adminUids', []);
+    }
+    function staff() { return signedIn() && (activeUser() || isOwner()); }
+    // ── V270.4.2: role permissions (Administration → Roles & Permissions) ──
+    // Each user record carries a copy of its role's lists (users/{uid}.perm: viewMods, createMods, editMods, cancelMods,
+    // writeMods, ownMods — kept in step by js/role-service.mjs), so a check reads only the user record: Firebase allows
+    // at most 10 record reads per checked document, and invoice / receipt saves already need most of them.
+    // Administrators (owner / Administrator role) may do everything.
+    function permList(f) { return get(uPath()).data.get('perm', {}).get(f, []); }
+    function canV(mods) { return (activeUser() && permList('viewMods').hasAny(mods)) || isAdmin(); }
+    function canC(mods) { return (activeUser() && permList('createMods').hasAny(mods)) || isAdmin(); }
+    function canE(mods) { return (activeUser() && permList('editMods').hasAny(mods)) || isAdmin(); }
+    function canX(mods) { return (activeUser() && permList('cancelMods').hasAny(mods)) || isAdmin(); }
+    function canW(mods) { return (activeUser() && permList('writeMods').hasAny(mods)) || isAdmin(); }
+    // "Own records only": the role sees / changes only records it owns (ownerUid).
+    // V270.4.3 Special Rights (users/{uid}.perm.rightMods) — administrators have every right.
+    function hasRight(r) { return (activeUser() && permList('rightMods').hasAny([r])) || isAdmin(); }
+    function ownOk(m, d) { return d.get('ownerUid', '') == request.auth.uid || !(activeUser() && permList('ownMods').hasAny([m])); }
+    function ownerUid(u) {
+      let p = /databases/$(database)/documents/system/accessControl;
+      return exists(p) && u in get(p).data.get('adminUids', []);
+    }
+    function storageMode() {
+      let p = /databases/$(database)/documents/system/deliveryNoteStorage;
+      return exists(p) ? get(p).data.mode : 'legacy';
+    }
+    function independent() { return storageMode() == 'independent'; }
+    function frozen() { return storageMode() == 'migrating'; }
+
+    // ── Administrators (server-trusted) ──
+    // system/accessControl { adminUids: [uid, …] } is maintained in the Firebase Console (or the admin
+    // tool); the app cannot write `system`, so no user can make themselves an administrator.
+    // V270.4.1: or an active user with the Administrator role (given from Administration → Users).
+    function isAdmin() {
+      return signedIn() && ((activeUser() && roleIn('default') == 'administrator') || isOwner());
+    }
+
+    // ── Document locks (ERP-style exclusive editing) ──
+    // A lock is live while heartbeatAt (server time) + ttlSec is in the future. ttlSec is capped at
+    // 600 s (10 min) here whatever the Administration settings say.
+    function lockLive(d) {
+      return d.get('lockVersion', 0) == 2 && d.get('heartbeatAt', null) is timestamp && d.get('ttlSec', null) is int
+        && d.heartbeatAt + duration.value(d.ttlSec, 's') > request.time;
+    }
+    // ── Customer invoices (V264) ──
+    function invoiceStorageMode() {
+      let p = /databases/$(database)/documents/system/invoiceStorage;
+      return exists(p) ? get(p).data.mode : 'legacy';
+    }
+    function invoicesIndependent() { return invoiceStorageMode() == 'independent'; }
+    // Billing Settings permission level: 'all' | 'admin' | 'none' (missing → 'admin')
+    function billingLevel(key) {
+      let p = /databases/$(database)/documents/settings/billing;
+      return exists(p) ? get(p).data.get(key, 'admin') : 'admin';
+    }
+    function levelAllows(level) { return level == 'all' || (level == 'admin' && isAdmin()); }
+    // V270.4.3: "administrators" (level 'admin') now means the roles with the Special Right (administrators: every right)
+    function levelAllowsRight(level, r) { return level == 'all' || (level == 'admin' && hasRight(r)); }
+    function invoiceTypeAllowed(t) {
+      return t == 'delivery' || (t == 'order' && levelAllowsRight(billingLevel('allowOrderInvoices'), 'orderInvoices'))
+        || (t == 'advance' && levelAllowsRight(billingLevel('allowAdvanceInvoices'), 'advanceInvoices'));
+    }
+    function creditNotesAllowed() {
+      let l = billingLevel('allowCreditNotes');
+      return levelAllowsRight(l == 'none' ? 'admin' : l, 'creditNotes');
+    }
+    function holdsOrderLock(soId) {
+      let p = /databases/$(database)/documents/locks/$('salesOrder_' + soId);
+      return exists(p) && get(p).data.uid == request.auth.uid && lockLive(get(p).data);
+    }
+
+    // ───────── Existing modules: unchanged access for signed-in users ─────────
+    // V270.4.2: each collection follows the role's permissions (Administration → Roles & Permissions). Writes that
+    // other modules make as part of their own work (e.g. a new Sales Order marks its quotation) are allowed to them too.
+    match /quotations/{id} {
+      allow read: if canV(['quotation']) && ownOk('quotation', resource.data);
+      allow create: if canC(['quotation']);
+      allow update: if (canW(['quotation']) || canC(['salesOrder'])) && ownOk('quotation', resource.data);
+      allow delete: if canX(['quotation']) && ownOk('quotation', resource.data);
+    }
+    // V270.4.9: master records. A VAT number belongs to one customer (and to one supplier): a customer / supplier whose
+    // VAT number is new or changed must claim it in partyVat/{list}_{VAT} in the same commit (js/master-service.mjs).
+    // A record's system code (CUS-00001 …) never changes once given (a temporary offline code …-OFF-… may be replaced).
+    function vatKeyOf(v) { return v.replace('[^0-9A-Za-z]', '').upper(); }
+    function vatClaimed(col, id) {
+      let d = request.resource.data;
+      let v = d.get('vat', '');
+      let claimPath = /databases/$(database)/documents/partyVat/$(col + '_' + d.get('vatKey', '-'));
+      return (resource != null && resource.data.get('vat', '') == v)
+        || v == ''
+        || (v is string && d.get('vatKey', '') == vatKeyOf(v)
+            && existsAfter(claimPath) && getAfter(claimPath).data.partyDoc == id);
+    }
+    function codeKept() {
+      let old = resource.data.get('code', '');
+      return old == '' || old.matches('.*-OFF-.*') || request.resource.data.get('code', '') == old;
+    }
+    match /partyVat/{key} {
+      allow read: if staff();
+      allow create: if staff() && validVatClaim(key);
+      // taken over only when its record no longer holds the number (VAT changed, deleted, in the Recycle Bin); the
+      // record's own claim may be renamed
+      allow update: if staff() && validVatClaim(key)
+        && (request.resource.data.partyDoc == resource.data.partyDoc || !claimHeld(resource.data));
+      allow delete: if staff() && !claimHeld(resource.data);
+      function partyPath(d) { return /databases/$(database)/documents/$(d.col)/$(d.partyDoc); }
+      function validVatClaim(key) {
+        let d = request.resource.data;
+        return d.id == key && d.col in ['customers', 'suppliers'] && d.vatKey is string && key == d.col + '_' + d.vatKey
+          && d.partyDoc is string && existsAfter(partyPath(d)) && getAfter(partyPath(d)).data.get('vatKey', '') == d.vatKey;
+      }
+      function claimHeld(d) {
+        return existsAfter(partyPath(d)) && getAfter(partyPath(d)).data.get('vatKey', '') == d.vatKey
+          && getAfter(partyPath(d)).data.get('_deletedAt', null) == null;
+      }
+    }
+    match /customers/{id} {
+      allow read: if canV(['customers']);
+      allow create: if canC(['customers', 'rfq', 'quotation', 'salesOrder']) && vatClaimed('customers', id);
+      allow update: if canW(['customers', 'rfq', 'quotation', 'salesOrder', 'invoice', 'receipt']) && vatClaimed('customers', id) && codeKept();
+      allow delete: if canX(['customers']);
+    }
+    match /suppliers/{id} {
+      allow read: if canV(['suppliers']);
+      allow create: if canC(['suppliers', 'pricing', 'purchaseInvoice']) && vatClaimed('suppliers', id);
+      allow update: if canW(['suppliers', 'pricing', 'purchaseInvoice', 'supplierPayment']) && vatClaimed('suppliers', id) && codeKept();
+      allow delete: if canX(['suppliers']);
+    }
+    match /products/{id} {
+      allow read: if canV(['products']);
+      allow create: if canC(['products', 'rfq', 'pricing', 'quotation', 'purchaseInvoice']) || canE(['stock']);
+      allow update: if canW(['products', 'rfq', 'pricing', 'quotation', 'salesOrder', 'purchaseInvoice', 'stock']) && codeKept();
+      allow delete: if canX(['products']);
+    }
+    match /deliveryTerms/{id}     { allow read: if staff(); allow write: if canE(['administration']) || canW(['quotation', 'salesOrder']); }
+    match /paymentTerms/{id}      { allow read: if staff(); allow write: if canE(['administration']) || canW(['quotation', 'salesOrder']); }
+    match /rfqs/{id} {
+      allow read: if canV(['rfq', 'pricing', 'quotation']) && ownOk('rfq', resource.data);
+      allow create: if canC(['rfq']);
+      allow update: if (canW(['rfq', 'pricing']) || canC(['quotation'])) && ownOk('rfq', resource.data);
+      allow delete: if canX(['rfq']) && ownOk('rfq', resource.data);
+    }
+    // V269: one document per pricing version (rfqs/{id}/pricingVersions/v{N}), written in the same batch as the RFQ.
+    // A version that is still being priced ('Saved' / 'Revision Draft') may change; once Converted / Superseded /
+    // Cancelled only its status (and updated time) may change. Never deleted from the app (administrators only).
+    match /rfqs/{rfqId}/pricingVersions/{vid} {
+      allow read: if canV(['pricing', 'rfq', 'quotation'])
+        && ownOk('rfq', get(/databases/$(database)/documents/rfqs/$(rfqId)).data);
+      allow create: if canW(['pricing']) && request.resource.data.rfqId == rfqId && request.resource.data.version is int
+        && vid == 'v' + string(request.resource.data.version);
+      allow update: if (canW(['pricing']) || canC(['quotation'])) && request.resource.data.rfqId == resource.data.rfqId && request.resource.data.version == resource.data.version
+        && (resource.data.get('status', 'Saved') in ['Saved', 'Revision Draft']
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updated'])
+                && request.resource.data.status in ['Converted', 'Superseded', 'Cancelled']));
+      allow delete: if isAdmin();
+    }
+    // V271.1: Contracting estimates — one document per version (rfqs/{id}/estimates/v{N}), written in the same batch as
+    // the RFQ. A 'Saved' version may change (and be converted / superseded with its last change); once Converted /
+    // Superseded / Cancelled only its status (and updated time) may change. Never deleted from the app (administrators only).
+    match /rfqs/{rfqId}/estimates/{vid} {
+      allow read: if canV(['pricing', 'rfq', 'quotation'])
+        && ownOk('rfq', get(/databases/$(database)/documents/rfqs/$(rfqId)).data);
+      allow create: if canW(['pricing']) && request.resource.data.rfqId == rfqId && request.resource.data.version is int
+        && vid == 'v' + string(request.resource.data.version) && request.resource.data.status == 'Saved';
+      allow update: if (canW(['pricing']) || canC(['quotation'])) && request.resource.data.rfqId == resource.data.rfqId && request.resource.data.version == resource.data.version
+        && ((resource.data.get('status', 'Saved') == 'Saved' && request.resource.data.status in ['Saved', 'Converted', 'Superseded'])
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updated'])
+                && request.resource.data.status in ['Converted', 'Superseded', 'Cancelled']));
+      allow delete: if isAdmin();
+    }
+    // V271.2: Contracting jobs (from a won estimate quotation) — the Sales Orders rights. Number on save (counters).
+    match /jobs/{id} {
+      allow read: if canV(['salesOrder', 'quotation']);
+      allow create: if canC(['salesOrder']) && request.resource.data.id == id && request.resource.data.jobNo is string
+        && request.resource.data.quotationId is string && request.resource.data.contractValue is number;
+      allow update: if (canE(['salesOrder']) || canC(['salesOrder'])) && request.resource.data.id == resource.data.id
+        && request.resource.data.jobNo == resource.data.jobNo && request.resource.data.quotationId == resource.data.quotationId;
+      allow delete: if isAdmin();
+    }
+    match /employees/{id} {
+      allow read: if canV(['employees']);
+      allow create: if canC(['employees']);
+      allow update: if canE(['employees']) && codeKept();
+      allow delete: if canX(['employees']);
+    }
+    match /recycleBin/{id}        { allow read, write: if staff(); }
+    // Administrator-controlled settings are excluded here and governed by their own rules below.
+    // V270.4.2: general settings — Administration (edit); product categories are saved by the product form; each user's own
+    // screen preferences (uiPrefs_<uid>).
+    match /settings/{id}          { allow read: if staff(); allow write: if staff() && !(id in ['locking', 'billing', 'receipts', 'purchasing'])
+                                      && (id == 'uiPrefs_' + request.auth.uid || canE(['administration']) || canW(['products'])); }
+    match /operationalEvents/{id} { allow read, create: if staff(); allow update, delete: if false; }
+    match /_meta/{id}             { allow read, write: if staff(); }
+    match /counters/{id}          { allow read, create, update: if staff() || (cashActive() && id.matches('^doc_cashTransfer_[0-9]{6}$')); allow delete: if false; }
+
+    // ───────── Document locks ─────────
+    match /locks/{lockId} {
+      allow read: if staff();
+      allow create: if staff() && validLockWrite(lockId);
+      // renew your own lock, or take over one that is no longer live
+      allow update: if staff() && validLockWrite(lockId)
+        && (resource.data.get('uid', '') == request.auth.uid || !lockLive(resource.data));
+      // release your own lock; anyone may clear an expired one; administrators may force-release
+      allow delete: if staff()
+        && (resource.data.get('uid', '') == request.auth.uid || !lockLive(resource.data) || hasRight('forceRelease'));
+      function validLockWrite(lockId) {
+        let d = request.resource.data;
+        return d.uid == request.auth.uid && d.lockVersion == 2
+          && d.docType is string && d.docId is string && lockId == d.docType + '_' + d.docId
+          && d.sessionId is string && d.heartbeatAt == request.time
+          && d.ttlSec is int && d.ttlSec >= 30 && d.ttlSec <= 600;
+      }
+    }
+    // Force-release log (administrators only, immutable)
+    match /lockEvents/{id} {
+      allow read: if staff();
+      allow create: if hasRight('forceRelease')
+        && request.resource.data.id == id
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.recordedAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // ───────── Administration → Document Locking ─────────
+    match /settings/locking {
+      allow create, update: if isAdmin() && validLockSettings();
+      allow delete: if false;
+      function validLockSettings() {
+        let d = request.resource.data;
+        return d.idleMinutes is int && d.idleMinutes >= 5 && d.idleMinutes <= 120
+          && d.idleWarningMinutes is int && d.idleWarningMinutes >= 1 && d.idleWarningMinutes <= 5
+          && d.idleWarningMinutes < d.idleMinutes
+          && d.crashExpiryMinutes is int && d.crashExpiryMinutes >= 1 && d.crashExpiryMinutes <= 10
+          && d.lockQuotations is bool && d.lockRFQs is bool
+          && d.updatedByUid == request.auth.uid && d.updatedAt == request.time;
+      }
+      match /changes/{changeId} {
+        allow read: if staff();
+        allow create: if isAdmin()
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.recordedAt == request.time;
+        allow update, delete: if false;
+      }
+    }
+
+    // ───────── Administration → Billing Settings ─────────
+    match /settings/billing {
+      allow create, update: if isAdmin() && validBillingSettings();
+      allow delete: if false;
+      function validBillingSettings() {
+        let d = request.resource.data;
+        return d.deductionMethod in ['auto-editable', 'auto-fixed', 'manual']
+          && d.allowOrderInvoices in ['all', 'admin', 'none']
+          && d.allowAdvanceInvoices in ['all', 'admin', 'none']
+          && d.allowCreditNotes in ['all', 'admin']
+          && d.updatedByUid == request.auth.uid && d.updatedAt == request.time;
+      }
+      match /changes/{changeId} {
+        allow read: if staff();
+        allow create: if isAdmin()
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.recordedAt == request.time;
+        allow update, delete: if false;
+      }
+    }
+
+    // ───────── Customer invoices (V264) ─────────
+    // Written only by the invoice service: invoice + NEW event + ledger in one commit, by the holder
+    // of the order lock. Issued figures are immutable; only the credit-note bookkeeping can change.
+    match /customerInvoices/{invId} {
+      allow read: if canV(['invoice','receipt']);
+      allow create: if canC(['invoice']) && invoicesIndependent()
+        && request.resource.data.id == invId
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.updatedByUid == request.auth.uid
+        && request.resource.data.revision == 1
+        && request.resource.data.status == 'Issued'
+        && invoiceTypeAllowed(request.resource.data.type)
+        && holdsOrderLock(request.resource.data.salesOrderId)
+        && invoiceCommitOk(request.resource.data)
+        && zohoNumberClaimed(request.resource.data);
+      allow update: if canW(['invoice','receipt']) && invoicesIndependent()
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.updatedByUid == request.auth.uid
+        && holdsOrderLock(resource.data.salesOrderId)
+        && ((request.resource.data.status in ['Partially credited', 'Credited']
+              && creditNotesAllowed()
+              && invoiceImmutableUnchanged()
+              && invoiceCommitOk(request.resource.data))
+          || invoiceEditOk(request.resource.data));
+      allow delete: if false;
+
+      function invoiceCommitOk(d) {
+        let evPath = /databases/$(database)/documents/customerInvoices/$(invId)/invoiceEvents/$(d.lastEventId);
+        let ledgerPath = /databases/$(database)/documents/salesOrderFulfillment/$(d.salesOrderId);
+        return !exists(evPath) && existsAfter(evPath)
+          && getAfter(evPath).data.toRevision == d.revision
+          && getAfter(ledgerPath).data.lastInvoiceId == invId
+          && getAfter(ledgerPath).data.lastEventId == d.lastEventId;
+      }
+      // V264.7: the Zoho invoice number is mandatory and unique — the invoice must claim its number
+      // document (invoiceZohoNumbers/{key}) in the same commit, which fails if the number is already used.
+      function zohoNumberClaimed(d) {
+        let zPath = /databases/$(database)/documents/invoiceZohoNumbers/$(d.zohoNoKey);
+        return d.zohoNo is string && d.zohoNo.size() > 0 && d.zohoNoKey is string && d.zohoNoKey.size() > 2
+          && !exists(zPath) && existsAfter(zPath) && getAfter(zPath).data.invoiceId == invId;
+      }
+      // V266.3 limited edit: only these fields, figures untouched, a new 'edited' event, per Administration settings
+      // (V266.4: any level except 'none' allows the limited edit; 'full' = Cancel and re-issue, which is a credit note + new invoice)
+      function invoiceEditOk(d) {
+        let evPath = /databases/$(database)/documents/customerInvoices/$(invId)/invoiceEvents/$(d.lastEventId);
+        let sp = /databases/$(database)/documents/settings/receipts;
+        return d.status == resource.data.status
+          && d.diff(resource.data).affectedKeys().hasOnly(['dueDate', 'poNo', 'reason', 'notes', 'zohoNo', 'zohoNoKey', 'revision', 'lastEventId',
+               'updatedAt', 'updatedBy', 'updatedByUid', 'revisedAt', 'revisedBy', 'revisedByUid', 'editCount', 'lastEditReason'])
+          && (exists(sp) ? get(sp).data.get('editInvoices', 'limited-admin-full') : 'limited-admin-full') != 'none'
+          && !exists(evPath) && existsAfter(evPath) && getAfter(evPath).data.toRevision == d.revision
+          && (!d.diff(resource.data).affectedKeys().hasAny(['zohoNoKey']) || zohoNumberClaimed(d));
+      }
+      function invoiceImmutableUnchanged() {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny(
+          ['id', 'invNo', 'type', 'salesOrderId', 'lines', 'deductions', 'advance', 'totals', 'date', 'customer', 'zohoNo', 'zohoNoKey',
+           'creationOperationId', 'created', 'createdBy', 'createdByUid', 'schemaVersion', 'migratedFrom']);
+      }
+
+      match /invoiceEvents/{eventId} {
+        allow read: if canV(['invoice','receipt']);
+        allow create: if canW(['invoice','receipt']) && invoicesIndependent()
+          && request.resource.data.id == eventId
+          && request.resource.data.invoiceId == invId
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.recordedAt == request.time
+          && getAfter(/databases/$(database)/documents/customerInvoices/$(invId)).data.lastEventId == eventId;
+        allow update, delete: if false;
+      }
+    }
+
+    // ───────── Zoho invoice numbers (V264.7) ─────────
+    // One document per Zoho number, created together with the invoice that uses it (issue or V266.3 edit);
+    // never changed, deleted only when its invoice is edited to another number, so a number is used only once.
+    match /invoiceZohoNumbers/{key} {
+      allow read: if staff();
+      allow create: if staff() && invoicesIndependent()
+        && request.resource.data.id == key
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.invoiceId is string
+        && invoiceClaimsKey(/databases/$(database)/documents/customerInvoices/$(request.resource.data.invoiceId), key);
+      // the invoice is issued with this number, or (V266.3) edited to it in the same commit
+      function invoiceClaimsKey(r, key) {
+        return getAfter(r).data.get('zohoNoKey', '') == key
+          && (!exists(r) || (get(r).data.get('zohoNoKey', '') != key && getAfter(r).data.revision == get(r).data.revision + 1));
+      }
+      allow update: if false;
+      // V266.3: released when its invoice is edited to another number (in the same commit)
+      allow delete: if staff() && invoicesIndependent()
+        && getAfter(/databases/$(database)/documents/customerInvoices/$(resource.data.invoiceId)).data.zohoNoKey != key
+        && getAfter(/databases/$(database)/documents/customerInvoices/$(resource.data.invoiceId)).data.revision
+           == get(/databases/$(database)/documents/customerInvoices/$(resource.data.invoiceId)).data.revision + 1;
+    }
+
+    // ───────── Credit notes (V264) ─────────
+    match /creditNotes/{cnId} {
+      allow read: if canV(['invoice','receipt']);
+      allow create: if canW(['invoice']) && invoicesIndependent() && creditNotesAllowed()
+        && request.resource.data.id == cnId
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.revision == 1
+        && holdsOrderLock(request.resource.data.salesOrderId)
+        && creditCommitOk(request.resource.data);
+      allow update, delete: if false;
+
+      function creditCommitOk(d) {
+        let evPath = /databases/$(database)/documents/creditNotes/$(cnId)/creditNoteEvents/$(d.lastEventId);
+        let invPath = /databases/$(database)/documents/customerInvoices/$(d.invoiceId);
+        return !exists(evPath) && existsAfter(evPath)
+          && getAfter(invPath).data.salesOrderId == d.salesOrderId
+          && getAfter(invPath).data.revision == get(invPath).data.revision + 1
+          && getAfter(invPath).data.creditNotes[getAfter(invPath).data.creditNotes.size() - 1].id == cnId;
+      }
+
+      match /creditNoteEvents/{eventId} {
+        allow read: if canV(['invoice','receipt']);
+        allow create: if canW(['invoice']) && invoicesIndependent()
+          && request.resource.data.id == eventId
+          && request.resource.data.creditNoteId == cnId
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.recordedAt == request.time
+          && getAfter(/databases/$(database)/documents/creditNotes/$(cnId)).data.lastEventId == eventId;
+        allow update, delete: if false;
+      }
+    }
+
+    // ───────── Administration → Billing Settings → Payment receipts (V266) ─────────
+    match /settings/receipts {
+      allow create, update: if isAdmin() && validReceiptSettings();
+      allow delete: if false;
+      function validReceiptSettings() {
+        let d = request.resource.data;
+        return d.zohoPaymentNo in ['mandatory', 'optional']
+          && d.allowRecord in ['all', 'admin']
+          && d.allowVoid in ['all', 'admin']
+          && d.accounts is list && d.accounts.size() <= 20
+          && d.get('editReceipts', 'limited-admin-full') in ['none', 'limited', 'limited-admin-full', 'full']
+          && d.get('editInvoices', 'limited-admin-full') in ['none', 'limited', 'limited-admin-full', 'full']
+          && d.get('editLimit', 'month') in ['none', 'month', 'days']
+          && d.get('editDays', 7) is int && d.get('editDays', 7) >= 1 && d.get('editDays', 7) <= 365
+          && d.get('adminsAfterLimit', true) is bool
+          && d.updatedByUid == request.auth.uid && d.updatedAt == request.time;
+      }
+      match /changes/{changeId} {
+        allow read: if staff();
+        allow create: if isAdmin()
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.recordedAt == request.time;
+        allow update, delete: if false;
+      }
+    }
+
+    // ───────── Payment Accounts (V267.1) — cash, card and bank accounts ─────────
+    // Administrators only. Written by js/account-service.mjs in one transaction: the account, a change record
+    // and one key document per name / code (uniqueness). Never deleted (made inactive instead). Once an
+    // account has entries (hasEntries — set later by the posting service) its type and opening balance are fixed.
+    match /paymentAccounts/{accId} {
+      // V267.2: a custodian login reads cash accounts only (its own, and whom to hand cash to)
+      allow read: if staff() || (cashActive() && resource.data.type == 'cash');
+      // V267.2: the first ledger entry marks the account as having entries (never back)
+      allow update: if (staff() || cashActive())
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hasEntries'])
+        && request.resource.data.hasEntries == true && resource.data.get('hasEntries', false) == false;
+      allow create: if isAdmin() && validAccount(request.resource.data)
+        && request.resource.data.id == accId
+        && request.resource.data.revision == 1
+        && request.resource.data.hasEntries == false
+        && request.resource.data.createdByUid == request.auth.uid
+        && accountKeysClaimed(accId, request.resource.data);
+      allow update: if isAdmin() && validAccount(request.resource.data)
+        && request.resource.data.id == accId
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.hasEntries == resource.data.get('hasEntries', false)
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && (!resource.data.get('hasEntries', false)
+            || (request.resource.data.type == resource.data.type
+                && request.resource.data.openingBalance == resource.data.openingBalance
+                && request.resource.data.openingDate == resource.data.openingDate))
+        && accountKeysClaimed(accId, request.resource.data);
+      allow delete: if false;
+      function validAccount(d) {
+        return d.code is string && d.code.size() >= 1 && d.code.size() <= 20 && d.code.matches('^[A-Za-z0-9][A-Za-z0-9.\\-]*$')
+          && d.codeKey == d.code.lower()
+          && d.name is string && d.name.size() >= 1 && d.name.size() <= 80
+          && d.nameKey is string && d.nameKey.size() >= 1 && d.nameKey.size() <= 80 && !d.nameKey.matches('.*/.*')
+          && d.type in ['cash', 'card', 'bank']
+          && d.custodianName is string && d.custodianName.size() <= 80
+          && (d.type == 'cash' ? d.custodianName.size() >= 1 : (d.custodianName == '' && d.get('custodianUid', '') == ''))
+          // V268.2: a card names its linked bank account (card payments come out of that bank account)
+          && (d.type == 'card'
+              ? (d.get('linkedBankAccountId', '') is string && d.get('linkedBankAccountId', '').size() >= 1 && d.get('linkedBankAccountId', '') != accId
+                 && get(/databases/$(database)/documents/paymentAccounts/$(d.get('linkedBankAccountId', 'x'))).data.type == 'bank')
+              : d.get('linkedBankAccountId', '') == '')
+          && d.get('zohoName', '') is string && d.get('zohoName', '').size() <= 120
+          && d.openingBalance is number
+          && d.openingDate is string && d.openingDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && d.active is bool
+          && d.updatedByUid == request.auth.uid && d.updatedAt == request.time;
+      }
+      // the name and code key documents point at this account after the commit
+      function accountKeysClaimed(accId, d) {
+        return getAfter(/databases/$(database)/documents/paymentAccountKeys/$('name_' + d.nameKey)).data.accountId == accId
+          && getAfter(/databases/$(database)/documents/paymentAccountKeys/$('code_' + d.codeKey)).data.accountId == accId;
+      }
+      match /changes/{changeId} {
+        allow read: if staff();
+        allow create: if isAdmin()
+          && request.resource.data.accountId == accId
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.recordedAt == request.time
+          && getAfter(/databases/$(database)/documents/paymentAccounts/$(accId)).data.revision == request.resource.data.toRevision;
+        allow update, delete: if false;
+      }
+    }
+    // One document per account name / code ("name_<key>", "code_<key>"); created with the account that uses it,
+    // removed only when that account changes to another name / code in the same commit.
+    match /paymentAccountKeys/{key} {
+      allow read: if staff();
+      allow create: if isAdmin()
+        && request.resource.data.id == key
+        && request.resource.data.kind in ['name', 'code']
+        && request.resource.data.accountId is string
+        && key == request.resource.data.kind + '_' + getAfter(/databases/$(database)/documents/paymentAccounts/$(request.resource.data.accountId)).data.get(request.resource.data.kind + 'Key', '');
+      allow update: if false;
+      allow delete: if isAdmin()
+        && key != resource.data.kind + '_' + getAfter(/databases/$(database)/documents/paymentAccounts/$(resource.data.accountId)).data.get(resource.data.kind + 'Key', '');
+    }
+
+    // ───────── Cash ledger with custodian confirmation (V267.2) ─────────
+    // Written by js/ledger-service.mjs. cashEntries = balanced entries (Σdebit = Σcredit), cashLines = the
+    // posting on each account ("<entryId>__<accountId>"), which the account's custodian confirms or queries.
+    // Confirmation never holds an entry back. Nothing is ever deleted; a cancelled handover is marked void.
+
+    // Cash custodian logins: administrators create / change them; the custodian may only clear
+    // "change password at first login" after changing it.
+    match /cashCustodians/{uid} {
+      allow read: if staff() || (signedIn() && request.auth.uid == uid);
+      // V270.4.1: never for a login that already has a users record (staff can't be turned into a custodian here)
+      allow create, update: if isAdmin() && staff() && validCustodian(request.resource.data)
+        && !exists(/databases/$(database)/documents/users/$(uid));
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['mustChangePassword', 'passwordChangedAt'])
+        && request.resource.data.mustChangePassword == false && request.resource.data.passwordChangedAt == request.time;
+      allow delete: if false;
+      function validCustodian(d) {
+        return d.uid == uid
+          && d.name is string && d.name.size() >= 1 && d.name.size() <= 120
+          && d.email is string && d.email.size() <= 200
+          && d.accountIds is list && d.accountIds.size() <= 20
+          && d.active is bool && d.mustChangePassword is bool
+          && d.updatedByUid == request.auth.uid && d.updatedAt == request.time;
+      }
+    }
+    // ───────── V270.4.1 Users (Administration → Users) ─────────
+    // users/{uid}: who may use BizCore and with which role per company. Written by administrators only (js/user-service.mjs),
+    // never deleted (deactivate instead). Not for cash custodian logins (they keep cashCustodians/{uid}). Nobody can
+    // switch off or demote their own record; only the owner may change an owner's record. The user may only clear
+    // "change password at first sign-in" after changing it.
+    match /users/{uid} {
+      allow read: if staff() || (signedIn() && request.auth.uid == uid);
+      allow create, update: if isAdmin() && validUser(request.resource.data)
+        && !exists(/databases/$(database)/documents/cashCustodians/$(uid))
+        && request.resource.data.revision == (resource == null ? 1 : resource.data.revision + 1)
+        && (resource == null || (request.resource.data.createdAt == resource.data.createdAt && request.resource.data.createdByUid == resource.data.createdByUid && request.resource.data.email == resource.data.email))
+        && (resource != null || (request.resource.data.createdAt == request.time && request.resource.data.createdByUid == request.auth.uid))
+        && (uid != request.auth.uid || isOwner() || (request.resource.data.active == true && request.resource.data.companyRoles.get('default', '') == 'administrator'))
+        && (!ownerUid(uid) || uid == request.auth.uid);
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['mustChangePassword', 'passwordChangedAt'])
+        && request.resource.data.mustChangePassword == false && request.resource.data.passwordChangedAt == request.time;
+      allow delete: if false;
+      function validUser(d) {
+        return d.keys().hasOnly(['uid', 'name', 'email', 'employeeId', 'employeeName', 'active', 'mustChangePassword', 'passwordChangedAt',
+                                 'companyRoles', 'defaultCompany', 'perm', 'revision', 'createdAt', 'createdByUid', 'createdByName',
+                                 'updatedAt', 'updatedByUid', 'updatedByName', 'schemaVersion'])
+          && d.get('perm', {}) is map
+          && d.uid == uid
+          && d.name is string && d.name.size() >= 1 && d.name.size() <= 120
+          && d.email is string && d.email.size() <= 200
+          && d.employeeId is string && d.employeeId.size() <= 120
+          && d.employeeName is string && d.employeeName.size() <= 120
+          && d.active is bool && d.mustChangePassword is bool
+          && d.companyRoles is map && d.companyRoles.size() >= 1 && d.companyRoles.size() <= 20
+          && d.companyRoles.get('default', '') is string && d.companyRoles.get('default', '').size() >= 1 && d.companyRoles.get('default', '').size() <= 40
+          && d.companyRoles.get('default', '') != 'cashCustodian'
+          && d.defaultCompany is string && d.defaultCompany.size() <= 40
+          && d.revision is int
+          && d.updatedAt == request.time && d.updatedByUid == request.auth.uid;
+      }
+      // Change history of a user record (created, edited, deactivated, reactivated, reset email sent) — never changed.
+      match /events/{eventId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin()
+          && request.resource.data.id == eventId
+          && request.resource.data.type in ['created', 'edited', 'deactivated', 'reactivated', 'resetSent']
+          && request.resource.data.byUid == request.auth.uid && request.resource.data.at == request.time
+          && request.resource.data.note is string && request.resource.data.note.size() <= 600;
+        allow update, delete: if false;
+      }
+    }
+
+    // ───────── V270.4.2 Roles (Administration → Roles & Permissions) ─────────
+    // Written by administrators only (js/role-service.mjs), never deleted. The Administrator role is locked (every right).
+    match /roles/{roleId} {
+      allow read: if staff();
+      allow create, update: if isAdmin() && validRole(request.resource.data)
+        && request.resource.data.revision == (resource == null ? 1 : resource.data.revision + 1)
+        && (resource == null || (resource.data.get('locked', false) == false || request.resource.data.perms == resource.data.perms));
+      allow delete: if false;
+      function validRole(d) {
+        return d.keys().hasOnly(['id', 'label', 'builtIn', 'locked', 'perms', 'rights', 'viewMods', 'createMods', 'editMods', 'cancelMods', 'writeMods', 'ownMods', 'rightMods',
+                                 'revision', 'updatedAt', 'updatedByUid', 'updatedByName', 'schemaVersion'])
+          && d.id == roleId && roleId != 'cashCustodian'
+          && d.label is string && d.label.size() >= 1 && d.label.size() <= 60
+          && d.builtIn is bool && d.locked is bool && d.perms is map && d.perms.size() <= 40
+          && d.viewMods is list && d.createMods is list && d.editMods is list && d.cancelMods is list && d.writeMods is list && d.ownMods is list
+          && d.viewMods.size() <= 40 && d.writeMods.size() <= 40
+          && d.updatedAt == request.time && d.updatedByUid == request.auth.uid;
+      }
+      match /changes/{changeId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin() && request.resource.data.id == changeId
+          && request.resource.data.byUid == request.auth.uid && request.resource.data.at == request.time
+          && request.resource.data.note is string && request.resource.data.note.size() <= 2000;
+        allow update, delete: if false;
+      }
+    }
+
+    // Every login records itself (name / email) so an administrator can link an account custodian to a login.
+    match /userDirectory/{uid} {
+      allow read: if staff();
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'name', 'lastSeenAt'])
+        && request.resource.data.uid == uid
+        && request.resource.data.email is string && request.resource.data.email.size() <= 200
+        && request.resource.data.name is string && request.resource.data.name.size() <= 120
+        && request.resource.data.lastSeenAt == request.time;
+      allow delete: if false;
+    }
+
+    // ───────── V268.5 Shared settings (were kept only in one browser before) ─────────
+    // sharedSettings/{doc} { id, key, json, revision, updatedAt, updatedBy, updatedByUid }
+    // Units of Measure and Categories: every staff member (as in Master Data). The others: administrators.
+    match /sharedSettings/{docId} {
+      allow read: if staff();
+      allow create, update: if staff()
+        && docId in ['units', 'categories', 'taxMaster', 'pricing', 'marginStatuses', 'costComponents', 'contracting', 'contractingRates']   // V271.1: Contracting Settings (administrators)
+        && (docId in ['units', 'categories'] || isAdmin()
+            || (docId == 'contractingRates' && hasRight('contractingRates')))   // V271.1.1: Labour Rates & Expense Categories — the Special Right   // V270.4.12: Categories (Master Data) like Units — every staff member
+        && request.resource.data.keys().hasOnly(['id', 'key', 'json', 'revision', 'updatedAt', 'updatedBy', 'updatedByUid'])
+        && request.resource.data.id == docId
+        && request.resource.data.key is string && request.resource.data.key.size() <= 60
+        && request.resource.data.json is string && request.resource.data.json.size() <= 200000
+        && request.resource.data.revision == (resource == null ? 1 : resource.data.revision + 1)
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy is string && request.resource.data.updatedBy.size() <= 120
+        && request.resource.data.updatedByUid == request.auth.uid;
+      allow delete: if false;
+    }
+    // ───────── V268.5 Approvals (pricing below the minimum margin) ─────────
+    // Asked by any staff member, decided by an administrator from their own login. Never deleted.
+    match /approvals/{aprId} {
+      allow read: if staff();
+      allow create: if staff()
+        && request.resource.data.id == aprId
+        && request.resource.data.kind in ['pricing', 'quotation']   // V270.4.14: a quotation with its own costs (rfqId = the quotation id)
+        && request.resource.data.status == 'Pending'
+        && request.resource.data.requestedByUid == request.auth.uid
+        && request.resource.data.requestedAt == request.time
+        && request.resource.data.decidedByUid == '' && request.resource.data.decidedAt == null
+        && request.resource.data.approverUid is string
+        && request.resource.data.rfqId is string && request.resource.data.version is number
+        && request.resource.data.marginPct is number
+        && request.resource.data.note is string && request.resource.data.note.size() <= 300;
+      allow update: if hasRight('approveMargin') && staff()   // V270.4.3: Special Right (was: administrators)
+        && resource.data.status == 'Pending'
+        && request.resource.data.status in ['Approved', 'Declined']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'decisionNote', 'decidedBy', 'decidedByUid', 'decidedAt'])
+        && request.resource.data.decidedByUid == request.auth.uid
+        && request.resource.data.decidedAt == request.time
+        && request.resource.data.decisionNote is string && request.resource.data.decisionNote.size() <= 300;
+      allow delete: if false;
+    }
+    match /cashEntries/{entryId} {
+      // a custodian login may check whether its own (retried) handover already exists
+      allow read: if canV(['cash','supplierPayment','receipt','purchaseInvoice']) || (cashActive() && (resource == null || resource.data.recordedByUid == request.auth.uid));
+      allow create: if (canW(['cash']) || cashActive()) && handoverCreateOk(request.resource.data);
+      allow update: if canW(['cash']) && handoverUpdateOk(request.resource.data);
+      // V268.2: supplier payment / cash back entries, written with their supplierPayments document
+      allow create: if canW(['supplierPayment','purchaseInvoice']) && spEntryCreateOk(request.resource.data);
+      allow update: if canW(['supplierPayment','purchaseInvoice']) && spEntryVoidOk(request.resource.data);
+      allow delete: if false;
+      function spEntryCreateOk(d) {
+        let p = getAfter(/databases/$(database)/documents/supplierPayments/$(d.paymentId)).data;
+        let payPath = /databases/$(database)/documents/supplierPayments/$(d.paymentId);
+        return d.id == entryId && entryId.matches('^spe-[A-Za-z0-9_-]{8,210}$')
+          && d.kind in ['supplier-payment', 'supplier-cashback', 'supplier-advance']
+          && d.schemaVersion == 1 && d.revision == 1 && d.void == false
+          && d.recordedByUid == request.auth.uid && d.updatedByUid == request.auth.uid && d.updatedAt == request.time
+          // a new payment, or (V268.3) a payment changed in full by an administrator: its new entry
+          && (!exists(payPath) || (p.revision == get(payPath).data.revision + 1 && get(payPath).data.entryId != entryId))
+          && p.entryId == entryId && p.status == 'Posted'
+          && d.voucherNo == p.spNo && d.date == p.date
+          && d.kind == (p.kind == 'payment' ? 'supplier-payment' : (p.kind == 'cashback' ? 'supplier-cashback' : 'supplier-advance'))
+          && d.accountIds is list && d.accountIds.size() >= 1 && d.accountIds.size() <= 20
+          && d.postings is map && d.postings.keys().hasAll(d.accountIds) && d.postings.keys().hasOnly(d.accountIds)
+          && d.lines is list && d.lines.size() >= 2 && d.lines.size() <= 24
+          && near(d.amount, p.kind == 'cashback' ? p.amount : p.amount - p.get('advanceTotal', 0) + p.bankCharges);
+      }
+      function spEntryVoidOk(d) {
+        let pAfter = getAfter(/databases/$(database)/documents/supplierPayments/$(resource.data.paymentId)).data;
+        return resource.data.kind in ['supplier-payment', 'supplier-cashback', 'supplier-advance'] && resource.data.void == false && d.void == true
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['void', 'voidReason', 'revision', 'updatedByUid', 'updatedByName', 'updatedAt'])
+          && d.revision == resource.data.revision + 1 && d.updatedByUid == request.auth.uid && d.updatedAt == request.time
+          && d.voidReason is string && d.voidReason.size() >= 1 && d.voidReason.size() <= 200
+          && (pAfter.status == 'Voided' || pAfter.entryId != resource.data.id);
+      }
+
+      function accountData(id) { return get(/databases/$(database)/documents/paymentAccounts/$(id)).data; }
+      function lineAfter(accId) { return getAfter(/databases/$(database)/documents/cashLines/$(entryId + '__' + accId)).data; }
+      function handoverFigures(d) {
+        let from = accountData(d.fromAccountId);
+        let to = accountData(d.toAccountId);
+        return d.kind == 'handover'
+          && d.amount is number && d.amount > 0 && d.amount <= 1000000000
+          && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && d.description is string && d.description.size() <= 200
+          && d.fromAccountId is string && d.toAccountId is string && d.fromAccountId != d.toAccountId
+          && d.accountIds == [d.toAccountId, d.fromAccountId]
+          && d.lines.size() == 2
+          && d.lines[0].keys().hasOnly(['accountId', 'debit', 'credit']) && d.lines[1].keys().hasOnly(['accountId', 'debit', 'credit'])
+          && d.lines[0].accountId == d.toAccountId && d.lines[0].debit == d.amount && d.lines[0].credit == 0
+          && d.lines[1].accountId == d.fromAccountId && d.lines[1].debit == 0 && d.lines[1].credit == d.amount
+          && from.type == 'cash' && to.type == 'cash'
+          && d.date >= from.openingDate && d.date >= to.openingDate;
+      }
+      function handoverCreateOk(d) {
+        let from = accountData(d.fromAccountId);
+        let to = accountData(d.toAccountId);
+        let counterPath = /databases/$(database)/documents/counters/$('doc_cashTransfer_' + d.date.split('-')[0] + d.date.split('-')[1]);
+        let seq = getAfter(counterPath).data.value;
+        return d.id == entryId && entryId.matches('^trf-[A-Za-z0-9_-]{8,200}$')
+          && d.schemaVersion == 1 && d.revision == 1 && d.void == false
+          && d.recordedByUid == request.auth.uid && d.updatedByUid == request.auth.uid && d.updatedAt == request.time
+          && handoverFigures(d)
+          && from.active == true && to.active == true
+          // a custodian login hands over only from its own account
+          && (staff() || from.get('custodianUid', '') == request.auth.uid)
+          // the monthly voucher counter moves by one in this commit and gives the voucher number
+          && seq == (exists(counterPath) ? get(counterPath).data.value : 0) + 1
+          && d.voucherNo is string && d.voucherNo.matches('^TRF-[0-9]{4}-[0-9]{4,}$') && int(d.voucherNo.split('-')[2]) == seq
+          // both postings are written in the same commit
+          && lineAfter(d.toAccountId).amountIn == d.amount
+          && lineAfter(d.fromAccountId).amountOut == d.amount;
+      }
+      // staff: amount / date / description, or cancel (void) — the accounts and the voucher never change
+      function handoverUpdateOk(d) {
+        return resource.data.void == false
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['date', 'amount', 'description', 'lines', 'revision', 'updatedByUid', 'updatedByName', 'updatedAt', 'void', 'voidReason'])
+          && d.revision == resource.data.revision + 1
+          && d.updatedByUid == request.auth.uid && d.updatedAt == request.time
+          && handoverFigures(d)
+          && d.void is bool
+          && (d.void == false || (d.voidReason is string && d.voidReason.size() >= 1 && d.voidReason.size() <= 200))
+          && lineAfter(d.toAccountId).entryRevision == d.revision
+          && lineAfter(d.fromAccountId).entryRevision == d.revision;
+      }
+    }
+
+    match /cashLines/{lineId} {
+      // staff see every line; a custodian login sees the lines of its own account(s)
+      // (V269.3: a line that doesn't exist yet may be looked up — the running balance checks what a commit changes)
+      allow read: if canV(['cash','supplierPayment','receipt','purchaseInvoice']) || (cashActive() && (resource == null || resource.data.custodianUid == request.auth.uid));
+      allow create: if (canW(['cash']) || cashActive()) && lineCreateOk(request.resource.data);
+      allow update: if confirmOk() || mirrorOk() || (canW(['cash']) && staffEditOk()) || relinkOk();
+      // V268.2: the postings of a supplier payment / cash back (cash ones wait for the custodian)
+      allow create: if canW(['supplierPayment','purchaseInvoice']) && spLineCreateOk(request.resource.data);
+      allow update: if canW(['supplierPayment','purchaseInvoice']) && spLineVoidOk();
+      allow delete: if false;
+      function spLineCreateOk(d) {
+        let e = entryAfter(d);
+        let a = get(/databases/$(database)/documents/paymentAccounts/$(d.accountId)).data;
+        let p = e.postings[d.accountId];
+        return d.id == lineId && lineId == d.entryId + '__' + d.accountId
+          && e.kind in ['supplier-payment', 'supplier-cashback', 'supplier-advance'] && d.kind == e.kind
+          && !exists(/databases/$(database)/documents/cashEntries/$(d.entryId))
+          && e.recordedByUid == request.auth.uid && d.recordedByUid == request.auth.uid
+          && d.voucherNo == e.voucherNo && d.date == e.date && d.description == e.description
+          && d.entryRevision == 1 && d.void == false
+          && d.accountId in e.accountIds
+          && d.amountIn == p.amountIn && d.amountOut == p.amountOut && d.get('memoOut', 0) == p.memoOut
+          && d.custodianUid == a.get('custodianUid', '')
+          && d.statusByUid == '' && d.onBehalf == false
+          && d.needsConfirm == (a.type == 'cash' && (p.amountIn > 0 || p.amountOut > 0))
+          && d.status == (d.needsConfirm ? 'pending' : 'none');
+      }
+      function spLineVoidOk() {
+        let d = request.resource.data;
+        let r = resource.data;
+        let e = entryAfter(r);
+        return r.kind in ['supplier-payment', 'supplier-cashback', 'supplier-advance'] && r.void == false && d.void == true
+          && changed().hasOnly(['void', 'voidReason', 'entryRevision'])
+          && e.void == true && d.entryRevision == e.revision;
+      }
+
+      function entryAfter(d) { return getAfter(/databases/$(database)/documents/cashEntries/$(d.entryId)).data; }
+      function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+      function lineCreateOk(d) {
+        let e = entryAfter(d);
+        return d.id == lineId && lineId == d.entryId + '__' + d.accountId
+          && !exists(/databases/$(database)/documents/cashEntries/$(d.entryId))
+          && e.recordedByUid == request.auth.uid && d.recordedByUid == request.auth.uid
+          && d.kind == e.kind && d.voucherNo == e.voucherNo && d.date == e.date && d.description == e.description
+          && d.entryRevision == 1 && d.void == false
+          && d.custodianUid == get(/databases/$(database)/documents/paymentAccounts/$(d.accountId)).data.get('custodianUid', '')
+          && d.statusByUid == '' && d.onBehalf == false
+          && ((d.accountId == e.toAccountId && d.amountIn == e.amount && d.amountOut == 0
+                && d.needsConfirm == true && d.status == 'pending'
+                && d.counterpartLineId == d.entryId + '__' + e.fromAccountId)
+            || (d.accountId == e.fromAccountId && d.amountOut == e.amount && d.amountIn == 0
+                && d.needsConfirm == false && d.status == 'none' && d.counterpartStatus == 'pending'
+                && d.counterpartLineId == d.entryId + '__' + e.toAccountId));
+      }
+      // the custodian confirms / queries; an administrator only for a custodian without a login
+      function confirmOk() {
+        let d = request.resource.data;
+        return changed().hasOnly(['status', 'statusByUid', 'statusByName', 'statusAt', 'statusNote', 'onBehalf'])
+          && resource.data.needsConfirm == true && resource.data.void == false
+          && d.status in ['confirmed', 'queried']
+          && d.statusByUid == request.auth.uid && d.statusAt == request.time
+          && d.statusNote is string && d.statusNote.size() <= 200
+          && (d.status == 'confirmed' || d.statusNote.size() >= 1)
+          && ((resource.data.custodianUid == request.auth.uid && d.onBehalf == false && (staff() || cashActive()))
+            || (resource.data.custodianUid == '' && d.onBehalf == true && isAdmin() && staff()));
+      }
+      // the giver's line of a handover shows the receiver's answer, written in the same commit as that answer
+      function mirrorOk() {
+        let d = request.resource.data;
+        let cp = getAfter(/databases/$(database)/documents/cashLines/$(resource.data.counterpartLineId)).data;
+        return signedIn()
+          && changed().hasOnly(['counterpartStatus', 'counterpartStatusByName', 'counterpartStatusAt', 'counterpartStatusNote'])
+          && resource.data.status == 'none' && resource.data.void == false
+          && d.counterpartStatusAt == request.time
+          && cp.statusByUid == request.auth.uid && cp.statusAt == request.time && cp.status == d.counterpartStatus;
+      }
+      // staff edit / cancel the entry: the line follows it; a new amount or date needs confirming again
+      function staffEditOk() {
+        let d = request.resource.data;
+        let r = resource.data;
+        let e = entryAfter(r);
+        return changed().hasOnly(['date', 'description', 'amountIn', 'amountOut', 'entryRevision', 'void', 'voidReason',
+                                  'status', 'statusByUid', 'statusByName', 'statusAt', 'onBehalf',
+                                  'counterpartStatus', 'counterpartStatusByName', 'counterpartStatusAt'])
+          && r.void == false
+          && e.revision == get(/databases/$(database)/documents/cashEntries/$(r.entryId)).data.revision + 1
+          && d.entryRevision == e.revision
+          && d.date == e.date && d.description == e.description && d.void == e.void
+          && (r.needsConfirm ? (d.amountIn == e.amount && d.amountOut == 0) : (d.amountOut == e.amount && d.amountIn == 0))
+          && (d.status == r.status || (r.needsConfirm && d.status == 'pending'))
+          && (!(r.needsConfirm && (d.amountIn != r.amountIn || d.date != r.date)) || d.status == 'pending')
+          && (d.get('counterpartStatus', '') == r.get('counterpartStatus', '') || d.get('counterpartStatus', '') == 'pending')
+          && (r.needsConfirm || (d.amountOut == r.amountOut && d.date == r.date) || d.get('counterpartStatus', '') == 'pending');
+      }
+      // an administrator linked the account to another login: its lines follow the account
+      function relinkOk() {
+        return isAdmin() && staff()
+          && changed().hasOnly(['custodianUid'])
+          && request.resource.data.custodianUid == get(/databases/$(database)/documents/paymentAccounts/$(resource.data.accountId)).data.get('custodianUid', '');
+      }
+    }
+
+    // ───────── V269.3 (data plan 2b): running balance per payment account, last price per item ─────────
+    // Written by js/running-totals.mjs in the SAME commit as the cash lines / purchase invoice they follow.
+    // Balances move with increment() (never read by the writer); staff rebuild them from all lines (rebuiltAt).
+    match /cashBalances/{accountId} {
+      allow read: if staff() || (cashActive() && get(/databases/$(database)/documents/paymentAccounts/$(accountId)).data.get('custodianUid', '') == request.auth.uid);
+      allow create, update: if balanceShapeOk(request.resource.data)
+        && (staff()
+          // a custodian login: only together with a cash line of this account in the same commit, never a rebuild
+          || (cashActive() && request.resource.data.lastLineId is string && request.resource.data.lastLineId.size() > 0
+              && getAfter(/databases/$(database)/documents/cashLines/$(request.resource.data.lastLineId)).data.accountId == accountId
+              && request.resource.data.get('rebuiltAt', null) == (resource == null ? null : resource.data.get('rebuiltAt', null))));
+      allow delete: if false;
+      function balanceShapeOk(d) {
+        return d.keys().hasOnly(['accountId', 'balance', 'confirmedBalance', 'lineCount', 'revision', 'lastLineId', 'updatedAt', 'rebuiltAt', 'updatedByUid'])
+          && d.accountId == accountId
+          && d.balance is number && d.confirmedBalance is number && d.lineCount is number && d.lineCount >= 0
+          && d.revision == (resource == null ? 1 : resource.data.revision + 1)
+          && d.updatedByUid == request.auth.uid && d.updatedAt == request.time;
+      }
+    }
+    match /itemLastPrices/{itemKey} {
+      allow read: if staff();
+      allow create, update: if staff()
+        && request.resource.data.keys().hasOnly(['itemKey', 'unitCost', 'piId', 'piNo', 'date', 'supplierName', 'uom', 'stale', 'lastEventId', 'revision', 'updatedAt', 'updatedByUid'])
+        && request.resource.data.itemKey == itemKey
+        && request.resource.data.unitCost is number && request.resource.data.unitCost >= 0
+        && request.resource.data.piId is string && request.resource.data.stale is bool
+        && request.resource.data.revision == (resource == null ? 1 : resource.data.revision + 1)
+        && request.resource.data.updatedByUid == request.auth.uid && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // ───────── Purchase Invoices (V268.1) ─────────
+    // Written by js/purchase-service.mjs in ONE commit: invoice + NEW event + supplier-invoice-no. claim
+    // + purchased quantities per Sales Order line + stock. Posted figures never change; an invoice is only
+    // cancelled (voided), with a new event. Nothing is deleted except the claim of a cancelled invoice.
+    match /settings/purchasing {
+      allow read: if staff();
+      allow write: if isAdmin() && staff()
+        && request.resource.data.costLimitPct is number && request.resource.data.costLimitPct >= 0 && request.resource.data.costLimitPct <= 1000
+        && request.resource.data.costLimitAction in ['reason', 'block']
+        && request.resource.data.discountMode in ['invoice', 'line', 'both']
+        && request.resource.data.roundingLimit is number && request.resource.data.roundingLimit >= 0 && request.resource.data.roundingLimit <= 100
+        && request.resource.data.vatRate is number && request.resource.data.vatRate >= 0 && request.resource.data.vatRate <= 100
+        && request.resource.data.profitVisibility in ['admins', 'everyone']
+        && request.resource.data.get('editMode', 'limited-admin') in ['off', 'limited', 'limited-admin', 'full']
+        && request.resource.data.get('editDays', 7) is int && request.resource.data.get('editDays', 7) >= 0 && request.resource.data.get('editDays', 7) <= 365
+        && request.resource.data.get('newProductRight', 'everyone') in ['everyone', 'admins']
+        && request.resource.data.updatedByUid == request.auth.uid;
+    }
+    match /purchaseInvoices/{piId} {
+      allow read: if canV(['purchaseInvoice','supplierPayment','cash']);
+      allow create: if canC(['purchaseInvoice']) && piCreateOk(request.resource.data);
+      allow update: if canX(['purchaseInvoice']) && piVoidOk(request.resource.data);
+      allow update: if canW(['supplierPayment','purchaseInvoice']) && piPayOk(request.resource.data);
+      allow update: if canE(['purchaseInvoice']) && piEditOk(request.resource.data);
+      allow delete: if false;
+      function piEventAfter(d) { return getAfter(/databases/$(database)/documents/purchaseInvoices/$(piId)/events/$(d.lastEventId)).data; }
+      function piCreateOk(d) {
+        return d.id == piId && piId.matches('^PI-[A-Za-z0-9_-]{8,200}$')
+          && d.status == 'Posted' && d.revision == 1
+          && d.createdByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.supplierName is string && d.supplierName.size() >= 1
+          && d.supplierInvoiceNo is string && d.supplierInvoiceNo.size() >= 1
+          && d.dueDate is string && d.dueDate >= d.date
+          && d.lines is list && d.lines.size() >= 1 && d.lines.size() <= 300
+          && d.totals.total is number && d.totals.supplierTotal == d.totals.total
+          // V268.2: payments made at entry are written in the same commit (listed in the posted event)
+          && d.paid is number && d.paid >= 0 && d.paid <= d.totals.total + 0.005
+          && d.get('paymentDiscount', 0) == 0 && d.get('cashBack', 0) == 0
+          && near(d.balance, d.totals.total - d.paid) && d.payStatus == payStatusFor(d.totals.total, d.paid, 0)
+          && (d.paid == 0 || piEventAfter(d).paymentIds.size() >= 1)
+          && piEventAfter(d).kind == 'posted' && piEventAfter(d).toRevision == 1
+          && getAfter(/databases/$(database)/documents/purchaseSupplierRefs/$(d.supplierRefKey)).data.invoiceId == piId;
+      }
+      // only cancelling: status, reason and who/when change — never the figures
+      function piVoidOk(d) {
+        return resource.data.status == 'Posted' && d.status == 'Voided'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'voidReason', 'voidedAt', 'voidedBy', 'voidedByUid', 'revision', 'lastEventId', 'updatedAt', 'updatedBy', 'updatedByUid'])
+          && d.revision == resource.data.revision + 1
+          && d.voidedByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.voidReason is string && d.voidReason.size() >= 1
+          && resource.data.get('paid', 0) == 0 && resource.data.get('paymentDiscount', 0) == 0 && resource.data.get('cashBack', 0) == 0
+          && piEventAfter(d).kind == 'voided' && piEventAfter(d).toRevision == d.revision;
+      }
+      // V268.2: a payment / cash back is added or cancelled — only the money figures move, with an event,
+      // and they move by exactly that payment's amount and discount
+      function piPayOk(d) {
+        let r = resource.data;
+        let ev = piEventAfter(d);
+        let pPath = /databases/$(database)/documents/supplierPayments/$(ev.paymentId);
+        let p = getAfter(pPath).data;
+        let adding = ev.kind in ['payment', 'cashback'];
+        let editing = ev.kind in ['payment-edited', 'cashback-edited'];
+        let sign = adding || editing ? 1 : -1;
+        let isPay = p.kind == 'payment';
+        // V268.3: a payment changed in full moves the figures by (new − old)
+        let oldAmt = editing ? get(pPath).data.amount : 0;
+        let oldDisc = editing ? get(pPath).data.discount : 0;
+        return r.status == 'Posted' && d.status == 'Posted'
+          && request.resource.data.diff(r).affectedKeys().hasOnly(['paid', 'paymentDiscount', 'cashBack', 'balance', 'payStatus', 'paymentCount', 'revision', 'lastEventId', 'updatedAt', 'updatedBy', 'updatedByUid'])
+          && d.revision == r.revision + 1 && d.updatedByUid == request.auth.uid
+          && ev.kind in ['payment', 'payment-voided', 'cashback', 'cashback-voided', 'payment-edited', 'cashback-edited'] && ev.toRevision == d.revision
+          && p.invoiceId == piId
+          && (ev.kind in ['payment', 'payment-voided', 'payment-edited']) == isPay
+          && (adding ? (p.status == 'Posted' && !exists(pPath))
+              : (editing ? (p.status == 'Posted' && get(pPath).data.status == 'Posted' && p.lastEventId == d.lastEventId)
+                : (p.status == 'Voided' && get(pPath).data.status == 'Posted')))
+          && near(d.paid, r.get('paid', 0) + (isPay ? sign * p.amount - oldAmt : 0))
+          && near(d.paymentDiscount, r.get('paymentDiscount', 0) + (isPay ? sign * p.discount - oldDisc : 0))
+          && near(d.cashBack, r.get('cashBack', 0) + (isPay ? 0 : sign * p.amount - oldAmt))
+          && d.paid > -0.006 && d.paymentDiscount > -0.006 && d.cashBack > -0.006 && d.cashBack < d.paid + 0.006
+          && near(d.balance, d.totals.total - d.paid - d.paymentDiscount) && d.balance > -0.006
+          && d.payStatus == payStatusFor(d.totals.total, d.paid, d.paymentDiscount);
+      }
+      // V268.3: edit. Limited (staff, within the edit days): numbers, dates, cost reasons — no figures.
+      // Full (administrators): the lines and amounts — only while nothing is paid; purchased quantities and stock
+      // follow in the same commit (their own rules check the event).
+      function piEditOk(d) {
+        let r = resource.data;
+        let ev = piEventAfter(d);
+        let keys = request.resource.data.diff(r).affectedKeys();
+        let full = ev.get('mode', '') == 'full';
+        return r.status == 'Posted' && d.status == 'Posted' && ev.kind == 'edited' && ev.toRevision == d.revision
+          && d.revision == r.revision + 1 && d.updatedByUid == request.auth.uid
+          && d.piNo == r.piNo && d.created == r.created && d.createdByUid == r.createdByUid && d.recordedAt == r.recordedAt
+          && d.lastEditReason is string && d.lastEditReason.size() >= 1
+          && d.dueDate is string && d.dueDate >= d.date
+          && d.supplierInvoiceNo is string && d.supplierInvoiceNo.size() >= 1
+          && d.lines is list && d.lines.size() >= 1 && d.lines.size() <= 300
+          && purEditRight(r, full)
+          && (full
+              ? (r.get('paid', 0) == 0 && r.get('paymentDiscount', 0) == 0 && r.get('cashBack', 0) == 0
+                 && d.paid == 0 && d.paymentDiscount == 0 && d.cashBack == 0 && d.payStatus == 'Unpaid' && near(d.balance, d.totals.total)
+                 && d.totals.total is number && d.totals.supplierTotal == d.totals.total)
+              : (keys.hasOnly(['supplierInvoiceNo', 'supplierInvoiceKey', 'supplierRefKey', 'zohoBillNo', 'date', 'dueDate', 'lines', 'revision', 'lastEventId', 'lastEditReason', 'updatedAt', 'updatedBy', 'updatedByUid'])
+                 && d.lines.size() == r.lines.size()))
+          && (d.supplierRefKey == r.supplierRefKey
+              || getAfter(/databases/$(database)/documents/purchaseSupplierRefs/$(d.supplierRefKey)).data.invoiceId == piId);
+      }
+      match /events/{eventId} {
+        allow read: if canV(['purchaseInvoice','supplierPayment','cash']);
+        allow create: if canW(['supplierPayment','purchaseInvoice'])
+          && request.resource.data.id == eventId
+          && request.resource.data.invoiceId == piId
+          && request.resource.data.actorUid == request.auth.uid
+          && getAfter(/databases/$(database)/documents/purchaseInvoices/$(piId)).data.lastEventId == eventId
+          && getAfter(/databases/$(database)/documents/purchaseInvoices/$(piId)).data.revision == request.resource.data.toRevision;
+        allow update, delete: if false;
+      }
+    }
+    // V268.2: supplier payments / cash back — written with the invoice's figures, event and ledger entry in ONE commit.
+    // Never deleted; a wrong one is cancelled (void, with a reason) and everything goes back.
+    match /supplierPayments/{payId} {
+      allow read: if canV(['purchaseInvoice','supplierPayment','cash']);
+      allow create: if canW(['supplierPayment','purchaseInvoice']) && (request.resource.data.kind == 'advance' ? advCreateOk(request.resource.data) : spCreateOk(request.resource.data));
+      allow update: if canW(['supplierPayment','purchaseInvoice']) && (resource.data.kind == 'advance'
+        ? (advUseOk(request.resource.data) || advVoidOk(request.resource.data) || spLimitedEditOk(request.resource.data) || spFullEditOk(request.resource.data))
+        : (spVoidOk(request.resource.data) || spLimitedEditOk(request.resource.data) || spFullEditOk(request.resource.data)));
+      allow delete: if false;
+      function payAfter(id) { return getAfter(/databases/$(database)/documents/supplierPayments/$(id)).data; }
+      function payEventAfter(d) { return getAfter(/databases/$(database)/documents/supplierPayments/$(payId)/events/$(d.lastEventId)).data; }
+      function entryOk(d) { return d.entryId == '' || getAfter(/databases/$(database)/documents/cashEntries/$(d.entryId)).data.paymentId == payId; }
+      // V268.3: the advances a payment uses (at most 3) record this payment as their last use, in the same commit
+      function advancesOk(d) {
+        let ids = d.get('advanceIds', []);
+        return ids is list && ids.size() <= 3 && d.get('advanceAmounts', {}).keys().hasOnly(ids)
+          && (ids.size() < 1 || payAfter(ids[0]).lastUseId == payId)
+          && (ids.size() < 2 || payAfter(ids[1]).lastUseId == payId)
+          && (ids.size() < 3 || payAfter(ids[2]).lastUseId == payId);
+      }
+      // V268.3: an advance (no invoice yet), with its ledger entry and a 'posted' event
+      function advCreateOk(d) {
+        return d.id == payId && payId.matches('^SPAY-[A-Za-z0-9_-]{8,210}$')
+          && d.status == 'Posted' && d.revision == 1
+          && d.createdByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.invoiceId == '' && d.supplierName is string && d.supplierName.size() >= 1
+          && d.amount is number && d.amount > 0 && d.discount == 0 && d.bankCharges is number && d.bankCharges >= 0
+          && d.advanceUsed == 0 && near(d.advanceLeft, d.amount) && d.advanceIds.size() == 0 && d.advanceTotal == 0
+          && d.lines is list && d.lines.size() >= 1 && d.lines.size() <= 10
+          && d.spNo is string && d.spNo.size() >= 1
+          && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && d.entryId != '' && entryOk(d)
+          && payEventAfter(d).kind == 'posted';
+      }
+      // V268.3: an invoice payment uses part of this advance (+) or gives it back when cancelled (−)
+      function advUseOk(d) {
+        let r = resource.data;
+        let uPath = /databases/$(database)/documents/supplierPayments/$(d.lastUseId);
+        let u = getAfter(uPath).data;
+        let amt = u.advanceAmounts[payId];
+        return r.status == 'Posted' && d.status == 'Posted'
+          && request.resource.data.diff(r).affectedKeys().hasOnly(['advanceUsed', 'advanceLeft', 'revision', 'lastUseId', 'updatedAt', 'updatedBy', 'updatedByUid'])
+          && d.revision == r.revision + 1 && d.updatedByUid == request.auth.uid
+          && d.advanceUsed > -0.006 && d.advanceLeft > -0.006 && near(d.advanceLeft, r.amount - d.advanceUsed)
+          && u.kind == 'payment' && u.supplierKey == r.supplierKey && payId in u.advanceIds
+          && ((u.status == 'Posted' && !exists(uPath) && near(d.advanceUsed, r.advanceUsed + amt))
+              || (u.status == 'Voided' && get(uPath).data.status == 'Posted' && near(d.advanceUsed, r.advanceUsed - amt)));
+      }
+      function advVoidOk(d) {
+        let r = resource.data;
+        return r.status == 'Posted' && d.status == 'Voided' && r.advanceUsed < 0.006
+          && request.resource.data.diff(r).affectedKeys().hasOnly(['status', 'voidReason', 'voidedAt', 'voidedBy', 'voidedByUid', 'voidEventId', 'revision', 'lastEventId', 'updatedAt', 'updatedBy', 'updatedByUid'])
+          && d.revision == r.revision + 1 && d.voidedByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.voidReason is string && d.voidReason.size() >= 1
+          && d.voidEventId == d.lastEventId && payEventAfter(d).kind == 'voided'
+          && (r.entryId == '' || getAfter(/databases/$(database)/documents/cashEntries/$(r.entryId)).data.void == true);
+      }
+      // V268.3: limited edit — references and note; the money (amount, accounts, ledger entry) stays
+      function spLimitedEditOk(d) {
+        let r = resource.data;
+        return r.status == 'Posted' && d.status == 'Posted' && purEditRight(r, false)
+          && request.resource.data.diff(r).affectedKeys().hasOnly(['lines', 'note', 'revision', 'lastEventId', 'lastEditReason', 'updatedAt', 'updatedBy', 'updatedByUid'])
+          && d.lines.size() == r.lines.size()
+          && d.revision == r.revision + 1 && d.updatedByUid == request.auth.uid
+          && d.lastEditReason is string && d.lastEditReason.size() >= 1
+          && payEventAfter(d).kind == 'edited' && payEventAfter(d).mode == 'limited';
+      }
+      // V268.3: full edit (administrators) — new amounts / accounts with a NEW ledger entry; the old entry is cancelled.
+      // Not for payments that use advances; an advance can't go below what is already used.
+      function spFullEditOk(d) {
+        let r = resource.data;
+        let isAdv = r.kind == 'advance';
+        return r.status == 'Posted' && d.status == 'Posted' && purEditRight(r, true)
+          && d.id == r.id && d.kind == r.kind && d.spNo == r.spNo && d.invoiceId == r.invoiceId && d.supplierKey == r.supplierKey
+          && d.created == r.created && d.createdByUid == r.createdByUid && d.recordedAt == r.recordedAt && d.operationId == r.operationId
+          && d.revision == r.revision + 1 && d.updatedByUid == request.auth.uid
+          && d.lastEditReason is string && d.lastEditReason.size() >= 1
+          && r.get('advanceIds', []).size() == 0 && d.get('advanceIds', []).size() == 0
+          && d.amount is number && d.amount >= 0 && d.discount is number && d.discount >= 0 && d.bankCharges is number && d.bankCharges >= 0
+          && d.lines is list && d.lines.size() <= 10
+          // a new ledger entry replaces the old one (a discount-only payment has none before or after)
+          && (d.entryId != r.entryId || (d.entryId == '' && r.entryId == '')) && entryOk(d)
+          && (r.entryId == '' || getAfter(/databases/$(database)/documents/cashEntries/$(r.entryId)).data.void == true)
+          && payEventAfter(d).kind == 'edited' && payEventAfter(d).mode == 'full'
+          && (isAdv
+              ? (d.amount > 0 && d.discount == 0 && d.advanceUsed == r.advanceUsed && d.amount + 0.006 > r.advanceUsed && near(d.advanceLeft, d.amount - d.advanceUsed))
+              : spInvoiceAfter(d).lastEventId == d.lastEventId);
+      }
+      function spInvoiceAfter(d) { return getAfter(/databases/$(database)/documents/purchaseInvoices/$(d.invoiceId)).data; }
+      function spCreateOk(d) {
+        let pi = spInvoiceAfter(d);
+        let evPath = /databases/$(database)/documents/purchaseInvoices/$(d.invoiceId)/events/$(pi.lastEventId);
+        let ev = getAfter(evPath).data;
+        return d.id == payId && payId.matches('^SPAY-[A-Za-z0-9_-]{8,210}$')
+          && d.status == 'Posted' && d.revision == 1
+          && d.createdByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.kind in ['payment', 'cashback']
+          && d.amount is number && d.amount >= 0 && d.discount is number && d.discount >= 0 && d.bankCharges is number && d.bankCharges >= 0
+          && (d.kind == 'payment' ? d.amount + d.discount > 0 : (d.discount == 0 && d.bankCharges == 0 && d.amount > 0))
+          && d.lines is list && d.lines.size() <= 10
+          && d.spNo is string && d.spNo.size() >= 1
+          && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && pi.status == 'Posted' && d.piNo == pi.piNo
+          && !exists(evPath)
+          && (ev.get('paymentId', '') == payId || payId in ev.get('paymentIds', []))
+          && advancesOk(d)
+          && (d.entryId == '' ? near(d.amount, d.get('advanceTotal', 0)) : getAfter(/databases/$(database)/documents/cashEntries/$(d.entryId)).data.paymentId == payId);
+      }
+      function spVoidOk(d) {
+        let pi = spInvoiceAfter(d);
+        let ev = getAfter(/databases/$(database)/documents/purchaseInvoices/$(d.invoiceId)/events/$(pi.lastEventId)).data;
+        return resource.data.status == 'Posted' && d.status == 'Voided'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'voidReason', 'voidedAt', 'voidedBy', 'voidedByUid', 'voidEventId', 'revision', 'lastEventId', 'updatedAt', 'updatedBy', 'updatedByUid'])
+          && d.revision == resource.data.revision + 1 && d.voidedByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.voidReason is string && d.voidReason.size() >= 1
+          && d.voidEventId == pi.lastEventId && ev.paymentId == payId && ev.kind in ['payment-voided', 'cashback-voided']
+          && (d.entryId == '' || getAfter(/databases/$(database)/documents/cashEntries/$(d.entryId)).data.void == true);
+      }
+      // V268.3: the history of an advance / a changed or cancelled payment
+      match /events/{eventId} {
+        allow read: if canV(['purchaseInvoice','supplierPayment','cash']);
+        allow create: if canW(['supplierPayment','purchaseInvoice'])
+          && request.resource.data.id == eventId && request.resource.data.paymentId == payId
+          && request.resource.data.actorUid == request.auth.uid
+          && getAfter(/databases/$(database)/documents/supplierPayments/$(payId)).data.lastEventId == eventId
+          && getAfter(/databases/$(database)/documents/supplierPayments/$(payId)).data.revision == request.resource.data.toRevision;
+        allow update, delete: if false;
+      }
+    }
+    // One document per supplier + supplier invoice no.: a bill can be recorded only once.
+    match /purchaseSupplierRefs/{key} {
+      allow read: if staff();
+      allow create: if staff()
+        && request.resource.data.id == key
+        && getAfter(/databases/$(database)/documents/purchaseInvoices/$(request.resource.data.invoiceId)).data.supplierRefKey == key
+        && getAfter(/databases/$(database)/documents/purchaseInvoices/$(request.resource.data.invoiceId)).data.status == 'Posted';
+      allow update: if false;
+      // released when its invoice is cancelled, or (V268.3) when the invoice is edited to another supplier invoice no.
+      allow delete: if staff()
+        && (getAfter(/databases/$(database)/documents/purchaseInvoices/$(resource.data.invoiceId)).data.status == 'Voided'
+            || getAfter(/databases/$(database)/documents/purchaseInvoices/$(resource.data.invoiceId)).data.supplierRefKey != key);
+    }
+    // V268.4: a stock allocation (stockAllocations/{id}) changes stock, the order's purchased qty and a movement
+    // in the same commit; the allocation's lastEventId is new in that commit.
+    function allocCoupled(d) {
+      let aPath = /databases/$(database)/documents/stockAllocations/$(d.get('lastAllocationId', 'none'));
+      return d.get('lastAllocationId', '') is string && d.get('lastAllocationId', '') != ''
+        && getAfter(aPath).data.lastEventId == d.lastEventId
+        && (!exists(aPath) || get(aPath).data.lastEventId != d.lastEventId);
+    }
+    // V268.5: Change Item (stockChanges/{id}) moves stock from one item to another in the same commit (administrators).
+    function changeCoupled(d) {
+      let cPath = /databases/$(database)/documents/stockChanges/$(d.get('lastChangeId', 'none'));
+      return d.get('lastChangeId', '') is string && d.get('lastChangeId', '') != '' && isAdmin()
+        && getAfter(cPath).data.lastEventId == d.lastEventId
+        && (!exists(cPath) || get(cPath).data.lastEventId != d.lastEventId)
+        && (getAfter(cPath).data.fromKey == d.itemKey || getAfter(cPath).data.toKey == d.itemKey);
+    }
+    // Purchased quantity per Sales Order line; changes only together with an invoice event (or a stock allocation) in the same commit.
+    match /salesOrderPurchasing/{soId} {
+      allow read: if staff();
+      allow create, update: if canW(['purchaseInvoice','supplierPayment','salesOrder','stock'])
+        && request.resource.data.salesOrderId == soId
+        && request.resource.data.lines is map
+        && request.resource.data.updatedByUid == request.auth.uid
+        && request.resource.data.revision == (resource == null ? 1 : resource.data.revision + 1)
+        && (allocCoupled(request.resource.data) || piCoupledLedger());
+      allow delete: if false;
+      function piCoupledLedger() {
+        return getAfter(/databases/$(database)/documents/purchaseInvoices/$(request.resource.data.lastInvoiceId)).data.lastEventId == request.resource.data.lastEventId
+        && existsAfter(/databases/$(database)/documents/purchaseInvoices/$(request.resource.data.lastInvoiceId)/events/$(request.resource.data.lastEventId))
+        && !exists(/databases/$(database)/documents/purchaseInvoices/$(request.resource.data.lastInvoiceId)/events/$(request.resource.data.lastEventId));
+      }
+    }
+    // Unassigned stock (bought, not yet given to an order) — same coupling (invoice event or stock allocation).
+    match /stockItems/{itemKey} {
+      allow read: if staff();
+      allow create, update: if canW(['stock','purchaseInvoice','supplierPayment','salesOrder','deliveryNote'])
+        && request.resource.data.itemKey == itemKey
+        && request.resource.data.qty is number && request.resource.data.qty >= 0
+        && request.resource.data.updatedByUid == request.auth.uid
+        && request.resource.data.revision == (resource == null ? 1 : resource.data.revision + 1)
+        && (allocCoupled(request.resource.data) || changeCoupled(request.resource.data)
+            || (getAfter(/databases/$(database)/documents/purchaseInvoices/$(request.resource.data.lastInvoiceId)).data.lastEventId == request.resource.data.lastEventId
+                && !exists(/databases/$(database)/documents/purchaseInvoices/$(request.resource.data.lastInvoiceId)/events/$(request.resource.data.lastEventId))));
+      allow delete: if false;
+    }
+    match /stockMovements/{moveId} {
+      allow read: if staff();
+      allow create: if canW(['stock','purchaseInvoice','supplierPayment','salesOrder','deliveryNote'])
+        && request.resource.data.id == moveId
+        && request.resource.data.actorUid == request.auth.uid
+        && (moveAllocOk(request.resource.data) || moveChangeOk(request.resource.data) || moveInvoiceOk(request.resource.data));
+      allow update, delete: if false;
+      function moveAllocOk(d) {
+        let aPath = /databases/$(database)/documents/stockAllocations/$(d.get('allocationId', 'none'));
+        return d.get('allocationId', '') != '' && getAfter(aPath).data.lastEventId == d.eventId
+          && (!exists(aPath) || get(aPath).data.lastEventId != d.eventId) && getAfter(aPath).data.itemKey == d.itemKey;
+      }
+      function moveChangeOk(d) {
+        let cPath = /databases/$(database)/documents/stockChanges/$(d.get('changeId', 'none'));
+        return d.get('changeId', '') != '' && getAfter(cPath).data.lastEventId == d.eventId
+          && (!exists(cPath) || get(cPath).data.lastEventId != d.eventId)
+          && (getAfter(cPath).data.fromKey == d.itemKey || getAfter(cPath).data.toKey == d.itemKey);
+      }
+      function moveInvoiceOk(d) {
+        return getAfter(/databases/$(database)/documents/purchaseInvoices/$(request.resource.data.invoiceId)).data.lastEventId == request.resource.data.eventId
+        && !exists(/databases/$(database)/documents/purchaseInvoices/$(request.resource.data.invoiceId)/events/$(request.resource.data.eventId));
+      }
+    }
+    // V268.4: stock given (allocated) to a sales order line — with the stock, the order's purchased qty and a movement.
+    // Never deleted; a wrong one is cancelled (with a reason) and everything goes back.
+    match /stockAllocations/{allocId} {
+      allow read: if staff();
+      allow create: if canW(['stock','purchaseInvoice','salesOrder','deliveryNote']) && allocCreateOk(request.resource.data);
+      allow update: if canW(['stock','purchaseInvoice','salesOrder','deliveryNote']) && allocCancelOk(request.resource.data);
+      allow delete: if false;
+      function stockPath(d) { return /databases/$(database)/documents/stockItems/$(d.itemKey); }
+      function ledPath(d) { return /databases/$(database)/documents/salesOrderPurchasing/$(d.soId); }
+      function fromStockBefore(d) { return exists(ledPath(d)) ? get(ledPath(d)).data.lines.get(d.soLineId, {}).get('fromStock', 0) : 0; }
+      function allocCreateOk(d) {
+        let after = getAfter(stockPath(d)).data;
+        return d.id == allocId && allocId.matches('^SA-[A-Za-z0-9_-]{8,200}$')
+          && d.status == 'Posted' && d.revision == 1
+          && d.createdByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.qty is number && d.qty > 0 && d.unitCost is number && d.unitCost >= 0 && near(d.value, d.qty * d.unitCost)
+          && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && after.lastAllocationId == allocId && after.lastEventId == d.lastEventId
+          && get(stockPath(d)).data.qty - after.qty > d.qty - 0.000001 && get(stockPath(d)).data.qty - after.qty < d.qty + 0.000001
+          && getAfter(ledPath(d)).data.lastAllocationId == allocId
+          && near(getAfter(ledPath(d)).data.lines[d.soLineId].fromStock - fromStockBefore(d), d.qty);
+      }
+      function allocCancelOk(d) {
+        let r = resource.data;
+        let after = getAfter(stockPath(r)).data;
+        return r.status == 'Posted' && d.status == 'Voided'
+          && request.resource.data.diff(r).affectedKeys().hasOnly(['status', 'voidReason', 'voidedAt', 'voidedBy', 'voidedByUid', 'revision', 'lastEventId', 'updatedAt', 'updatedBy', 'updatedByUid'])
+          && d.revision == r.revision + 1 && d.voidedByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.voidReason is string && d.voidReason.size() >= 1
+          && after.lastAllocationId == allocId && after.lastEventId == d.lastEventId
+          && after.qty - (exists(stockPath(r)) ? get(stockPath(r)).data.qty : 0) > r.qty - 0.000001
+          && after.qty - (exists(stockPath(r)) ? get(stockPath(r)).data.qty : 0) < r.qty + 0.000001
+          && getAfter(ledPath(r)).data.lastAllocationId == allocId
+          && near(fromStockBefore(r) - getAfter(ledPath(r)).data.lines[r.soLineId].fromStock, r.qty);
+      }
+    }
+
+    // V268.5: Change Item — part or all of a stock item moved to the correct product (same unit, same cost).
+    // Administrators only; never deleted; cancelled with a reason (the stock goes back).
+    match /stockChanges/{chgId} {
+      allow read: if staff();
+      allow create: if staff() && isAdmin() && chgCreateOk(request.resource.data);
+      allow update: if staff() && isAdmin() && chgCancelOk(request.resource.data);
+      allow delete: if false;
+      function sPath(k) { return /databases/$(database)/documents/stockItems/$(k); }
+      function qtyBefore(k) { return exists(sPath(k)) ? get(sPath(k)).data.qty : 0; }
+      function chgCreateOk(d) {
+        return d.id == chgId && chgId.matches('^SC-[A-Za-z0-9_-]{8,200}$')
+          && d.status == 'Posted' && d.revision == 1
+          && d.createdByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.fromKey is string && d.toKey is string && d.fromKey != d.toKey
+          && d.qty is number && d.qty > 0 && d.value is number && d.value >= 0
+          && d.reason is string && d.reason.size() >= 5 && d.reason.size() <= 300
+          && getAfter(sPath(d.fromKey)).data.lastChangeId == chgId && getAfter(sPath(d.toKey)).data.lastChangeId == chgId
+          && getAfter(sPath(d.fromKey)).data.lastEventId == d.lastEventId && getAfter(sPath(d.toKey)).data.lastEventId == d.lastEventId
+          && near(qtyBefore(d.fromKey) - getAfter(sPath(d.fromKey)).data.qty, d.qty)
+          && near(getAfter(sPath(d.toKey)).data.qty - qtyBefore(d.toKey), d.qty);
+      }
+      function chgCancelOk(d) {
+        let r = resource.data;
+        return r.status == 'Posted' && d.status == 'Voided'
+          && request.resource.data.diff(r).affectedKeys().hasOnly(['status', 'voidReason', 'voidedAt', 'voidedBy', 'voidedByUid', 'revision', 'lastEventId', 'updatedAt', 'updatedBy', 'updatedByUid'])
+          && d.revision == r.revision + 1 && d.voidedByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.voidReason is string && d.voidReason.size() >= 1
+          && getAfter(sPath(r.fromKey)).data.lastChangeId == chgId && getAfter(sPath(r.toKey)).data.lastChangeId == chgId
+          && getAfter(sPath(r.fromKey)).data.lastEventId == d.lastEventId && getAfter(sPath(r.toKey)).data.lastEventId == d.lastEventId
+          && near(getAfter(sPath(r.fromKey)).data.qty - qtyBefore(r.fromKey), r.qty)
+          && near(qtyBefore(r.toKey) - getAfter(sPath(r.toKey)).data.qty, r.qty);
+      }
+    }
+
+    // ───────── Payment receipts (V266) ─────────
+    // Written only by the receipt service: receipt + NEW event + invoicePayments in one commit.
+    // Posted figures (customer, date, amount, method, references) are immutable; afterwards only the
+    // allocations (applying unapplied money) or the void status may change, each with a new event.
+    match /customerReceipts/{rctId} {
+      allow read: if canV(['receipt']);
+      // V270.4.3: who may record / void = the Payment Receipts module's Create / Cancel
+      allow create: if canC(['receipt']) && invoicesIndependent()
+        && request.resource.data.id == rctId
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.updatedByUid == request.auth.uid
+        && request.resource.data.revision == 1
+        && request.resource.data.status == 'Posted'
+        && request.resource.data.amount is number && request.resource.data.amount > 0
+        && request.resource.data.get('bankCharges', 0) is number && request.resource.data.get('bankCharges', 0) >= 0
+        && request.resource.data.get('bankCharges', 0) < request.resource.data.amount
+        && request.resource.data.allocations is list
+        && receiptAccountOk(request.resource.data)
+        && receiptZohoOk(request.resource.data)
+        && receiptCommitOk(request.resource.data);
+      // V266.3: every change (apply, edit, void) is made by the holder of the receipt lock.
+      allow update: if canW(['receipt']) && invoicesIndependent()
+        && resource.data.status == 'Posted'
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.updatedByUid == request.auth.uid
+        && holdsReceiptLock(rctId)
+        && receiptImmutableUnchanged()
+        && receiptCommitOk(request.resource.data)
+        && receiptChangeOk(request.resource.data, request.resource.data.diff(resource.data).affectedKeys(), receiptSettings());
+      allow delete: if false;
+
+      function holdsReceiptLock(id) {
+        let p = /databases/$(database)/documents/locks/$('receipt_' + id);
+        return exists(p) && get(p).data.uid == request.auth.uid && lockLive(get(p).data);
+      }
+      function receiptChanged() { return request.resource.data.diff(resource.data).affectedKeys(); }
+      function receiptFullKeys() { return ['customer', 'custId', 'custKey', 'date', 'amount', 'bankCharges']; }
+      function receiptLimitedKeys() { return ['reference', 'notes', 'account', 'method', 'zohoPaymentNo', 'zohoPaymentNoKey']; }
+      function receiptAllocKeys() { return ['allocations', 'applied', 'unapplied', 'invoiceIds']; }
+      // V270.4.2: the changed keys and the settings are worked out once (Firebase allows 1000 evaluated expressions per request)
+      function receiptChangeOk(d, ch, st) {
+        return (d.status == 'Voided' && canX(['receipt'])
+              && d.voidReason is string && d.voidReason.size() >= 5
+              && !ch.hasAny(receiptFullKeys().concat(receiptLimitedKeys()).concat(receiptAllocKeys())))
+          || (d.status == 'Posted' && receiptPostedChangeOk(d, ch, st.get('editReceipts', 'limited-admin-full'), st));
+      }
+      function receiptPostedChangeOk(d, ch, lvl, st) {
+        let limited = lvl in ['limited', 'limited-admin-full', 'full'];
+        let fullKeys = ch.hasAny(receiptFullKeys());
+        let full = fullKeys && (lvl == 'full' || (lvl == 'limited-admin-full' && hasRight('fullEdit')));
+        return (!fullKeys || full)
+          && (!ch.hasAny(receiptLimitedKeys()) || limited || full)
+          && (!ch.hasAny(receiptAllocKeys()) || limited || full || canC(['receipt']))
+          && d.amount is number && d.amount > 0
+          && d.get('bankCharges', 0) is number && d.get('bankCharges', 0) >= 0 && d.get('bankCharges', 0) < d.amount
+          && (!ch.hasAny(['account']) || receiptAccountOk(d))
+          && (!ch.hasAny(['zohoPaymentNoKey']) || receiptZohoOk(d));
+      }
+
+      function receiptSettings() {
+        let p = /databases/$(database)/documents/settings/receipts;
+        return exists(p) ? get(p).data : {};
+      }
+      function receiptAllowed(key, dflt) { return levelAllows(receiptSettings().get(key, dflt)); }
+      function receiptAccountOk(d) {
+        let accounts = receiptSettings().get('accounts', []);
+        return accounts.size() == 0 || d.get('account', '') in accounts;
+      }
+      function receiptZohoOk(d) {
+        let key = d.get('zohoPaymentNoKey', '');
+        return (key == '' && receiptSettings().get('zohoPaymentNo', 'mandatory') == 'optional')
+          || (key is string && key.size() > 2 && receiptZohoClaimed(key));
+      }
+      function receiptZohoClaimed(key) {
+        let zPath = /databases/$(database)/documents/receiptZohoNumbers/$(key);
+        return !exists(zPath) && existsAfter(zPath) && getAfter(zPath).data.receiptId == rctId;
+      }
+      function receiptCommitOk(d) {
+        let evPath = /databases/$(database)/documents/customerReceipts/$(rctId)/receiptEvents/$(d.lastEventId);
+        return !exists(evPath) && existsAfter(evPath) && getAfter(evPath).data.toRevision == d.revision;
+      }
+      function receiptImmutableUnchanged() {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny(
+          ['id', 'rctNo', 'creationOperationId', 'created', 'createdBy', 'createdByUid', 'schemaVersion']);
+      }
+
+      match /receiptEvents/{eventId} {
+        allow read: if canV(['receipt']);
+        allow create: if canW(['receipt']) && invoicesIndependent()
+          && request.resource.data.id == eventId
+          && request.resource.data.receiptId == rctId
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.recordedAt == request.time
+          && getAfter(/databases/$(database)/documents/customerReceipts/$(rctId)).data.lastEventId == eventId;
+        allow update, delete: if false;
+      }
+    }
+
+    // What has been paid on each invoice. Changes only together with a receipt and its new event.
+    match /invoicePayments/{invId} {
+      allow read: if canV(['invoice','receipt']);
+      allow create, update: if canW(['invoice','receipt']) && invoicesIndependent() && validPaymentWrite();
+      allow delete: if false;
+      function validPaymentWrite() {
+        let d = request.resource.data;
+        let rPath = /databases/$(database)/documents/customerReceipts/$(d.lastReceiptId);
+        let evPath = /databases/$(database)/documents/customerReceipts/$(d.lastReceiptId)/receiptEvents/$(d.lastEventId);
+        return d.id == invId && d.invoiceId == invId
+          && d.updatedByUid == request.auth.uid
+          && d.revision == (resource == null ? 1 : resource.data.revision + 1)
+          && d.paid is number && d.paid >= 0 && d.receipts is map
+          && d.lastReceiptId is string && d.lastEventId is string
+          && getAfter(rPath).data.lastEventId == d.lastEventId
+          && !exists(evPath) && existsAfter(evPath);
+      }
+    }
+
+    // One document per Zoho payment number, created with the receipt that uses it; never changed or deleted.
+    match /receiptZohoNumbers/{key} {
+      allow read: if staff();
+      allow create: if staff() && invoicesIndependent()
+        && request.resource.data.id == key
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.receiptId is string
+        && receiptClaimsKey(/databases/$(database)/documents/customerReceipts/$(request.resource.data.receiptId), key);
+      // the receipt is posted with this number, or (V266.3) edited to it in the same commit
+      function receiptClaimsKey(r, key) {
+        return getAfter(r).data.get('zohoPaymentNoKey', '') == key
+          && (!exists(r) || (get(r).data.get('zohoPaymentNoKey', '') != key && getAfter(r).data.revision == get(r).data.revision + 1));
+      }
+      allow update: if false;
+      // V266.3: released when its receipt is edited to another number (in the same commit)
+      allow delete: if staff() && invoicesIndependent()
+        && getAfter(/databases/$(database)/documents/customerReceipts/$(resource.data.receiptId)).data.zohoPaymentNoKey != key
+        && getAfter(/databases/$(database)/documents/customerReceipts/$(resource.data.receiptId)).data.revision
+           == get(/databases/$(database)/documents/customerReceipts/$(resource.data.receiptId)).data.revision + 1;
+    }
+
+    // ───────── Sales Orders ─────────
+    match /salesOrders/{soId} {
+      allow read: if canV(['salesOrder']) && ownOk('salesOrder', resource.data);
+      allow create: if canC(['salesOrder']) && !frozen() && (!independent() || noEmbeddedDeliveries()) && (!invoicesIndependent() || noEmbeddedInvoices());
+      // In independent mode, changes to the order's lines, invoices or payments require the order lock.
+      allow update: if canW(['salesOrder','deliveryNote','invoice','receipt','purchaseInvoice']) && ownOk('salesOrder', resource.data) && !frozen()
+        && (!independent() || (noEmbeddedDeliveries() && (!businessChange() || holdsOrderLock(soId))))
+        && (!invoicesIndependent() || noEmbeddedInvoices())
+        // invoice migration in progress: embedded invoices are frozen
+        && (invoiceStorageMode() != 'migrating' || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['invoices']));
+      allow delete: if canX(['salesOrder']) && ownOk('salesOrder', resource.data) && !frozen()
+        && !exists(/databases/$(database)/documents/salesOrderFulfillment/$(soId))
+        && (!independent() || holdsOrderLock(soId));
+      function noEmbeddedDeliveries() {
+        return !('deliveries' in request.resource.data)
+          || request.resource.data.deliveries == null
+          || request.resource.data.deliveries.size() == 0;
+      }
+      function noEmbeddedInvoices() {
+        return !('invoices' in request.resource.data)
+          || request.resource.data.invoices == null
+          || request.resource.data.invoices.size() == 0;
+      }
+      function businessChange() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasAny(['items', 'invoices', 'payments', 'deliveries']);
+      }
+    }
+
+    // ───────── Storage mode & migration records: admin tool only ─────────
+    match /system/{docId} {
+      allow read: if staff() || (signedIn() && docId == 'accessControl');
+      allow write: if false;
+      match /{sub=**} { allow read: if staff(); allow write: if false; }
+    }
+    match /migrationRuns/{doc=**} { allow read: if staff(); allow write: if false; }
+
+    // ───────── Sales Order fulfillment ledger ─────────
+    match /salesOrderFulfillment/{soId} {
+      allow read: if staff();
+      allow create, update: if canW(['salesOrder','deliveryNote','invoice','receipt']) && independent() && validLedgerWrite();
+      allow delete: if false;
+
+      function validLedgerWrite() {
+        let d = request.resource.data;
+        return d.salesOrderId == soId
+          && d.updatedByUid == request.auth.uid
+          && holdsOrderLock(soId)
+          && d.lines is map
+          && d.revision == (resource == null ? 1 : resource.data.revision + 1)
+          && (dnCoupled(d) || invoiceCoupled(d));
+      }
+      // Delivery Note operation: changes delivery quantities only (never the billing block)
+      function dnCoupled(d) {
+        return d.lastEventCollection in ['dispatchEvents', 'acceptanceEvents'] && dnEventOk(d)
+          && (resource == null || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['billing', 'lastInvoiceId']));
+      }
+      function dnEventOk(d) {
+        let dnPath = /databases/$(database)/documents/deliveryNotes/$(d.lastDeliveryNoteId);
+        let evPath = /databases/$(database)/documents/deliveryNotes/$(d.lastDeliveryNoteId)/$(d.lastEventCollection)/$(d.lastEventId);
+        // the ledger changes only together with a DN write and a NEW audit event in this commit
+        return !exists(evPath) && existsAfter(evPath)
+          && getAfter(dnPath).data.salesOrderId == soId
+          && getAfter(dnPath).data.lastEventId == d.lastEventId;
+      }
+      // Invoice / credit note operation: coupled to a NEW invoice event in the same commit
+      function invoiceCoupled(d) {
+        return d.lastEventCollection == 'invoiceEvents' && invoicesIndependent() && invoiceEventOk(d);
+      }
+      function invoiceEventOk(d) {
+        let invPath = /databases/$(database)/documents/customerInvoices/$(d.lastInvoiceId);
+        let evPath = /databases/$(database)/documents/customerInvoices/$(d.lastInvoiceId)/invoiceEvents/$(d.lastEventId);
+        return !exists(evPath) && existsAfter(evPath)
+          && getAfter(invPath).data.salesOrderId == soId
+          && getAfter(invPath).data.lastEventId == d.lastEventId;
+      }
+    }
+
+    // ───────── Delivery Notes ─────────
+    match /deliveryNotes/{dnId} {
+      allow read: if canV(['deliveryNote','invoice']);
+      allow create: if canC(['deliveryNote']) && independent()
+        && request.resource.data.id == dnId
+        && request.resource.data.createdByUid == request.auth.uid
+        && validBusinessWrite(1);
+      allow update: if canW(['deliveryNote','invoice']) && independent() && (
+          (resource.data.voided != true && validBusinessWrite(resource.data.revision + 1) && immutableFieldsUnchanged())
+          || tokenOnlyUpdate());
+      allow delete: if false;
+
+      function validBusinessWrite(rev) {
+        let d = request.resource.data;
+        let evPath = /databases/$(database)/documents/deliveryNotes/$(dnId)/$(d.lastEventCollection)/$(d.lastEventId);
+        return d.revision == rev
+          && d.updatedByUid == request.auth.uid
+          && d.items is list && d.items.size() > 0 && d.items.size() <= 400
+          && d.lastEventCollection in ['dispatchEvents', 'acceptanceEvents']
+          && !exists(evPath)
+          && getAfter(evPath).data.toRevision == rev
+          && getAfter(/databases/$(database)/documents/salesOrderFulfillment/$(d.salesOrderId)).data.lastEventId == d.lastEventId;
+      }
+      function immutableFieldsUnchanged() {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny(
+          ['id', 'dnNo', 'salesOrderId', 'creationOperationId', 'created', 'createdBy', 'createdByUid', 'schemaVersion', 'migratedFrom']);
+      }
+      // QR access token for an older DN: only the two token fields, only when none exists yet.
+      function tokenOnlyUpdate() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deliveryAccessToken', 'deliveryAccessCreatedAt'])
+          && (!('deliveryAccessToken' in resource.data) || resource.data.deliveryAccessToken == null)
+          && resource.data.voided != true
+          && request.resource.data.deliveryAccessToken is string
+          && request.resource.data.deliveryAccessToken.matches('^[a-f0-9]{48}$');
+      }
+
+      // ───────── Immutable audit events ─────────
+      match /{eventCollection}/{eventId} {
+        allow read: if canV(['deliveryNote','invoice']);
+        allow create: if canW(['deliveryNote','invoice']) && independent()
+          && eventCollection in ['dispatchEvents', 'acceptanceEvents']
+          && request.resource.data.id == eventId
+          && request.resource.data.deliveryNoteId == dnId
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.recordedAt == request.time
+          && getAfter(/databases/$(database)/documents/deliveryNotes/$(dnId)).data.lastEventId == eventId
+          && getAfter(/databases/$(database)/documents/deliveryNotes/$(dnId)).data.revision == request.resource.data.toRevision;
+        allow update, delete: if false;
+      }
+    }
+  }
+}

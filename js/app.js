@@ -1532,7 +1532,7 @@ function validUntil(q) {
 function bcLocalISO(d){d=d instanceof Date?d:new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 /* ── v103 Central document numbering ── */
 const DOC_NUMBERING_DEFAULTS={
-  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},paymentReceipt:{label:'Payment Receipt',prefix:'RCT',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'},supplierPayment:{label:'Supplier Payment',prefix:'SP',reset:'monthly'},
+  rfq:{label:'RFQ',prefix:'RFQ',reset:'monthly'},pricing:{label:'Pricing',prefix:'PR',reset:'monthly'},quotation:{label:'Quotation',prefix:'Q',reset:'monthly'},salesOrder:{label:'Sales Order',prefix:'SO',reset:'monthly'},deliveryNote:{label:'Delivery Note',prefix:'DN',reset:'monthly'},customerInvoice:{label:'Customer Invoice',prefix:'INV',reset:'monthly'},creditNote:{label:'Credit Note',prefix:'CN',reset:'monthly'},paymentReceipt:{label:'Payment Receipt',prefix:'RCT',reset:'monthly'},purchaseOrder:{label:'Purchase Order',prefix:'PO',reset:'monthly'},purchaseInvoice:{label:'Purchase Invoice',prefix:'PI',reset:'monthly'},supplierPayment:{label:'Supplier Payment',prefix:'SP',reset:'monthly'},job:{label:'Job (Contracting)',prefix:'JOB',reset:'monthly'},
   // V270.4.9: master codes — system-generated on save, one running sequence (never reset), no date part
   customer:{label:'Customer',prefix:'CUS',reset:'never',dateFormat:'none',digits:5},supplier:{label:'Supplier',prefix:'SUP',reset:'never',dateFormat:'none',digits:5},product:{label:'Product (goods)',prefix:'ITM',reset:'never',dateFormat:'none',digits:6},service:{label:'Product (service)',prefix:'SRV',reset:'never',dateFormat:'none',digits:6},employee:{label:'Employee',prefix:'EMP',reset:'never',dateFormat:'none',digits:4}
 };
@@ -1549,7 +1549,7 @@ const DOC_RESETS_FOR_FORMAT={none:['never'],YY:['yearly','never'],YYYY:['yearly'
 const DOC_RESET_LABELS={yearly:'Yearly',monthly:'Monthly',never:'Never'};
 const DOC_SEPARATORS=['-','/','.',''];
 const DOC_DIGITS=[3,4,5,6];
-const DOC_NUMBERING_GROUPS=[['Sales',['rfq','pricing','quotation','salesOrder','deliveryNote','customerInvoice','creditNote','paymentReceipt']],['Purchases',['purchaseOrder','purchaseInvoice','supplierPayment']],['Master Data',['customer','supplier','product','service','employee']]];
+const DOC_NUMBERING_GROUPS=[['Sales',['rfq','pricing','quotation','salesOrder','job','deliveryNote','customerInvoice','creditNote','paymentReceipt']],['Purchases',['purchaseOrder','purchaseInvoice','supplierPayment']],['Master Data',['customer','supplier','product','service','employee']]];
 function cleanDocPrefix(v){return String(v||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8);}
 function normalizeDocNumberingConfig(type,raw){
   const d=DOC_NUMBERING_DEFAULTS[type]||{},c={...(raw||{})};
@@ -1595,6 +1595,7 @@ async function allocateDocumentNumber(type,date=new Date()){
 function existingDocumentNumbers(type){
   // V270.4.9: master codes
   if(type==='customer')return customers.map(x=>x.code||''); if(type==='supplier')return suppliers.map(x=>x.code||''); if(type==='product')return products.filter(x=>x.type!=='service').map(x=>x.code||''); if(type==='service')return products.filter(x=>x.type==='service').map(x=>x.code||''); if(type==='employee')return employees.map(x=>x.code||'');
+  if(type==='job')return (window.BCJobs?BCJobs.list():[]).map(x=>x.jobNo||'');   // V271.2
   if(type==='rfq')return rfqs.map(x=>x.rfqNo||''); if(type==='quotation')return quotations.map(x=>x.qno||''); if(type==='salesOrder')return salesOrders.map(x=>x.soNo||'');
   if(type==='deliveryNote')return salesOrders.flatMap(s=>(s.deliveries||[]).map(x=>x.dnNo||'')); if(type==='customerInvoice')return salesOrders.flatMap(s=>(s.invoices||[]).map(x=>x.invNo||'')); if(type==='creditNote')return salesOrders.flatMap(s=>(s.creditNotes||[]).map(x=>x.cnNo||'')); if(type==='paymentReceipt')return (typeof receiptsCache!=='undefined'?receiptsCache:[]).map(x=>x.rctNo||''); if(type==='purchaseInvoice')return (window.BizCorePI?window.BizCorePI.invoices:[]).map(x=>x.piNo||''); if(type==='supplierPayment')return (window.BizCorePI?window.BizCorePI.payments:[]).map(x=>x.spNo||''); return [];
 }
@@ -4970,7 +4971,7 @@ function showPage(page, el) {
   pageEl.classList.add('active');
   if(!el) el=document.querySelector(`[data-nav-page="${page}"]`)||document.querySelector(`[data-nav-page="${targetPage}"]`);
   setActiveMenuItem(el);
-  const titles={masters:'Master Data',dashboard:'Dashboard',rfq:'RFQs',costing:'Pricing',quotations:'Quotations',customers:'Customers',suppliers:'Suppliers',products:'Products',analytics:'Reports',setup:'Administration',salesorders:'Sales Orders',deliverynotes:'Delivery Notes',customerinvoices:'Invoices',supplierrfqs:'Supplier RFQs',purchaseorders:'Purchase Orders',purchaseinvoices:'Purchase Invoices',supplierpayments:'Supplier Payments',stock:'Stock',warehouses:'Warehouses',categories:'Categories',units:'Units',employees:'Employees'};
+  const titles={masters:'Master Data',dashboard:'Dashboard',rfq:'RFQs',costing:'Pricing',quotations:'Quotations',customers:'Customers',suppliers:'Suppliers',products:'Products',analytics:'Reports',setup:'Administration',salesorders:'Sales Orders',jobs:'Jobs',deliverynotes:'Delivery Notes',customerinvoices:'Invoices',supplierrfqs:'Supplier RFQs',purchaseorders:'Purchase Orders',purchaseinvoices:'Purchase Invoices',supplierpayments:'Supplier Payments',stock:'Stock',warehouses:'Warehouses',categories:'Categories',units:'Units',employees:'Employees'};
   document.getElementById('page-title').textContent=titles[page]||page;
   if(targetPage==='masters'){switchMastersTab(requestedMasterTab||'customers');}
   if(page==='setup'){applySettings();loadAccessSetup();switchSetupTab('branding');renderSetupTermsList('delivery');renderSetupTermsList('payment');}
@@ -4979,6 +4980,7 @@ function showPage(page, el) {
   if(page==='quotations'){currentPage=1;renderTable();}
   if(page==='analytics')renderAnalytics();
   if(page==='salesorders')renderSOPage();
+  if(page==='jobs'&&window.BCJobs)BCJobs.renderRegister();   // V271.2
   if(page==='deliverynotes')renderDNPage();
   if(page==='customerinvoices'&&typeof renderInvoiceRegister==='function')renderInvoiceRegister();
   if(page==='receipts'&&typeof renderReceiptRegister==='function'){document.getElementById('page-title').textContent='Payment Receipts';renderReceiptRegister();}
@@ -5443,6 +5445,7 @@ function openNewQuotation(templateType) {
   calcTotals();
   if(document.getElementById('prod-search-inp')) document.getElementById('prod-search-inp').value='';
   updateValidUntil(); updateQuoteHeaderSummary(); setQuoteFormState('saved');
+  window._pendingEstimate=null; if(typeof window.bcEstQuoteSetup==='function') window.bcEstQuoteSetup();   // V271.2
   if(typeof qtOnOpen==='function') qtOnOpen();
   openModalWithSize('quote-modal');
   if(typeof qtAfterOpen==='function') qtAfterOpen();
@@ -5529,6 +5532,7 @@ function editQuotation(id, skipVatCheck=false) {
   calcTotals();
   if(document.getElementById('prod-search-inp')) document.getElementById('prod-search-inp').value='';
   updateValidUntil(); updateQuoteHeaderSummary(); setQuoteFormState('saved');
+  window._pendingEstimate=q.estimate?JSON.parse(JSON.stringify(q.estimate)):null; if(typeof window.bcEstQuoteSetup==='function') window.bcEstQuoteSetup();   // V271.2
   if(typeof qtOnOpen==='function') qtOnOpen(q);
   openModalWithSize('quote-modal');
   if(typeof qtAfterOpen==='function') qtAfterOpen(q);
@@ -5561,6 +5565,7 @@ function addItemRow(item={}) {
   if(item.pricingBuy!==undefined&&item.pricingBuy!=='') tr.dataset.pricingBuy=String(item.pricingBuy);
   if(Number(item.estCost)>0) tr.dataset.estCost=String(item.estCost);   // V270.4.14: internal cost (never printed)
   if(isScopeRow&&item.freeScope) tr.dataset.freeScope='1';             // V270.4.14: scope line on purpose (contracting, not linked)
+  if(item.estItemId) tr.dataset.estItem=String(item.estItemId);       // V271.2: a line priced by the Contracting estimate
   const discAmt=quoteLineDisc(item);
   if(discAmt){ tr.dataset.discBy=item.discBy==='pct'?'pct':'amt'; tr.dataset.discPct=String(quoteLineDiscPct(item)); }
   const selectedUom=item.uom||(isProduct?'Pcs':'Job');
@@ -6031,6 +6036,7 @@ async function saveQuotation(mode='save', opts={}) {
     if(rows[i].dataset.discErr){ const f=rows[i].querySelector(rows[i].dataset.discBy==='pct'?'[data-quote-dpct]':'[data-quote-damt]'); showToast('Line '+(i+1)+' — discount: '+rows[i].dataset.discErr,'error'); if(typeof qtRevealRow==='function') qtRevealRow(rows[i]); f?.focus(); return; }
   }
   if(window._qtTotals?.discBad){ const f=document.getElementById('f-discount'); showToast('Quotation discount: '+(f?.title||'check the amount'),'error'); f?.focus(); return; }
+  if(window._pendingEstimate&&typeof window.bcEstQuoteValidate==='function'&&!window.bcEstQuoteValidate()) return;   // V271.2: lines still match the estimate
   // Capture pendingRFQId immediately before any async operations
   const capturedRFQId = document._pendingRFQId || null;
   const capturedEditingId = editingId;
@@ -6151,6 +6157,7 @@ async function saveQuotation(mode='save', opts={}) {
       // V270.4.14: formatted scope text, scope line on purpose, internal cost of the line (own lines; Pricing's stays pricingBuy)
       if(isScope&&window.BCRich){ const dh=BCRich.htmlOf(qtField(tr,'desc')); if(dh) line.descHtml=dh; }
       if(isScope&&tr.dataset.freeScope==='1') line.freeScope=true;
+      if(tr.dataset.estItem) line.estItemId=tr.dataset.estItem;   // V271.2
       if(!tr.dataset.pricingBuy&&Number(tr.dataset.estCost)>0) line.estCost=Number(tr.dataset.estCost);
       items.push(line);
     }
@@ -6181,6 +6188,8 @@ async function saveQuotation(mode='save', opts={}) {
     taxEffectiveFrom: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.taxEffectiveFrom||activeTaxSettings().effectiveFrom) : activeTaxSettings(document.getElementById('f-date')?.value).effectiveFrom,
     vatRate: qtVatPercent(),
     vatSource: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.vatSource||'Document Snapshot') : 'Tax Master Snapshot',
+    ...(window._pendingEstimate&&typeof window.bcEstQuoteBlock==='function'?{estimate:window.bcEstQuoteBlock()}:{}),   // V271.2: Contracting estimate (print style, section amounts)
+    ...(prevQ&&prevQ.jobId?{jobId:prevQ.jobId,jobNo:prevQ.jobNo||''}:{}),
     items, custId:selectedCustId, ...quotationItemKeysField(items),   // V270.1.3: itemKeys for Selling Price History
     rfqId: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.rfqId||null) : (capturedRFQId||null),
     pricingVersion: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.pricingVersion||1) : (document._pendingPricingVersion||1),
@@ -6238,6 +6247,7 @@ async function saveQuotation(mode='save', opts={}) {
     if (rfq) {
       const _pvIndex=ensurePricingVersions(rfq);   // V269: index entries; saveRFQs writes the version documents
       const pv=_pvIndex.find(v=>Number(v.version)===Number(document._pendingPricingVersion||rfq.currentPricingVersion||1));
+      if(window._pendingEstimate&&typeof window.bcEstMarkConverted==='function') window.bcEstMarkConverted(rfq,q);   // V271.2
       if(pv){
         if(Number(pv.version)>1) _pvIndex.filter(v=>Number(v.version)<Number(pv.version)&&v.status==='Converted').forEach(v=>v.status='Superseded');
         pv.status='Converted';pv.quotationId=q.id;pv.convertedDate=new Date().toISOString();pv.updated=new Date().toISOString();
@@ -6262,7 +6272,7 @@ async function saveQuotation(mode='save', opts={}) {
   ]);
   if (_rfqNeedsSave) renderRFQPage();
 
-  clearDirty(); window._pendingQuotationOrigin=null; setQuotationPricingContext(null); closeModal('quote-modal');
+  clearDirty(); window._pendingQuotationOrigin=null; window._pendingEstimate=null; setQuotationPricingContext(null); closeModal('quote-modal');
   if(!capturedEditingId) resetQuotationRegisterFiltersForNewRecord();
   renderAll();
   if(typeof renderTable==='function')renderTable();
@@ -6474,7 +6484,10 @@ function viewQuotation(id, skipVatCheck=false) {
   else buttons.push('<button class="btn btn-secondary" data-qid="'+q.id+'" onclick="createQuotationRevision(this.dataset.qid)"><i class="ti ti-git-branch"></i>Revise</button>');
   buttons.push('<button class="btn btn-secondary" data-qid="'+q.id+'" onclick="duplicateQuotation(this.dataset.qid)"><i class="ti ti-copy"></i>Duplicate</button>');
   if(linkedSO) buttons.push('<button class="btn btn-success" data-soid="'+linkedSO.id+'" onclick="openSalesOrderDocument(this.dataset.soid)"><i class="ti ti-external-link"></i>'+escapeHtml(linkedSO.soNo)+'</button>');
-  if(status==='Won' && !getQuotationSOProgress(q.id).complete) buttons.push('<button class="btn btn-success" data-qid="'+q.id+'" onclick="transitionQuotationToSO(this)"><i class="ti ti-shopping-cart"></i>'+(linkedSO?'Create Remaining SO':'Create Sales Order')+'</button>');
+  if(q.estimate){   // V271.2: a Contracting quotation from an estimate becomes a Job, not a Sales Order
+    if(q.jobId) buttons.push('<button class="btn btn-success" data-jobid="'+escapeHtml(q.jobId)+'" onclick="window.BCJobs&&BCJobs.view(this.dataset.jobid)"><i class="ti ti-briefcase"></i>'+escapeHtml(q.jobNo||'Job')+'</button>');
+    else if(status==='Won') buttons.push('<button class="btn btn-success" data-qid="'+q.id+'" onclick="openCreateJob(this.dataset.qid)"><i class="ti ti-briefcase"></i>Create Job</button>');
+  } else if(status==='Won' && !getQuotationSOProgress(q.id).complete) buttons.push('<button class="btn btn-success" data-qid="'+q.id+'" onclick="transitionQuotationToSO(this)"><i class="ti ti-shopping-cart"></i>'+(linkedSO?'Create Remaining SO':'Create Sales Order')+'</button>');
   buttons.push('<button class="btn btn-primary" data-qid="'+q.id+'" onclick="openTemplatePicker(this.dataset.qid)"><i class="ti ti-printer"></i>Print / PDF</button>');
   // Delete / Cancel — mutually exclusive, rules enforced inside each function
   if (!linkedSO) {
@@ -6540,7 +6553,12 @@ async function commitStatus(id, newStatus, opts={}) {
   showToast('Status changed: ' + oldStatus + ' → ' + newStatus, 'success');
 
   // If marked Won → prompt to create Sales Order immediately
-  if (newStatus === 'Won') {
+  if (newStatus === 'Won' && q.estimate && !q.jobId) {   // V271.2: Contracting → Create Job
+    viewQuotation(id);
+    setTimeout(() => showConfirm({ icon: '🎉', title: 'Quotation Won!', message: q.qno + ' — ' + q.company,
+      details: { 'Contract value (excl. VAT)': fmt(calcQuote(q).bvat), 'Next step': 'Create the Job with the customer\'s PO' },
+      confirmText: 'Create Job now', cancelText: 'I\'ll do it later', confirmClass: 'btn-success', onConfirm: () => openCreateJob(id), onCancel: () => {} }), 400);
+  } else if (newStatus === 'Won') {
     // Also update the view footer so the button appears right now
     viewQuotation(id);
     // Small delay so the toast and footer update render first
@@ -6664,6 +6682,7 @@ function createQuotationRevision(id){
   updateValidUntil();
   updateQuoteHeaderSummary();
   setQuoteFormState('saved');
+  window._pendingEstimate=q.estimate?JSON.parse(JSON.stringify(q.estimate)):null; if(typeof window.bcEstQuoteSetup==='function') window.bcEstQuoteSetup();   // V271.2
   if(typeof qtOnOpen==='function') qtOnOpen(q);
   openModalWithSize('quote-modal');
   if(typeof qtAfterOpen==='function') qtAfterOpen(q);
@@ -6699,10 +6718,12 @@ async function duplicateQuotation(id) {
   const newQno = numResult.qno;
   const copy={...JSON.parse(JSON.stringify(q)),id:newQno,qno:newQno,
     rfqId:null, // don't inherit RFQ link — it's a new quotation
+    estimate:null, jobId:null, jobNo:null,   // V271.2: a copy is an ordinary service quotation
     date:bcLocalISO(),
     status:'Draft',
     created:new Date().toISOString(),
     updated:new Date().toISOString()};
+  delete copy.estimate; delete copy.jobId; delete copy.jobNo; (copy.items||[]).forEach(it=>{ if(it) delete it.estItemId; });
   quotations.unshift(copy); saveQuotations(); renderAll();
   if (numResult.isProvisional) {
     showToast('Duplicated as '+newQno+' (offline — will get final number once reconnected)','error');
@@ -7726,6 +7747,7 @@ function editRFQFromView(btn) { transitionToRFQEdit(btn); }
 function viewQuoteFromRFQ(btn){ const id=btn.getAttribute('data-qid'); closeModal('rfq-view-modal'); if(id) viewQuotation(id); }
 function viewPricingROFromBtn(btn) { const id=btn.getAttribute('data-rid'); if(id) viewPricingReadOnly(id); }
 function openPricingFromBtn(btn)   { transitionRFQToPricing(btn); }
+function openCreateJob(qid)        { if(window.BCJobs) BCJobs.openCreate(qid); }   // V271.2
 function openEstimateFromBtn(btn)  { const id=btn?.getAttribute('data-rid'); if(id&&typeof window.bcOpenEstimate==='function') window.bcOpenEstimate(id,{fromRfqView:true}); }   // V271.1
 function openNoBidDialogFromBtn(btn) { const id=btn.getAttribute('data-rid'); if(id) openNoBidDialog(id); }
 function deleteRFQFromBtn(btn) { const id=btn.getAttribute('data-rid'); if(id) deleteRFQRecord(id); }
@@ -10560,6 +10582,7 @@ async function convertToQuotation() {
     rfqId:pricingRFQId,
     sourceQuotationId:r.quotationId||revisionInfo.revisionOf||null
   } : null;
+  window._pendingEstimate=null; if(typeof window.bcEstQuoteSetup==='function') window.bcEstQuoteSetup();   // V271.2
   if(typeof qtOnOpen==='function') qtOnOpen();
   openModalWithSize('quote-modal');
   if(typeof qtAfterOpen==='function') qtAfterOpen();
@@ -13640,8 +13663,27 @@ function printQuotationErpVariant(id, variant) {
       ? '<th style="width:30px">#</th><th>Scope of Work / Description</th><th class="c" style="width:46px">Qty</th><th class="c" style="width:58px">Unit</th><th class="r" style="width:88px">Rate</th>'+(hasDisc?'<th class="r" style="width:70px">Disc.</th>':'')+'<th class="r" style="width:92px">Amount</th>'
       : '<th style="width:30px">#</th><th>Description</th><th class="c" style="width:46px">Qty</th><th class="c" style="width:48px">UOM</th><th class="r" style="width:88px">Unit Price</th>'+(hasDisc?'<th class="r" style="width:70px">Disc.</th>':'')+'<th class="r" style="width:92px">Amount</th>');
   const headImage = '<th style="width:30px">#</th><th class="c" style="width:'+imageSize.col+'">Image Ref</th><th>Description</th><th class="c" style="width:42px">Qty</th><th class="c" style="width:44px">UOM</th><th class="r" style="width:78px">Unit Price</th>'+(hasDisc?'<th class="r" style="width:66px">Disc.</th>':'')+'<th class="r" style="width:84px">Amount</th>';
-  const tableHead = (isImage && !isImageAttachment) ? headImage : headNormal;
-  const tableRows = (isImage && !isImageAttachment) ? imageRows : (isContracting ? serviceRows : normalRows);
+  const tableHead = (isImage && !isImageAttachment) ? headImage : headNormal;   // V271.2: an estimate quotation uses estHead (below)
+  let tableRows = (isImage && !isImageAttachment) ? imageRows : (isContracting ? serviceRows : normalRows);
+  // V271.2 (CQ_2): a Contracting quotation from an estimate prints Lump Sum Only (no line prices) or With Section Totals
+  const est = isContracting && q.estimate ? q.estimate : null;
+  let estHead = '';
+  if (est) {
+    const showQ = est.showQty !== false, bySec = est.style === 'sections', cols = 2 + (showQ ? 2 : 0) + (bySec ? 1 : 0);
+    const letter = i => { let t = '', n = i; do { t = String.fromCharCode(65 + n % 26) + t; n = Math.floor(n / 26) - 1; } while (n >= 0); return t; };
+    estHead = '<th style="width:40px">#</th><th>Scope of Work</th>' + (showQ ? '<th class="c" style="width:58px">Unit</th><th class="r" style="width:56px">Qty</th>' : '') + (bySec ? '<th class="r" style="width:100px">Amount</th>' : '');
+    const out = []; let sec = -1, sum = 0, title = '', n = 0;
+    const flush = () => { if (bySec && sec >= 0) out.push('<tr class="est-st"><td></td><td colspan="' + (cols - 2) + '" style="font-weight:700!important">Total — ' + (title ? escapeHtml(title) : 'Section ' + letter(sec)) + '</td><td class="r" style="font-weight:700!important">' + pdfLineAmountMoney(sum) + '</td></tr>'); };
+    (q.items || []).forEach(it => {
+      if (it.lineType === 'heading') { flush(); sec++; sum = 0; n = 0; title = it.text || it.desc || ''; out.push('<tr><td style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800">' + letter(sec) + '</td><td colspan="' + (cols - 1) + '" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800">' + escapeHtml(title) + '</td></tr>'); return; }
+      if (it.lineType === 'note') { out.push('<tr' + (it.textHtml ? ' class="bc-rt-row"' : '') + '><td></td><td colspan="' + (cols - 1) + '">' + quotationPrintLineNoteHtml(it.text || it.desc || '', quotationEffectiveNoteStyle(q, it), it.textHtml) + '</td></tr>'); return; }
+      n++; sum += quoteLineNet(it);
+      out.push('<tr' + (it.descHtml ? ' class="bc-rt-row"' : '') + '><td class="num">' + (sec >= 0 ? letter(sec) : '') + n + '</td><td><div>' + bcLineDescHtml(it, '') + '</div></td>' + (showQ ? '<td class="c">' + escapeHtml(it.uom || '') + '</td><td class="r">' + escapeHtml(String(it.qty == null ? '' : it.qty)) + '</td>' : '') + (bySec ? '<td></td>' : '') + '</tr>');
+    });
+    flush();
+    tableRows = out.join('');
+    labels.subtotal = bySec ? 'Total' : 'Lump Sum Price';
+  }
   const attachmentRows = (q.items||[]).map(function(it,i){
     if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
     if(it.lineType==='note') return '<tr><td></td><td colspan="98">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it),it.textHtml)+'</td></tr>';
@@ -13664,7 +13706,7 @@ function printQuotationErpVariant(id, variant) {
 +'</style></head><body><div class="fixed-footer">'+footerInfo+'</div><table class="pw"><tfoot><tr><td style="padding:0"><div class="footer">'+footerInfo+'</div></td></tr></tfoot><tbody><tr><td style="padding:0">'
 +'<div class="header"><div class="hrow"><div class="brand"><div class="logo-card">'+logoHtml+'</div><div class="co-meta">'+headerInfo+'</div></div><div><div class="doc-chip">'+docTitle+'</div><div class="doc-no">'+q.qno+'</div></div></div></div>'
 +'<div class="info-wrap"><div class="variant-title">'+title+'</div><div class="split-panels">'+custBlock+docPanel+'</div></div>'
-+'<div class="items-wrap"><table class="items"><thead><tr>'+tableHead+'</tr></thead><tbody>'+tableRows+'</tbody></table></div>'
++'<div class="items-wrap"><table class="items"><thead><tr>'+(estHead||tableHead)+'</tr></thead><tbody>'+tableRows+'</tbody></table></div>'
 +'<div class="after"><div class="terms"><div class="terms-title">'+termsTitle+'</div><ul>'+termsWithAdditional+'</ul></div><div class="tot">'
 +totRow(labels.subtotal,pdfSummaryMoney(sub))+(disc>0?totRow(labels.discount,'− '+pdfSummaryMoney(disc))+totRow(labels.beforeVat,pdfSummaryMoney(bvat)):'')+totRow(labels.vat+' ('+getQuoteVatPercent(q)+'%)',pdfSummaryMoney(vat))+'<div class="tot-net"><span>'+labels.net+'</span><b>'+pdfGrandTotalMoney(net)+'</b></div></div></div>'
 +(q.notes?'<div class="notes"><strong>Notes:</strong> '+q.notes+'</div>':'')

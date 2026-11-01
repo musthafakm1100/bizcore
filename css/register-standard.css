@@ -12,6 +12,7 @@
 #page-deliverynotes .bc-monitor,
 #page-customerinvoices .bc-monitor,
 #page-receipts .bc-monitor,
+#page-jobs .bc-monitor,
 #page-purchaseinvoices .bc-monitor,
 #page-stock .bc-monitor,
 #page-supplierpayments .bc-monitor{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0!important;overflow:visible!important;gap:0!important}
@@ -22,6 +23,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-head,
 #page-customerinvoices .bc-monitor .dn-overview-head,
 #page-receipts .bc-monitor .dn-overview-head,
+#page-jobs .bc-monitor .dn-overview-head,
 #page-purchaseinvoices .bc-monitor .dn-overview-head,
 #page-stock .bc-monitor .dn-overview-head,
 #page-supplierpayments .bc-monitor .dn-overview-head{min-height:52px!important;padding:9px 9px 9px 12px!important;background:var(--c-173a5e)!important;color:#fff!important;border-radius:10px 10px 0 0!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;margin:0!important;border:0!important}
@@ -32,6 +34,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-head>div,
 #page-customerinvoices .bc-monitor .dn-overview-head>div,
 #page-receipts .bc-monitor .dn-overview-head>div,
+#page-jobs .bc-monitor .dn-overview-head>div,
 #page-purchaseinvoices .bc-monitor .dn-overview-head>div,
 #page-stock .bc-monitor .dn-overview-head>div,
 #page-supplierpayments .bc-monitor .dn-overview-head>div{display:flex!important;flex-direction:column!important;gap:2px!important;min-width:0!important}
@@ -42,6 +45,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-head strong,
 #page-customerinvoices .bc-monitor .dn-overview-head strong,
 #page-receipts .bc-monitor .dn-overview-head strong,
+#page-jobs .bc-monitor .dn-overview-head strong,
 #page-purchaseinvoices .bc-monitor .dn-overview-head strong,
 #page-stock .bc-monitor .dn-overview-head strong,
 #page-supplierpayments .bc-monitor .dn-overview-head strong{font-size:15px!important;font-weight:700!important;color:#fff!important;letter-spacing:0!important;line-height:1.25!important}
@@ -52,6 +56,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-head span,
 #page-customerinvoices .bc-monitor .dn-overview-head span,
 #page-receipts .bc-monitor .dn-overview-head span,
+#page-jobs .bc-monitor .dn-overview-head span,
 #page-purchaseinvoices .bc-monitor .dn-overview-head span,
 #page-stock .bc-monitor .dn-overview-head span,
 #page-supplierpayments .bc-monitor .dn-overview-head span{font-size:10.5px!important;font-weight:400!important;color:rgba(255,255,255,.72)!important;margin:0!important;line-height:1.3!important}
@@ -62,6 +67,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-body,
 #page-customerinvoices .bc-monitor .dn-overview-body,
 #page-receipts .bc-monitor .dn-overview-body,
+#page-jobs .bc-monitor .dn-overview-body,
 #page-purchaseinvoices .bc-monitor .dn-overview-body,
 #page-stock .bc-monitor .dn-overview-body,
 #page-supplierpayments .bc-monitor .dn-overview-body{padding:0!important;background:#fff!important;border:1px solid #dfe6ee!important;border-top:0!important;border-radius:0 0 10px 10px!important;display:block!important;box-shadow:none!important;overflow:hidden!important}
@@ -72,6 +78,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-total,
 #page-customerinvoices .bc-monitor .dn-overview-total,
 #page-receipts .bc-monitor .dn-overview-total,
+#page-jobs .bc-monitor .dn-overview-total,
 #page-purchaseinvoices .bc-monitor .dn-overview-total,
 #page-stock .bc-monitor .dn-overview-total,
 #page-supplierpayments .bc-monitor .dn-overview-total{width:100%!important;min-height:0!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px!important;padding:9px 10px 10px!important;border:0!important;border-bottom:1px solid #eef2f5!important;border-radius:0!important;margin:0!important;background:#fff!important;box-shadow:none!important;color:#334155!important;cursor:pointer!important;font:inherit;transform:none!important}
@@ -82,6 +89,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-total span,
 #page-customerinvoices .bc-monitor .dn-overview-total span,
 #page-receipts .bc-monitor .dn-overview-total span,
+#page-jobs .bc-monitor .dn-overview-total span,
 #page-purchaseinvoices .bc-monitor .dn-overview-total span,
 #page-stock .bc-monitor .dn-overview-total span,
 #page-supplierpayments .bc-monitor .dn-overview-total span{font-size:12.5px!important;font-weight:600!important;text-align:left!important;color:inherit!important}
@@ -92,6 +100,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-total strong,
 #page-customerinvoices .bc-monitor .dn-overview-total strong,
 #page-receipts .bc-monitor .dn-overview-total strong,
+#page-jobs .bc-monitor .dn-overview-total strong,
 #page-purchaseinvoices .bc-monitor .dn-overview-total strong,
 #page-stock .bc-monitor .dn-overview-total strong,
 #page-supplierpayments .bc-monitor .dn-overview-total strong{min-width:34px!important;font-size:21px!important;font-weight:720!important;color:var(--c-173a5e)!important;text-align:right!important;font-variant-numeric:tabular-nums!important;line-height:1.1!important}
@@ -102,6 +111,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-section-label,
 #page-customerinvoices .bc-monitor .dn-overview-section-label,
 #page-receipts .bc-monitor .dn-overview-section-label,
+#page-jobs .bc-monitor .dn-overview-section-label,
 #page-purchaseinvoices .bc-monitor .dn-overview-section-label,
 #page-stock .bc-monitor .dn-overview-section-label,
 #page-supplierpayments .bc-monitor .dn-overview-section-label{display:block!important;padding:9px 10px 5px!important;margin:0!important;font-size:10px!important;font-weight:700!important;letter-spacing:.07em!important;text-transform:uppercase!important;color:#8a98a8!important;border:0!important;background:transparent!important}
@@ -112,6 +122,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-row,
 #page-customerinvoices .bc-monitor .dn-overview-row,
 #page-receipts .bc-monitor .dn-overview-row,
+#page-jobs .bc-monitor .dn-overview-row,
 #page-purchaseinvoices .bc-monitor .dn-overview-row,
 #page-stock .bc-monitor .dn-overview-row,
 #page-supplierpayments .bc-monitor .dn-overview-row{width:100%!important;min-height:37px!important;display:grid!important;grid-template-columns:minmax(0,1fr) 44px!important;align-items:center!important;gap:8px!important;padding:5px 10px!important;margin:0!important;border:0!important;border-bottom:1px solid #f0f3f6!important;border-radius:0!important;background:#fff!important;box-shadow:none!important;color:#334155!important;text-align:left!important;cursor:pointer;font:inherit;transform:none!important}
@@ -122,6 +133,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-row>span,
 #page-customerinvoices .bc-monitor .dn-overview-row>span,
 #page-receipts .bc-monitor .dn-overview-row>span,
+#page-jobs .bc-monitor .dn-overview-row>span,
 #page-purchaseinvoices .bc-monitor .dn-overview-row>span,
 #page-stock .bc-monitor .dn-overview-row>span,
 #page-supplierpayments .bc-monitor .dn-overview-row>span{display:flex!important;align-items:center!important;gap:9px!important;min-width:0!important;font-size:13px!important;font-weight:500!important;color:inherit!important;line-height:1.3!important}
@@ -132,6 +144,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-row>strong,
 #page-customerinvoices .bc-monitor .dn-overview-row>strong,
 #page-receipts .bc-monitor .dn-overview-row>strong,
+#page-jobs .bc-monitor .dn-overview-row>strong,
 #page-purchaseinvoices .bc-monitor .dn-overview-row>strong,
 #page-stock .bc-monitor .dn-overview-row>strong,
 #page-supplierpayments .bc-monitor .dn-overview-row>strong{min-width:34px!important;margin:0!important;font-size:16px!important;font-weight:700!important;line-height:1!important;color:#243447!important;text-align:right!important;font-variant-numeric:tabular-nums!important}
@@ -157,21 +170,25 @@
 #page-deliverynotes .bc-monitor .dn-overview-row.active,
 #page-customerinvoices .bc-monitor .dn-overview-total:hover,
 #page-receipts .bc-monitor .dn-overview-total:hover,
+#page-jobs .bc-monitor .dn-overview-total:hover,
 #page-purchaseinvoices .bc-monitor .dn-overview-total:hover,
 #page-stock .bc-monitor .dn-overview-total:hover,
 #page-supplierpayments .bc-monitor .dn-overview-total:hover,
 #page-customerinvoices .bc-monitor .dn-overview-row:hover,
 #page-receipts .bc-monitor .dn-overview-row:hover,
+#page-jobs .bc-monitor .dn-overview-row:hover,
 #page-purchaseinvoices .bc-monitor .dn-overview-row:hover,
 #page-stock .bc-monitor .dn-overview-row:hover,
 #page-supplierpayments .bc-monitor .dn-overview-row:hover,
 #page-customerinvoices .bc-monitor .dn-overview-total.active,
 #page-receipts .bc-monitor .dn-overview-total.active,
+#page-jobs .bc-monitor .dn-overview-total.active,
 #page-purchaseinvoices .bc-monitor .dn-overview-total.active,
 #page-stock .bc-monitor .dn-overview-total.active,
 #page-supplierpayments .bc-monitor .dn-overview-total.active,
 #page-customerinvoices .bc-monitor .dn-overview-row.active,
 #page-receipts .bc-monitor .dn-overview-row.active,
+#page-jobs .bc-monitor .dn-overview-row.active,
 #page-purchaseinvoices .bc-monitor .dn-overview-row.active,
 #page-stock .bc-monitor .dn-overview-row.active,
 #page-supplierpayments .bc-monitor .dn-overview-row.active{background:#f6f9fc!important}
@@ -182,6 +199,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-row.active,
 #page-customerinvoices .bc-monitor .dn-overview-row.active,
 #page-receipts .bc-monitor .dn-overview-row.active,
+#page-jobs .bc-monitor .dn-overview-row.active,
 #page-purchaseinvoices .bc-monitor .dn-overview-row.active,
 #page-stock .bc-monitor .dn-overview-row.active,
 #page-supplierpayments .bc-monitor .dn-overview-row.active{box-shadow:inset 3px 0 0 var(--c-2e75b6)!important}
@@ -197,11 +215,13 @@
 #page-deliverynotes .bc-monitor .dn-overview-row.active>span,
 #page-customerinvoices .bc-monitor .dn-overview-total.active span,
 #page-receipts .bc-monitor .dn-overview-total.active span,
+#page-jobs .bc-monitor .dn-overview-total.active span,
 #page-purchaseinvoices .bc-monitor .dn-overview-total.active span,
 #page-stock .bc-monitor .dn-overview-total.active span,
 #page-supplierpayments .bc-monitor .dn-overview-total.active span,
 #page-customerinvoices .bc-monitor .dn-overview-row.active>span,
 #page-receipts .bc-monitor .dn-overview-row.active>span,
+#page-jobs .bc-monitor .dn-overview-row.active>span,
 #page-purchaseinvoices .bc-monitor .dn-overview-row.active>span,
 #page-stock .bc-monitor .dn-overview-row.active>span,
 #page-supplierpayments .bc-monitor .dn-overview-row.active>span{color:var(--c-173a5e)!important}
@@ -212,6 +232,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-row.bc-monitor-metric,
 #page-customerinvoices .bc-monitor .dn-overview-row.bc-monitor-metric,
 #page-receipts .bc-monitor .dn-overview-row.bc-monitor-metric,
+#page-jobs .bc-monitor .dn-overview-row.bc-monitor-metric,
 #page-purchaseinvoices .bc-monitor .dn-overview-row.bc-monitor-metric,
 #page-stock .bc-monitor .dn-overview-row.bc-monitor-metric,
 #page-supplierpayments .bc-monitor .dn-overview-row.bc-monitor-metric{grid-template-columns:minmax(0,1fr) auto!important;cursor:default!important}
@@ -222,6 +243,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-row.bc-monitor-metric>span,
 #page-customerinvoices .bc-monitor .dn-overview-row.bc-monitor-metric>span,
 #page-receipts .bc-monitor .dn-overview-row.bc-monitor-metric>span,
+#page-jobs .bc-monitor .dn-overview-row.bc-monitor-metric>span,
 #page-purchaseinvoices .bc-monitor .dn-overview-row.bc-monitor-metric>span,
 #page-stock .bc-monitor .dn-overview-row.bc-monitor-metric>span,
 #page-supplierpayments .bc-monitor .dn-overview-row.bc-monitor-metric>span{font-size:12.5px!important;color:#475569!important}
@@ -232,6 +254,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-row.bc-monitor-metric>strong,
 #page-customerinvoices .bc-monitor .dn-overview-row.bc-monitor-metric>strong,
 #page-receipts .bc-monitor .dn-overview-row.bc-monitor-metric>strong,
+#page-jobs .bc-monitor .dn-overview-row.bc-monitor-metric>strong,
 #page-purchaseinvoices .bc-monitor .dn-overview-row.bc-monitor-metric>strong,
 #page-stock .bc-monitor .dn-overview-row.bc-monitor-metric>strong,
 #page-supplierpayments .bc-monitor .dn-overview-row.bc-monitor-metric>strong{font-size:13.5px!important;white-space:nowrap!important}
@@ -242,6 +265,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-row.bc-monitor-metric:hover,
 #page-customerinvoices .bc-monitor .dn-overview-row.bc-monitor-metric:hover,
 #page-receipts .bc-monitor .dn-overview-row.bc-monitor-metric:hover,
+#page-jobs .bc-monitor .dn-overview-row.bc-monitor-metric:hover,
 #page-purchaseinvoices .bc-monitor .dn-overview-row.bc-monitor-metric:hover,
 #page-stock .bc-monitor .dn-overview-row.bc-monitor-metric:hover,
 #page-supplierpayments .bc-monitor .dn-overview-row.bc-monitor-metric:hover{background:#fff!important}
@@ -252,6 +276,7 @@
 #page-deliverynotes .bc-monitor .dn-overview-body>:last-child,
 #page-customerinvoices .bc-monitor .dn-overview-body>:last-child,
 #page-receipts .bc-monitor .dn-overview-body>:last-child,
+#page-jobs .bc-monitor .dn-overview-body>:last-child,
 #page-purchaseinvoices .bc-monitor .dn-overview-body>:last-child,
 #page-stock .bc-monitor .dn-overview-body>:last-child,
 #page-supplierpayments .bc-monitor .dn-overview-body>:last-child{border-bottom:0!important}
@@ -262,6 +287,7 @@
 #page-deliverynotes .bc-monitor .dn-dot,
 #page-customerinvoices .bc-monitor .dn-dot,
 #page-receipts .bc-monitor .dn-dot,
+#page-jobs .bc-monitor .dn-dot,
 #page-purchaseinvoices .bc-monitor .dn-dot,
 #page-stock .bc-monitor .dn-dot,
 #page-supplierpayments .bc-monitor .dn-dot{width:9px!important;height:9px!important;border-radius:50%!important;display:inline-block!important;flex:0 0 9px!important;box-shadow:0 0 0 2px rgba(15,23,42,.04)!important}
@@ -272,6 +298,7 @@
 #page-deliverynotes .bc-monitor .bc-dot-slate,
 #page-customerinvoices .bc-monitor .bc-dot-slate,
 #page-receipts .bc-monitor .bc-dot-slate,
+#page-jobs .bc-monitor .bc-dot-slate,
 #page-purchaseinvoices .bc-monitor .bc-dot-slate,
 #page-stock .bc-monitor .bc-dot-slate,
 #page-supplierpayments .bc-monitor .bc-dot-slate{background:#64748b!important}
@@ -282,6 +309,7 @@
 #page-deliverynotes .bc-monitor .bc-dot-amber,
 #page-customerinvoices .bc-monitor .bc-dot-amber,
 #page-receipts .bc-monitor .bc-dot-amber,
+#page-jobs .bc-monitor .bc-dot-amber,
 #page-purchaseinvoices .bc-monitor .bc-dot-amber,
 #page-stock .bc-monitor .bc-dot-amber,
 #page-supplierpayments .bc-monitor .bc-dot-amber{background:#f59e0b!important}
@@ -292,6 +320,7 @@
 #page-deliverynotes .bc-monitor .bc-dot-green,
 #page-customerinvoices .bc-monitor .bc-dot-green,
 #page-receipts .bc-monitor .bc-dot-green,
+#page-jobs .bc-monitor .bc-dot-green,
 #page-purchaseinvoices .bc-monitor .bc-dot-green,
 #page-stock .bc-monitor .bc-dot-green,
 #page-supplierpayments .bc-monitor .bc-dot-green{background:#22c55e!important}
@@ -302,6 +331,7 @@
 #page-deliverynotes .bc-monitor .bc-dot-blue,
 #page-customerinvoices .bc-monitor .bc-dot-blue,
 #page-receipts .bc-monitor .bc-dot-blue,
+#page-jobs .bc-monitor .bc-dot-blue,
 #page-purchaseinvoices .bc-monitor .bc-dot-blue,
 #page-stock .bc-monitor .bc-dot-blue,
 #page-supplierpayments .bc-monitor .bc-dot-blue{background:#3b82f6!important}
@@ -312,6 +342,7 @@
 #page-deliverynotes .bc-monitor .bc-dot-red,
 #page-customerinvoices .bc-monitor .bc-dot-red,
 #page-receipts .bc-monitor .bc-dot-red,
+#page-jobs .bc-monitor .bc-dot-red,
 #page-purchaseinvoices .bc-monitor .bc-dot-red,
 #page-stock .bc-monitor .bc-dot-red,
 #page-supplierpayments .bc-monitor .bc-dot-red{background:#ef4444!important}
@@ -322,6 +353,7 @@
 #page-deliverynotes .bc-monitor .bc-dot-orange,
 #page-customerinvoices .bc-monitor .bc-dot-orange,
 #page-receipts .bc-monitor .bc-dot-orange,
+#page-jobs .bc-monitor .bc-dot-orange,
 #page-purchaseinvoices .bc-monitor .bc-dot-orange,
 #page-stock .bc-monitor .bc-dot-orange,
 #page-supplierpayments .bc-monitor .bc-dot-orange{background:#f97316!important}
@@ -332,6 +364,7 @@
 #page-deliverynotes .bc-monitor .bc-dot-purple,
 #page-customerinvoices .bc-monitor .bc-dot-purple,
 #page-receipts .bc-monitor .bc-dot-purple,
+#page-jobs .bc-monitor .bc-dot-purple,
 #page-purchaseinvoices .bc-monitor .bc-dot-purple,
 #page-stock .bc-monitor .bc-dot-purple,
 #page-supplierpayments .bc-monitor .bc-dot-purple{background:#8b5cf6!important}
@@ -342,6 +375,7 @@
 #page-deliverynotes .bc-monitor .bc-dot-yellow,
 #page-customerinvoices .bc-monitor .bc-dot-yellow,
 #page-receipts .bc-monitor .bc-dot-yellow,
+#page-jobs .bc-monitor .bc-dot-yellow,
 #page-purchaseinvoices .bc-monitor .bc-dot-yellow,
 #page-stock .bc-monitor .bc-dot-yellow,
 #page-supplierpayments .bc-monitor .bc-dot-yellow{background:#eab308!important}
@@ -352,6 +386,7 @@
 #page-deliverynotes .bc-monitor .bc-dot-teal,
 #page-customerinvoices .bc-monitor .bc-dot-teal,
 #page-receipts .bc-monitor .bc-dot-teal,
+#page-jobs .bc-monitor .bc-dot-teal,
 #page-purchaseinvoices .bc-monitor .bc-dot-teal,
 #page-stock .bc-monitor .bc-dot-teal,
 #page-supplierpayments .bc-monitor .bc-dot-teal{background:#14b8a6!important}
@@ -362,6 +397,7 @@
 #page-deliverynotes .bc-monitor .bc-dot-gray,
 #page-customerinvoices .bc-monitor .bc-dot-gray,
 #page-receipts .bc-monitor .bc-dot-gray,
+#page-jobs .bc-monitor .bc-dot-gray,
 #page-purchaseinvoices .bc-monitor .bc-dot-gray,
 #page-stock .bc-monitor .bc-dot-gray,
 #page-supplierpayments .bc-monitor .bc-dot-gray{background:#94a3b8!important}
@@ -372,6 +408,7 @@
 #page-deliverynotes .bc-filterbar,
 #page-customerinvoices .bc-filterbar,
 #page-receipts .bc-filterbar,
+#page-jobs .bc-filterbar,
 #page-purchaseinvoices .bc-filterbar,
 #page-stock .bc-filterbar,
 #page-supplierpayments .bc-filterbar{display:flex!important;align-items:center!important;justify-content:space-between!important;flex-wrap:wrap!important;gap:8px 12px!important;padding:9px 12px!important;min-height:54px!important;height:auto!important;max-height:none!important;overflow:visible!important;box-sizing:border-box!important}
@@ -382,6 +419,7 @@
 #page-deliverynotes .bc-filterbar-left,
 #page-customerinvoices .bc-filterbar-left,
 #page-receipts .bc-filterbar-left,
+#page-jobs .bc-filterbar-left,
 #page-purchaseinvoices .bc-filterbar-left,
 #page-stock .bc-filterbar-left,
 #page-supplierpayments .bc-filterbar-left{display:flex!important;align-items:center!important;gap:10px!important;flex:0 0 auto!important;margin:0!important;padding:0!important;min-width:0!important}
@@ -392,6 +430,7 @@
 #page-deliverynotes .bc-filterbar-right,
 #page-customerinvoices .bc-filterbar-right,
 #page-receipts .bc-filterbar-right,
+#page-jobs .bc-filterbar-right,
 #page-purchaseinvoices .bc-filterbar-right,
 #page-stock .bc-filterbar-right,
 #page-supplierpayments .bc-filterbar-right{display:flex!important;align-items:center!important;justify-content:flex-end!important;flex-wrap:wrap!important;gap:8px!important;flex:1 1 auto!important;margin:0 0 0 auto!important;padding:0!important;min-width:0!important}
@@ -402,6 +441,7 @@
 #page-deliverynotes .bc-filter,
 #page-customerinvoices .bc-filter,
 #page-receipts .bc-filter,
+#page-jobs .bc-filter,
 #page-purchaseinvoices .bc-filter,
 #page-stock .bc-filter,
 #page-supplierpayments .bc-filter{height:34px!important;min-height:34px!important;max-height:34px!important;box-sizing:border-box!important;margin:0!important;border:1px solid #d5dde7!important;border-radius:8px!important;background-color:#fff!important;color:#1f2937!important;font-family:inherit!important;font-size:12.5px!important;font-weight:500!important;line-height:normal!important;letter-spacing:0!important;box-shadow:none!important;transition:border-color .15s,box-shadow .15s,background-color .15s!important}
@@ -412,6 +452,7 @@
 #page-deliverynotes select.bc-filter,
 #page-customerinvoices select.bc-filter,
 #page-receipts select.bc-filter,
+#page-jobs select.bc-filter,
 #page-purchaseinvoices select.bc-filter,
 #page-stock select.bc-filter,
 #page-supplierpayments select.bc-filter{-webkit-appearance:none!important;appearance:none!important;padding:0 30px 0 11px!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 11px center!important;background-size:10px 6px!important;cursor:pointer!important;text-overflow:ellipsis!important}
@@ -422,6 +463,7 @@
 #page-deliverynotes .bc-filter:hover,
 #page-customerinvoices .bc-filter:hover,
 #page-receipts .bc-filter:hover,
+#page-jobs .bc-filter:hover,
 #page-purchaseinvoices .bc-filter:hover,
 #page-stock .bc-filter:hover,
 #page-supplierpayments .bc-filter:hover{border-color:#b8c4d3!important}
@@ -437,11 +479,13 @@
 #page-deliverynotes .bc-filter:focus-visible,
 #page-customerinvoices .bc-filter:focus,
 #page-receipts .bc-filter:focus,
+#page-jobs .bc-filter:focus,
 #page-purchaseinvoices .bc-filter:focus,
 #page-stock .bc-filter:focus,
 #page-supplierpayments .bc-filter:focus,
 #page-customerinvoices .bc-filter:focus-visible,
 #page-receipts .bc-filter:focus-visible,
+#page-jobs .bc-filter:focus-visible,
 #page-purchaseinvoices .bc-filter:focus-visible,
 #page-stock .bc-filter:focus-visible,
 #page-supplierpayments .bc-filter:focus-visible{outline:none!important;border-color:var(--c-3b82f6)!important;box-shadow:0 0 0 3px color-mix(in srgb, var(--c-3b82f6) 15%, transparent)!important}
@@ -452,6 +496,7 @@
 #page-deliverynotes .bc-filter-sort,
 #page-customerinvoices .bc-filter-sort,
 #page-receipts .bc-filter-sort,
+#page-jobs .bc-filter-sort,
 #page-purchaseinvoices .bc-filter-sort,
 #page-stock .bc-filter-sort,
 #page-supplierpayments .bc-filter-sort{width:140px!important;min-width:140px!important;max-width:140px!important;flex:0 0 140px!important}
@@ -462,6 +507,7 @@
 #page-deliverynotes .bc-filter-customer,
 #page-customerinvoices .bc-filter-customer,
 #page-receipts .bc-filter-customer,
+#page-jobs .bc-filter-customer,
 #page-purchaseinvoices .bc-filter-customer,
 #page-stock .bc-filter-customer,
 #page-supplierpayments .bc-filter-customer{width:165px!important;flex:0 1 165px!important;min-width:130px!important}
@@ -472,6 +518,7 @@
 #page-deliverynotes .bc-filter-status,
 #page-customerinvoices .bc-filter-status,
 #page-receipts .bc-filter-status,
+#page-jobs .bc-filter-status,
 #page-purchaseinvoices .bc-filter-status,
 #page-stock .bc-filter-status,
 #page-supplierpayments .bc-filter-status{width:155px!important;flex:0 1 155px!important;min-width:125px!important}
@@ -482,6 +529,7 @@
 #page-deliverynotes .bc-filter-date,
 #page-customerinvoices .bc-filter-date,
 #page-receipts .bc-filter-date,
+#page-jobs .bc-filter-date,
 #page-purchaseinvoices .bc-filter-date,
 #page-stock .bc-filter-date,
 #page-supplierpayments .bc-filter-date{width:140px!important;min-width:140px!important;max-width:140px!important;flex:0 0 140px!important}
@@ -492,6 +540,7 @@
 #page-deliverynotes .bc-filter-search,
 #page-customerinvoices .bc-filter-search,
 #page-receipts .bc-filter-search,
+#page-jobs .bc-filter-search,
 #page-purchaseinvoices .bc-filter-search,
 #page-stock .bc-filter-search,
 #page-supplierpayments .bc-filter-search{width:260px!important;flex:1 1 180px!important;max-width:300px!important;min-width:150px!important;padding:0 11px!important}
@@ -502,6 +551,7 @@
 #page-deliverynotes .bc-filter-search::placeholder,
 #page-customerinvoices .bc-filter-search::placeholder,
 #page-receipts .bc-filter-search::placeholder,
+#page-jobs .bc-filter-search::placeholder,
 #page-purchaseinvoices .bc-filter-search::placeholder,
 #page-stock .bc-filter-search::placeholder,
 #page-supplierpayments .bc-filter-search::placeholder{color:#94a3b8!important;font-weight:400!important}
@@ -512,6 +562,7 @@
 #page-deliverynotes .bc-filter-datebtn,
 #page-customerinvoices .bc-filter-datebtn,
 #page-receipts .bc-filter-datebtn,
+#page-jobs .bc-filter-datebtn,
 #page-purchaseinvoices .bc-filter-datebtn,
 #page-stock .bc-filter-datebtn,
 #page-supplierpayments .bc-filter-datebtn{display:inline-flex!important;align-items:center!important;justify-content:flex-start!important;gap:7px!important;padding:0 11px!important;cursor:pointer!important;white-space:nowrap!important;overflow:hidden!important;text-align:left!important}
@@ -522,6 +573,7 @@
 #page-deliverynotes .bc-filter-datebtn>span,
 #page-customerinvoices .bc-filter-datebtn>span,
 #page-receipts .bc-filter-datebtn>span,
+#page-jobs .bc-filter-datebtn>span,
 #page-purchaseinvoices .bc-filter-datebtn>span,
 #page-stock .bc-filter-datebtn>span,
 #page-supplierpayments .bc-filter-datebtn>span{flex:1 1 auto!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;font:inherit!important;color:inherit!important}
@@ -532,6 +584,7 @@
 #page-deliverynotes .bc-filter-datebtn>i,
 #page-customerinvoices .bc-filter-datebtn>i,
 #page-receipts .bc-filter-datebtn>i,
+#page-jobs .bc-filter-datebtn>i,
 #page-purchaseinvoices .bc-filter-datebtn>i,
 #page-stock .bc-filter-datebtn>i,
 #page-supplierpayments .bc-filter-datebtn>i{font-size:14px!important;color:#64748b!important;flex:0 0 auto!important;margin:0!important}
@@ -552,16 +605,19 @@
 #page-deliverynotes select.bc-filter-customer:not([data-empty]),
 #page-customerinvoices select.bc-filter.filter-active,
 #page-receipts select.bc-filter.filter-active,
+#page-jobs select.bc-filter.filter-active,
 #page-purchaseinvoices select.bc-filter.filter-active,
 #page-stock select.bc-filter.filter-active,
 #page-supplierpayments select.bc-filter.filter-active,
 #page-customerinvoices .bc-filter-datebtn.active,
 #page-receipts .bc-filter-datebtn.active,
+#page-jobs .bc-filter-datebtn.active,
 #page-purchaseinvoices .bc-filter-datebtn.active,
 #page-stock .bc-filter-datebtn.active,
 #page-supplierpayments .bc-filter-datebtn.active,
 #page-customerinvoices select.bc-filter-customer:not([data-empty]),
 #page-receipts select.bc-filter-customer:not([data-empty]),
+#page-jobs select.bc-filter-customer:not([data-empty]),
 #page-purchaseinvoices select.bc-filter-customer:not([data-empty]),
 #page-stock select.bc-filter-customer:not([data-empty]),
 #page-supplierpayments select.bc-filter-customer:not([data-empty]){border-color:#d5dde7}
@@ -572,6 +628,7 @@
 #page-deliverynotes .bc-filter-count,
 #page-customerinvoices .bc-filter-count,
 #page-receipts .bc-filter-count,
+#page-jobs .bc-filter-count,
 #page-purchaseinvoices .bc-filter-count,
 #page-stock .bc-filter-count,
 #page-supplierpayments .bc-filter-count{font-size:12px!important;font-weight:500!important;color:#64748b!important;white-space:nowrap!important;margin:0!important;padding:0!important;min-width:0!important;overflow:visible!important}
@@ -582,6 +639,7 @@
 #page-deliverynotes .bc-filter-btn,
 #page-customerinvoices .bc-filter-btn,
 #page-receipts .bc-filter-btn,
+#page-jobs .bc-filter-btn,
 #page-purchaseinvoices .bc-filter-btn,
 #page-stock .bc-filter-btn,
 #page-supplierpayments .bc-filter-btn{height:34px!important;min-height:34px!important;box-sizing:border-box!important;display:inline-flex!important;align-items:center!important;gap:6px!important;padding:0 12px!important;margin:0!important;border-radius:8px!important;font-family:inherit!important;font-size:12.5px!important;font-weight:600!important;line-height:1!important;white-space:nowrap!important;flex:0 0 auto!important}
@@ -592,6 +650,7 @@
 #page-deliverynotes .bc-filter-btn i,
 #page-customerinvoices .bc-filter-btn i,
 #page-receipts .bc-filter-btn i,
+#page-jobs .bc-filter-btn i,
 #page-purchaseinvoices .bc-filter-btn i,
 #page-stock .bc-filter-btn i,
 #page-supplierpayments .bc-filter-btn i{font-size:15px!important}
@@ -603,6 +662,7 @@
 #page-deliverynotes .bc-filterbar-right,
 #page-customerinvoices .bc-filterbar-right,
 #page-receipts .bc-filterbar-right,
+#page-jobs .bc-filterbar-right,
 #page-purchaseinvoices .bc-filterbar-right,
 #page-stock .bc-filterbar-right,
 #page-supplierpayments .bc-filterbar-right{justify-content:flex-start!important;margin-left:0!important}
@@ -628,21 +688,25 @@
 #page-deliverynotes .bc-filter-search,
 #page-customerinvoices .bc-filter-customer,
 #page-receipts .bc-filter-customer,
+#page-jobs .bc-filter-customer,
 #page-purchaseinvoices .bc-filter-customer,
 #page-stock .bc-filter-customer,
 #page-supplierpayments .bc-filter-customer,
 #page-customerinvoices .bc-filter-status,
 #page-receipts .bc-filter-status,
+#page-jobs .bc-filter-status,
 #page-purchaseinvoices .bc-filter-status,
 #page-stock .bc-filter-status,
 #page-supplierpayments .bc-filter-status,
 #page-customerinvoices .bc-filter-date,
 #page-receipts .bc-filter-date,
+#page-jobs .bc-filter-date,
 #page-purchaseinvoices .bc-filter-date,
 #page-stock .bc-filter-date,
 #page-supplierpayments .bc-filter-date,
 #page-customerinvoices .bc-filter-search,
 #page-receipts .bc-filter-search,
+#page-jobs .bc-filter-search,
 #page-purchaseinvoices .bc-filter-search,
 #page-stock .bc-filter-search,
 #page-supplierpayments .bc-filter-search{flex:1 1 140px!important;width:auto!important}
@@ -689,48 +753,48 @@
    count · customer · status · date · search · Clear · Export · main button. No sort list (click a column).
    When the line gets tight the fields shrink, then the secondary buttons show only their icon (tooltip
    keeps the name), then the main button too. Phones (≤ 760 px) scroll the line sideways. */
-:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar{
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar{
   flex-wrap:nowrap!important;container-type:inline-size;container-name:bcbar;gap:8px!important;min-height:48px!important;height:48px!important;padding:0 10px!important}
-:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-left{flex:0 0 auto!important;gap:0!important}
-:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar .bc-filter-sort{display:none!important}
-:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar .bc-filter-count{white-space:nowrap;font-size:12px}
-:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right{
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-left{flex:0 0 auto!important;gap:0!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar .bc-filter-sort{display:none!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar .bc-filter-count{white-space:nowrap;font-size:12px}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right{
   flex:1 1 auto!important;flex-wrap:nowrap!important;justify-content:safe flex-end!important;margin-left:auto!important;gap:7px!important;min-width:0!important}
-:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-customer{flex:0 1 170px!important;width:auto!important;min-width:104px!important}
-:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-status{flex:0 1 140px!important;width:auto!important;min-width:100px!important}
-:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-date{flex:0 0 132px!important;width:132px!important;min-width:132px!important}
-:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-search{flex:1 1 240px!important;width:auto!important;min-width:150px!important;max-width:360px!important}
-:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.btn{flex:0 0 auto!important;height:34px!important;min-height:34px!important;white-space:nowrap!important;margin:0!important}
-:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-new{padding:0 14px!important;font-weight:650!important;box-shadow:none!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-customer{flex:0 1 170px!important;width:auto!important;min-width:104px!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-status{flex:0 1 140px!important;width:auto!important;min-width:100px!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-date{flex:0 0 132px!important;width:132px!important;min-width:132px!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-search{flex:1 1 240px!important;width:auto!important;min-width:150px!important;max-width:360px!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.btn{flex:0 0 auto!important;height:34px!important;min-height:34px!important;white-space:nowrap!important;margin:0!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-new{padding:0 14px!important;font-weight:650!important;box-shadow:none!important}
 @container bcbar (max-width: 1080px){
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-btn{width:34px!important;padding:0!important;justify-content:center!important}
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-btn span{display:none!important}
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-btn i{margin:0!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-btn{width:34px!important;padding:0!important;justify-content:center!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-btn span{display:none!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-btn i{margin:0!important}
 }
 @container bcbar (max-width: 920px){
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-left .bc-filter-count{display:none!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-left .bc-filter-count{display:none!important}
 }
 @container bcbar (max-width: 660px){
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-customer,:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-status{min-width:86px!important}
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-date{flex:0 0 108px!important;width:108px!important;min-width:108px!important}
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-search{min-width:104px!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-customer,:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-status{min-width:86px!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-date{flex:0 0 108px!important;width:108px!important;min-width:108px!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-search{min-width:104px!important}
 }
 @container bcbar (max-width: 800px){
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-new{width:34px!important;padding:0!important;justify-content:center!important}
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-new span{display:none!important}
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-new i{margin:0!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-new{width:34px!important;padding:0!important;justify-content:center!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-new span{display:none!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-new i{margin:0!important}
 }
 /* Very narrow (phones, portrait tablets) — until the V266.7 phone / tablet design: wrap so every button stays visible */
 @media (max-width: 860px){
 @container bcbar (max-width: 560px){
   /* only on phones / portrait tablets (viewport ≤ 860 px); desktops keep one line */
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right{flex-wrap:wrap!important;justify-content:flex-start!important}
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-new{width:auto!important;padding:0 12px!important}
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-new span{display:inline!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs) .bc-filterbar-right{flex-wrap:wrap!important;justify-content:flex-start!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-new{width:auto!important;padding:0 12px!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-new span{display:inline!important}
 }
 }
 @media (max-width: 860px){
-  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar{flex-wrap:wrap!important;height:auto!important;padding:8px 10px!important;overflow:visible!important}
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar{flex-wrap:wrap!important;height:auto!important;padding:8px 10px!important;overflow:visible!important}
 }
 
 /* V266.6 — sticky offsets: the page header (48 px) is gone, so everything sticks 48 px higher */
@@ -741,6 +805,7 @@ html body #page-salesorders .bc-filterbar,
 html body #page-deliverynotes .bc-filterbar,
 html body #page-customerinvoices .bc-filterbar,
 html body #page-receipts .bc-filterbar,
+html body #page-jobs .bc-filterbar,
 html body #page-purchaseinvoices .bc-filterbar,
 html body #page-stock .bc-filterbar,
 html body #page-supplierpayments .bc-filterbar{top:0!important}
@@ -750,6 +815,7 @@ html body #page-salesorders #so-register-table thead th,
 html body #page-deliverynotes #dn-register-table thead th,
 html body #page-customerinvoices #dn-register-table thead th,
 html body #page-receipts #dn-register-table thead th,
+html body #page-jobs #dn-register-table thead th,
 html body #page-purchaseinvoices #dn-register-table thead th,
 html body #page-stock #dn-register-table thead th,
 html body #page-supplierpayments #dn-register-table thead th,
@@ -773,20 +839,24 @@ html body #page-customerinvoices .module-monitor,
 html body #page-customerinvoices .module-monitor-rail,
 html body #page-customerinvoices .dn-overview-panel,
 html body #page-receipts .module-monitor,
+html body #page-jobs .module-monitor,
 html body #page-purchaseinvoices .module-monitor,
 html body #page-stock .module-monitor,
 html body #page-supplierpayments .module-monitor,
 html body #page-receipts .module-monitor-rail,
+html body #page-jobs .module-monitor-rail,
 html body #page-purchaseinvoices .module-monitor-rail,
 html body #page-stock .module-monitor-rail,
 html body #page-supplierpayments .module-monitor-rail,
 html body #page-receipts .dn-overview-panel,
+html body #page-jobs .dn-overview-panel,
 html body #page-purchaseinvoices .dn-overview-panel,
 html body #page-stock .dn-overview-panel,
 html body #page-supplierpayments .dn-overview-panel{top:0!important}
 /* monitors keep their own (more specific) rules → same value with ids */
-html body #page-quotations .quotation-main-monitor,html body #page-salesorders .salesorders-main-monitor,html body #page-costing .pricing-main-monitor,html body #page-quotations .module-monitor-rail,html body #page-costing .module-monitor-rail,html body #page-deliverynotes .dn-overview-panel,html body #page-customerinvoices .dn-overview-panel,html body #page-receipts .dn-overview-panel,html body #page-purchaseinvoices .dn-overview-panel,html body #page-stock .dn-overview-panel,html body #page-supplierpayments .dn-overview-panel{top:0!important}
-:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar .bc-date>.bc-date-btn{min-width:0!important;max-width:100%!important;overflow:hidden!important;white-space:nowrap!important;padding-left:9px!important;padding-right:8px!important}
+html body #page-quotations .quotation-main-monitor,html body #page-salesorders .salesorders-main-monitor,html body #page-costing .pricing-main-monitor,html body #page-quotations .module-monitor-rail,html body #page-costing .module-monitor-rail,html body #page-deliverynotes .dn-overview-panel,html body #page-customerinvoices .dn-overview-panel,html body #page-receipts .dn-overview-panel,
+html body #page-jobs .dn-overview-panel,html body #page-purchaseinvoices .dn-overview-panel,html body #page-stock .dn-overview-panel,html body #page-supplierpayments .dn-overview-panel{top:0!important}
+:is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar .bc-date>.bc-date-btn{min-width:0!important;max-width:100%!important;overflow:hidden!important;white-space:nowrap!important;padding-left:9px!important;padding-right:8px!important}
 
 /* V266.6 — Excel export icon (original drawing; fixed green in every theme) */
 .bc-xls-ico{display:inline-block;width:18px;height:18px;flex:0 0 18px;background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Crect%20x%3D%222%22%20y%3D%223%22%20width%3D%2220%22%20height%3D%2218%22%20rx%3D%223%22%20fill%3D%22%23107C41%22/%3E%3Cpath%20d%3D%22M14%206h5v12h-5%22%20fill%3D%22%2321A366%22/%3E%3Cpath%20d%3D%22M15%209h3M15%2012h3M15%2015h3%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22/%3E%3Cpath%20d%3D%22M5.5%208l5%208M10.5%208l-5%208%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.1%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E") center/contain no-repeat;vertical-align:middle}
@@ -798,6 +868,7 @@ html body #page-salesorders #so-register-table td:is(:nth-child(1),:nth-child(2)
 html body #page-deliverynotes #dn-register-table td:is(:nth-child(1),:nth-child(2),:nth-child(4),:nth-child(8)),
 html body #page-customerinvoices #invreg-table td:is(:nth-child(1),:nth-child(2),:nth-child(3),:nth-child(5),:nth-child(7),:nth-child(8),:nth-child(9),:nth-child(10)),
 html body #page-receipts #rctreg-table td:is(:nth-child(1),:nth-child(2),:nth-child(6),:nth-child(8),:nth-child(9)),
+html body #page-jobs #rctreg-table td:is(:nth-child(1),:nth-child(2),:nth-child(6),:nth-child(8),:nth-child(9)),
 html body #page-purchaseinvoices #pireg-table td:is(:nth-child(1),:nth-child(2),:nth-child(4),:nth-child(7),:nth-child(8)),
 html body #page-stock #streg-table td:is(:nth-child(1),:nth-child(2),:nth-child(4),:nth-child(7),:nth-child(8)),
 html body #page-supplierpayments #spreg-table td:is(:nth-child(1),:nth-child(2),:nth-child(4),:nth-child(7),:nth-child(8)),
@@ -807,29 +878,38 @@ html body #page-rfq .rfq-register td:is(:nth-child(1),:nth-child(4),:nth-child(5
 
 /* V266.6 — Invoices & Payment Receipts registers use the same type scale as Quotations / Sales Orders:
    header 12 px / 600, rows 46 px, status badge 13 px / 600, secondary pills 12 px / 600, amounts regular. */
-html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) thead th{
+html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) thead th,
+amounts regular. */
+html body :is(#page-customerinvoices #invreg-table,#page-jobs #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) thead th{
   height:38px!important;padding-top:0!important;padding-bottom:0!important;padding-left:12px!important;font-family:inherit!important;font-size:12px!important;font-weight:600!important;
   color:#536273!important;letter-spacing:.01em!important;line-height:1.2!important;vertical-align:middle!important}
-html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) tbody td{
+html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) tbody td,
+html body :is(#page-customerinvoices #invreg-table,#page-jobs #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) tbody td{
   height:46px!important;padding:7px 12px!important;font-size:14px!important;line-height:1.3!important;vertical-align:middle!important;border-bottom:1px solid #edf1f5!important}
-html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) tbody tr:last-child td{border-bottom:0!important}
+html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) tbody tr:last-child td,
+html body :is(#page-customerinvoices #invreg-table,#page-jobs #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) tbody tr:last-child td{border-bottom:0!important}
 html body #page-customerinvoices #invreg-table .badge,
 html body #page-receipts #rctreg-table .rct-status,
+html body #page-jobs #rctreg-table .rct-status,
 html body #page-purchaseinvoices #pireg-table .rct-status,
 html body #page-stock #streg-table .rct-status,
 html body #page-supplierpayments #spreg-table .rct-status{font-size:13px!important;font-weight:600!important;padding:3px 10px!important;line-height:1.25!important;border-radius:999px!important}
-html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) :is(.inv-type-pill,.rct-pay-pill){font-size:12px!important;font-weight:600!important;padding:3px 9px!important;line-height:1.25!important}
-html body #page-receipts #rctreg-table .rct-chip,html body #page-purchaseinvoices #pireg-table .rct-chip,html body #page-stock #streg-table .rct-chip,html body #page-supplierpayments #spreg-table .rct-chip{font-size:12px!important;padding:2px 7px!important}
-html body #page-receipts #rctreg-table td.num .rct-bc,html body #page-purchaseinvoices #pireg-table td.num .rct-bc,html body #page-stock #streg-table td.num .rct-bc,html body #page-supplierpayments #spreg-table td.num .rct-bc{font-size:11.5px!important}
-html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) thead th:not(.sortable-register-th){padding-right:12px!important}
+html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) :is(.inv-type-pill,.rct-pay-pill),
+html body :is(#page-customerinvoices #invreg-table,#page-jobs #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) :is(.inv-type-pill,.rct-pay-pill){font-size:12px!important;font-weight:600!important;padding:3px 9px!important;line-height:1.25!important}
+html body #page-receipts #rctreg-table .rct-chip,
+html body #page-jobs #rctreg-table .rct-chip,html body #page-purchaseinvoices #pireg-table .rct-chip,html body #page-stock #streg-table .rct-chip,html body #page-supplierpayments #spreg-table .rct-chip{font-size:12px!important;padding:2px 7px!important}
+html body #page-receipts #rctreg-table td.num .rct-bc,
+html body #page-jobs #rctreg-table td.num .rct-bc,html body #page-purchaseinvoices #pireg-table td.num .rct-bc,html body #page-stock #streg-table td.num .rct-bc,html body #page-supplierpayments #spreg-table td.num .rct-bc{font-size:11.5px!important}
+html body :is(#page-customerinvoices #invreg-table,#page-receipts #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) thead th:not(.sortable-register-th),
+html body :is(#page-customerinvoices #invreg-table,#page-jobs #rctreg-table,#page-purchaseinvoices #pireg-table,#page-stock #streg-table,#page-supplierpayments #spreg-table) thead th:not(.sortable-register-th){padding-right:12px!important}
 
 /* V266.7 — very narrow toolbar (tablet with sidebar and monitor open): the date button shows only its icon */
 @container bcbar (max-width: 600px){
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts) .bc-filterbar-right>.bc-date{flex:0 0 34px!important;width:34px!important;min-width:34px!important}
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-date .bc-date-btn{padding:0!important;justify-content:center!important;width:34px!important}
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-date :is(.bc-date-label,.bc-date-chev){display:none!important}
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>:is(.bc-filter-customer,.bc-filter-status){min-width:80px!important}
-  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-search{min-width:96px!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs) .bc-filterbar-right>.bc-date{flex:0 0 34px!important;width:34px!important;min-width:34px!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-date .bc-date-btn{padding:0!important;justify-content:center!important;width:34px!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-date :is(.bc-date-label,.bc-date-chev){display:none!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>:is(.bc-filter-customer,.bc-filter-status){min-width:80px!important}
+  :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-right>.bc-filter-search{min-width:96px!important}
 }
 
 /* V266.72 — the RFQ monitor's folded button sits at the top like on every other register (was 96 px down) */

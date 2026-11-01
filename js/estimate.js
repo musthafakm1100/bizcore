@@ -220,6 +220,7 @@
 <button type="button" class="btn btn-secondary es-cl" id="es-more" title="Versions">Versions ▾</button>
 <button type="button" class="btn btn-secondary es-cl" id="es-close2">Close</button>
 <button type="button" class="btn btn-primary" id="es-save">Save Estimate</button>
+<button type="button" class="btn btn-success" id="es-quote" hidden>Save &amp; Create Quotation</button>
 <button type="button" class="btn btn-primary" id="es-revise" hidden>Revise — New Version</button>
 </div>
 <div class="es-bu" id="es-bu" hidden></div>
@@ -230,6 +231,7 @@
     $('es-close2').addEventListener('click', () => requestClose(false));
     $('es-save').addEventListener('click', () => save());
     $('es-revise').addEventListener('click', () => newVersion());
+    $('es-quote').addEventListener('click', () => toQuotation());
     $('es-st').addEventListener('click', e => versionsMenu(e.currentTarget));
     $('es-more').addEventListener('click', e => versionsMenu(e.currentTarget));
     $('es-note-pill').addEventListener('click', () => showTab('notes'));
@@ -244,7 +246,11 @@
     grid.addEventListener('input', onGridInput);
     grid.addEventListener('click', onGridClick);
     grid.addEventListener('keydown', onGridKey);
-    grid.addEventListener('focusin', e => { const tr = e.target.closest('tr[data-iid]'); if (tr) select(tr.dataset.iid); });
+    grid.addEventListener('focusin', e => {
+      if (dd && e.target !== dd.input) closeDD();
+      const tr = e.target.closest('tr[data-iid]'); if (!tr) return; select(tr.dataset.iid);
+      if (e.target.dataset.dd === 'unit' && E && !E.ro) { const it = findItem(tr.dataset.iid)?.it; if (it) unitDD(e.target, false, u => { it.unit = u; e.target.value = u; changed(); }); }
+    });
     $('es-side').addEventListener('input', onSideInput);
     $('es-side').addEventListener('click', e => { const b = e.target.closest('[data-act="use-round"]'); if (b && !E.ro) { E.est.roundTo = b.dataset.v; renderSide(); changed(); } });
     ['es-manpower', 'es-subcontract'].forEach(id => $(id).addEventListener('click', e => { const tr = e.target.closest('tr[data-iid]'); if (tr) openBuild(tr.dataset.iid); }));
@@ -255,6 +261,7 @@
     bu.addEventListener('keydown', onBuKey);
     bu.addEventListener('focusout', onBuBlur);
     bu.addEventListener('focusin', e => {   // the Item Master / Supplier Master / Copy From list opens on entering the field
+      if (dd && e.target !== dd.input) closeDD();   // V271.2: a list never stays open when the cursor moves on (Tab or click)
       const el = e.target; if (!E || E.ro || !el.dataset || !el.dataset.dd) return;
       if (el.id === 'es-copy') { copySearch(el); return; }
       const tr = el.closest('tr[data-lid]'), k = el.closest('.es-grpbox')?.dataset.k; if (!tr || !k) return;
@@ -349,7 +356,7 @@
         body += `<tr class="es-it${E.sel === it.id ? ' is-sel' : ''}${x.cost.total > 0 ? '' : ' no-cost'}" data-iid="${it.id}" data-sid="${s.id}">
 <td class="es-no">${x.code}</td>
 <td><textarea class="es-in" data-f="desc" rows="1" maxlength="2000" placeholder="Item description" aria-label="Item ${x.code} description"${ro()}>${esc(it.desc)}</textarea>${onlySub ? '<span class="es-tag t-sub">Subcontract</span>' : ''}</td>
-<td><input class="es-in" data-f="unit" value="${esc(it.unit)}" list="es-units" maxlength="12" aria-label="Unit"${ro()}></td>
+<td><input class="es-in" data-f="unit" data-dd="unit" value="${esc(it.unit)}" maxlength="12" autocomplete="off" aria-label="Unit"${ro()}></td>
 <td><input class="es-in es-num" data-f="qty" value="${esc(fq(it.qty))}" inputmode="decimal" aria-label="Quantity"${ro()}></td>
 ${KINDS.map(({ k }) => `<td class="es-r es-val es-cost${x.cost[k] ? '' : ' es-m'}" data-act="build" title="Open the Cost Build-up">${x.cost[k] ? fmt(x.cost[k]) : '—'}</td>`).join('')}
 <td class="es-r es-val es-tot es-cost" data-act="build" title="${x.cost.total > 0 ? 'Cost per ' + esc(it.unit || 'unit') + ': ' + fmt(x.costRate) : 'No cost yet — open the Cost Build-up'}">${x.cost.total > 0 ? fmt(x.cost.total) : 'No cost'}</td>
@@ -435,6 +442,12 @@ ${!E.ro && down > 0 && down !== num(E.est.roundTo) && down !== c.sell ? `<div st
   function renderFooter() {
     const r = rfqOf(), latest = r && Number(E.version) === maxVersion(r);
     $('es-save').hidden = E.ro; $('es-revise').hidden = !(E.ro && canEdit() && latest && !E.isNew);
+    // V271.2: Save & Create Quotation (or open the quotation made from this version)
+    const qb = $('es-quote'), entry = r && idxOf(r).find(e => Number(e.version) === Number(E.version));
+    const canQ = typeof window.bcCan !== 'function' || window.bcCan('quotation', 'c');
+    if (E.status === 'Converted' && entry && entry.quotationId) { qb.hidden = false; qb.disabled = false; qb.textContent = 'Open Quotation'; qb.dataset.qid = entry.quotationId; }
+    else if (!E.ro && canQ) { qb.hidden = false; delete qb.dataset.qid; qb.textContent = dirty() ? 'Save & Create Quotation' : 'Create Quotation'; }
+    else qb.hidden = true;
     $('es-more').hidden = !(r && idxOf(r).length);
     const chk = $('es-chk');
     if (E.ro) { chk.className = 'es-chk'; chk.textContent = E.status === 'Superseded' ? 'Replaced by a newer version — shown read only.' : E.status === 'Converted' ? 'Quoted — shown read only. Revise to change the estimate.' : 'Shown read only.'; return; }
@@ -442,6 +455,7 @@ ${!E.ro && down > 0 && down !== num(E.est.roundTo) && down !== c.sell ? `<div st
     chk.className = 'es-chk' + (blocks.length ? ' is-todo' : '');
     chk.textContent = blocks.length ? 'To continue: ' + blocks.slice(0, 3).map((x, i) => '①②③'[i] + ' ' + x.text).join('  ') : '✓ Ready to save' + (notes.length ? ' · ' + notes.map(x => x.text).join(' · ') : ' · all items costed');
     $('es-save').disabled = !!blocks.length; $('es-save').title = blocks.length ? blocks[0].text : 'Save this estimate (Ctrl+S)';
+    const qb2 = $('es-quote'); if (!qb2.dataset.qid) { qb2.disabled = !!blocks.length || calc(E.est).uncosted > 0; qb2.title = blocks.length ? blocks[0].text : calc(E.est).uncosted ? 'Every item needs a cost before the quotation' : 'The quotation takes the items, the section amounts and the lump sum from this estimate'; }
   }
   function changed() { if (!E) return; renderFooter(); }
 
@@ -452,7 +466,7 @@ ${!E.ro && down > 0 && down !== num(E.est.roundTo) && down !== c.sell ? `<div st
     if (f === 'title') { const s = E.est.sections.find(x => x.id === el.closest('tr').dataset.sid); if (s) s.title = el.value; changed(); return; }
     const hit = findItem(el.closest('tr')?.dataset.iid); if (!hit) return;
     if (f === 'desc') { hit.it.desc = el.value; grow(el); }
-    else if (f === 'unit') hit.it.unit = el.value;
+    else if (f === 'unit') { hit.it.unit = el.value; unitDD(el, true, u => { hit.it.unit = u; el.value = u; changed(); }); }
     else if (f === 'qty') { hit.it.qty = el.value; el.classList.toggle('is-bad', el.value !== '' && !(num(el.value) > 0)); refreshNumbers(); }
     changed();
   }
@@ -467,6 +481,7 @@ ${!E.ro && down > 0 && down !== num(E.est.roundTo) && down !== c.sell ? `<div st
     if (act === 'add-section') { addSection(); }
   }
   function onGridKey(e) {
+    if (dd && e.target === dd.input && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key)) { ddKey(e); return; }
     const tr = e.target.closest('tr[data-iid]');
     if (e.key === 'F2' && tr) { e.preventDefault(); openBuild(tr.dataset.iid); return; }
     if (e.key === 'Enter' && e.target.dataset.f === 'qty' && tr && !E.ro) {   // Enter on Qty: next item, or a new one at the end of the section
@@ -605,7 +620,7 @@ ${!E.ro && down > 0 && down !== num(E.est.roundTo) && down !== c.sell ? `<div st
       }
       if (f === 'trade') { const lr = labourRate(v); return `<td><input class="es-in" data-f="trade" value="${esc(v)}" list="es-trades" maxlength="60" placeholder="Trade" aria-label="Trade"${ro()}>${lr > 0 ? `<div class="es-ref">Labour Rates: ${fmt(lr)} / day</div>` : ''}</td>`; }
       if (f === 'supplierName') { const bad = String(v).trim() && !supplierById(l.supplierId); return `<td><input class="es-in${bad ? ' is-bad' : ''}" data-f="supplierName" data-dd="supplier" value="${esc(v)}" maxlength="160" autocomplete="off" placeholder="${k === 'material' ? 'Optional' : 'Supplier Master'}" aria-label="Supplier"${ro()}>${bad ? '<div class="es-ref" style="color:#b42318">Not in the Supplier Master</div>' : ''}</td>`; }
-      if (f === 'unit') return `<td><input class="es-in" data-f="unit" value="${esc(v)}" list="es-units" maxlength="12" aria-label="Unit"${ro()}></td>`;
+      if (f === 'unit') return `<td><input class="es-in" data-f="unit" data-dd="unit" value="${esc(v)}" maxlength="12" autocomplete="off" aria-label="Unit"${ro()}></td>`;
       return `<td><input class="es-in${NUMF.has(f) ? ' es-num' : ''}" data-f="${f}" value="${esc(NUMF.has(f) && v !== '' ? fq(v) : v)}"${NUMF.has(f) ? ' inputmode="decimal"' : ' maxlength="300"'} aria-label="${f}"${ro()}></td>`;
     };
     return `<tr data-lid="${l.id}">${COLS[k].map(cell).join('')}</tr>`;
@@ -656,7 +671,7 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     if (f === 'desc' && k === 'material' && l.productId) { l.productId = ''; const s = tr.querySelector('.es-src'); if (s) { s.classList.remove('m'); s.title = 'Free text — not in the Item Master'; } }
     if (f === 'supplierName') { l.supplierId = ''; }
     if (NUMF.has(f)) el.classList.toggle('is-bad', el.value !== '' && !(num(el.value) >= 0 && Number.isFinite(Number(String(el.value).replace(/,/g, '')))));
-    if (el.dataset.dd) openDDFor(el, k, l);
+    if (el.dataset.dd) openDDFor(el, k, l, true);
     refreshBu(tr, k);
   }
   function onBuChange(e) {
@@ -717,7 +732,15 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     const rec = lib.lastPrices.get ? lib.lastPrices.get(key) : null;
     return rec && !rec.stale && Number(rec.unitCost) > 0 ? { price: Number(rec.unitCost), no: rec.piNo || '', date: rec.date || '' } : null;
   }
-  function openDDFor(input, k, l) {
+  /** V271.2: the unit list always shows every unit on entering the field (typing narrows it; the current one is marked). */
+  function unitDD(input, typed, onPick) {
+    const q = typed ? low(input.value) : '', cur = low(input.value);
+    const list = UNITS.filter(u => !q || low(u).includes(q) || UNITS.every(x => !low(x).includes(q)));
+    showDD(input, list.map(u => ({ label: esc(u) + (low(u) === cur ? ' ✓' : ''), v: u })), onPick);
+    dd.el.style.minWidth = '0'; dd.el.style.width = Math.max(input.getBoundingClientRect().width, 120) + 'px';
+  }
+  function openDDFor(input, k, l, typed) {
+    if (input.dataset.dd === 'unit') return unitDD(input, typed, u => { l.unit = u; input.value = u; changed(); });
     const q = low(input.value);
     if (input.dataset.dd === 'product') {
       const hits = PRODUCTS().filter(p => !p._deletedAt && (!q || low(p.name).includes(q) || low(p.code).includes(q))).slice(0, 30);
@@ -852,6 +875,142 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     setTimeout(() => toast(`Estimation V${n} saved.`, 'success', 'Saved'), 60);
     return true;
   }
+
+  /* ══ V271.2 — the quotation from the estimate (CQ_1, CQ_2) ══
+     The quotation is made in the normal Quotation Entry (Service template): sections → heading lines, items → scope
+     lines with the estimate's quantity and unit. The price comes only from the estimate: each line's amount is its share
+     of the lump sum (exact to the halala — a rate rounded up and a few halalas of line discount), qty / rate / line
+     discount are locked; only the quotation discount can be given. Print Style: Lump Sum Only / With Section Totals. */
+  const ceil2 = x => Math.ceil(Number(x) * 100 - 1e-6) / 100;
+  async function toQuotation() {
+    if (!E) return;
+    const qb = $('es-quote');
+    if (qb.dataset.qid) { const id = qb.dataset.qid; closeWin(); E = null; if (typeof viewQuotation === 'function') viewQuotation(id); return; }
+    if (typeof window.bcCan === 'function' && !window.bcCan('quotation', 'c')) { toast('Your role cannot create quotations.', 'error'); return; }
+    if (dirty()) { if (!(await save())) return; }
+    if (E.status !== 'Saved') { toast('Only a saved estimate can be quoted.', 'error'); return; }
+    const c = calc(E.est);
+    if (c.uncosted) { toast(`${c.uncosted} item${c.uncosted === 1 ? ' has' : 's have'} no cost — every item needs a cost before the quotation.`, 'error'); return; }
+    if (!(c.offer > 0)) { toast('The quoted price is 0.', 'error'); return; }
+    const r = rfqOf(); if (!r) return;
+    const est = E.est, n = Number(E.version);
+    const shares = distribute(c.offer, c.flat.map(x => x.cost.total));
+    const f = 1 + num(est.overheadPct) / 100 + num(est.contingencyPct) / 100;
+    const lines = [];
+    let k = 0;
+    est.sections.forEach((s, si) => {
+      lines.push({ lineType: 'heading', text: (s.title || 'Section ' + c.secs[si].code) });
+      (s.items || []).forEach(it => {
+        const share = shares[k], x = c.flat[k]; k++;
+        const qty = num(it.qty) || 1, up = ceil2(share / qty), resid = r2(qty * up - share);
+        const line = { rowKind: 'scope', freeScope: true, desc: String(it.desc || '').trim(), qty, uom: it.unit || 'LS', up, pricingSell: up, pricingBuy: r2(x.cost.total * f / qty), estItemId: it.id };
+        if (resid > 0) { line.discBy = 'amt'; line.discAmt = resid; }
+        lines.push(line);
+      });
+    });
+    const ctx = { rfqId: String(r.id), rfqNo: r.rfqNo || '', version: n, ref: 'EST-' + String(r.rfqNo || '').replace(/^RFQ-?/i, '') + '-V' + n,
+      style: est.quoteStyle === 'sections' ? 'sections' : 'lumpsum', showQty: true, offer: c.offer, itemCount: c.itemCount,
+      budget: { material: c.by.material, manpower: c.by.manpower, subcontract: c.by.subcontract, other: c.by.other, overhead: c.overhead, contingency: c.contingency, totalCost: c.totalCost },
+      plannedProfit: c.profit, site: est.site || '', duration: est.duration || '',
+      sections: c.secs.map(s => ({ code: s.code, title: s.title || '', amount: s.offer })) };
+    closeWin(); E = null;
+    fillQuotation(r, ctx, lines, est);
+  }
+  function fillQuotation(r, ctx, lines, est) {
+    const set = (id, v) => { const el = $(id); if (el) el.value = v; };
+    try { editingId = null; } catch (_) {}
+    $('modal-title').textContent = `New quotation — from Estimation V${ctx.version} · ${r.rfqNo || ''}`;
+    const cust = (typeof customers !== 'undefined' ? customers : []).find(x => x.id === r.custId) || (typeof customers !== 'undefined' ? customers : []).find(x => x.company === r.company);
+    if (cust) { try { selectedCustId = cust.id; } catch (_) {} set('f-cust-search', cust.company); $('f-cust-search')?.classList.add('cust-locked'); set('f-company', cust.company); set('f-city', cust.city || ''); }
+    set('f-contact', r.contact || ''); set('f-ref', r.ref || ''); set('f-project', est.site || r.site || '');
+    set('f-qno', 'Auto on Save'); if ($('f-qno')) { $('f-qno').dataset.reservedQno = ''; $('f-qno').dataset.isProvisional = '0'; }
+    if (typeof todayQuoteDateDisplay === 'function') set('f-date', todayQuoteDateDisplay());
+    set('f-status', 'Draft');
+    let ps = {}; try { ps = activePricingSettings(); } catch (_) {}
+    set('f-validity', Math.max(1, Number(ps.validity) || 7)); set('f-notes', ''); set('f-discount', ''); set('f-internal-notes', ''); set('f-additional-conditions', '');
+    if (typeof populateTermsSelect === 'function') { populateTermsSelect('delivery'); populateTermsSelect('payment'); }
+    try { currentQuoteVatRate = Number(activeTaxSettings().rate) || 0; currentQuoteNoteStyle = ''; currentQuoteType = 'contracting'; } catch (_) {}
+    setQuoteType('contracting', { locked: true });
+    $('items-tbody').innerHTML = '';
+    lines.forEach(l => addItemRow(l));
+    setQuotationPricingContext({ rfqNo: r.rfqNo, pricingRef: ctx.ref, cost: ctx.budget.totalCost, sell: ctx.offer, version: ctx.version });
+    calcTotals();
+    document._pendingRFQId = r.id; document._pendingPricingVersion = null;
+    document._pendingQuotationRevision = null;
+    if (r.quotationId && typeof nextQuotationRevisionNo === 'function') { const info = nextQuotationRevisionNo(r); if (info) document._pendingQuotationRevision = { ...info, rfqId: r.id, sourceQuotationId: r.quotationId || info.revisionOf || null }; }
+    window._pendingEstimate = ctx;
+    estQuoteSetup();
+    if (typeof qtOnOpen === 'function') qtOnOpen();
+    openModalWithSize('quote-modal');
+    if (typeof qtAfterOpen === 'function') qtAfterOpen();
+    toast(`Quotation prepared from Estimation V${ctx.version} — check the wording and save it`, 'success', 'From the estimate');
+  }
+  /** The Contracting card on the quotation's summary panel + the locked figures of the estimate lines. */
+  let estObserver = null;
+  function lockEstLines() {
+    const on = !!window._pendingEstimate;
+    document.querySelectorAll('#items-tbody tr[data-line-type="item"]').forEach(tr => {
+      const lock = on && !!tr.dataset.estItem;
+      tr.classList.toggle('qt-est-line', lock);
+      tr.querySelectorAll('[data-quote-qty],[data-quote-price],[data-quote-dpct],[data-quote-damt]').forEach(i => {
+        if (lock) { i.readOnly = true; i.tabIndex = -1; i.title = 'From the estimate — change the price with a new estimate version'; }
+        else if (i.title.startsWith('From the estimate')) { i.readOnly = false; i.removeAttribute('tabindex'); i.title = ''; }
+      });
+    });
+  }
+  function estQuoteSetup() {
+    const side = $('qt-side'); if (!side) return;
+    let card = $('qt-est-card');
+    const ctx = window._pendingEstimate;
+    if (!estObserver && $('items-tbody')) { estObserver = new MutationObserver(() => lockEstLines()); estObserver.observe($('items-tbody'), { childList: true }); }
+    if (!ctx) { if (card) card.hidden = true; lockEstLines(); return; }
+    if (!card) { card = document.createElement('div'); card.id = 'qt-est-card'; card.className = 'qt-est-card'; const hd = side.querySelector('.qt-side-hd'); hd ? hd.after(card) : side.prepend(card); }
+    card.hidden = false;
+    card.innerHTML = `<div class="qt-est-h">Contracting · <b>Estimation V${esc(ctx.version)}</b>${ctx.rfqNo ? ' · ' + esc(ctx.rfqNo) : ''}</div>
+<div class="qt-est-l">Print Style</div>
+<label class="qt-est-o"><input type="radio" name="qt-est-style" value="lumpsum"${ctx.style !== 'sections' ? ' checked' : ''}><span><b>Lump Sum Only</b><small>Sections with their scope · one total</small></span></label>
+<label class="qt-est-o"><input type="radio" name="qt-est-style" value="sections"${ctx.style === 'sections' ? ' checked' : ''}><span><b>With Section Totals</b><small>Each section shows its amount · total</small></span></label>
+<label class="qt-est-c"><input type="checkbox" id="qt-est-qty"${ctx.showQty !== false ? ' checked' : ''}> Show Qty / Unit on print</label>
+<div class="qt-est-n">Lump sum ${fmt(ctx.offer)} from the estimate. Qty, rates and line discounts are locked — only the quotation discount can be given. To change the price, make a new estimate version.<br>Rates are rounded up to the halala; the few halalas shown as line discounts keep every line exactly at its share of the lump sum (they are not printed).</div>`;
+    card.onchange = e => {
+      if (e.target.name === 'qt-est-style') ctx.style = e.target.value === 'sections' ? 'sections' : 'lumpsum';
+      if (e.target.id === 'qt-est-qty') ctx.showQty = e.target.checked;
+      if (typeof markDirty === 'function') markDirty('quote-modal');
+    };
+    lockEstLines();
+  }
+  function estQuoteBlock() { const c = window._pendingEstimate; return c ? clone(c) : null; }
+  /** Before saving: the estimate lines must still be all there with their amounts (they make the lump sum). */
+  function estQuoteValidate() {
+    const ctx = window._pendingEstimate; if (!ctx) return true;
+    const rows = [...document.querySelectorAll('#items-tbody tr[data-line-type="item"][data-est-item]')];
+    let total = 0;
+    rows.forEach(tr => {
+      const q = typeof parseBizNumber === 'function' ? parseBizNumber(tr.querySelector('[data-quote-qty]')?.value) : num(tr.querySelector('[data-quote-qty]')?.value);
+      const p = typeof parseBizNumber === 'function' ? parseBizNumber(tr.querySelector('[data-quote-price]')?.value) : num(tr.querySelector('[data-quote-price]')?.value);
+      const d = typeof parseBizNumber === 'function' ? parseBizNumber(tr.querySelector('[data-quote-damt]')?.value) : num(tr.querySelector('[data-quote-damt]')?.value);
+      total += r2(q * p - d);
+    });
+    total = r2(total);
+    if (rows.length === ctx.itemCount && Math.abs(total - ctx.offer) < 0.01) return true;
+    const msg = rows.length !== ctx.itemCount ? `The estimate has ${ctx.itemCount} item${ctx.itemCount === 1 ? '' : 's'}; this quotation has ${rows.length} of them.` : `The estimate lines add up to ${fmt(total)}; the estimate's lump sum is ${fmt(ctx.offer)}.`;
+    if (typeof showConfirm === 'function') showConfirm({ icon: '⚠️', title: 'Lines changed from the estimate', message: msg + ' The price of a Contracting quotation comes only from its estimate — make a new estimate version to change it (lines can be reworded, not removed). Give a reduction as the quotation discount.', confirmText: 'OK', cancelText: 'Close', confirmClass: 'btn-primary' });
+    return false;
+  }
+  /** At the save of a new quotation from the estimate: the version becomes Converted (locked) and points to it. */
+  function estMarkConverted(rfq, q) {
+    const ctx = window._pendingEstimate; if (!ctx || !rfq) return;
+    const now = new Date().toISOString(), n = Number(ctx.version);
+    const e = (rfq.estimateIndex || []).find(x => Number(x.version) === n); if (!e) return;
+    const wasSaved = e.status === 'Saved';
+    e.status = 'Converted'; e.quotationId = q.id; e.updated = now;
+    const ck = rfq.id + '#' + n; if (cache.has(ck)) { cache.get(ck).status = 'Converted'; cache.get(ck).quotationId = q.id; }
+    if (wasSaved && window.FB && window.FB.fbMergeFields) window.FB.fbMergeFields('rfqs/' + rfq.id + '/estimates', 'v' + n, { status: 'Converted', updated: now, quotationId: q.id });
+  }
+  window.bcEstQuoteSetup = estQuoteSetup;
+  window.bcEstQuoteBlock = estQuoteBlock;
+  window.bcEstQuoteValidate = estQuoteValidate;
+  window.bcEstMarkConverted = estMarkConverted;
 
   /* ── keyboard ── */
   document.addEventListener('keydown', e => {

@@ -25,7 +25,7 @@
     deleteRFQFromBtn: ['rfq', 'x'], deleteRFQRecord: ['rfq', 'x'],
     // Pricing
     openPricingSourceRFQs: ['pricing', 'c'], openPricingFromBtn: ['pricing', 'c'], editPricingFromRO: ['pricing', 'e'], revisePricingFromRO: ['pricing', 'e'],
-    openEstimateFromBtn: ['pricing', 'v'],   // V271.1: Contracting Estimation (read only without Pricing create / edit)
+    openEstimateFromBtn: ['pricing', 'v'], openCreateJob: ['salesOrder', 'c'],   // V271.2: Create Job   // V271.1: Contracting Estimation (read only without Pricing create / edit)
     // Quotations
     openNewQuotation: ['quotation', 'c'], convertToQuotation: ['quotation', 'c'], duplicateQuotation: ['quotation', 'c'], openQuotationWorkflowDialog: ['quotation', 'c'],
     editQuotation: ['quotation', 'e'], createQuotationRevision: ['quotation', 'e'], cancelQuotation: ['quotation', 'x'], deleteQuotation: ['quotation', 'x'],

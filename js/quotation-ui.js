@@ -141,7 +141,7 @@
   function qtPaintHeader() {
     if (!$('quote-modal')) return;
     const f = flowInfo(), company = $('f-company')?.value || $('f-cust-search')?.value || '', ref = $('f-ref')?.value.trim() || '';
-    const sub = [company || 'Select a customer', ref ? 'Ref ' + ref : '', f.ctx?.pricingRef ? 'From Pricing ' + f.ctx.pricingRef : '', typeof quotationTypeLabel === 'function' ? quotationTypeLabel(currentQuoteType).replace(' Quotation', 's') : ''].filter(Boolean);
+    const sub = [company || 'Select a customer', ref ? 'Ref ' + ref : '', f.ctx?.pricingRef ? (window._pendingEstimate ? 'From Estimation ' : 'From Pricing ') + f.ctx.pricingRef : '', typeof quotationTypeLabel === 'function' ? quotationTypeLabel(currentQuoteType).replace(' Quotation', 's') : ''].filter(Boolean);
     if ($('quote-header-sub')) $('quote-header-sub').textContent = sub.join(' · ');
     const st = $('f-status')?.value || 'Draft';
     if ($('qt-status-text')) $('qt-status-text').textContent = st;
@@ -160,9 +160,11 @@
     const chip = (label, state, act, title) => state === 'cur' ? `<span class="qt-fc qt-fc-cur">${esc(label)}</span>` : state === 'off' ? `<span class="qt-fc qt-fc-off" title="${esc(title || '')}">${esc(label)}</span>` : `<button type="button" class="qt-fc" data-flow="${act}" title="${esc(title || '')}">${state === 'done' ? '<i class="qt-tick" aria-hidden="true">✓</i>' : ''}${esc(label)}</button>`;
     const s = '<span class="qt-fsep" aria-hidden="true">›</span>';
     const html = (f.r ? chip(f.r.rfqNo || 'RFQ', 'done', 'rfq', 'Open the RFQ') : chip('RFQ —', 'off', '', 'No RFQ')) + s
-      + (f.r && f.pv ? chip('Pricing V' + f.pv, 'done', 'pricing', 'Open the Pricing') : chip('Pricing —', 'off', '', 'No Pricing')) + s
+      + (window._pendingEstimate ? chip('Estimation V' + window._pendingEstimate.version, 'done', 'estimate', 'Open the Estimation')   // V271.2
+        : f.r && f.pv ? chip('Pricing V' + f.pv, 'done', 'pricing', 'Open the Pricing') : chip('Pricing —', 'off', '', 'No Pricing')) + s
       + chip(f.q?.qno || 'Quotation', 'cur') + s
-      + (f.so ? chip(f.so.soNo || 'Sales Order', 'done', 'so', 'Open the Sales Order') : chip('Sales Order', 'off', '', 'Not ordered yet'));
+      + (window._pendingEstimate ? (f.q?.jobNo ? chip(f.q.jobNo, 'done', 'job', 'Open the Job') : chip('Job', 'off', '', 'No job yet'))
+        : f.so ? chip(f.so.soNo || 'Sales Order', 'done', 'so', 'Open the Sales Order') : chip('Sales Order', 'off', '', 'Not ordered yet'));
     if ($('qt-flow')) $('qt-flow').innerHTML = html;
     if ($('qt-band-flow')) $('qt-band-flow').innerHTML = html;
     const back = $('qt-back-btn');
@@ -181,6 +183,8 @@
       if (kind === 'rfq' && f.r) { leaveScreen(() => typeof viewRFQ === 'function' && viewRFQ(f.r.id)); }
       else if (kind === 'pricing' && f.r) { leaveScreen(() => typeof openPricingDocument === 'function' ? openPricingDocument(f.r.id) : (typeof viewPricingReadOnly === 'function' && viewPricingReadOnly(f.r.id))); }
       else if (kind === 'so' && f.so) { leaveScreen(() => typeof openSalesOrderDocument === 'function' && openSalesOrderDocument(f.so.id)); }
+      else if (kind === 'estimate' && window._pendingEstimate) { const e = window._pendingEstimate; leaveScreen(() => typeof bcOpenEstimate === 'function' && bcOpenEstimate(e.rfqId, { version: e.version })); }   // V271.2
+      else if (kind === 'job' && f.q?.jobId) { leaveScreen(() => window.BCJobs && BCJobs.view(f.q.jobId)); }
     };
     if (!changed) { go(); return; }
     confirmLeave({ where: 'Leaving now', after: go });

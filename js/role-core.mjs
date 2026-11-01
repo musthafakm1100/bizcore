@@ -177,6 +177,7 @@ export const READ_MODULES = Object.freeze({
   rfqs: ['rfq', 'pricing', 'quotation'],
   quotations: ['quotation'],
   salesOrders: ['salesOrder'],
+  jobs: ['salesOrder', 'quotation'],   // V271.2: Contracting jobs (the Sales Orders rights)
   deliveryNotes: ['deliveryNote', 'invoice'],
   customerInvoices: ['invoice', 'receipt'],
   creditNotes: ['invoice', 'receipt'],
@@ -196,7 +197,7 @@ export const OWN_COLLECTIONS = Object.freeze({ rfqs: 'rfq', quotations: 'quotati
 
 /** Screens (data-nav-page) → the modules that open them. */
 export const PAGE_MODULES = Object.freeze({
-  rfq: ['rfq'], costing: ['pricing'], quotations: ['quotation'], salesorders: ['salesOrder'],
+  rfq: ['rfq'], costing: ['pricing'], quotations: ['quotation'], salesorders: ['salesOrder'], jobs: ['salesOrder'],
   deliverynotes: ['deliveryNote'], deliveries: ['deliveryNote'], customerinvoices: ['invoice'], receipts: ['receipt'],
   supplierrfqs: ['purchaseInvoice'], purchaseorders: ['purchaseInvoice'], purchaseinvoices: ['purchaseInvoice'],
   supplierpayments: ['supplierPayment'], stock: ['stock'], cashbank: ['cash'],
