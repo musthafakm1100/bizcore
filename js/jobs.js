@@ -763,14 +763,20 @@ ${open.map(e => `<tr><td><input type="checkbox" data-pk="${esc(e.id)}" checked a
 
   /* ── prints (JE_5, JE_6): A4, internal, the company letterhead and the footer at the bottom like every document ── */
   const words = n => { try { return window.BizCoreRct && window.BizCoreRct.core && window.BizCoreRct.core.amountInWords ? window.BizCoreRct.core.amountInWords(n) : ''; } catch (e) { return ''; } };
+  /* internal vouchers (agreed 2 Nov 2026): a small logo, no address block — more room for the lines */
   function letterhead(title, no, dateLabel, date) {
     const cp = typeof dnCompanyProfile === 'function' ? dnCompanyProfile() : { name: 'Company' };
-    const logo = cp.logo ? `<img src="${cp.logo}" alt="${esc(cp.name)}" style="max-width:240px;max-height:72px;width:auto;height:auto;object-fit:contain">` : `<div style="font-size:22px;font-weight:800;color:#173a5e">${esc(cp.name)}</div>`;
-    const parts = [cp.pobox ? `P.O. Box ${esc(cp.pobox)}` : '', cp.address ? esc(cp.address) : '', cp.phone ? `Tel: ${esc(cp.phone)}` : '', cp.email ? esc(cp.email) : ''].filter(Boolean);
-    const contact = parts.join('<br>') + (cp.vat ? `<br><b>VAT No.:</b> ${esc(cp.vat)}` : '') + (cp.cr ? `<br><b>CR No.:</b> ${esc(cp.cr)}` : '');
-    return { parts, head: `<div class="dn-head"><div>${logo}</div><div class="dn-contact">${contact || '&nbsp;'}</div><div class="dn-title-stack"><div class="dn-titlebox"><h1>${title}<span class="jx-int">INTERNAL</span></h1><div><small>No.</small><strong>${esc(no)}</strong></div><div><small>${dateLabel}</small><strong>${dmy(date)}</strong></div></div></div></div>` };
+    const logo = cp.logo ? `<img src="${cp.logo}" alt="${esc(cp.name)}" class="jx-logo">` : `<div class="jx-coname">${esc(cp.name)}</div>`;
+    return { parts: [esc(cp.name || '')], head: `<div class="jx-head"><div>${logo}</div><div class="jx-tbox"><h1>${title}<span class="jx-int">INTERNAL</span></h1><div class="jx-tmeta"><div><small>No.</small><strong>${esc(no)}</strong></div><div><small>${dateLabel}</small><strong>${dmy(date)}</strong></div></div></div></div>` };
   }
   const JX_CSS = `.inv-a4.jx-a4{--ia:#173a5e;--ia-soft:#c7d7e8;--ia-tint:#f1f5f9;--ia-ink:#173a5e;position:relative}
+.jx-a4 .jx-head{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-bottom:8px;border-bottom:2px solid #173a5e}
+.jx-a4 .jx-logo{max-width:150px;max-height:40px;width:auto;height:auto;object-fit:contain;display:block}
+.jx-a4 .jx-coname{font-size:15px;font-weight:800;color:#173a5e}
+.jx-a4 .jx-tbox{text-align:right}.jx-a4 .jx-tbox h1{margin:0;font-size:16px;letter-spacing:.3px;color:#173a5e;white-space:nowrap}
+.jx-a4 .jx-tmeta{display:flex;gap:18px;justify-content:flex-end;margin-top:4px}.jx-a4 .jx-tmeta small{display:block;font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;text-align:right}.jx-a4 .jx-tmeta strong{font-size:11.5px}
+.jx-a4 .dn-bottom{grid-template-columns:1fr 1fr 1fr}
+.jx-a4 .dn-foot{white-space:normal}
 .jx-a4 .jx-int{display:inline-block;margin-left:8px;font-size:9px;font-weight:700;letter-spacing:.06em;color:#92400e;background:#fef3c7;border-radius:3px;padding:1px 5px;vertical-align:middle}
 .jx-a4 .jx-info{display:grid;grid-template-columns:1fr 1fr;gap:3px 22px;margin:10px 0;font-size:10px}.jx-a4 .jx-info div{display:flex;gap:8px}.jx-a4 .jx-info span{color:#64748b;min-width:90px}
 .jx-a4 .dn-items td,.jx-a4 .dn-items th{white-space:nowrap;font-size:9.4px}.jx-a4 .dn-items td.jx-wrap{white-space:normal}.jx-a4 .dn-items td small{display:block;color:#64748b;font-size:8.4px}
@@ -803,7 +809,7 @@ ${L.head}
 ${adv ? `<div class="jx-adv"><span>Site advance — ${esc(adv.name)}:</span>${adv.bal != null ? `<span>balance now <b>${fmt(adv.bal)}</b></span>` : ''}<span>this voucher <b>−${fmt(adv.used)}</b></span>${num(e.ownMoney) > 0 ? `<span>· to reimburse <b>${fmt(JC().core.owedOf(e))}</b></span>` : ''}</div>` : num(e.ownMoney) > 0 ? `<div class="jx-adv"><span>Own money — to reimburse <b>${fmt(JC().core.owedOf(e))}</b></span></div>` : ''}
 <div class="jx-words"><b>Amount in words:</b> ${esc(words(e.total))}</div>
 ${sig([['Submitted by', e.submittedBy], ['Received by', e.createdBy], ['Approved by', '']])}
-<div class="dn-foot dn-foot-j">${typeof docFooterPartsHtml === 'function' ? docFooterPartsHtml([...L.parts, 'Internal document — not a tax invoice · original receipts attached']) : ''}</div></div>`;
+<div class="dn-foot dn-foot-j">${typeof docFooterPartsHtml === 'function' ? docFooterPartsHtml([...L.parts, 'Internal document — not a tax invoice', 'Original receipts attached']) : ''}</div></div>`;
   }
   async function printExpense(e) {
     if (typeof invPrintDocument !== 'function') { toast('Printing is not available — please reload.', 'error'); return; }
