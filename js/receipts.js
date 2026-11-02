@@ -170,7 +170,7 @@ function renderReceiptRegister(){
   else if (sort === 'customer-asc') rows.sort((a, b) => String(a.customer || '').localeCompare(String(b.customer || '')));
   else if (sort === 'amount-desc') rows.sort((a, b) => rctNum(b.amount) - rctNum(a.amount));
   else rows.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || byNo(b, a));
-  if (typeof sortRegisterRows === 'function') rows = sortRegisterRows(rows, 'rct', { no: r => r.rctNo, date: r => r.date, customer: r => r.customer, method: r => r.method, amount: r => rctNum(r.amount), status: r => r.status });
+  if (typeof sortRegisterRows === 'function') rows = sortRegisterRows(rows, 'rct', { created: r => bcRegisterCreated(r), no: r => r.rctNo, date: r => r.date, customer: r => r.customer, method: r => r.method, amount: r => rctNum(r.amount), status: r => r.status });
   setT('rctreg-count', `${rows.length} receipt${rows.length === 1 ? '' : 's'}`);
   const clear = document.getElementById('rctreg-clear');
   if (clear) { const active = !!(q || cust || ds.preset !== 'all' || sort !== 'date-desc' || _rctKpi !== 'all'); clear.disabled = !active; clear.classList.toggle('active', active); }

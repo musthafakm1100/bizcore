@@ -107,7 +107,7 @@ function renderSupplierPayments(){
   else if (sort === 'supplier-asc') rows.sort((a, b) => String(a.supplierName).localeCompare(String(b.supplierName)));
   else if (sort === 'amount-desc') rows.sort((a, b) => spAmountOf(b) - spAmountOf(a));
   else rows.sort((a, b) => String(b.date).localeCompare(String(a.date)) || byNo(b, a));
-  if (typeof sortRegisterRows === 'function') rows = sortRegisterRows(rows, 'sp', { no: p => p.spNo, date: p => p.date, supplier: p => p.supplierName, type: p => SP_TYPE[spTypeOf(p)][0], amount: p => spAmountOf(p) });
+  if (typeof sortRegisterRows === 'function') rows = sortRegisterRows(rows, 'sp', { created: p => bcRegisterCreated(p), no: p => p.spNo, date: p => p.date, supplier: p => p.supplierName, type: p => SP_TYPE[spTypeOf(p)][0], amount: p => spAmountOf(p) });
   setT('spreg-count', `${rows.length} payment${rows.length === 1 ? '' : 's'}`);
   const clear = document.getElementById('spreg-clear');
   if (clear) { const active = !!(q || sup || ds.preset !== 'all' || sort !== 'date-desc' || _spKpi !== 'all'); clear.disabled = !active; clear.classList.toggle('active', active); }

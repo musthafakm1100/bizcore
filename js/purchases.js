@@ -140,7 +140,7 @@ function renderPurchaseRegister(){
   else if (sort === 'amount-desc') rows.sort((a, b) => piN(b.totals && b.totals.total) - piN(a.totals && a.totals.total));
   else if (sort === 'due-asc') rows.sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
   else rows.sort((a, b) => String(b.date).localeCompare(String(a.date)) || byNo(b, a));
-  if (typeof sortRegisterRows === 'function') rows = sortRegisterRows(rows, 'pi', { no: p => p.piNo, date: p => p.date, supplier: p => p.supplierName, amount: p => piN(p.totals && p.totals.total), due: p => p.dueDate, status: p => p.status });
+  if (typeof sortRegisterRows === 'function') rows = sortRegisterRows(rows, 'pi', { created: p => bcRegisterCreated(p), no: p => p.piNo, date: p => p.date, supplier: p => p.supplierName, amount: p => piN(p.totals && p.totals.total), due: p => p.dueDate, status: p => p.status });
   setT('pireg-count', `${rows.length} invoice${rows.length === 1 ? '' : 's'}`);
   const clear = document.getElementById('pireg-clear');
   if (clear) { const active = !!(q || sup || ds.preset !== 'all' || sort !== 'date-desc' || _piKpi !== 'all'); clear.disabled = !active; clear.classList.toggle('active', active); }

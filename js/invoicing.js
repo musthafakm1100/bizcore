@@ -1217,7 +1217,7 @@ function renderInvoiceRegister(){
   else if (sort === 'customer-asc') rows.sort((a, b) => (a.customer || '').localeCompare(b.customer || ''));
   else if (sort === 'total-desc') rows.sort((a, b) => b.total - a.total);
   else rows.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.no || '').localeCompare(a.no || '', undefined, { numeric: true }));
-  if (typeof sortRegisterRows === 'function') rows = sortRegisterRows(rows, 'inv', { no: r => r.no, type: r => r.type, date: r => r.date, customer: r => r.customer, so: r => r.soNo, total: r => r.total, status: r => r.status });
+  if (typeof sortRegisterRows === 'function') rows = sortRegisterRows(rows, 'inv', { created: r => bcRegisterCreated(r), no: r => r.no, type: r => r.type, date: r => r.date, customer: r => r.customer, so: r => r.soNo, total: r => r.total, status: r => r.status });
   setT('invreg-count', `${rows.length} document${rows.length === 1 ? '' : 's'}`);
   const clear = document.getElementById('invreg-clear');
   if (clear) { const active = !!(q || cust || st || dp !== 'all' || sort !== 'date-desc' || _invRegKpi !== 'all'); clear.disabled = !active; clear.classList.toggle('active', active); }

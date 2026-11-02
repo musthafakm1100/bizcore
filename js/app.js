@@ -2323,13 +2323,46 @@ function compareBizCoreDocumentNumbers(a,b,type){
   if(reset==='monthly'&&x.mo!==null&&y.mo!==null&&x.mo!==y.mo)return x.mo-y.mo;
   return x.seq-y.seq || x.revision-y.revision || compareRegisterValues(x.raw,y.raw);
 }
+/* Phase 1 — one source of truth for dropdown and table-header sorting. */
+const BC_REGISTER_SELECTS={quotation:'filter-sort',pricing:'pricing-sort',so:'so-sort',dn:'dn-sort',inv:'invreg-sort',rct:'rctreg-sort',pi:'pireg-sort',sp:'spreg-sort'};
+function bcRegisterDropdownChanged(screen,renderFn){
+  const sel=document.getElementById(BC_REGISTER_SELECTS[screen]);
+  const m=sel?.value.match(/^(.*)-(asc|desc)$/);
+  if(m)registerSortState[screen]={key:m[1]==='dn'?'no':m[1],dir:m[2]};
+  if(screen==='pricing')pricingDocPage=1;
+  if(screen==='so')soPage=1;
+  if(screen==='quotation')currentPage=1;
+  renderFn();updateRegisterSortIndicators();
+}
+function bcRegisterCreated(row){
+  // Preserve the first creation timestamp; never use last-edited time as creation.
+  return row.createdAt||row.created||row.creationTime||row.createdOn||row.date||'';
+}
 function sortRegisterRows(rows, screen, getters){
-  const st=registerSortState[screen]; if(!st||!getters[st.key])return rows;
-  return [...rows].sort((a,b)=>(st.key==='no'&&BC_NUMBER_SORT_TYPES[screen]?compareBizCoreDocumentNumbers(getters[st.key](a),getters[st.key](b),screen==='inv' && /^(CN|CR)[-/.]/i.test(String(getters[st.key](a))) ? 'creditNote' : BC_NUMBER_SORT_TYPES[screen]):compareRegisterValues(getters[st.key](a),getters[st.key](b)))*(st.dir==='asc'?1:-1));
+  const dropdownId=BC_REGISTER_SELECTS[screen];
+  const selection=dropdownId?document.getElementById(dropdownId)?.value:null;
+  const selected=selection&&/^(.*)-(asc|desc)$/.exec(selection);
+  const st=selected?{key:selected[1]==='dn'?'no':selected[1],dir:selected[2]}:registerSortState[screen];
+  if(!st||!getters[st.key])return rows;
+  return [...rows].sort((a,b)=>{
+    const av=getters[st.key](a), bv=getters[st.key](b);
+    const type=screen==='inv'&&/^(CN|CR)[-/.]/i.test(String(av))&&/^(CN|CR)[-/.]/i.test(String(bv))?'creditNote':BC_NUMBER_SORT_TYPES[screen];
+    const result=st.key==='no'&&type?compareBizCoreDocumentNumbers(av,bv,type):compareRegisterValues(av,bv);
+    return result*(st.dir==='asc'?1:-1);
+  });
 }
 function setRegisterSort(screen,key,renderFn){
   const cur=registerSortState[screen];
   registerSortState[screen]={key,dir:(cur&&cur.key===key&&cur.dir==='asc')?'desc':'asc'};
+  const dropdown=document.getElementById(BC_REGISTER_SELECTS[screen]);
+  if(dropdown){
+    const value=key+'-'+registerSortState[screen].dir;
+    if(![...dropdown.options].some(o=>o.value===value)){
+      const label=dropdown.closest('.bc-filterbar-left')?.querySelector('label')?.textContent?.trim()||key;
+      dropdown.add(new Option(label+' '+(registerSortState[screen].dir==='asc'?'↑':'↓'),value));
+    }
+    dropdown.value=value;
+  }
   if(screen==='rfq'){const menu=document.getElementById('rfq-sort');const mapped={no:'number',date:'date',due:'due',customer:'customer'}[key];if(menu&&mapped){menu.value=mapped+'-'+(registerSortState[screen].dir==='asc'?'asc':'desc');}}
   try{ if(screen==='quotation') currentPage=1; if(screen==='pricing') pricingDocPage=1; if(screen==='rfq') rfqPage=1; if(screen==='so') soPage=1; if(screen==='customers') customerPage=1; if(screen==='suppliers') supplierPage=1; if(screen==='products') prodPage=1; if(screen==='employees') employeePage=1; }catch(e){}
   renderFn();
@@ -4308,7 +4341,7 @@ function renderTable() {
   else if(fSort==='date-asc') filtered.sort((a,b)=>a.date.localeCompare(b.date));
   else if(fSort==='amount-desc') filtered.sort((a,b)=>calcQuote(b).net-calcQuote(a).net);
   else if(fSort==='amount-asc') filtered.sort((a,b)=>calcQuote(a).net-calcQuote(b).net);
-  filtered=sortRegisterRows(filtered,'quotation',{no:q=>q.qno,date:q=>normalizedQuotationDate(q),customer:q=>q.company,reference:q=>q.ref,items:q=>(q.items||[]).length,amount:q=>calcQuote(q).net,status:q=>q.status,salesorders:q=>salesOrders.filter(x=>x.quotationId===q.id).map(x=>x.soNo).join(' '),valid:q=>validUntil(q)});
+  filtered=sortRegisterRows(filtered,'quotation',{created:q=>bcRegisterCreated(q),no:q=>q.qno,date:q=>normalizedQuotationDate(q),customer:q=>q.company,reference:q=>q.ref,items:q=>(q.items||[]).length,amount:q=>calcQuote(q).net,status:q=>q.status,salesorders:q=>salesOrders.filter(x=>x.quotationId===q.id).map(x=>x.soNo).join(' '),valid:q=>validUntil(q)});
 
   // V265 standard: the count shows only the number; the chosen period is shown on the date filter itself
   document.getElementById('q-count').textContent = `${filtered.length} quotation${filtered.length!==1?'s':''}`;
@@ -4873,7 +4906,7 @@ function renderPricingDocuments(){
   else if(pSort==='customer-asc')rows.sort((a,b)=>String(a.rfq.company||'').localeCompare(String(b.rfq.company||'')));
   else rows.sort((a,b)=>String(b.updated||'').localeCompare(String(a.updated||'')));
   {const c=document.getElementById('pricing-register-count');if(c)c.textContent=`${rows.length} document${rows.length===1?'':'s'}`;}
-  const sortedRows=sortRegisterRows(rows,'pricing',{no:d=>d.pricingNo,customer:d=>d.rfq.company,version:d=>d.version,updated:d=>d.updated,cost:d=>d.cost,selling:d=>d.selling,profit:d=>d.profit,margin:d=>d.marginPct,status:d=>d.status,quotation:d=>d.quote?.qno||''});
+  const sortedRows=sortRegisterRows(rows,'pricing',{created:d=>bcRegisterCreated(d),no:d=>d.pricingNo,customer:d=>d.rfq.company,version:d=>d.version,updated:d=>d.updated,cost:d=>d.cost,selling:d=>d.selling,profit:d=>d.profit,margin:d=>d.marginPct,status:d=>d.status,quotation:d=>d.quote?.qno||''});
   const pricingDocPages = Math.ceil(sortedRows.length / PRICING_DOC_PER_PAGE) || 1;
   if (pricingDocPage > pricingDocPages) pricingDocPage = 1;
   const pageRows = sortedRows.slice((pricingDocPage-1)*PRICING_DOC_PER_PAGE, pricingDocPage*PRICING_DOC_PER_PAGE);
@@ -4896,7 +4929,7 @@ function renderPricingDocuments(){
 function getPricingRegisterExportRows(){
   const search=(document.getElementById('pricing-doc-search')?.value||'').trim().toLowerCase();
   const rows=getPricingDocuments().filter(d=>(pricingDocumentFilter==='all'||d.status===pricingDocumentFilter)&&pricingMatchesDateFilter(d)&&(!search||[d.pricingNo,d.rfq.rfqNo,d.rfq.company,d.rfq.ref,d.quote?.qno].some(x=>String(x||'').toLowerCase().includes(search))));
-  return sortRegisterRows(rows,'pricing',{no:d=>d.pricingNo,customer:d=>d.rfq.company,version:d=>d.version,updated:d=>d.updated,cost:d=>d.cost,selling:d=>d.selling,profit:d=>d.profit,margin:d=>d.marginPct,status:d=>d.status,quotation:d=>d.quote?.qno||''});
+  return sortRegisterRows(rows,'pricing',{created:d=>bcRegisterCreated(d),no:d=>d.pricingNo,customer:d=>d.rfq.company,version:d=>d.version,updated:d=>d.updated,cost:d=>d.cost,selling:d=>d.selling,profit:d=>d.profit,margin:d=>d.marginPct,status:d=>d.status,quotation:d=>d.quote?.qno||''});
 }
 function pricingExportFilterSummary(){
   const parts=[];
@@ -11270,7 +11303,7 @@ function renderSOPage() {
   else if(sortValue==='amount-desc') list.sort((a,b)=>(parseFloat(b.total)||0)-(parseFloat(a.total)||0));
   else if(sortValue==='amount-asc') list.sort((a,b)=>(parseFloat(a.total)||0)-(parseFloat(b.total)||0));
   else list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  list=sortRegisterRows(list,'so',{no:s=>s.soNo,date:s=>s.date,customer:s=>s.customer,po:s=>s.poNo,quotation:s=>quotations.find(q=>q.id===s.quotationId)?.qno||'',items:s=>(s.items||[]).length,amount:s=>parseFloat(s.total)||0,status:s=>s._status||soOrderStatus(s)});
+  list=sortRegisterRows(list,'so',{created:s=>bcRegisterCreated(s),no:s=>s.soNo,date:s=>s.date,customer:s=>s.customer,po:s=>s.poNo,quotation:s=>quotations.find(q=>q.id===s.quotationId)?.qno||'',items:s=>(s.items||[]).length,amount:s=>parseFloat(s.total)||0,status:s=>s._status||soOrderStatus(s)});
 
   const countEl=document.getElementById('so-register-count');
   if(countEl)countEl.textContent=`${list.length} order${list.length===1?'':'s'}`;
@@ -12274,7 +12307,7 @@ function renderDNPage(){
  else if(sort==='customer-asc')rows.sort((a,b)=>(a.so.customer||'').localeCompare(b.so.customer||''));
  else if(sort==='updated-desc')rows.sort((a,b)=>updated(b).localeCompare(updated(a)));
  else rows.sort((a,b)=>(b.d.date||'').localeCompare(a.d.date||'')||(b.d.dnNo||'').localeCompare(a.d.dnNo||'',undefined,{numeric:true}));
- rows=sortRegisterRows(rows,'dn',{no:x=>x.d.dnNo,date:x=>x.d.date,customer:x=>x.so.customer,so:x=>x.so.soNo,po:x=>x.so.poNo,items:x=>(x.d.items||[]).length,status:x=>x.status});
+ rows=sortRegisterRows(rows,'dn',{created:x=>bcRegisterCreated(x.d),no:x=>x.d.dnNo,date:x=>x.d.date,customer:x=>x.so.customer,so:x=>x.so.soNo,po:x=>x.so.poNo,items:x=>(x.d.items||[]).length,status:x=>x.status});
  const ce=document.getElementById('dn-register-count');if(ce)ce.textContent=`${rows.length} delivery note${rows.length===1?'':'s'}`;
  const clear=document.getElementById('dn-clear-filters-btn');if(clear){const active=!!(q||cust||dnDateFilter.mode!=='all'||sort!=='date-desc'||dnKpiFilter!=='all');clear.disabled=!active;clear.classList.toggle('active',active)}
  body.innerHTML=rows.length?rows.map(x=>`<tr class="quotation-clickable-row" tabindex="0" role="button" onclick="viewDeliveryNote('${x.so.id}',${x.i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewDeliveryNote('${x.so.id}',${x.i})}"><td>${escapeHtml(x.d.dnNo||'—')}</td><td>${fmtDate(x.d.date)}</td><td>${escapeHtml(x.so.customer||'—')}</td><td>${escapeHtml(x.so.soNo||'—')}</td><td>${escapeHtml(x.so.poNo||'—')}</td><td class="center">${(x.d.items||[]).length}</td><td>${x.d.customerConfirmed?(()=>{const sm=dnConfirmationSummary(x.d);return `<span class="dn-reg-result">${sm.accepted?`<b class="ok">${sm.accepted} accepted</b>`:''}${sm.partial?`<b class="warn">${sm.partial} partial</b>`:''}${sm.rejected?`<b class="bad">${sm.rejected} rejected</b>`:''}</span>`})():'<span class="dn-reg-pending">Pending</span>'}</td><td><span class="badge ${getDNBadgeClass(x.status)}">${x.status}</span></td></tr>`).join(''):'<tr><td colspan="8"><div class="empty-state"><i class="ti ti-truck-delivery"></i><strong>No delivery notes found</strong><p>Adjust the filters to see other delivery records.</p></div></td></tr>';
