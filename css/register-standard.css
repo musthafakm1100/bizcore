@@ -914,3 +914,18 @@ html body :is(#page-customerinvoices #invreg-table,#page-jobs #rctreg-table,#pag
 
 /* V266.72 — the RFQ monitor's folded button sits at the top like on every other register (was 96 px down) */
 html body #page-rfq .rfq-main-workspace .rfq-monitor-expand.module-monitor-rail.rfq-monitor-expand{top:0!important;margin-top:0!important}
+
+/* V271.4.2 hotfix — expose the shared register sorting control.
+   Older V266.6 toolbar styling deliberately hid it; Phase 1 now requires it. */
+@media (min-width: 761px) {
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar .bc-filter-sort {
+    display: block !important;
+    width: 152px !important;
+    min-width: 152px !important;
+    max-width: 152px !important;
+    flex: 0 0 152px !important;
+  }
+  html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-jobs,#page-purchaseinvoices,#page-stock,#page-supplierpayments) .bc-filterbar-left {
+    gap: 8px !important;
+  }
+}
