@@ -104,3 +104,8 @@
 .docnum-status strong{color:var(--st-amber-fg,#92400e)}
 @media(max-width:900px){.docnum-layout>.docnum-panel{grid-template-columns:1fr}}
 @media(max-width:700px){.docnum-rules{grid-template-columns:1fr}.docnum-table{min-width:760px}}
+
+/* V271.4: read-only administrative sorting rule */
+.docnum-table .bc-number-sort-rule{display:inline-block;font-size:11px;color:#475569;font-weight:500;white-space:nowrap}
+.docnum-table td:has(.bc-number-sort-rule){background:#f8fbff}
+@media(max-width:900px){.docnum-table{min-width:1060px}}

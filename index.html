@@ -26,7 +26,7 @@
 <link href="css/typography.css?v=215" rel="stylesheet"/>
 <link href="css/masters.css?v=266.5" rel="stylesheet"/>
 <link href="css/administration-typography.css?v=247" rel="stylesheet"/>
-<link href="css/numbering-controls.css?v=270.25" rel="stylesheet"/>
+<link href="css/numbering-controls.css?v=271.4-sorting" rel="stylesheet"/>
 <link href="css/rfq-entry.css?v=271.2" rel="stylesheet"/>
 <link href="css/invoicing.css?v=270.50" rel="stylesheet"/>
 <link href="css/register-standard.css?v=271.2" rel="stylesheet"/>
@@ -47,7 +47,7 @@
 <link href="css/quote-rich.css?v=270.61" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <link href="css/users.css?v=270.43" rel="stylesheet"/>
-<link href="css/estimate.css?v=271.32" rel="stylesheet"/>
+<link href="css/estimate.css?v=271.4-sorting" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
 <script src="js/responsive.js?v=270.47" defer></script>
 <script src="js/bc-date.js?v=270.52" defer></script>
@@ -377,7 +377,7 @@ document.addEventListener('error', function(e) {
 <button aria-label="Expand RFQ Monitor" class="rfq-monitor-expand module-monitor-rail" id="rfq-monitor-expand" onclick="toggleModuleMonitor('rfq')" title="Expand RFQ Monitor" type="button"><i class="ti ti-layout-sidebar-left-expand"></i><span>RFQs</span></button>
 <div class="rfq-register-area">
     <div aria-label="RFQ filters" class="rfq-main-toolbar page-toolbar page-toolbar--sticky page-control-bar bc-filterbar" role="toolbar">
-<div class="bc-filterbar-left"><select id="rfq-sort" class="bc-filter bc-filter-sort" onchange="rfqPage=1;renderRFQPage()" aria-label="Sort RFQs"><option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option><option value="due-asc">Due date (soonest)</option><option value="customer-asc">Customer A–Z</option></select><span id="rfq-register-count" class="so-toolbar-count bc-filter-count"></span></div>
+<div class="bc-filterbar-left"><select id="rfq-sort" class="bc-filter bc-filter-sort" onchange="rfqPage=1;renderRFQPage()" aria-label="Sort RFQs"><option value="created-desc">Recently Created</option><option value="number-desc">RFQ Number ↓</option><option value="number-asc">RFQ Number ↑</option><option value="date-desc">RFQ Date — Newest</option><option value="date-asc">RFQ Date — Oldest</option><option value="due-asc">Due Date — Soonest</option><option value="due-desc">Due Date — Latest</option><option value="customer-asc">Customer A–Z</option><option value="customer-desc">Customer Z–A</option></select><span id="rfq-register-count" class="so-toolbar-count bc-filter-count"></span></div>
 <div class="rfq-toolbar-actions bc-filterbar-right">
 <select id="rfq-customer-filter" class="bc-filter bc-filter-customer" onchange="rfqPage=1;renderRFQPage()" aria-label="Filter RFQs by customer"><option value="">All customers</option></select>
 <select id="rfq-status-filter" class="bc-filter bc-filter-status" onchange="applyRFQMonitorFilter(this.value||'all')" aria-label="Filter RFQs by status"><option value="">All statuses</option><option value="New">Awaiting Pricing</option><option value="Pricing">In Pricing</option><option value="Quoted">Quoted / Sales Order</option><option value="No Bid">No Bid</option><option value="Open">Open RFQs</option><option value="Overdue">Overdue</option></select>
@@ -1231,7 +1231,7 @@ document.addEventListener('error', function(e) {
 <div class="numbering-section-head"><div><h4><i class="ti ti-hash"></i>Document Numbering</h4><p>Number format and sequence reset are set separately. Numbers are allocated atomically on Save and never reused.</p></div><div class="docnum-actions"><button class="btn btn-secondary btn-sm" id="docnum-discard-btn" onclick="discardDocumentNumbering()" disabled><i class="ti ti-arrow-back-up"></i>Discard changes</button><button class="btn btn-primary btn-sm" id="docnum-save-btn" onclick="saveDocumentNumbering()" disabled><i class="ti ti-device-floppy"></i>Save Numbering</button></div></div>
 <div class="docnum-applybar"><strong>Apply to all documents:</strong><label>Date part <select class="docnum-ctl" id="docnum-all-date" onchange="syncDocNumApplyAllReset()"></select></label><label>Separators <select class="docnum-ctl docnum-sep" id="docnum-all-sep1" title="After prefix"></select><select class="docnum-ctl docnum-sep" id="docnum-all-sep2" title="After date"></select></label><label>Digits <select class="docnum-ctl docnum-digits" id="docnum-all-digits"></select></label><label>Reset <select class="docnum-ctl docnum-reset" id="docnum-all-reset"></select></label><button class="btn btn-secondary btn-sm" onclick="applyDocNumToAll()">Apply</button><span class="docnum-applynote">Prefixes stay as they are.</span></div>
 <div class="docnum-layout">
-<div class="admin-master-table-wrap numbering-table-wrap"><table class="numbering-table docnum-table"><thead><tr><th>Document</th><th>Prefix</th><th>Date part</th><th title="After prefix · after date">Separators</th><th>Digits</th><th>Sequence reset</th><th>Format · Next number</th></tr></thead><tbody id="document-numbering-tbody"></tbody></table></div>
+<div class="admin-master-table-wrap numbering-table-wrap"><table class="numbering-table docnum-table"><thead><tr><th>Document</th><th>Prefix</th><th>Date part</th><th title="After prefix · after date">Separators</th><th>Digits</th><th>Sequence reset</th><th title="Automatically derived from sequence reset; not editable">Sorting Priority</th><th>Format · Next number</th></tr></thead><tbody id="document-numbering-tbody"></tbody></table></div>
 <aside class="docnum-panel" id="docnum-panel" aria-live="polite"></aside>
 </div>
 <div class="docnum-rules">
@@ -4582,7 +4582,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=271.32';
+      s.src = 'js/app.js?v=271.4-sorting';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4596,7 +4596,7 @@ onAuthStateChanged(auth, async user => {
         // V271.1: Contracting Estimation (estimate window, Cost Build-up, Contracting Settings)
         const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.3'; document.body.appendChild(es);
         // V271.2: Contracting Jobs (Create Job, Jobs register, Job view)
-        const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.33'; document.body.appendChild(jb);
+        const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.4-sorting'; document.body.appendChild(jb);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=271.11'; document.body.appendChild(ds);
         // V270.4.1: Administration → Users, Roles & Permissions

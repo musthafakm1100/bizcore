@@ -493,3 +493,40 @@
 /* V271.3.2: Product details — a picture whose file is missing keeps its place */
 .pv-img.pv-missing{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#b45309;background:#fffbeb;border-color:#fcd34d}
 .pv-img.pv-missing i{font-size:26px}.pv-img.pv-missing small{font-size:10.5px;font-weight:600}
+
+/* V271.4.1 — Jobs monitor visually aligned with the actual Sales Orders tile CSS.
+   Keep Jobs-specific statuses and counters; only presentation changes here. */
+#page-jobs .jb-reg{max-width:none;width:100%;font-size:12px;font-weight:400}
+#page-jobs .jb-monitor{display:flex;align-items:stretch;background:#fff;border:1px solid #dfe5ec;border-radius:10px;overflow:hidden;margin:0 0 6px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+#page-jobs .jb-monitor button{appearance:none;border:0;margin:0;min-width:0;text-align:left;cursor:pointer;font:inherit;background:#fff;color:#1f2937;padding:12px 16px;display:flex;flex-direction:column;justify-content:flex-start;gap:1px;position:relative;transition:background .15s}
+#page-jobs .jb-monitor button:focus-visible{outline:2px solid var(--c-2e75b6,#2e75b6);outline-offset:-3px}
+#page-jobs .jb-monitor button+button{flex:1 1 0;border-left:1px solid #edf1f5}
+#page-jobs .jb-monitor button+button:before{display:none}
+#page-jobs .jb-monitor button:hover:not(.jb-monitor-main){background:#f6f9fc}
+#page-jobs .jb-monitor .jb-monitor-main{flex:0 0 200px;background:var(--c-173a5e,#193b60);color:#fff;justify-content:center;padding:12px 18px}
+#page-jobs .jb-monitor .jb-monitor-main:hover{filter:brightness(1.08)}
+#page-jobs .jb-monitor .jb-monitor-main span{font-size:11px;letter-spacing:.05em;text-transform:uppercase;opacity:.8;font-weight:600}
+#page-jobs .jb-monitor .jb-monitor-main strong{font-size:26px;line-height:1.15;font-weight:700;color:#fff}
+#page-jobs .jb-monitor .jb-monitor-main small{font-size:11.5px;opacity:.75;margin-top:3px}
+#page-jobs .jb-monitor .jb-monitor-tile{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto 16px auto;align-content:start;column-gap:8px;row-gap:2px}
+#page-jobs .jb-monitor .jb-monitor-tile>span{grid-column:1;grid-row:1;font-size:12.5px;font-weight:600;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#page-jobs .jb-monitor .jb-monitor-tile>strong{grid-column:2;grid-row:1;font-size:22px;line-height:1.1;font-weight:700;color:#0f172a;font-variant-numeric:tabular-nums}
+#page-jobs .jb-monitor .jb-monitor-tile:after{content:'Jobs';grid-column:1/-1;grid-row:2;font-size:11.5px;color:#64748b}
+#page-jobs .jb-monitor-track{grid-column:1/-1;grid-row:3;display:block;background:#eef2f6;border-radius:3px;height:5px;width:100%;margin-top:8px;overflow:hidden}
+#page-jobs .jb-monitor-fill{display:block;background:#3b82f6;height:100%;width:0;border-radius:3px}
+#page-jobs .jb-monitor button:nth-child(3) .jb-monitor-fill{background:#8b5cf6}
+#page-jobs .jb-monitor button:nth-child(4) .jb-monitor-fill{background:#22c55e}
+#page-jobs .jb-monitor button:nth-child(5) .jb-monitor-fill{background:#94a3b8}
+#page-jobs .jb-monitor button:nth-child(6) .jb-monitor-fill{background:#ef4444}
+#page-jobs .jb-monitor .is-active:not(.jb-monitor-main){background:#eef4fb;box-shadow:inset 0 -3px 0 var(--c-173a5e,#193b60)}
+#page-jobs .jb-monitor .jb-monitor-main.is-active{box-shadow:inset 0 -4px 0 rgba(255,255,255,.75)}
+#page-jobs .jb-reg-table td,#page-jobs .jb-reg-table th{font-size:11.5px;font-weight:400}
+#page-jobs .jb-reg-table td b{font-weight:550}
+#page-jobs .jb-reg-table th{font-weight:550;white-space:nowrap}
+#page-jobs .jb-sort-head{cursor:pointer;user-select:none}
+#page-jobs .jb-sort-head:hover{color:#1e4f86;background:#eef6fc}
+#page-jobs .jb-sort-arrow{color:#94a3b8;margin-left:3px;font-weight:400}
+#page-jobs .jb-sort-head[aria-sort!='none'] .jb-sort-arrow{color:#2563eb}
+#page-jobs #jbreg-sort{max-width:185px}
+@media(max-width:1100px){#page-jobs .jb-monitor{flex-direction:column}#page-jobs .jb-monitor .jb-monitor-main{flex:0 0 auto;flex-direction:row;align-items:center;gap:12px;padding:9px 16px}#page-jobs .jb-monitor .jb-monitor-main strong{font-size:21px}#page-jobs .jb-monitor .jb-monitor-main small{margin-left:auto}#page-jobs .jb-monitor .jb-monitor-tile{display:inline-grid;flex:1 1 0;min-width:145px}#page-jobs .jb-monitor{flex-flow:row wrap}#page-jobs .jb-monitor .jb-monitor-main{flex:0 0 100%}}
+@media(max-width:640px){#page-jobs .jb-monitor .jb-monitor-tile{flex:1 1 calc(50% - 12px);min-width:0}#page-jobs .jb-monitor button{padding:10px 13px}#page-jobs .jb-reg-table{min-width:1080px}}

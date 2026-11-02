@@ -1626,13 +1626,14 @@ function docNumDigitOptions(val){return DOC_DIGITS.map(n=>`<option value="${n}" 
 function renderDocumentNumbering(){
   const body=document.getElementById('document-numbering-tbody');if(!body)return;
   if(!docNumDraft||!docNumDirty){docNumDraft=JSON.parse(JSON.stringify(docNumSaved()));docNumDirty=false;}
-  body.innerHTML=DOC_NUMBERING_GROUPS.map(([g,keys])=>`<tr class="docnum-group"><td colspan="7">${g}</td></tr>`+keys.filter(k=>docNumDraft[k]).map(k=>{const c=docNumDraft[k];return `<tr class="docnum-row${k===docNumSelected?' is-selected':''}" data-type="${k}" onclick="selectDocNumRow('${k}')">
+  body.innerHTML=DOC_NUMBERING_GROUPS.map(([g,keys])=>`<tr class="docnum-group"><td colspan="8">${g}</td></tr>`+keys.filter(k=>docNumDraft[k]).map(k=>{const c=docNumDraft[k];return `<tr class="docnum-row${k===docNumSelected?' is-selected':''}" data-type="${k}" onclick="selectDocNumRow('${k}')">
 <td><span class="docnum-doc">${DOC_NUMBERING_DEFAULTS[k].label}</span><span class="docnum-changed" data-changed-type="${k}"${docNumChanged(k)?'':' hidden'}>Changed</span></td>
 <td><input class="docnum-prefix" data-type="${k}" value="${c.prefix}" maxlength="8" aria-label="${DOC_NUMBERING_DEFAULTS[k].label} prefix" oninput="setDocNumField('${k}','prefix',this.value,true)" onblur="if(!cleanDocPrefix(this.value)){this.value=docNumDraft['${k}'].prefix;}"></td>
 <td><select class="docnum-ctl docnum-date" data-type="${k}" aria-label="Date part" onchange="setDocNumField('${k}','dateFormat',this.value)">${docNumOptions(DOC_DATE_FORMAT_LABELS,c.dateFormat)}</select></td>
 <td class="docnum-seps"><select class="docnum-ctl docnum-sep" data-type="${k}" data-sep="1" title="After prefix" aria-label="Separator after prefix" onchange="setDocNumField('${k}','sep1',this.value)">${docNumSepOptions(c.sep1)}</select><select class="docnum-ctl docnum-sep" data-type="${k}" data-sep="2" title="After date" aria-label="Separator after date" ${c.dateFormat==='none'?'disabled':''} onchange="setDocNumField('${k}','sep2',this.value)">${docNumSepOptions(c.sep2)}</select></td>
 <td><select class="docnum-ctl docnum-digits" data-type="${k}" aria-label="Digits" onchange="setDocNumField('${k}','digits',Number(this.value))">${docNumDigitOptions(c.digits)}</select></td>
 <td><select class="docnum-ctl docnum-reset" data-type="${k}" aria-label="Sequence reset" onchange="setDocNumField('${k}','reset',this.value)">${docNumOptions(DOC_RESET_LABELS,c.reset,DOC_RESETS_FOR_FORMAT[c.dateFormat])}</select></td>
+<td><span class="bc-number-sort-rule" title="Automatic, read-only">${c.reset==='monthly'?'Year → Month → Sequence':c.reset==='yearly'?'Year → Sequence':'Continuous Sequence'}</span></td>
 <td><span class="docnum-format-preview" data-format-type="${k}">${docNumberPattern(c)}</span><strong class="docnum-next-no" data-next-type="${k}"></strong></td></tr>`}).join('')).join('');
   if(!document.getElementById('docnum-all-date')?.options.length)fillDocNumApplyAll();
   refreshDocNumPreviews();
@@ -1644,7 +1645,7 @@ function renderDocumentNumbering(){
 }
 function refreshDocNumPreviews(){
   if(!docNumDraft)return;
-  Object.keys(docNumDraft).forEach(k=>{const c=normalizeDocNumberingConfig(k,docNumDraft[k]),x=docNumberPartsFor(k,c);const f=document.querySelector(`[data-format-type="${k}"]`);if(f)f.textContent=docNumberPattern(c);const n=document.querySelector(`[data-next-type="${k}"]`);if(n)n.textContent=formatDocSequence(x.displayPrefix,estimatedNextSequence(x),x.digits);const b=document.querySelector(`[data-changed-type="${k}"]`);if(b)b.hidden=!docNumChanged(k);});
+  Object.keys(docNumDraft).forEach(k=>{const c=normalizeDocNumberingConfig(k,docNumDraft[k]),x=docNumberPartsFor(k,c);const f=document.querySelector(`[data-format-type="${k}"]`);if(f)f.textContent=docNumberPattern(c);const n=document.querySelector(`[data-next-type="${k}"]`);if(n)n.textContent=formatDocSequence(x.displayPrefix,estimatedNextSequence(x),x.digits);const b=document.querySelector(`[data-changed-type="${k}"]`);if(b)b.hidden=!docNumChanged(k);const r=document.querySelector(`.docnum-row[data-type="${k}"] .bc-number-sort-rule`);if(r)r.textContent=c.reset==='monthly'?'Year → Month → Sequence':c.reset==='yearly'?'Year → Sequence':'Continuous Sequence';});
   renderDocNumPanel();
   const n=Object.keys(docNumDraft).filter(docNumChanged).length;
   const st=document.getElementById('docnum-status');if(st)st.innerHTML=n?`<strong>${n} document type${n>1?'s':''} changed</strong> — not saved yet`:'No unsaved changes';
@@ -2292,13 +2293,44 @@ function compareRegisterValues(a,b){
   if(typeof a==='number'&&typeof b==='number')return a-b;
   return String(a).localeCompare(String(b),undefined,{numeric:true,sensitivity:'base'});
 }
+/* V271.4: compare issued document identifiers using the configured counter reset period.
+   The date part is only a label for yearly/never counters; never sort solely by that text.
+   Older/historic formats are best-effort parsed and retain a natural fallback. */
+const BC_NUMBER_SORT_TYPES={rfq:'rfq',pricing:'pricing',quotation:'quotation',so:'salesOrder',dn:'deliveryNote',job:'job',pi:'purchaseInvoice',sp:'supplierPayment',rct:'paymentReceipt',inv:'customerInvoice'};
+function bcNumberSortKey(value,type){
+  const raw=String(value||'').trim(), cfg=ensureDocumentNumbering()[type];
+  if(!raw||!cfg)return null;
+  const base=raw.replace(/-R(\d+)$/i,'');
+  const revision=Number((raw.match(/-R(\d+)$/i)||[])[1]||0);
+  const suffix=base.match(/(\d+)$/);if(!suffix)return null;
+  const seq=Number(suffix[1]);
+  let before=base.slice(0,-suffix[1].length).replace(/[-/.]$/,'');
+  const prefix=String(cfg.prefix||'');
+  if(prefix&&before.toUpperCase().startsWith(prefix.toUpperCase())) before=before.slice(prefix.length);
+  const numbers=before.replace(/[^0-9]/g,'');
+  let yr=null,mo=null;
+  if(numbers.length>=4&&/^(19|20)\d{2}/.test(numbers))yr=Number(numbers.slice(0,4));
+  else if(numbers.length>=2)yr=2000+Number(numbers.slice(0,2));
+  if(numbers.length>=6&&yr!==null&&yr<2100&&numbers.startsWith(String(yr)))mo=Number(numbers.slice(4,6));
+  else if(numbers.length>=4&&yr!==null)mo=Number(numbers.slice(2,4));
+  return {seq,yr,mo,revision,raw};
+}
+function compareBizCoreDocumentNumbers(a,b,type){
+  const x=bcNumberSortKey(a,type),y=bcNumberSortKey(b,type);
+  if(!x||!y)return compareRegisterValues(a,b);
+  const reset=ensureDocumentNumbering()[type]?.reset||'yearly';
+  if(reset!=='never'&&x.yr!==null&&y.yr!==null&&x.yr!==y.yr)return x.yr-y.yr;
+  if(reset==='monthly'&&x.mo!==null&&y.mo!==null&&x.mo!==y.mo)return x.mo-y.mo;
+  return x.seq-y.seq || x.revision-y.revision || compareRegisterValues(x.raw,y.raw);
+}
 function sortRegisterRows(rows, screen, getters){
   const st=registerSortState[screen]; if(!st||!getters[st.key])return rows;
-  return [...rows].sort((a,b)=>compareRegisterValues(getters[st.key](a),getters[st.key](b))*(st.dir==='asc'?1:-1));
+  return [...rows].sort((a,b)=>(st.key==='no'&&BC_NUMBER_SORT_TYPES[screen]?compareBizCoreDocumentNumbers(getters[st.key](a),getters[st.key](b),screen==='inv' && /^(CN|CR)[-/.]/i.test(String(getters[st.key](a))) ? 'creditNote' : BC_NUMBER_SORT_TYPES[screen]):compareRegisterValues(getters[st.key](a),getters[st.key](b)))*(st.dir==='asc'?1:-1));
 }
 function setRegisterSort(screen,key,renderFn){
   const cur=registerSortState[screen];
   registerSortState[screen]={key,dir:(cur&&cur.key===key&&cur.dir==='asc')?'desc':'asc'};
+  if(screen==='rfq'){const menu=document.getElementById('rfq-sort');const mapped={no:'number',date:'date',due:'due',customer:'customer'}[key];if(menu&&mapped){menu.value=mapped+'-'+(registerSortState[screen].dir==='asc'?'asc':'desc');}}
   try{ if(screen==='quotation') currentPage=1; if(screen==='pricing') pricingDocPage=1; if(screen==='rfq') rfqPage=1; if(screen==='so') soPage=1; if(screen==='customers') customerPage=1; if(screen==='suppliers') supplierPage=1; if(screen==='products') prodPage=1; if(screen==='employees') employeePage=1; }catch(e){}
   renderFn();
   setTimeout(updateRegisterSortIndicators,0);
@@ -8108,6 +8140,11 @@ function rfqAge(rfq) {
 }
 
 function renderRFQPage() {
+  // Selecting the toolbar's Sort By must supersede earlier column-header sorting.
+  const rfqSelection=document.getElementById('rfq-sort')?.value||'created-desc';
+  const header=registerSortState.rfq;
+  const map={no:'number',date:'date',due:'due',customer:'customer'};
+  if(header && rfqSelection!==((map[header.key]||header.key)+'-'+header.dir))delete registerSortState.rfq;
   const today = bcLocalISO();
   const getRfqDisplayStatus = r => {
     const stage = getRFQWorkflowStage(r);
@@ -8144,11 +8181,19 @@ function renderRFQPage() {
     return [r.rfqNo, r.company, r.ref, r.desc, r.assigned, r.channel]
       .some(v => String(v || '').toLowerCase().includes(search));
   });
-  const rfqSort = document.getElementById('rfq-sort')?.value || 'date-desc';
-  let sorted = [...filtered].sort((a,b) => (b.date||'').localeCompare(a.date||''));
-  if (rfqSort === 'date-asc') sorted.reverse();
-  else if (rfqSort === 'due-asc') sorted.sort((a,b) => (a.due||'9999').localeCompare(b.due||'9999'));
-  else if (rfqSort === 'customer-asc') sorted.sort((a,b) => (a.company||'').localeCompare(b.company||''));
+  const rfqSort = document.getElementById('rfq-sort')?.value || 'created-desc';
+  const rfqCreated=r=>String(r.created||r.createdAt||'');
+  const recentCmp=(a,b)=>rfqCreated(b).localeCompare(rfqCreated(a))||compareBizCoreDocumentNumbers(b.rfqNo,a.rfqNo,'rfq');
+  let sorted=[...filtered];
+  if(rfqSort==='created-desc')sorted.sort((a,b)=>recentCmp(a,b));
+  else if(rfqSort==='number-desc')sorted.sort((a,b)=>compareBizCoreDocumentNumbers(b.rfqNo,a.rfqNo,'rfq'));
+  else if(rfqSort==='number-asc')sorted.sort((a,b)=>compareBizCoreDocumentNumbers(a.rfqNo,b.rfqNo,'rfq'));
+  else if(rfqSort==='date-desc')sorted.sort((a,b)=>(b.date||'').localeCompare(a.date||'')||recentCmp(a,b));
+  else if(rfqSort==='date-asc')sorted.sort((a,b)=>(a.date||'').localeCompare(b.date||'')||recentCmp(a,b));
+  else if(rfqSort==='due-asc')sorted.sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999'));
+  else if(rfqSort==='due-desc')sorted.sort((a,b)=>(b.due||'').localeCompare(a.due||''));
+  else if(rfqSort==='customer-asc')sorted.sort((a,b)=>(a.company||'').localeCompare(b.company||''));
+  else if(rfqSort==='customer-desc')sorted.sort((a,b)=>(b.company||'').localeCompare(a.company||''));
 
   const open    = rfqScope.filter(r => !['Quoted','Sales Order','No Bid'].includes(getRFQWorkflowStage(r)));
   const overdue = rfqScope.filter(r => getRfqDisplayStatus(r) === 'Overdue');
@@ -8321,7 +8366,7 @@ function filterRFQ(status, btn) {
 function clearAllRFQFilters() {
   rfqFilter = 'all'; rfqPage = 1;
   ['rfq-customer-filter','rfq-status-filter'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';});
-  { const e=document.getElementById('rfq-sort'); if(e) e.value='date-desc'; }
+  { const e=document.getElementById('rfq-sort'); if(e) e.value='created-desc'; }
   const search=document.getElementById('rfq-search'); if(search) search.value='';
   const from=document.getElementById('rfq-date-from'); if(from) from.value='';
   const to=document.getElementById('rfq-date-to'); if(to) to.value='';

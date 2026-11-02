@@ -839,28 +839,39 @@ ${sig([['Received by', rb.employeeName], ['Paid by', rb.createdBy], ['Approved b
   }
 
   /* ══ Jobs register (Sales → Jobs) ══ */
-  const F = { customer: '', status: '', q: '' };
+  const F = { customer: '', status: '', q: '', sort: 'created-desc', heading: '', direction: 'desc', monitor: '' };
   let built = false;
   function buildPage() {
     const page = $('page-jobs'); if (!page || built) return;
     built = true;
     page.innerHTML = `<div class="dn-register-area module-register-area jb-reg">
+<div class="jb-monitor" id="jb-monitor" role="group" aria-label="Job status monitor">
+<button type="button" class="jb-monitor-main" data-jb-monitor=""><span>JOBS</span><strong id="jbmon-total">0</strong><small>Total jobs</small></button>
+${[['Open','Open'],['In Progress','In Progress'],['Completed','Completed'],['Closed','Closed'],['Cancelled','Cancelled']].map(([status,label])=>`<button type="button" class="jb-monitor-tile" data-jb-monitor="${status}"><span>${label}</span><strong data-jb-count="${status}">0</strong><i class="jb-monitor-track"><i class="jb-monitor-fill"></i></i></button>`).join('')}
+</div>
 <div class="dn-register-toolbar page-toolbar page-toolbar--sticky page-control-bar bc-filterbar" role="toolbar" aria-label="Job filters">
 <div class="dn-toolbar-left bc-filterbar-left"><span class="bc-filter-count" id="jbreg-count">0 jobs</span></div>
 <div class="dn-toolbar-right bc-filterbar-right">
 <select id="jbreg-customer" class="bc-filter bc-filter-customer" aria-label="Filter jobs by customer"><option value="">All customers</option></select>
 <select id="jbreg-status" class="bc-filter bc-filter-status" aria-label="Status"><option value="">All statuses</option>${STATUSES.map(s => `<option>${s}</option>`).join('')}</select>
 <div class="bc-date" data-bc-date="jbreg" data-bc-date-title="Job date"></div>
+<select id="jbreg-sort" class="bc-filter bc-filter-sort" aria-label="Sort jobs"><option value="created-desc">Recently Created</option><option value="number-desc">Job Number ↓</option><option value="number-asc">Job Number ↑</option><option value="date-desc">Job Date — Newest</option><option value="date-asc">Job Date — Oldest</option><option value="customer-asc">Customer A–Z</option><option value="contract-desc">Contract — Highest</option><option value="finish-asc">Planned Finish — Soonest</option></select>
 <input id="jbreg-q" class="bc-filter bc-filter-search" type="text" placeholder="Search job, customer, project, PO…" aria-label="Search jobs">
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="jbreg-clear" type="button" title="Clear all job filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
 <button class="btn btn-primary btn-sm bc-filter-btn" id="jbreg-je" type="button" title="Record a cost paid for a job (cash, card or bank)"${canExpense() ? '' : ' hidden'}><i class="ti ti-receipt"></i><span>+ Job Expense</span></button>
 </div></div>
-<div class="card dn-register-card"><div class="dn-table-scroll"><table class="jb-reg-table"><thead><tr><th>Job No.</th><th>Date</th><th>Customer</th><th>Project / Site</th><th>Customer PO</th><th class="num">Contract (SAR)</th><th class="num">Budget</th><th>Start</th><th>Planned Finish</th><th>Status</th></tr></thead><tbody id="jbreg-body"></tbody></table></div></div>
+<div class="card dn-register-card"><div class="dn-table-scroll"><table class="jb-reg-table"><thead><tr><th class="jb-sort-head" data-jb-sort="jobNo" tabindex="0" role="button" aria-sort="none">Job No. <span class="jb-sort-arrow" aria-hidden="true">↕</span></th><th class="jb-sort-head" data-jb-sort="date" tabindex="0" role="button" aria-sort="none">Date <span class="jb-sort-arrow" aria-hidden="true">↕</span></th><th class="jb-sort-head" data-jb-sort="company" tabindex="0" role="button" aria-sort="none">Customer <span class="jb-sort-arrow" aria-hidden="true">↕</span></th><th class="jb-sort-head" data-jb-sort="project" tabindex="0" role="button" aria-sort="none">Project / Site <span class="jb-sort-arrow" aria-hidden="true">↕</span></th><th class="jb-sort-head" data-jb-sort="poNo" tabindex="0" role="button" aria-sort="none">Customer PO <span class="jb-sort-arrow" aria-hidden="true">↕</span></th><th class="jb-sort-head num" data-jb-sort="contractValue" tabindex="0" role="button" aria-sort="none">Contract (SAR) <span class="jb-sort-arrow" aria-hidden="true">↕</span></th><th class="jb-sort-head num" data-jb-sort="budget" tabindex="0" role="button" aria-sort="none">Budget <span class="jb-sort-arrow" aria-hidden="true">↕</span></th><th class="jb-sort-head" data-jb-sort="startDate" tabindex="0" role="button" aria-sort="none">Start <span class="jb-sort-arrow" aria-hidden="true">↕</span></th><th class="jb-sort-head" data-jb-sort="finishDate" tabindex="0" role="button" aria-sort="none">Planned Finish <span class="jb-sort-arrow" aria-hidden="true">↕</span></th><th class="jb-sort-head" data-jb-sort="status" tabindex="0" role="button" aria-sort="none">Status <span class="jb-sort-arrow" aria-hidden="true">↕</span></th></tr></thead><tbody id="jbreg-body"></tbody></table></div></div>
 <p class="jb-reg-hint">Jobs are created from a won Contracting quotation (Quotation → Create Job). Open and recent jobs are shown; older ones are loaded on request.</p></div>`;
     $('jbreg-customer').onchange = e => { F.customer = e.target.value; paint(); };
     $('jbreg-status').onchange = e => { F.status = e.target.value; paint(); };
+    $('jbreg-sort').onchange = e => { F.sort=e.target.value;F.heading='';paint(); };
+    $('jb-monitor').onclick = e => {const b=e.target.closest('[data-jb-monitor]');if(!b)return;const v=b.dataset.jbMonitor;F.monitor=F.monitor===v?'':v;paint();};
+    page.querySelectorAll('.jb-sort-head').forEach(th=>{
+      const change=()=>{const key=th.dataset.jbSort;F.direction=F.heading===key&&F.direction==='asc'?'desc':'asc';F.heading=key;paint();};
+      th.onclick=change;th.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();change();}};
+    });
     $('jbreg-q').oninput = e => { F.q = e.target.value; paint(); };
-    $('jbreg-clear').onclick = () => { F.customer = F.status = F.q = ''; $('jbreg-customer').value = ''; $('jbreg-status').value = ''; $('jbreg-q').value = ''; if (window.BCDateFilter) BCDateFilter.set('jbreg', { preset: 'all' }); paint(); };
+    $('jbreg-clear').onclick = () => { F.customer = F.status = F.q = F.monitor = F.heading = ''; F.sort='created-desc'; $('jbreg-sort').value=F.sort; $('jbreg-customer').value = ''; $('jbreg-status').value = ''; $('jbreg-q').value = ''; if (window.BCDateFilter) BCDateFilter.set('jbreg', { preset: 'all' }); paint(); };
     if (window.BCDateFilter) BCDateFilter.register('jbreg', () => paint());
     $('jbreg-je').onclick = () => openExpense('');
     $('jbreg-body').onclick = e => { const tr = e.target.closest('tr[data-jid]'); if (tr) view(tr.dataset.jid); };
@@ -869,10 +880,32 @@ ${sig([['Received by', rb.employeeName], ['Paid by', rb.createdBy], ['Approved b
     const body = $('jbreg-body'); if (!body) return;
     const ds = window.BCDateFilter ? BCDateFilter.get('jbreg') : { from: '', to: '' };
     const q = low(F.q);
-    const list = jobs.filter(j => (!F.customer || j.company === F.customer) && (!F.status || j.status === F.status)
-      && (!ds.from || String(j.date || '') >= ds.from) && (!ds.to || String(j.date || '') <= ds.to)
-      && (!q || [j.jobNo, j.company, j.project, j.poNo, j.qno].some(x => low(x).includes(q))))
-      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.jobNo || '').localeCompare(String(a.jobNo || '')));
+    const base = jobs.filter(j=>(!F.customer||j.company===F.customer)
+      && (!ds.from||String(j.date||'')>=ds.from)&&(!ds.to||String(j.date||'')<=ds.to)
+      && (!q||[j.jobNo,j.company,j.project,j.poNo,j.qno].some(x=>low(x).includes(q))));
+    const counts={};for(const job of base)counts[job.status||'Open']=(counts[job.status||'Open']||0)+1;
+    $('jbmon-total').textContent=base.length;
+    $('jb-monitor').querySelectorAll('[data-jb-monitor]').forEach(b=>{const status=b.dataset.jbMonitor;
+      b.classList.toggle('is-active',status===F.monitor&&!!status);
+      if(status){const n=counts[status]||0;b.querySelector('strong').textContent=n;
+        b.querySelector('.jb-monitor-fill').style.width=(base.length?Math.round(n/base.length*100):0)+'%';}
+    });
+    const cmp=(x,y)=>typeof compareBizCoreDocumentNumbers==='function'
+      ?compareBizCoreDocumentNumbers(x,y,'job')
+      :String(x||'').localeCompare(String(y||''),undefined,{numeric:true});
+    const read=(r,k)=>k==='budget'?Number(r.budget?.totalCost||0):k==='contractValue'?Number(r.contractValue||0):String(r[k]||'');
+    const sortMap={'created-desc':['created','desc'],'number-desc':['jobNo','desc'],'number-asc':['jobNo','asc'],'date-desc':['date','desc'],'date-asc':['date','asc'],'customer-asc':['company','asc'],'contract-desc':['contractValue','desc'],'finish-asc':['finishDate','asc']};
+    const [sortKey,sortDir]=F.heading?[F.heading,F.direction]:(sortMap[F.sort]||sortMap['created-desc']);
+    const compare=(a,b)=>sortKey==='jobNo'?cmp(a.jobNo,b.jobNo):sortKey==='created'
+      ?String(a.created||'').localeCompare(String(b.created||''))
+      :typeof read(a,sortKey)==='number'?read(a,sortKey)-read(b,sortKey)
+      :String(read(a,sortKey)).localeCompare(String(read(b,sortKey)),undefined,{numeric:true});
+    const list=base.filter(j=>(!F.status||j.status===F.status)&&(!F.monitor||j.status===F.monitor))
+      .sort((a,b)=>compare(a,b)*(sortDir==='asc'?1:-1)||cmp(b.jobNo,a.jobNo));
+    document.querySelectorAll('#page-jobs .jb-sort-head').forEach(th=>{
+      const active=th.dataset.jbSort===sortKey;th.setAttribute('aria-sort',active?(sortDir==='asc'?'ascending':'descending'):'none');
+      th.querySelector('.jb-sort-arrow').textContent=active?(sortDir==='asc'?'↑':'↓'):'↕';
+    });
     const sel = $('jbreg-customer'), cur = sel.value;
     sel.innerHTML = '<option value="">All customers</option>' + [...new Set(jobs.map(j => j.company).filter(Boolean))].sort().map(c => `<option${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('');
     $('jbreg-count').textContent = list.length + (list.length === 1 ? ' job' : ' jobs');
