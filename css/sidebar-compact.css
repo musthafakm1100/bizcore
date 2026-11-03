@@ -1,0 +1,16 @@
+/* BizCore V271.5.9 — approved compact sidebar typography.
+   Scoped to the sidebar: no changes to registers, themes or document views. */
+.sidebar .sidebar-logo .co { font-size:13px; font-weight:600; line-height:1.3; }
+.sidebar .sidebar-logo .sub { font-size:10px; font-weight:400; }
+.sidebar .nav-item.nav-root,
+.sidebar .nav-group-toggle { font-size:13px; font-weight:500; }
+.sidebar .nav-submenu .nav-item { font-size:13px; font-weight:400; }
+.sidebar .nav-item.active,
+.sidebar .nav-submenu .nav-item.active { font-weight:500; }
+.sidebar .nav-item i,
+.sidebar .nav-group-toggle > i:first-child,
+.sidebar .nav-submenu .nav-item i { font-size:16px; width:16px; flex-basis:16px; }
+/* Keep the chevron independent of menu icons. */
+.sidebar .nav-group-toggle > .nav-chevron { font-size:14px; width:auto; flex-basis:auto; }
+/* Respect existing 232px width, 40px main rows, 36px submenu rows,
+   active white background, theme colors and sidebar collapse behavior. */

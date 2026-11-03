@@ -48,6 +48,7 @@
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <link href="css/users.css?v=270.43" rel="stylesheet"/>
 <link href="css/estimate.css?v=271.4-sorting" rel="stylesheet"/>
+<link href="css/sidebar-compact.css?v=271.5.9" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
 <script src="js/responsive.js?v=270.47" defer></script>
 <script src="js/bc-date.js?v=270.52" defer></script>
@@ -729,7 +730,7 @@ document.addEventListener('error', function(e) {
         <div class="dn-toolbar-left bc-filterbar-left"><select id="pireg-sort" class="bc-filter bc-filter-sort" onchange="bcRegisterDropdownChanged('pi',renderPurchaseRegister)" aria-label="Sort purchase invoices"><option value="created-desc">Recently Created</option><option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option><option value="no-asc">Number A–Z</option><option value="supplier-asc">Supplier A–Z</option><option value="amount-desc">Amount high–low</option><option value="due-asc">Due date</option><option value="no-desc">Invoice Number ↓</option><option value="amount-asc">Amount low–high</option></select><span class="bc-filter-count" id="pireg-count">0 invoices</span></div>
         <div class="dn-toolbar-right bc-filterbar-right">
 <select id="pireg-supplier" class="bc-filter bc-filter-customer" onchange="renderPurchaseRegister()" aria-label="Filter by supplier"><option value="">All suppliers</option></select>
-<select id="pireg-status" class="bc-filter bc-filter-status" onchange="filterPurchaseKPI(this.value||'all')" aria-label="Status"><option value="">All statuses</option><option value="Posted">Posted</option><option value="Voided">Cancelled</option><option value="overdue">Overdue</option><option value="duesoon">Due ≤ 7 days</option></select>
+<select id="pireg-status" class="bc-filter bc-filter-status" onchange="filterPurchaseKPI(this.value||'all')" aria-label="Status"><option value="">All statuses</option><option value="Posted">Posted</option><option value="Voided">Cancelled</option><option value="overdue">Overdue</option><option value="pay-unpaid">Unpaid</option><option value="pay-partial">Partially paid</option><option value="pay-paid">Paid</option><option value="duesoon">Due ≤ 7 days</option></select>
 <div class="bc-date" data-bc-date="pireg" data-bc-date-title="Invoice date"></div>
 <input id="pireg-q" class="bc-filter bc-filter-search" type="text" oninput="renderPurchaseRegister()" placeholder="Search invoice, supplier, order, item…" aria-label="Search purchase invoices"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="pireg-clear" onclick="clearPurchaseRegisterFilters()" type="button" title="Clear all filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
@@ -776,7 +777,7 @@ document.addEventListener('error', function(e) {
         <div class="dn-toolbar-left bc-filterbar-left"><select id="spreg-sort" class="bc-filter bc-filter-sort" onchange="bcRegisterDropdownChanged('sp',renderSupplierPayments)" aria-label="Sort supplier payments"><option value="created-desc">Recently Created</option><option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option><option value="no-asc">Number A–Z</option><option value="supplier-asc">Supplier A–Z</option><option value="amount-desc">Amount high–low</option><option value="no-desc">Payment Number ↓</option><option value="amount-asc">Amount low–high</option></select><span class="bc-filter-count" id="spreg-count">0 payments</span></div>
         <div class="dn-toolbar-right bc-filterbar-right">
 <select id="spreg-supplier" class="bc-filter bc-filter-customer" onchange="renderSupplierPayments()" aria-label="Filter by supplier"><option value="">All suppliers</option></select>
-<select id="spreg-status" class="bc-filter bc-filter-status" onchange="filterSupplierPaymentKPI(this.value||'all')" aria-label="Type"><option value="">All types</option><option value="payment">Invoice payments</option><option value="advance">Advances</option><option value="cashback">Cash back</option><option value="Voided">Cancelled</option><option value="open">Open advances</option><option value="waiting">Cash waiting for custodian</option></select>
+<select id="spreg-status" class="bc-filter bc-filter-status" onchange="filterSupplierPaymentKPI(this.value||'all')" aria-label="Type"><option value="">All types</option><option value="payment">Invoice payments</option><option value="advance">Advances</option><option value="cashback">Cash back</option><option value="Voided">Cancelled</option><option value="fully-applied">Fully applied</option><option value="partially-applied">Partially applied</option><option value="unapplied">Unapplied advances</option><option value="open">Open advances</option><option value="waiting">Cash waiting for custodian</option></select>
 <div class="bc-date" data-bc-date="spreg" data-bc-date-title="Payment date"></div>
 <input id="spreg-q" class="bc-filter bc-filter-search" type="text" oninput="renderSupplierPayments()" placeholder="Search payment, supplier, invoice…" aria-label="Search supplier payments"/>
 <button class="btn btn-secondary btn-sm register-clear-filters bc-filter-btn" id="spreg-clear" onclick="clearSupplierPaymentFilters()" type="button" title="Clear all filters"><i class="ti ti-filter-off"></i><span>Clear Filters</span></button>
@@ -4609,11 +4610,11 @@ onAuthStateChanged(auth, async user => {
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js
-    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=271.5.4'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
+    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=271.5.8'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
     // V268.3: supplier-payments.js (Supplier Payments, advances, edits) after purchases.js
     // V268.4: stock.js (Purchasing → Stock) after supplier-payments.js
     const loadStock = () => { const st = document.createElement('script'); st.id = 'bizcore-stock-script'; st.src = 'js/stock.js?v=271.3'; st.onload = start; st.onerror = () => { console.error('[BizCore] stock.js could not be loaded'); start(); }; document.body.appendChild(st); };
-    const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=271.5.7'; sp.onload = loadStock; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
+    const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=271.5.8'; sp.onload = loadStock; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
     // V267.2: cash-ui.js + cashbank.js (Cash & Bank) after accounts.js, before app.js
     const loadCash = () => { const u = document.createElement('script'); u.id = 'bizcore-cashui-script'; u.src = 'js/cash-ui.js?v=271.32'; u.onload = u.onerror = () => { const c = document.createElement('script'); c.id = 'bizcore-cashbank-script'; c.src = 'js/cashbank.js?v=269.3'; c.onload = loadPurchases; c.onerror = () => { console.error('[BizCore] cashbank.js could not be loaded'); loadPurchases(); }; document.body.appendChild(c); }; document.body.appendChild(u); };
     // V266: receipts.js (Payment Receipts) after invoicing.js, before app.js
@@ -4769,6 +4770,6 @@ console.log('BizCore Firebase ready ✅');
   <span id="bc5-pi-overdue">—</span>
   <span id="bc5-sp-payments">—</span>
 </div>
-<script defer src="js/phase5a-monitors.js?v=271.5.7"></script>
+<script defer src="js/phase5a-monitors.js?v=271.5.8"></script>
 </body>
 </html>
