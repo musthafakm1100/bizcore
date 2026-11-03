@@ -855,7 +855,7 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="card-body" style="padding:14px 16px 0">
 <div class="filter-bar page-control-bar">
-<input id="cust-search" oninput="renderCustomers()" placeholder="Search customers…" type="text"/>
+<input id="cust-search" oninput="renderCustomers()" placeholder="Search customers…" type="text"/><label class="bc-master-sort-label" for="master-sort-customers">Sort by</label><select class="bc-master-sort" id="master-sort-customers" aria-label="Sort customers" onchange="bcMasterSortChanged('customers',renderCustomers)"><option value="company-asc">Company A–Z</option><option value="company-desc">Company Z–A</option><option value="contact-asc">Contact A–Z</option><option value="city-asc">City A–Z</option><option value="quotes-desc">Most quotations</option><option value="total-desc">Highest quotation value</option></select>
 </div>
 </div>
 <div class="list-table-scroll">
@@ -881,7 +881,7 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="card-body" style="padding:14px 16px 0">
 <div class="filter-bar page-control-bar">
-<input id="sup-search" oninput="renderSuppliers()" placeholder="Search suppliers…" style="width:280px" type="text"/>
+<input id="sup-search" oninput="renderSuppliers()" placeholder="Search suppliers…" style="width:280px" type="text"/><label class="bc-master-sort-label" for="master-sort-suppliers">Sort by</label><select class="bc-master-sort" id="master-sort-suppliers" aria-label="Sort suppliers" onchange="bcMasterSortChanged('suppliers',renderSuppliers)"><option value="company-asc">Company A–Z</option><option value="company-desc">Company Z–A</option><option value="contact-asc">Contact A–Z</option><option value="category-asc">Category A–Z</option><option value="city-asc">City A–Z</option><option value="quotes-desc">Most RFQs</option></select>
 </div>
 </div>
 <div class="list-table-scroll">
@@ -911,7 +911,7 @@ document.addEventListener('error', function(e) {
 <select id="prod-cat-filter" onchange="renderProducts()">
 <option value="">All categories</option>
 </select>
-<select id="prod-type-filter" onchange="prodPage=1;renderProducts()" aria-label="Type"><option value="">Goods &amp; services</option><option value="goods">Goods</option><option value="service">Services</option></select>
+<select id="prod-type-filter" onchange="prodPage=1;renderProducts()" aria-label="Type"><label class="bc-master-sort-label" for="master-sort-products">Sort by</label><select class="bc-master-sort" id="master-sort-products" aria-label="Sort products" onchange="bcMasterSortChanged('products',renderProducts)"><option value="name-asc">Product name A–Z</option><option value="name-desc">Product name Z–A</option><option value="code-asc">Item code ↑</option><option value="code-desc">Item code ↓</option><option value="type-asc">Type A–Z</option><option value="category-asc">Category A–Z</option><option value="price-desc">Price high–low</option><option value="price-asc">Price low–high</option></select><option value="">Goods &amp; services</option><option value="goods">Goods</option><option value="service">Services</option></select>
 </div>
 </div>
 <div class="list-table-scroll">
@@ -938,7 +938,7 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="card-body employee-toolbar">
 <input id="emp-search" oninput="renderEmployees()" placeholder="Search employee, role, Iqama or mobile…" type="text"/>
-<select id="emp-status-filter" onchange="renderEmployees()"><option value="active">Active employees</option><option value="all">All employees</option><option value="expiring">Documents expiring in 90 days</option></select>
+<select id="emp-status-filter" onchange="renderEmployees()"><option value="active">Active employees</option><option value="all">All employees</option><option value="expiring">Documents expiring in 90 days</option></select><label class="bc-master-sort-label" for="master-sort-employees">Sort by</label><select class="bc-master-sort" id="master-sort-employees" aria-label="Sort employees" onchange="bcMasterSortChanged('employees',renderEmployees)"><option value="employee-asc">Employee A–Z</option><option value="employee-desc">Employee Z–A</option><option value="department-asc">Department A–Z</option><option value="status-asc">Status A–Z</option><option value="iqama-asc">Iqama number ↑</option></select>
 </div>
 <div class="employee-form-panel employee-profile-form" id="employee-form-panel" style="display:none">
 <div class="employee-form-head employee-profile-head"><div><h4 id="employee-form-title">New employee</h4><p>Employee profile, operational roles and document validity.</p></div><button aria-label="Close employee form" class="close-btn" onclick="closeEmployeeForm()">✕</button></div>
@@ -4582,7 +4582,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=271.4-sorting';
+      s.src = 'js/app.js?v=271.4.3-phase23';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)

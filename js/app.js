@@ -2324,7 +2324,18 @@ function compareBizCoreDocumentNumbers(a,b,type){
   return x.seq-y.seq || x.revision-y.revision || compareRegisterValues(x.raw,y.raw);
 }
 /* Phase 1 — one source of truth for dropdown and table-header sorting. */
-const BC_REGISTER_SELECTS={quotation:'filter-sort',pricing:'pricing-sort',so:'so-sort',dn:'dn-sort',inv:'invreg-sort',rct:'rctreg-sort',pi:'pireg-sort',sp:'spreg-sort'};
+const BC_REGISTER_SELECTS={customers:'master-sort-customers',suppliers:'master-sort-suppliers',products:'master-sort-products',employees:'master-sort-employees',quotation:'filter-sort',pricing:'pricing-sort',so:'so-sort',dn:'dn-sort',inv:'invreg-sort',rct:'rctreg-sort',pi:'pireg-sort',sp:'spreg-sort'};
+/* V271.4.3: Master registers share header/dropdown sort state; nothing persisted to records. */
+function bcMasterSortChanged(screen,renderFn){
+  const select=document.getElementById(BC_REGISTER_SELECTS[screen]);
+  const match=select?.value.match(/^(.*)-(asc|desc)$/);
+  if(match)registerSortState[screen]={key:match[1],dir:match[2]};
+  if(screen==='customers')customerPage=1;
+  if(screen==='suppliers')supplierPage=1;
+  if(screen==='products')prodPage=1;
+  if(screen==='employees')employeePage=1;
+  renderFn();updateRegisterSortIndicators();
+}
 function bcRegisterDropdownChanged(screen,renderFn){
   const sel=document.getElementById(BC_REGISTER_SELECTS[screen]);
   const m=sel?.value.match(/^(.*)-(asc|desc)$/);
@@ -2363,6 +2374,7 @@ function setRegisterSort(screen,key,renderFn){
     }
     dropdown.value=value;
   }
+  if(['customers','suppliers','products','employees'].includes(screen)&&dropdown){const v=key+'-'+registerSortState[screen].dir;if([...dropdown.options].some(o=>o.value===v))dropdown.value=v;}
   if(screen==='rfq'){const menu=document.getElementById('rfq-sort');const mapped={no:'number',date:'date',due:'due',customer:'customer'}[key];if(menu&&mapped){menu.value=mapped+'-'+(registerSortState[screen].dir==='asc'?'asc':'desc');}}
   try{ if(screen==='quotation') currentPage=1; if(screen==='pricing') pricingDocPage=1; if(screen==='rfq') rfqPage=1; if(screen==='so') soPage=1; if(screen==='customers') customerPage=1; if(screen==='suppliers') supplierPage=1; if(screen==='products') prodPage=1; if(screen==='employees') employeePage=1; }catch(e){}
   renderFn();

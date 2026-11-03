@@ -929,3 +929,10 @@ html body #page-rfq .rfq-main-workspace .rfq-monitor-expand.module-monitor-rail.
     gap: 8px !important;
   }
 }
+
+/* V271.4.3 master sorting: compact with existing toolbar controls */
+.bc-master-sort-label{font-size:12px;color:var(--gray,#667085);white-space:nowrap;margin-left:auto}
+.bc-master-sort{min-width:150px;max-width:220px;font:inherit;font-size:12px;padding:7px 9px;border:1px solid var(--border,#d7e0e9);border-radius:6px;background:var(--white,#fff);color:var(--text,#23364c)}
+.filter-bar.page-control-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.employee-toolbar .bc-master-sort-label{margin-left:auto}
+@media(max-width:700px){.bc-master-sort-label{margin-left:0}.bc-master-sort{max-width:100%;min-width:130px}}
