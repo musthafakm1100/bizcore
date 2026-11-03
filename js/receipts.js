@@ -173,7 +173,7 @@ function renderReceiptRegister(){
   setT('bc5-rct-receipts', rctSum(()=>true,r=>rctNum(r.amount)));
   setT('bc5-rct-fully', rctSum(r=>receiptAllocationState(r)==='fully-allocated',r=>rctNum(r.amount)));
   setT('bc5-rct-partial', rctSum(r=>receiptAllocationState(r)==='partially-allocated',r=>Math.max(0,rctNum(r.amount)-rctNum(r.unapplied))));
-  setT('bc5-rct-unallocated', rctSum(r=>receiptAllocationState(r)==='unallocated',r=>rctNum(r.unapplied)));
+  setT('bc5-rct-unallocated', rctSum(r=>rctNum(r.unapplied)>0.005,r=>rctNum(r.unapplied)));
 
   setT('rctreg-a-receivable', rctF(inv.receivable));
   setT('rctreg-a-charges', rctF(posted.reduce((s, r) => s + rctNum(r.bankCharges), 0)));
