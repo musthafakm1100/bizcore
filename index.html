@@ -911,7 +911,9 @@ document.addEventListener('error', function(e) {
 <select id="prod-cat-filter" onchange="renderProducts()">
 <option value="">All categories</option>
 </select>
-<select id="prod-type-filter" onchange="prodPage=1;renderProducts()" aria-label="Type"><label class="bc-master-sort-label" for="master-sort-products">Sort by</label><select class="bc-master-sort" id="master-sort-products" aria-label="Sort products" onchange="bcMasterSortChanged('products',renderProducts)"><option value="name-asc">Product name A–Z</option><option value="name-desc">Product name Z–A</option><option value="code-asc">Item code ↑</option><option value="code-desc">Item code ↓</option><option value="type-asc">Type A–Z</option><option value="category-asc">Category A–Z</option><option value="price-desc">Price high–low</option><option value="price-asc">Price low–high</option></select><option value="">Goods &amp; services</option><option value="goods">Goods</option><option value="service">Services</option></select>
+<select id="prod-type-filter" onchange="prodPage=1;renderProducts()" aria-label="Type"><option value="">Goods &amp; services</option><option value="goods">Goods</option><option value="service">Services</option></select>
+<label class="bc-master-sort-label" for="master-sort-products">Sort by</label>
+<select class="bc-master-sort" id="master-sort-products" aria-label="Sort products" onchange="bcMasterSortChanged('products',renderProducts)"><option value="name-asc">Product name A–Z</option><option value="name-desc">Product name Z–A</option><option value="code-asc">Item code ↑</option><option value="code-desc">Item code ↓</option><option value="type-asc">Type A–Z</option><option value="category-asc">Category A–Z</option><option value="price-desc">Price high–low</option><option value="price-asc">Price low–high</option></select>
 </div>
 </div>
 <div class="list-table-scroll">
