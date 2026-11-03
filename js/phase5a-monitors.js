@@ -20,7 +20,7 @@ const pageConfigs=[
   {page:'purchaseinvoices',host:'pi-main-workspace',lead:['Outstanding Payables','pireg-a-payable','SAR · Payable to suppliers','all'],cards:[
     ['Unpaid','pireg-k-pay-unpaid','No payment made','slate','pay-unpaid'],['Partially Paid','pireg-k-pay-partial','Balance remaining','blue','pay-partial'],['Paid','pireg-k-pay-paid','Fully settled','green','pay-paid'],['Overdue','pireg-k-overdue','Past supplier due date','red','overdue']]},
   {page:'supplierpayments',host:'sp-main-workspace',lead:['Total Paid','spreg-a-paid','SAR · Cash paid including advances','all'],cards:[
-    ['Payments','spreg-k-payment','Invoice payments (excludes advances and cash back)','slate','payment'],['Fully Applied',null,'Application breakdown pending','green',null],['Partially Applied',null,'Application breakdown pending','blue',null],['Unapplied',null,'Application breakdown pending','amber',null],['Advances','spreg-a-open','SAR · Available supplier advances','purple','open']]}
+    ['Payments','spreg-k-payment','Invoice payments (including applied advances)','slate','payment'],['Fully Applied',null,'Application breakdown pending','green',null],['Partially Applied',null,'Application breakdown pending','blue',null],['Unapplied',null,'Application breakdown pending','amber',null],['Advances','spreg-a-open','SAR · Available supplier advances','purple','open']]}
 ];
 // Read-only amount subtitles. Values are populated from each register's existing
 // filtered scope; no financial data or posting logic is changed.

@@ -24,6 +24,8 @@ const SP_TYPE = { payment: ['Payment', 'pay'], discount: ['Discount', 'disc'], a
 function spTypePill(p){ const t = SP_TYPE[spTypeOf(p)]; return `<span class="sp-type ${t[1]}">${t[0]}</span>`; }
 /** The money of the row: what was paid (a discount-only payment shows the discount). */
 function spAmountOf(p){ return p.kind === 'payment' && !(piN(p.amount) > 0.005) ? piN(p.discount) : piN(p.amount); }
+/** Invoice payment value including advances applied to invoice payments; excludes new advance issues, cash back and voids. */
+function spMonitorInvoicePaymentValue(payments){ return payments.filter(p => p.status !== 'Voided' && spTypeOf(p) === 'payment').reduce((total,p) => total + piN(p.amount), 0); }
 /** First name of the custodian who still has to confirm a cash line of this payment (null when none). */
 function spWaitingFor(p){
   if (p.status === 'Voided' || !p.entryId) return null;
@@ -94,8 +96,10 @@ function renderSupplierPayments(){
   setT('spreg-k-total', scope.length); setT('spreg-k-live', live.length); setT('spreg-k-payment', live.filter(is('payment')).length); setT('spreg-k-advance', live.filter(is('advance')).length);
   setT('spreg-k-cashback', live.filter(is('cashback')).length); setT('spreg-k-voided', scope.length - live.length);
   setT('spreg-k-open', openAdv.length); setT('spreg-k-waiting', waiting.length);
-  // Physical cash paid by ordinary payment records (advance usage is not new cash paid).
-  setT('bc5-sp-payments', piF(live.filter(p=>spTypeOf(p)==='payment').reduce((n,p)=>n+Math.max(0,piN(p.amount)-piN(p.advanceTotal)),0)));
+  // Invoice payment value includes advance funds applied to an invoice.
+  // Do NOT subtract advanceTotal here: it is part of the recorded invoice payment.
+  // Total Paid below uses physical cash paid (advances issued once, not again on use).
+  setT('bc5-sp-payments', piF(spMonitorInvoicePaymentValue(live)));
 
   document.querySelectorAll('#page-supplierpayments [data-sp-kpi]').forEach(e => { const on = e.dataset.spKpi === _spKpi; e.classList.toggle('active', on); e.setAttribute('aria-pressed', on ? 'true' : 'false'); });
   const st = document.getElementById('spreg-status'); if (st) st.value = _spKpi === 'all' ? '' : _spKpi;
