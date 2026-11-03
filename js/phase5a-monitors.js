@@ -1,4 +1,4 @@
-/* BizCore Phase 5A review. UI only: no Firestore writes or status mutations.
+/* BizCore Phase 5A metrics step 1. UI and read-only calculations: no Firestore writes or status mutations.
    Existing monitor calculations and filtering stay authoritative. Unimplemented
    workflow measures are shown as unavailable, never as fictitious zeroes. */
 (function(){
@@ -16,11 +16,11 @@ const pageConfigs=[
   {page:'customerinvoices',host:'customerinvoices-main-workspace',lead:['Outstanding','invreg-a-balance','SAR · Customer receivables','all'],cards:[
     ['Unpaid','invreg-k-pay-unpaid','No payment received','slate','pay-unpaid'],['Partially Paid','invreg-k-pay-partial','Balance remaining','blue','pay-partial'],['Paid','invreg-k-pay-paid','Fully settled','green','pay-paid'],['Overdue','invreg-k-pay-overdue','Past payment due date','red','pay-overdue']]},
   {page:'receipts',host:'receipts-main-workspace',lead:['Total Received','rctreg-a-received','SAR · Recorded receipts','all'],cards:[
-    ['Receipts','rctreg-k-posted','Posted receipt count','blue','Posted'],['Fully Allocated',null,'Allocation breakdown pending','green',null],['Partially Allocated',null,'Allocation breakdown pending','purple',null],['Unallocated','rctreg-k-unapplied','Includes partly unapplied','amber','unapplied']]},
+    ['Receipts','rctreg-k-posted','Posted receipt count','blue','Posted'],['Fully Allocated','rctreg-k-fully-allocated','Completely applied to invoices','green','fully-allocated'],['Partially Allocated','rctreg-k-partially-allocated','Partly applied to invoices','purple','partially-allocated'],['Unallocated','rctreg-k-strict-unallocated','Not applied to any invoice','amber','unallocated']]},
   {page:'purchaseinvoices',host:'pi-main-workspace',lead:['Outstanding Payables','pireg-a-payable','SAR · Payable to suppliers','all'],cards:[
-    ['Unpaid',null,'Payment breakdown pending','slate',null],['Partially Paid',null,'Payment breakdown pending','blue',null],['Paid',null,'Payment breakdown pending','green',null],['Overdue','pireg-k-overdue','Past supplier due date','red','overdue']]},
+    ['Unpaid','pireg-k-pay-unpaid','No payment made','slate','pay-unpaid'],['Partially Paid','pireg-k-pay-partial','Balance remaining','blue','pay-partial'],['Paid','pireg-k-pay-paid','Fully settled','green','pay-paid'],['Overdue','pireg-k-overdue','Past supplier due date','red','overdue']]},
   {page:'supplierpayments',host:'sp-main-workspace',lead:['Total Paid','spreg-a-paid','SAR · In shown records','all'],cards:[
-    ['Payments','spreg-k-payment','Invoice payments','slate','payment'],['Fully Applied',null,'Application breakdown pending','green',null],['Partially Applied',null,'Application breakdown pending','blue',null],['Unapplied',null,'Application breakdown pending','amber',null],['Advances','spreg-a-open','SAR · Available supplier advances','purple','open']]}
+    ['Payments','spreg-k-live','Recorded payments and advances','slate',null],['Fully Applied',null,'Application breakdown pending','green',null],['Partially Applied',null,'Application breakdown pending','blue',null],['Unapplied',null,'Application breakdown pending','amber',null],['Advances','spreg-a-open','SAR · Available supplier advances','purple','open']]}
 ];
 const filterFunctions={rfq:(key)=>window.applyRFQMonitorFilter?.(key),costing:(key)=>window.filterPricingDocuments?.(key,$('pricing-doc-f-'+(key==='Saved'?'saved':key==='Converted'?'converted':'all'))),quotations:(key)=>window.setQuotationMonitorFilter?.(key==='all'?'':key),deliverynotes:(key)=>window.filterDNKPI?.(key),customerinvoices:(key)=>window.filterInvoiceKPI?.(key),receipts:(key)=>window.filterReceiptKPI?.(key),purchaseinvoices:(key)=>window.filterPurchaseKPI?.(key),supplierpayments:(key)=>window.filterSupplierPaymentKPI?.(key)};
 const leadValue=(cfg)=>{

@@ -91,7 +91,7 @@ function renderSupplierPayments(){
   const openAdv = live.filter(p => p.kind === 'advance' && C.advanceLeftOf(p) > 0.005);
   const waiting = live.filter(p => spWaitingFor(p));
   const setT = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-  setT('spreg-k-total', scope.length); setT('spreg-k-payment', live.filter(is('payment')).length); setT('spreg-k-advance', live.filter(is('advance')).length);
+  setT('spreg-k-total', scope.length); setT('spreg-k-live', live.length); setT('spreg-k-payment', live.filter(is('payment')).length); setT('spreg-k-advance', live.filter(is('advance')).length);
   setT('spreg-k-cashback', live.filter(is('cashback')).length); setT('spreg-k-voided', scope.length - live.length);
   setT('spreg-k-open', openAdv.length); setT('spreg-k-waiting', waiting.length);
   document.querySelectorAll('#page-supplierpayments [data-sp-kpi]').forEach(e => { const on = e.dataset.spKpi === _spKpi; e.classList.toggle('active', on); e.setAttribute('aria-pressed', on ? 'true' : 'false'); });

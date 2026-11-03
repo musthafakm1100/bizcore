@@ -125,6 +125,13 @@ function renderPurchaseRegister(){
   const soon = open.filter(p => { const d = C.daysUntil(p.dueDate, today); return d !== null && d >= 0 && d <= 7; });
   const setT = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   setT('pireg-k-total', scope.length); setT('pireg-k-posted', posted.length); setT('pireg-k-voided', scope.length - posted.length);
+  const purchasePayStatus = p => String(C.payStatusOf(p) || '').toLowerCase();
+  const unpaidPIs = posted.filter(p => purchasePayStatus(p) === 'unpaid');
+  const partialPIs = posted.filter(p => purchasePayStatus(p) === 'part paid');
+  const paidPIs = posted.filter(p => purchasePayStatus(p) === 'paid');
+  setT('pireg-k-pay-unpaid', unpaidPIs.length);
+  setT('pireg-k-pay-partial', partialPIs.length);
+  setT('pireg-k-pay-paid', paidPIs.length);
   setT('pireg-k-overdue', overdue.length); setT('pireg-k-duesoon', soon.length);
   setT('pireg-a-purchases', piF(posted.reduce((s, p) => s + piN(p.totals && p.totals.total), 0)));
   setT('pireg-a-payable', piF(open.reduce((s, p) => s + piN(p.balance), 0)));
@@ -132,6 +139,7 @@ function renderPurchaseRegister(){
   document.querySelectorAll('#page-purchaseinvoices [data-pi-kpi]').forEach(e => { const on = e.dataset.piKpi === _piKpi; e.classList.toggle('active', on); e.setAttribute('aria-pressed', on ? 'true' : 'false'); });
   const st = document.getElementById('pireg-status'); if (st) st.value = _piKpi === 'all' ? '' : _piKpi;
   let rows = scope.filter(p => _piKpi === 'all' || (_piKpi === 'Posted' ? p.status !== 'Voided' : _piKpi === 'Voided' ? p.status === 'Voided'
+    : _piKpi === 'pay-unpaid' ? unpaidPIs.includes(p) : _piKpi === 'pay-partial' ? partialPIs.includes(p) : _piKpi === 'pay-paid' ? paidPIs.includes(p)
     : _piKpi === 'overdue' ? overdue.includes(p) : _piKpi === 'duesoon' ? soon.includes(p) : true));
   const byNo = (a, b) => String(a.piNo || '').localeCompare(String(b.piNo || ''), undefined, { numeric: true });
   if (sort === 'date-asc') rows.sort((a, b) => String(a.date).localeCompare(String(b.date)) || byNo(a, b));

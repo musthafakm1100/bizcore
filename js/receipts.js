@@ -156,6 +156,17 @@ function renderReceiptRegister(){
   const setT = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   const inv = openInvoicesSummary();
   setT('rctreg-k-total', scope.length); setT('rctreg-k-posted', posted.length); setT('rctreg-k-voided', scope.length - posted.length);
+  const receiptAllocationState = r => {
+    if (r.status === 'Voided') return 'voided';
+    const amt = rctNum(r.amount), left = Math.max(0, rctNum(r.unapplied));
+    if (amt <= 0.005 || left >= amt - 0.005) return 'unallocated';
+    return left > 0.005 ? 'partially-allocated' : 'fully-allocated';
+  };
+  const receiptBreakdown = { 'fully-allocated': 0, 'partially-allocated': 0, 'unallocated': 0 };
+  posted.forEach(r => { receiptBreakdown[receiptAllocationState(r)]++; });
+  setT('rctreg-k-fully-allocated', receiptBreakdown['fully-allocated']);
+  setT('rctreg-k-partially-allocated', receiptBreakdown['partially-allocated']);
+  setT('rctreg-k-strict-unallocated', receiptBreakdown['unallocated']);
   setT('rctreg-k-unapplied', unapplied.length); setT('rctreg-k-overdue', inv.overdue); setT('rctreg-k-duesoon', inv.dueSoon);
   setT('rctreg-a-received', rctF(posted.reduce((s, r) => s + rctNum(r.amount), 0)));
   setT('rctreg-a-receivable', rctF(inv.receivable));
@@ -163,7 +174,9 @@ function renderReceiptRegister(){
   setT('rctreg-a-unapplied', rctF(receiptsCache.filter(r => r.status !== 'Voided').reduce((s, r) => s + Math.max(0, rctNum(r.unapplied)), 0)));
   document.querySelectorAll('#page-receipts [data-rct-kpi]').forEach(e => { const on = e.dataset.rctKpi === _rctKpi; e.classList.toggle('active', on); e.setAttribute('aria-pressed', on ? 'true' : 'false'); });
   const st = document.getElementById('rctreg-status'); if (st) st.value = _rctKpi === 'all' ? '' : _rctKpi;
-  let rows = scope.filter(r => _rctKpi === 'all' || (_rctKpi === 'unapplied' ? (r.status !== 'Voided' && rctNum(r.unapplied) > 0.005) : r.status === _rctKpi));
+  let rows = scope.filter(r => _rctKpi === 'all' ||
+    (_rctKpi === 'unapplied' ? (r.status !== 'Voided' && rctNum(r.unapplied) > 0.005) :
+    ['fully-allocated', 'partially-allocated', 'unallocated'].includes(_rctKpi) ? receiptAllocationState(r) === _rctKpi : r.status === _rctKpi));
   const byNo = (a, b) => String(a.rctNo || '').localeCompare(String(b.rctNo || ''), undefined, { numeric: true });
   if (sort === 'date-asc') rows.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || byNo(a, b));
   else if (sort === 'no-asc') rows.sort(byNo);

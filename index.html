@@ -659,7 +659,7 @@ document.addEventListener('error', function(e) {
       <div class="dn-overview-body module-monitor-body">
         <button type="button" class="dn-overview-total dn-kpi active" data-rct-kpi="all" onclick="filterReceiptKPI('all')"><span>All receipts</span><strong id="rctreg-k-total">0</strong></button>
         <div class="dn-overview-section-label">Status</div>
-        <button type="button" class="dn-overview-row dn-kpi" data-rct-kpi="Posted" onclick="filterReceiptKPI('Posted')"><span><i class="dn-dot bc-dot-green"></i>Posted</span><strong id="rctreg-k-posted">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-rct-kpi="Posted" onclick="filterReceiptKPI('Posted')"><span><i class="dn-dot bc-dot-green"></i>Posted</span><strong id="rctreg-k-posted">0</strong></button><span hidden id="rctreg-k-fully-allocated">0</span><span hidden id="rctreg-k-partially-allocated">0</span><span hidden id="rctreg-k-strict-unallocated">0</span>
         <button type="button" class="dn-overview-row dn-kpi" data-rct-kpi="Voided" onclick="filterReceiptKPI('Voided')"><span><i class="dn-dot bc-dot-gray"></i>Voided</span><strong id="rctreg-k-voided">0</strong></button>
         <div class="dn-overview-section-label">Attention</div>
         <button type="button" class="dn-overview-row dn-kpi" data-rct-kpi="unapplied" onclick="filterReceiptKPI('unapplied')"><span><i class="dn-dot bc-dot-amber"></i>Not fully applied</span><strong id="rctreg-k-unapplied">0</strong></button>
@@ -712,7 +712,7 @@ document.addEventListener('error', function(e) {
       <div class="dn-overview-body module-monitor-body">
         <button type="button" class="dn-overview-total dn-kpi active" data-pi-kpi="all" onclick="filterPurchaseKPI('all')"><span>All purchase invoices</span><strong id="pireg-k-total">0</strong></button>
         <div class="dn-overview-section-label">Status</div>
-        <button type="button" class="dn-overview-row dn-kpi" data-pi-kpi="Posted" onclick="filterPurchaseKPI('Posted')"><span><i class="dn-dot bc-dot-green"></i>Posted</span><strong id="pireg-k-posted">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-pi-kpi="Posted" onclick="filterPurchaseKPI('Posted')"><span><i class="dn-dot bc-dot-green"></i>Posted</span><strong id="pireg-k-posted">0</strong></button><span hidden id="pireg-k-pay-unpaid">0</span><span hidden id="pireg-k-pay-partial">0</span><span hidden id="pireg-k-pay-paid">0</span>
         <button type="button" class="dn-overview-row dn-kpi" data-pi-kpi="Voided" onclick="filterPurchaseKPI('Voided')"><span><i class="dn-dot bc-dot-gray"></i>Cancelled</span><strong id="pireg-k-voided">0</strong></button>
         <div class="dn-overview-section-label">To pay</div>
         <button type="button" class="dn-overview-row dn-kpi" data-pi-kpi="overdue" onclick="filterPurchaseKPI('overdue')"><span><i class="dn-dot bc-dot-red"></i>Overdue</span><strong id="pireg-k-overdue">0</strong></button>
@@ -758,7 +758,7 @@ document.addEventListener('error', function(e) {
       <div class="dn-overview-body module-monitor-body">
         <button type="button" class="dn-overview-total dn-kpi active" data-sp-kpi="all" onclick="filterSupplierPaymentKPI('all')"><span>All supplier payments</span><strong id="spreg-k-total">0</strong></button>
         <div class="dn-overview-section-label">Type</div>
-        <button type="button" class="dn-overview-row dn-kpi" data-sp-kpi="payment" onclick="filterSupplierPaymentKPI('payment')"><span><i class="dn-dot bc-dot-blue"></i>Invoice payments</span><strong id="spreg-k-payment">0</strong></button>
+        <button type="button" class="dn-overview-row dn-kpi" data-sp-kpi="payment" onclick="filterSupplierPaymentKPI('payment')"><span><i class="dn-dot bc-dot-blue"></i>Invoice payments</span><strong id="spreg-k-payment">0</strong></button><span hidden id="spreg-k-live">0</span>
         <button type="button" class="dn-overview-row dn-kpi" data-sp-kpi="advance" onclick="filterSupplierPaymentKPI('advance')"><span><i class="dn-dot bc-dot-purple"></i>Advances</span><strong id="spreg-k-advance">0</strong></button>
         <button type="button" class="dn-overview-row dn-kpi" data-sp-kpi="cashback" onclick="filterSupplierPaymentKPI('cashback')"><span><i class="dn-dot bc-dot-teal"></i>Cash back</span><strong id="spreg-k-cashback">0</strong></button>
         <button type="button" class="dn-overview-row dn-kpi" data-sp-kpi="Voided" onclick="filterSupplierPaymentKPI('Voided')"><span><i class="dn-dot bc-dot-gray"></i>Cancelled</span><strong id="spreg-k-voided">0</strong></button>
