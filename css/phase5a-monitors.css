@@ -1,0 +1,41 @@
+/* Phase 5A review: status strips use Sales Order monitor dimensions and theme.
+   Legacy monitors remain in DOM for existing calculations, filters and workflows. */
+html body #app-topbar .global-search-wrap{display:none!important}
+html body #app-topbar .topbar-center{display:none!important}
+html body :is(#page-rfq,#page-costing,#page-quotations,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .module-main-workspace,
+html body #page-rfq .rfq-main-workspace{display:block!important;grid-template-columns:none!important}
+html body :is(#page-rfq,#page-costing,#page-quotations,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .module-main-workspace>.module-monitor,
+html body :is(#page-rfq,#page-costing,#page-quotations,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .module-main-workspace>.module-monitor-rail{display:none!important}
+html body :is(#page-rfq,#page-costing,#page-quotations,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) :is(.rfq-register-area,.module-register-area,.dn-register-area){width:100%;max-width:100%;min-width:0}
+.bc5-strip{display:flex;align-items:stretch;background:#fff;border:1px solid #dfe5ec;border-radius:10px;overflow:hidden;margin:0 0 6px;box-shadow:0 1px 2px rgba(15,23,42,.04);min-height:112px}
+.bc5-lead{appearance:none;flex:0 0 200px;border:0;text-align:left;background:var(--c-173a5e,#173a5e);color:white;padding:12px 18px;display:flex;flex-direction:column;justify-content:center;min-width:0;gap:3px;font:inherit}
+.bc5-lead .bc5-label{font-size:11px;letter-spacing:.04em;text-transform:uppercase;font-weight:600;opacity:.86}
+.bc5-lead .bc5-number{font-size:26px;line-height:1.15;font-weight:700}
+.bc5-lead .bc5-description{font-size:11.5px;line-height:1.3;opacity:.82}
+.bc5-other{display:grid;grid-template-columns:repeat(var(--bc5-columns,4),minmax(0,1fr));flex:1;min-width:0}
+.bc5-card{appearance:none;background:#fff;min-width:0;border:0;border-left:1px solid #edf1f5;display:flex;flex-direction:column;text-align:left;justify-content:flex-start;padding:12px 16px;gap:3px;font:inherit;color:#334155}
+.bc5-card-header{display:flex;align-items:baseline;justify-content:space-between;gap:6px;min-width:0;font-size:12.5px;font-weight:600}
+.bc5-card-header .bc5-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bc5-card .bc5-number{font-size:22px;line-height:1.1;font-weight:700;color:#0f172a}
+.bc5-card .bc5-description{font-size:11.5px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+.bc5-bar{height:5px;background:#eef2f6;border-radius:3px;overflow:hidden;margin-top:auto;display:block}
+.bc5-bar i{display:block;height:100%;width:38%;background:#3b82f6;border-radius:3px}
+.bc5-card[data-tone=green] .bc5-bar i{background:#22c55e}
+.bc5-card[data-tone=amber] .bc5-bar i{background:#f59e0b}
+.bc5-card[data-tone=red] .bc5-bar i{background:#ef4444}
+.bc5-card[data-tone=purple] .bc5-bar i{background:#8b5cf6}
+.bc5-card[data-tone=slate] .bc5-bar i{background:#94a3b8}
+.bc5-card:disabled{cursor:default;opacity:1}
+.bc5-card:not(:disabled),.bc5-lead:not(:disabled){cursor:pointer}
+.bc5-card:not(:disabled):hover{background:#f6f9fc}
+.bc5-card[aria-pressed=true]{box-shadow:inset 0 -3px 0 var(--c-173a5e,#173a5e);background:#eef4fb}
+.bc5-card:focus-visible,.bc5-lead:focus-visible{outline:2px solid var(--c-2e75b6,#2e75b6);outline-offset:-3px}
+.bc5-note{font-size:11.5px;color:#64748b;margin:0 2px 10px;min-height:16px}
+@media(max-width:900px){.bc5-strip{flex-direction:column}.bc5-lead{flex:0 0 auto;flex-direction:row;align-items:center;gap:14px;padding:10px 14px}.bc5-lead .bc5-number{font-size:22px}.bc5-other{grid-template-columns:repeat(2,minmax(0,1fr))}.bc5-card{min-height:85px}.bc5-card:nth-child(odd){border-left:0}}
+@media(max-width:480px){.bc5-card{padding:9px 11px}.bc5-card .bc5-number{font-size:19px}.bc5-card-header{font-size:12px}.bc5-note{font-size:10px}}
+
+/* Five approved Jobs cards, one row on desktop; Sales Order proportions. */
+@media(min-width:1101px){html body #page-jobs .jb-monitor{flex-flow:row nowrap!important}html body #page-jobs .jb-monitor .jb-monitor-main{flex:0 0 200px!important}html body #page-jobs .jb-monitor .jb-monitor-tile{flex:1 1 0;min-width:0}}
+#page-jobs .jb-monitor .jb-monitor-tile:disabled{cursor:default;opacity:1}
+#page-jobs .jb-monitor .jb-monitor-tile:disabled>strong{color:#94a3b8}
+#page-jobs .jb-monitor button:nth-child(5) .jb-monitor-fill{background:#f59e0b}

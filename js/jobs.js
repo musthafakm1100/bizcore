@@ -847,7 +847,7 @@ ${sig([['Received by', rb.employeeName], ['Paid by', rb.createdBy], ['Approved b
     page.innerHTML = `<div class="dn-register-area module-register-area jb-reg">
 <div class="jb-monitor" id="jb-monitor" role="group" aria-label="Job status monitor">
 <button type="button" class="jb-monitor-main" data-jb-monitor=""><span>JOBS</span><strong id="jbmon-total">0</strong><small>Total jobs</small></button>
-${[['Open','Open'],['In Progress','In Progress'],['Completed','Completed'],['Closed','Closed'],['Cancelled','Cancelled']].map(([status,label])=>`<button type="button" class="jb-monitor-tile" data-jb-monitor="${status}"><span>${label}</span><strong data-jb-count="${status}">0</strong><i class="jb-monitor-track"><i class="jb-monitor-fill"></i></i></button>`).join('')}
+${[['Open','Open'],['In Progress','In Progress'],['Completed','Completed'],['To Invoice','To Invoice']].map(([status,label])=>`<button type="button" class="jb-monitor-tile" data-jb-monitor="${status}"${status === 'To Invoice' ? ' disabled title="Job invoicing is not yet implemented"' : ''}><span>${label}</span><strong data-jb-count="${status}">${status === 'To Invoice' ? '—' : '0'}</strong><i class="jb-monitor-track"><i class="jb-monitor-fill"></i></i></button>`).join('')}
 </div>
 <div class="dn-register-toolbar page-toolbar page-toolbar--sticky page-control-bar bc-filterbar" role="toolbar" aria-label="Job filters">
 <div class="dn-toolbar-left bc-filterbar-left"><span class="bc-filter-count" id="jbreg-count">0 jobs</span></div>
@@ -865,7 +865,7 @@ ${[['Open','Open'],['In Progress','In Progress'],['Completed','Completed'],['Clo
     $('jbreg-customer').onchange = e => { F.customer = e.target.value; paint(); };
     $('jbreg-status').onchange = e => { F.status = e.target.value; paint(); };
     $('jbreg-sort').onchange = e => { F.sort=e.target.value;F.heading='';paint(); };
-    $('jb-monitor').onclick = e => {const b=e.target.closest('[data-jb-monitor]');if(!b)return;const v=b.dataset.jbMonitor;F.monitor=F.monitor===v?'':v;paint();};
+    $('jb-monitor').onclick = e => {const b=e.target.closest('[data-jb-monitor]');if(!b)return;const v=b.dataset.jbMonitor;if(b.disabled)return;F.monitor=F.monitor===v?'':v;paint();};
     page.querySelectorAll('.jb-sort-head').forEach(th=>{
       const change=()=>{const key=th.dataset.jbSort;F.direction=F.heading===key&&F.direction==='asc'?'desc':'asc';F.heading=key;paint();};
       th.onclick=change;th.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();change();}};
@@ -887,8 +887,8 @@ ${[['Open','Open'],['In Progress','In Progress'],['Completed','Completed'],['Clo
     $('jbmon-total').textContent=base.length;
     $('jb-monitor').querySelectorAll('[data-jb-monitor]').forEach(b=>{const status=b.dataset.jbMonitor;
       b.classList.toggle('is-active',status===F.monitor&&!!status);
-      if(status){const n=counts[status]||0;b.querySelector('strong').textContent=n;
-        b.querySelector('.jb-monitor-fill').style.width=(base.length?Math.round(n/base.length*100):0)+'%';}
+      if(status && status !== 'To Invoice'){const n=counts[status]||0;b.querySelector('strong').textContent=n;
+        b.querySelector('.jb-monitor-fill').style.width=(base.length?Math.round(n/base.length*100):0)+'%';}else if(status === 'To Invoice'){b.querySelector('strong').textContent='—';}
     });
     const cmp=(x,y)=>typeof compareBizCoreDocumentNumbers==='function'
       ?compareBizCoreDocumentNumbers(x,y,'job')
