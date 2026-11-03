@@ -39,3 +39,37 @@ html body :is(#page-rfq,#page-costing,#page-quotations,#page-deliverynotes,#page
 #page-jobs .jb-monitor .jb-monitor-tile:disabled{cursor:default;opacity:1}
 #page-jobs .jb-monitor .jb-monitor-tile:disabled>strong{color:#94a3b8}
 #page-jobs .jb-monitor button:nth-child(5) .jb-monitor-fill{background:#f59e0b}
+
+
+/* V271.5.1: remove obsolete left monitor tracks and painted 250px rails.
+   These are legacy pseudo-elements from the previous two-column register UI;
+   they must not cover the new full-width horizontal status strip. */
+html body :is(#page-rfq,#page-costing,#page-quotations,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .module-main-workspace,
+html body #page-rfq .rfq-main-workspace {
+  display:block!important;
+  grid-template-columns:none!important;
+  gap:0!important;
+}
+html body :is(#page-rfq,#page-costing,#page-quotations,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .module-main-workspace::before,
+html body #page-rfq .rfq-main-workspace::before {
+  content:none!important;
+  display:none!important;
+}
+html body :is(#page-rfq,#page-costing,#page-quotations,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments) .module-main-workspace>.module-register-area,
+html body #page-rfq .rfq-main-workspace>.rfq-register-area {
+  grid-column:auto!important;
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  margin-left:0!important;
+  position:relative;
+  z-index:1;
+}
+/* Preserve the theme-colored first card and its readable white text. */
+html body .bc5-strip>.bc5-lead {
+  background:var(--c-173a5e,#173a5e)!important;
+  color:#fff!important;
+}
+html body .bc5-strip>.bc5-lead .bc5-label,
+html body .bc5-strip>.bc5-lead .bc5-number,
+html body .bc5-strip>.bc5-lead .bc5-description {color:#fff!important;}
