@@ -1,0 +1,90 @@
+/* BizCore V271.5.11 — Desktop register styling parity with the approved
+   Sales Orders V271.5.10 trial. Visual only, no scripts or records touched.
+   Scope: primary list/register tables only, not their entry/detail modals.
+   Status badges, alerts, filters, sorting and pagination retain their styles. */
+@media (min-width: 761px) {
+  :is(
+    html body #page-rfq .rfq-register table,
+    html body #page-costing .pricing-register-table,
+    html body #page-quotations #quotes-table,
+    html body #page-jobs .jb-reg-table,
+    html body #page-deliverynotes #dn-register-table,
+    html body #page-customerinvoices #invreg-table,
+    html body #page-receipts #rctreg-table,
+    html body #page-purchaseinvoices #pireg-table,
+    html body #page-supplierpayments #spreg-table,
+    html body #page-stock #streg-table
+  ) {
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+  }
+  :is(
+    html body #page-rfq .rfq-register table,
+    html body #page-costing .pricing-register-table,
+    html body #page-quotations #quotes-table,
+    html body #page-jobs .jb-reg-table,
+    html body #page-deliverynotes #dn-register-table,
+    html body #page-customerinvoices #invreg-table,
+    html body #page-receipts #rctreg-table,
+    html body #page-purchaseinvoices #pireg-table,
+    html body #page-supplierpayments #spreg-table,
+    html body #page-stock #streg-table
+  ) thead th,
+  :is(
+    html body #page-rfq .rfq-register table,
+    html body #page-costing .pricing-register-table,
+    html body #page-quotations #quotes-table,
+    html body #page-jobs .jb-reg-table,
+    html body #page-deliverynotes #dn-register-table,
+    html body #page-customerinvoices #invreg-table,
+    html body #page-receipts #rctreg-table,
+    html body #page-purchaseinvoices #pireg-table,
+    html body #page-supplierpayments #spreg-table,
+    html body #page-stock #streg-table
+  ) tbody td {
+    border-left: 0 !important;
+    border-right: 0 !important;
+    box-shadow: none !important;
+  }
+  :is(
+    html body #page-rfq .rfq-register table,
+    html body #page-costing .pricing-register-table,
+    html body #page-quotations #quotes-table,
+    html body #page-jobs .jb-reg-table,
+    html body #page-deliverynotes #dn-register-table,
+    html body #page-customerinvoices #invreg-table,
+    html body #page-receipts #rctreg-table,
+    html body #page-purchaseinvoices #pireg-table,
+    html body #page-supplierpayments #spreg-table,
+    html body #page-stock #streg-table
+  ) tbody td {
+    border-top: 0 !important;
+    border-bottom: 1px solid #edf1f5 !important;
+  }
+  :is(
+    html body #page-rfq .rfq-register table tbody td:first-child,
+    html body #page-costing .pricing-register-table tbody td:first-child,
+    html body #page-quotations #quotes-table tbody td:first-child,
+    html body #page-jobs .jb-reg-table tbody td:first-child,
+    html body #page-deliverynotes #dn-register-table tbody td:first-child,
+    html body #page-customerinvoices #invreg-table tbody td:first-child,
+    html body #page-receipts #rctreg-table tbody td:first-child,
+    html body #page-purchaseinvoices #pireg-table tbody td:first-child,
+    html body #page-supplierpayments #spreg-table tbody td:first-child,
+    html body #page-stock #streg-table tbody td:first-child
+  ),
+  :is(
+    html body #page-rfq .rfq-register table tbody td:first-child :is(span,a,strong,b),
+    html body #page-costing .pricing-register-table tbody td:first-child :is(span,a,strong,b),
+    html body #page-quotations #quotes-table tbody td:first-child :is(span,a,strong,b),
+    html body #page-jobs .jb-reg-table tbody td:first-child :is(span,a,strong,b),
+    html body #page-deliverynotes #dn-register-table tbody td:first-child :is(span,a,strong,b),
+    html body #page-customerinvoices #invreg-table tbody td:first-child :is(span,a,strong,b),
+    html body #page-receipts #rctreg-table tbody td:first-child :is(span,a,strong,b),
+    html body #page-purchaseinvoices #pireg-table tbody td:first-child :is(span,a,strong,b),
+    html body #page-supplierpayments #spreg-table tbody td:first-child :is(span,a,strong,b),
+    html body #page-stock #streg-table tbody td:first-child :is(span,a,strong,b)
+  ) {
+    font-weight: 400 !important;
+  }
+}
