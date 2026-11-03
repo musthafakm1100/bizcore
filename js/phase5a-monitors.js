@@ -19,8 +19,8 @@ const pageConfigs=[
     ['Receipts','rctreg-k-posted','Posted receipt count','blue','Posted'],['Fully Allocated','rctreg-k-fully-allocated','Completely applied to invoices','green','fully-allocated'],['Partially Allocated','rctreg-k-partially-allocated','Partly applied to invoices','purple','partially-allocated'],['Unallocated','rctreg-k-unapplied','Remaining amount not applied to invoices','amber','unapplied']]},
   {page:'purchaseinvoices',host:'pi-main-workspace',lead:['Outstanding Payables','pireg-a-payable','SAR · Payable to suppliers','all'],cards:[
     ['Unpaid','pireg-k-pay-unpaid','No payment made','slate','pay-unpaid'],['Partially Paid','pireg-k-pay-partial','Balance remaining','blue','pay-partial'],['Paid','pireg-k-pay-paid','Fully settled','green','pay-paid'],['Overdue','pireg-k-overdue','Past supplier due date','red','overdue']]},
-  {page:'supplierpayments',host:'sp-main-workspace',lead:['Total Paid','spreg-a-paid','SAR · In shown records','all'],cards:[
-    ['Payments','spreg-k-live','Recorded payments and advances','slate',null],['Fully Applied',null,'Application breakdown pending','green',null],['Partially Applied',null,'Application breakdown pending','blue',null],['Unapplied',null,'Application breakdown pending','amber',null],['Advances','spreg-a-open','SAR · Available supplier advances','purple','open']]}
+  {page:'supplierpayments',host:'sp-main-workspace',lead:['Total Paid','spreg-a-paid','SAR · Cash paid including advances','all'],cards:[
+    ['Payments','spreg-k-payment','Invoice payments (excludes advances and cash back)','slate','payment'],['Fully Applied',null,'Application breakdown pending','green',null],['Partially Applied',null,'Application breakdown pending','blue',null],['Unapplied',null,'Application breakdown pending','amber',null],['Advances','spreg-a-open','SAR · Available supplier advances','purple','open']]}
 ];
 // Read-only amount subtitles. Values are populated from each register's existing
 // filtered scope; no financial data or posting logic is changed.
