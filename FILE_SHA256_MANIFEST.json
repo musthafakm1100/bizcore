@@ -1,0 +1,439 @@
+{
+  "release": "V271.5.4",
+  "source": "BizCore_V271.5.4_Amount_Display_Fix_Work",
+  "deploy_files": [
+    {
+      "path": "css/accounts.css",
+      "sha256": "e8661fbfda0cfed6ec41e9e2e429990117d30925b678a8de31bf1ad7e08cf3ef"
+    },
+    {
+      "path": "css/administration-typography.css",
+      "sha256": "c500684cfed8c8c76d9fd373d7612eaea8cc82f6a74f55452a64fc1b4772e498"
+    },
+    {
+      "path": "css/bc-date.css",
+      "sha256": "807df75ce7850939ad03c7fea199db6654be43569479cc2dcf742a018f4cd95a"
+    },
+    {
+      "path": "css/bizcore-design.css",
+      "sha256": "203653a68ca223990faacd92eec4645476ba055d4a4ae453f4fb4a3d26a11b66"
+    },
+    {
+      "path": "css/cash.css",
+      "sha256": "31901a567b65a9cb6abe9639205de556486828995be6214933f36212a4123fed"
+    },
+    {
+      "path": "css/delivery-compact.css",
+      "sha256": "8de38a1819db74507de6ac39f5229749b3784b5b319d550c340093a16af39039"
+    },
+    {
+      "path": "css/doc-view.css",
+      "sha256": "b380d911f449ad1376f18525ce46fdd0f71508025fd71dae9a0aa1fbd2203154"
+    },
+    {
+      "path": "css/estimate.css",
+      "sha256": "ef906471c86497fa3ef524a6462e03229eceb525b7ce8ddf57c431b241a37628"
+    },
+    {
+      "path": "css/invoicing.css",
+      "sha256": "15d8331090b71825a4cb047f75d67040efdb5e5f16b54d7978fffd56d62ec85b"
+    },
+    {
+      "path": "css/main.css",
+      "sha256": "9de142e94b74d9584b3a08476903c7e04d14714e69cfd06541a85571784a505a"
+    },
+    {
+      "path": "css/masters.css",
+      "sha256": "e1ba14323df17074974f8afaaf726ec8beb32539a9c38288e7037cb209b39ff9"
+    },
+    {
+      "path": "css/mobile-zoom.css",
+      "sha256": "f4c4bd3dba2e26628237e4c735096db6bb1a2353ad2ff2a8045750cb2387fe0a"
+    },
+    {
+      "path": "css/numbering-controls.css",
+      "sha256": "1f779c4e8ec86338b097918eeeb708521bdf3d1176ad6d3de371f9931f97bd92"
+    },
+    {
+      "path": "css/phase5a-monitors.css",
+      "sha256": "6dd20e24fde7405c814154c6a736c1802b24ccbc3b2b2575af7c51d797b68424"
+    },
+    {
+      "path": "css/pricing.css",
+      "sha256": "d5bdcd63ea405e60d6d824d45175216862d173b0bd63c79b159f416d1c50cb27"
+    },
+    {
+      "path": "css/purchases.css",
+      "sha256": "dc9b101d864056ae411f296de60c552f2bfd1e02fcf190dae604f63b2b46ddb9"
+    },
+    {
+      "path": "css/quotation.css",
+      "sha256": "20f7d118a81fa5dfc04d3ed21e712e10eedaf5222ff83460b44ead5431632a21"
+    },
+    {
+      "path": "css/quote-rich.css",
+      "sha256": "c527d31031a14af3409f5e2fa503ad9e776cb527b66aa9f7a62e8644fed2a64d"
+    },
+    {
+      "path": "css/receipts.css",
+      "sha256": "7e99438dd739425eb64f520130b62369b925ee9451a67a9c11780edeece11545"
+    },
+    {
+      "path": "css/register-standard.css",
+      "sha256": "e49a8f8623f513e78679965be34c3c61afc8d1f334d8eff642ac5b650959bfde"
+    },
+    {
+      "path": "css/responsive-v196.css",
+      "sha256": "833e770382b843517743945035902c709d68155ac5766ee167ac65970489244f"
+    },
+    {
+      "path": "css/responsive.css",
+      "sha256": "4df528c5038c7f06bbb7d25c2b1fff5d3251ceea4bc7c09cf4e03e6e46bc4afa"
+    },
+    {
+      "path": "css/rfq-entry.css",
+      "sha256": "19e5e0949057239af4381b57ac67bd737a7b0f9a7087eb7c462a38be56633d7e"
+    },
+    {
+      "path": "css/safe-area.css",
+      "sha256": "4d2a14efc86b18cc6e19f94ee4ece652978280f95fc61700a4334021ad9d6023"
+    },
+    {
+      "path": "css/shell.css",
+      "sha256": "339ca15dd34e4d0cf8b35994278c375ac3d6cec5b694d952af0282f00e27e2ed"
+    },
+    {
+      "path": "css/so-register.css",
+      "sha256": "831b0cc517c6c0182487e45cbc36c684c6a4afe8f575e2af7579d423dc7fddc0"
+    },
+    {
+      "path": "css/so-view.css",
+      "sha256": "4fb349efdc7cc266f7238beeb9390ce0af04322b32ae07cfc92631834a1d105f"
+    },
+    {
+      "path": "css/theme.css",
+      "sha256": "2463ca8b14ef0922b6c626a30576cfab42d5bbc570ac9a404a059004d320a8b5"
+    },
+    {
+      "path": "css/typography.css",
+      "sha256": "0a479f0b2708ab439893e9257dae73e6886ddf6456659c3fd2293051ecb27050"
+    },
+    {
+      "path": "css/users.css",
+      "sha256": "416b13c1a71997ab3398d6c1081456f69964d416b1c4ca534ceb555abd84001b"
+    },
+    {
+      "path": "delivery.html",
+      "sha256": "c22732d2d46b76145ea1bb3a172cc11ff387e452f67d14514ba73044ce2a2c5e"
+    },
+    {
+      "path": "favicon.ico",
+      "sha256": "b4364b1c5b5ba0a51d72580550adbbdbf092804a71a7019c378362301df71433"
+    },
+    {
+      "path": "index.html",
+      "sha256": "3b5c50c00b3d4b344dcb5a0a6f118ad26da622778c77e9cc6993ba8997065807"
+    },
+    {
+      "path": "js/account-core.mjs",
+      "sha256": "b8689d9c554aca36fbe0e86007bf1a8287da5a8ca8ebbeee61b56e3233e1cef0"
+    },
+    {
+      "path": "js/account-service.mjs",
+      "sha256": "ec082c25c4e85d11c1723763efe5070cbed544c395e187c0680953e567f094bd"
+    },
+    {
+      "path": "js/accounts.js",
+      "sha256": "27521a2f3d0047af11259f267e5ca83909cdd7cd4fccdbdeb42d3a96034bbd88"
+    },
+    {
+      "path": "js/app.js",
+      "sha256": "7bafba87b4dd4dedc98d16cc1be709174c419d3d4f735b0037cf5a7f4a6bc2ca"
+    },
+    {
+      "path": "js/bc-date.js",
+      "sha256": "b0b640d5a14870f6e007cec118f35460c41385e571d46bc75252fce7994feffe"
+    },
+    {
+      "path": "js/cash-ui.js",
+      "sha256": "6961c70e4fcfd637c40908c7b42c68fb94bfceb6b85efde1dde88a1382abf047"
+    },
+    {
+      "path": "js/cashbank.js",
+      "sha256": "2365f070bf0bb71508a034ffc04e9eb97901e5cda830805943364d9454a4475a"
+    },
+    {
+      "path": "js/data-safety.js",
+      "sha256": "053d17678a73ed694d17deccfff2cb4bdef6fb1f26c61406a6a5cb01ce5fa4aa"
+    },
+    {
+      "path": "js/deliveries.js",
+      "sha256": "e2ea073b2e8f415cabebaff3ec053a18df51e67b12206679d8a158d034b4df97"
+    },
+    {
+      "path": "js/delivery-core.mjs",
+      "sha256": "2d1a4277fb3e40a3d130c6dd67a99f91fa4eb008f2cc97711167e4ddf08eab04"
+    },
+    {
+      "path": "js/delivery-migration.mjs",
+      "sha256": "3182c2cb90e475c19ee3597470d7a998da37c46dec2808057450f8e1ff0ed44d"
+    },
+    {
+      "path": "js/delivery-service.mjs",
+      "sha256": "31e7f88818838a1fb246a169cf693bcf4d6fd2a0ecfb1d5bb19cff0ae53f7594"
+    },
+    {
+      "path": "js/doc-pages.js",
+      "sha256": "23461e3ce9aceae8fd4f0dda8a2c3acfb3a8deaebd3fa1bcad1a733f454657c4"
+    },
+    {
+      "path": "js/doc-zoom.js",
+      "sha256": "1d30513d96975b722c4de520644d9476b1fe5b226c0a71acb9475ec54085c8e5"
+    },
+    {
+      "path": "js/estimate.js",
+      "sha256": "386fa1f72a13eab7c584a7c7b730ebfb8b7b2b8e319d5877268ce333184f0040"
+    },
+    {
+      "path": "js/invoice-core.mjs",
+      "sha256": "cdd499bfcf3389f15d99d67beebe23174183969e9cc425e67e40f00ed1b79237"
+    },
+    {
+      "path": "js/invoice-migration.mjs",
+      "sha256": "84736e3aec15af9344497e0a6274b9777290cffe9f2944664cd8dab09a0714ce"
+    },
+    {
+      "path": "js/invoice-service.mjs",
+      "sha256": "79bea40cddf992996e5ce003987f39bfcc77d299ff8663b81b1f2ef7075913eb"
+    },
+    {
+      "path": "js/invoicing.js",
+      "sha256": "f9d10971543763aae068b7a2630e3374f17d280b4440b676155c2d94b98cba7e"
+    },
+    {
+      "path": "js/item-link.js",
+      "sha256": "bfe9abe11be66eef4009cee5b9e1b192aefa2cf6937409ceb0b6bedee78cd248"
+    },
+    {
+      "path": "js/job-cost-core.mjs",
+      "sha256": "000dae4107c7d36b353311c3d11e7117369c0d722315ca719a6e0eb71f48780e"
+    },
+    {
+      "path": "js/job-cost-service.mjs",
+      "sha256": "c24eee84551e0deee155a2ad1eb164960889f27c2b4c41caa5a583f192c0268a"
+    },
+    {
+      "path": "js/jobs.js",
+      "sha256": "54a73305789eb59715df3220dd726dfa00ec245a282ecea1aa2f43b6494e2d55"
+    },
+    {
+      "path": "js/ledger-core.mjs",
+      "sha256": "b81f2e701603cbed9bb281c794cd9b3f12d9366c5255f1854531d0003086ccf9"
+    },
+    {
+      "path": "js/ledger-service.mjs",
+      "sha256": "d309936ebd8ebc0bb41dd2b5bf58eaa0405646703ece3e1ef6d37abad7b8d0a3"
+    },
+    {
+      "path": "js/lock-service.mjs",
+      "sha256": "ac4acb2bcbd0e713beda16f52aeb3865f0b7393bf02760c2f0b1987a94ec62df"
+    },
+    {
+      "path": "js/master-service.mjs",
+      "sha256": "78770902c03abd36b557d181ff693ccc7f4924391a350031f6f4a0d2f6932489"
+    },
+    {
+      "path": "js/master-ui.js",
+      "sha256": "f43294902c11558fbcda0f5654f5d27636f71c9cf2664770d5d812893adcd2ff"
+    },
+    {
+      "path": "js/numbering.mjs",
+      "sha256": "ddebc4d938fbae18cb2fce37b1832553555d64a2aa94e7391f7766dae51d8732"
+    },
+    {
+      "path": "js/permissions-ui.js",
+      "sha256": "740e309d45d5f699177ef4001c115df69e1b21d2230fdca0b8ce1c4a2bac2d9a"
+    },
+    {
+      "path": "js/phase5a-monitors.js",
+      "sha256": "6bde88855338a2e9ce14be54b23d93a52ad19b21e71857713c7b0ae02aa71d57"
+    },
+    {
+      "path": "js/pricing-ui.js",
+      "sha256": "6d11f57afa40f841cd8aa2f2ecb8a816d5b13a96ed265043629c11cd1e2ad0cb"
+    },
+    {
+      "path": "js/purchase-core.mjs",
+      "sha256": "828a01daf4bb6d450553d90f299b0e1c0d28007bf66ba9993868d7911c3b9f37"
+    },
+    {
+      "path": "js/purchase-service.mjs",
+      "sha256": "0dac96f6d3f1a06ee7d7d4bae0aa1ba943d6a4eda3d81f09e4e6fa63411d7a7f"
+    },
+    {
+      "path": "js/purchases.js",
+      "sha256": "ff60d4028d222704404e228537ae38c87c594e79e135b21ef41786911cd561e7"
+    },
+    {
+      "path": "js/quotation-ui.js",
+      "sha256": "d3ab9991de92283feb0fb3e5563a159076b3693efee8932c3d42c199af9559e7"
+    },
+    {
+      "path": "js/quote-cost.js",
+      "sha256": "8c8ecd3ad09c4644a6bc4814b11d3219f0b928c7a6d79fc272b0b7bdbeecc3b6"
+    },
+    {
+      "path": "js/quote-rich.js",
+      "sha256": "63161df18315e24297259cc4fa65cdcdfdfd3b6f027e36b1209bab40f774a31b"
+    },
+    {
+      "path": "js/receipt-core.mjs",
+      "sha256": "cfb46426635e1ad35f022e20d86a951b68e34a9d8888f4ce075146d6b43e45a8"
+    },
+    {
+      "path": "js/receipt-service.mjs",
+      "sha256": "b659eabccd82665d669889069d9500332fdfba0a79cee0d60db987fb9420b9c3"
+    },
+    {
+      "path": "js/receipts.js",
+      "sha256": "1ffd17bdfd79a8f70ec5bb4eb2a73a6db0bb2b613cb69712a1501525f01ea1bf"
+    },
+    {
+      "path": "js/responsive.js",
+      "sha256": "d2f3bf4f7dfeb9ba44803c71ee639fc9001ff681551ead5c2163fdd05a4cffbe"
+    },
+    {
+      "path": "js/rfq-entry.js",
+      "sha256": "cb015f648f3848699657900fe2af4a3705d06a5957dd138cd2121c7063037690"
+    },
+    {
+      "path": "js/role-core.mjs",
+      "sha256": "ab5f0cb1a072c52230bbd0b76c685a7a8b4e455f56b969b820957b63425e9b6c"
+    },
+    {
+      "path": "js/role-service.mjs",
+      "sha256": "0c655abd4dcccc22468e92c75a0a95a95bbc0c291eb4d86f911406ddfa3525ec"
+    },
+    {
+      "path": "js/running-totals.mjs",
+      "sha256": "a02e2ac6c31288fa43bcde8b989e915b1b4fe015a1e7611fd02e0099cc229fd0"
+    },
+    {
+      "path": "js/so-view.js",
+      "sha256": "055d6af0aa9f5a132c56cdb0a9dec06bc290c59ce976f7435b1d97746aa2ab0a"
+    },
+    {
+      "path": "js/stock.js",
+      "sha256": "e12d6cbe32ccb11f4ca9d360a8e1fc955606486eb5f47f28a70e8eb572c5d43a"
+    },
+    {
+      "path": "js/supplier-payments.js",
+      "sha256": "415a46b6a8370188361dedd0e9bcc88cf5724e0b36fd28c42eab1c19c3d73bbf"
+    },
+    {
+      "path": "js/ui-standard.js",
+      "sha256": "bf29a1ce94c3c323335c32126d22bae853a3528691e24e52e98b47026e413483"
+    },
+    {
+      "path": "js/user-core.mjs",
+      "sha256": "4e9b82fbe8b7706b832da48e6c2ecb2ad640f13e4aba18c07e1a6186aee179e2"
+    },
+    {
+      "path": "js/user-service.mjs",
+      "sha256": "b793677a8b881185271f4c871e395fd06d86ced21572c44a06f789d5c0435576"
+    },
+    {
+      "path": "js/users.js",
+      "sha256": "96c90d4893082face46494e64bd8e9d5c3608a855377182496f40d197035e38a"
+    },
+    {
+      "path": "login.html",
+      "sha256": "8fcad1d38b24a4dd329001c27830a8a228cc80bba89603864ff385d424df99b3"
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "a2fbde74abb3cfdfa3d74ba627809e0652b616a3172fff1b93ae005988cee6c1"
+    },
+    {
+      "path": "mycash.html",
+      "sha256": "7559eba12ecdd03e29bf677b77d158714f63618b549ad917620b53da68a30cfa"
+    },
+    {
+      "path": "sw.js",
+      "sha256": "60fac00e5a06dafada7944fdc35235582364b82f4781659033af7b318d349560"
+    }
+  ],
+  "changed_since_v271_3_2": [
+    "css/estimate.css",
+    "css/numbering-controls.css",
+    "css/phase5a-monitors.css",
+    "css/register-standard.css",
+    "index.html",
+    "js/app.js",
+    "js/invoicing.js",
+    "js/jobs.js",
+    "js/phase5a-monitors.js",
+    "js/purchases.js",
+    "js/receipts.js",
+    "js/supplier-payments.js"
+  ],
+  "missing_refs": [
+    [
+      "index.html",
+      "icons/bizcore-icon-180.png"
+    ],
+    [
+      "index.html",
+      "icons/bizcore-icon-192.png"
+    ],
+    [
+      "index.html",
+      "icons/bizcore-icon-32.png"
+    ],
+    [
+      "login.html",
+      "icons/bizcore-icon-180.png"
+    ],
+    [
+      "login.html",
+      "icons/bizcore-icon-192.png"
+    ],
+    [
+      "login.html",
+      "icons/bizcore-icon-32.png"
+    ],
+    [
+      "manifest.json",
+      "icons/bizcore-icon-128.png"
+    ],
+    [
+      "manifest.json",
+      "icons/bizcore-icon-16.png"
+    ],
+    [
+      "manifest.json",
+      "icons/bizcore-icon-180.png"
+    ],
+    [
+      "manifest.json",
+      "icons/bizcore-icon-192.png"
+    ],
+    [
+      "manifest.json",
+      "icons/bizcore-icon-32.png"
+    ],
+    [
+      "manifest.json",
+      "icons/bizcore-icon-48.png"
+    ],
+    [
+      "manifest.json",
+      "icons/bizcore-icon-512.png"
+    ],
+    [
+      "manifest.json",
+      "icons/bizcore-icon-64.png"
+    ]
+  ],
+  "js_syntax_failures": []
+}
