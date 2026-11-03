@@ -152,3 +152,26 @@ html body #page-salesorders .bc-filterbar-right>.bc-split.bc-filter-new{display:
 }
 /* a little air between the top bar and the tiles */
 html body #page-salesorders .so-tiles{margin-top:8px}
+
+/* V271.5.10 — Sales Orders desktop register visual trial only.
+   Deliberately scoped to this register and desktop; no JS or data changes. */
+@media (min-width: 761px) {
+  html body #page-salesorders #so-register-table {
+    border-spacing: 0 !important;
+    border-collapse: separate !important;
+  }
+  html body #page-salesorders #so-register-table thead th,
+  html body #page-salesorders #so-register-table tbody td {
+    border-left: 0 !important;
+    border-right: 0 !important;
+    box-shadow: none !important;
+  }
+  html body #page-salesorders #so-register-table tbody td {
+    border-top: 0 !important;
+    border-bottom: 1px solid #edf1f5 !important;
+  }
+  html body #page-salesorders #so-register-table tbody td:first-child,
+  html body #page-salesorders #so-register-table tbody td:first-child :is(span,a,strong,b) {
+    font-weight: 400 !important;
+  }
+}
