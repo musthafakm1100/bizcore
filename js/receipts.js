@@ -169,6 +169,12 @@ function renderReceiptRegister(){
   setT('rctreg-k-strict-unallocated', receiptBreakdown['unallocated']);
   setT('rctreg-k-unapplied', unapplied.length); setT('rctreg-k-overdue', inv.overdue); setT('rctreg-k-duesoon', inv.dueSoon);
   setT('rctreg-a-received', rctF(posted.reduce((s, r) => s + rctNum(r.amount), 0)));
+  const rctSum = (f, value) => rctF(posted.filter(f).reduce((n,r)=>n+Math.max(0,value(r)),0));
+  setT('bc5-rct-receipts', rctSum(()=>true,r=>rctNum(r.amount)));
+  setT('bc5-rct-fully', rctSum(r=>receiptAllocationState(r)==='fully-allocated',r=>rctNum(r.amount)));
+  setT('bc5-rct-partial', rctSum(r=>receiptAllocationState(r)==='partially-allocated',r=>Math.max(0,rctNum(r.amount)-rctNum(r.unapplied))));
+  setT('bc5-rct-unallocated', rctSum(r=>receiptAllocationState(r)==='unallocated',r=>rctNum(r.unapplied)));
+
   setT('rctreg-a-receivable', rctF(inv.receivable));
   setT('rctreg-a-charges', rctF(posted.reduce((s, r) => s + rctNum(r.bankCharges), 0)));
   setT('rctreg-a-unapplied', rctF(receiptsCache.filter(r => r.status !== 'Voided').reduce((s, r) => s + Math.max(0, rctNum(r.unapplied)), 0)));

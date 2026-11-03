@@ -94,6 +94,9 @@ function renderSupplierPayments(){
   setT('spreg-k-total', scope.length); setT('spreg-k-live', live.length); setT('spreg-k-payment', live.filter(is('payment')).length); setT('spreg-k-advance', live.filter(is('advance')).length);
   setT('spreg-k-cashback', live.filter(is('cashback')).length); setT('spreg-k-voided', scope.length - live.length);
   setT('spreg-k-open', openAdv.length); setT('spreg-k-waiting', waiting.length);
+  // Physical cash paid by ordinary payment records (advance usage is not new cash paid).
+  setT('bc5-sp-payments', piF(live.filter(p=>spTypeOf(p)==='payment').reduce((n,p)=>n+Math.max(0,piN(p.amount)-piN(p.advanceTotal)),0)));
+
   document.querySelectorAll('#page-supplierpayments [data-sp-kpi]').forEach(e => { const on = e.dataset.spKpi === _spKpi; e.classList.toggle('active', on); e.setAttribute('aria-pressed', on ? 'true' : 'false'); });
   const st = document.getElementById('spreg-status'); if (st) st.value = _spKpi === 'all' ? '' : _spKpi;
   let rows = scope.filter(p => _spKpi === 'all' || (_spKpi === 'Voided' ? p.status === 'Voided' : _spKpi === 'open' ? openAdv.includes(p) : _spKpi === 'waiting' ? waiting.includes(p)

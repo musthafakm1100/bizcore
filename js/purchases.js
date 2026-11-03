@@ -135,6 +135,13 @@ function renderPurchaseRegister(){
   setT('pireg-k-overdue', overdue.length); setT('pireg-k-duesoon', soon.length);
   setT('pireg-a-purchases', piF(posted.reduce((s, p) => s + piN(p.totals && p.totals.total), 0)));
   setT('pireg-a-payable', piF(open.reduce((s, p) => s + piN(p.balance), 0)));
+  // Sum the same invoice categories used for the five monitor counts.
+  const piSum=(rows,amount)=>piF(rows.reduce((n,p)=>n+Math.max(0,piN(amount(p))),0));
+  setT('bc5-pi-unpaid',piSum(unpaidPIs,p=>p.balance));
+  setT('bc5-pi-partial',piSum(partialPIs,p=>p.balance));
+  setT('bc5-pi-paid',piSum(paidPIs,p=>p.totals&&p.totals.total));
+  setT('bc5-pi-overdue',piSum(overdue,p=>p.balance));
+
   setT('pireg-a-stock', piF([...(lib.stock || new Map()).values()].reduce((s, x) => s + piN(x.value), 0)));
   document.querySelectorAll('#page-purchaseinvoices [data-pi-kpi]').forEach(e => { const on = e.dataset.piKpi === _piKpi; e.classList.toggle('active', on); e.setAttribute('aria-pressed', on ? 'true' : 'false'); });
   const st = document.getElementById('pireg-status'); if (st) st.value = _piKpi === 'all' ? '' : _piKpi;

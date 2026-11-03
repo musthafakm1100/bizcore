@@ -1210,6 +1210,13 @@ function renderInvoiceRegister(){
   ['pay-unpaid', 'pay-partial', 'pay-overdue', 'pay-paid', 'pay-duesoon'].forEach(k => setT('invreg-k-' + k, scope.filter(r => payMatch(r, k)).length));
   setT('invreg-a-received', formatNumber(scope.reduce((s, r) => s + (r.kind === 'invoice' ? invNum(r.paid) : 0), 0), 2));
   setT('invreg-a-balance', formatNumber(scope.reduce((s, r) => s + (r.kind === 'invoice' ? Math.max(0, invNum(r.balance)) : 0), 0), 2));
+  // Phase 5A: amount subtotals use the same filtered invoice rows as the KPI counts.
+  const invSum = (k, amount) => formatNumber(scope.filter(r=>payMatch(r,k)).reduce((n,r)=>n+Math.max(0,invNum(amount(r))),0),2);
+  setT('bc5-inv-unpaid', payOn?invSum('pay-unpaid',r=>r.balance):'—');
+  setT('bc5-inv-partial', payOn?invSum('pay-partial',r=>r.balance):'—');
+  setT('bc5-inv-paid', payOn?invSum('pay-paid',r=>r.paid):'—');
+  setT('bc5-inv-overdue', payOn?invSum('pay-overdue',r=>r.balance):'—');
+
   document.querySelectorAll('#invreg-table .inv-pay-col').forEach(e => { e.hidden = !payOn; });
   let rows = scope.filter(r => _invRegKpi === 'all' || (String(_invRegKpi).startsWith('pay-') ? payMatch(r, _invRegKpi) : r.type === _invRegKpi));
   if (sort === 'date-asc') rows.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.no || '').localeCompare(b.no || '', undefined, { numeric: true }));

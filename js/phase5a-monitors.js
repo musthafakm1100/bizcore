@@ -22,6 +22,15 @@ const pageConfigs=[
   {page:'supplierpayments',host:'sp-main-workspace',lead:['Total Paid','spreg-a-paid','SAR · In shown records','all'],cards:[
     ['Payments','spreg-k-live','Recorded payments and advances','slate',null],['Fully Applied',null,'Application breakdown pending','green',null],['Partially Applied',null,'Application breakdown pending','blue',null],['Unapplied',null,'Application breakdown pending','amber',null],['Advances','spreg-a-open','SAR · Available supplier advances','purple','open']]}
 ];
+// Read-only amount subtitles. Values are populated from each register's existing
+// filtered scope; no financial data or posting logic is changed.
+const financeAmounts={
+ customerinvoices:{'Unpaid':'bc5-inv-unpaid','Partially Paid':'bc5-inv-partial','Paid':'bc5-inv-paid','Overdue':'bc5-inv-overdue'},
+ receipts:{'Receipts':'bc5-rct-receipts','Fully Allocated':'bc5-rct-fully','Partially Allocated':'bc5-rct-partial','Unallocated':'bc5-rct-unallocated'},
+ purchaseinvoices:{'Unpaid':'bc5-pi-unpaid','Partially Paid':'bc5-pi-partial','Paid':'bc5-pi-paid','Overdue':'bc5-pi-overdue'},
+ supplierpayments:{'Payments':'bc5-sp-payments','Fully Applied':null,'Partially Applied':null,'Unapplied':null,'Advances':'spreg-a-open'}
+};
+const moneyText=id=>{const v=readText(id);return v==='—'?'—':`SAR ${v}`};
 const filterFunctions={rfq:(key)=>window.applyRFQMonitorFilter?.(key),costing:(key)=>window.filterPricingDocuments?.(key,$('pricing-doc-f-'+(key==='Saved'?'saved':key==='Converted'?'converted':'all'))),quotations:(key)=>window.setQuotationMonitorFilter?.(key==='all'?'':key),deliverynotes:(key)=>window.filterDNKPI?.(key),customerinvoices:(key)=>window.filterInvoiceKPI?.(key),receipts:(key)=>window.filterReceiptKPI?.(key),purchaseinvoices:(key)=>window.filterPurchaseKPI?.(key),supplierpayments:(key)=>window.filterSupplierPaymentKPI?.(key)};
 const leadValue=(cfg)=>{
  if(cfg.page==='costing'){
@@ -49,7 +58,7 @@ function createTile(cfg,entry,index){
  if(index<0)el.innerHTML='<span class="bc5-label"></span><b class="bc5-number">—</b><span class="bc5-description"></span>';
  else el.innerHTML='<span class="bc5-card-header"><span class="bc5-label"></span><b class="bc5-number">—</b></span><span class="bc5-description"></span><span class="bc5-bar" aria-hidden="true"><i></i></span>';
  el.querySelector('.bc5-label').textContent=label;el.querySelector('.bc5-description').textContent=description;
- el.dataset.metric=source||'';return el;
+ el.dataset.metric=source||'';if(index>=0 && financeAmounts[cfg.page] && Object.hasOwn(financeAmounts[cfg.page],label)){el.dataset.amountMetric=financeAmounts[cfg.page][label]||'';el.classList.add('bc5-financial');}return el;
 }
 function install(){
  for(const cfg of pageConfigs){
@@ -59,12 +68,16 @@ function install(){
   const other=document.createElement('div');other.className='bc5-other';other.style.setProperty('--bc5-columns',String(cfg.cards.length));
   cfg.cards.forEach((entry,i)=>other.appendChild(createTile(cfg,entry,i)));
   strip.append(lead,other);
+  // Hidden read-only KPI values are updated by existing register render functions.
+  const amountIds=Object.values(financeAmounts[cfg.page]||{}).filter(x=>x&&x.startsWith('bc5-'));
+  for(const id of amountIds){if(!$(id)){const span=document.createElement('span');span.id=id;span.hidden=true;span.setAttribute('aria-hidden','true');root.appendChild(span);}}
   const note=document.createElement('div');note.className='bc5-note';note.textContent='Select a tile to filter the register; select it again to show all. A dash indicates a measure requiring a future workflow update.';
   root.insertBefore(note,root.firstChild);root.insertBefore(strip,note);
   const refresh=()=>{
     for(const tile of strip.querySelectorAll('[data-metric]')){
       const id=tile.dataset.metric;
       tile.querySelector('.bc5-number').textContent=tile===lead?leadValue(cfg):displayValue(id);
+      if(tile.classList.contains('bc5-financial')){const amount=tile.dataset.amountMetric;tile.querySelector('.bc5-description').textContent=amount?moneyText(amount)+(tile.dataset.metric==='spreg-a-open'?' available':''):'Amount breakdown pending';}
     }
     if(cfg.page==='rfq'){
       const total=readText('rfq-k-total'),avg=readText('rfq-k-avg');
@@ -77,6 +90,7 @@ function install(){
   if(cfg.page==='costing')sources.push('pricing-doc-k-total');
   if(cfg.page==='quotations')sources.push('quote-kpi-all','quote-kpi-draft','quote-kpi-sent');
   if(cfg.page==='rfq')sources.push('rfq-k-total','rfq-k-avg');
+  sources.push(...Object.values(financeAmounts[cfg.page]||{}).filter(Boolean));
   let queued=false;
   const schedule=()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;refresh()})};
   for(const id of new Set(sources.filter(Boolean))){const e=$(id);if(e)new MutationObserver(schedule).observe(e,{subtree:true,childList:true,characterData:true});}

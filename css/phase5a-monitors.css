@@ -73,3 +73,7 @@ html body .bc5-strip>.bc5-lead {
 html body .bc5-strip>.bc5-lead .bc5-label,
 html body .bc5-strip>.bc5-lead .bc5-number,
 html body .bc5-strip>.bc5-lead .bc5-description {color:#fff!important;}
+
+/* V271.5.3: financial subtitles display the actual amount without increasing the monitor height. */
+.bc5-card.bc5-financial .bc5-description{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;margin-top:4px}
+.bc5-card.bc5-financial .bc5-bar{margin-top:auto}
