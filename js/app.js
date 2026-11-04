@@ -11347,7 +11347,7 @@ function renderSOPage() {
         <td style="${rowStyle}">${q?escapeHtml(q.qno):'—'}${soQuoteIds(so).length>1?` <span class="so-more-q" title="${escapeHtml(soQuoteIds(so).map(id=>quotations.find(x=>x.id===id)?.qno||'').filter(Boolean).join(', '))}">+${soQuoteIds(so).length-1}</span>`:''}</td>
         <td class="center" style="${rowStyle}">${(so.items||[]).length}</td>
         <td class="right" style="${rowStyle}">${formatNumber(parseFloat(so.total)||0,2)}</td>
-        <td style="${rowStyle}"><span class="badge ${getSOBadgeClass(status)}">${status}</span>${so._toInvoice?' <span class="so-to-invoice">· to invoice</span>':''}</td>
+        <td style="${rowStyle}"><span class="badge ${getSOBadgeClass(status)}">${status}</span>${so._toInvoice?' <span class="badge badge-so-to-invoice">To Invoice</span>':''}</td>
       </tr>`;
     }).join(''):`<tr><td colspan="8"><div class="empty-state"><i class="ti ti-shopping-cart"></i><strong>No sales orders found</strong><p>Adjust the filters or create a Sales Order from an approved quotation.</p></div></td></tr>`;
   }

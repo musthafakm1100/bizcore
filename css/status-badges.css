@@ -1,0 +1,57 @@
+/* BizCore V271.5.14 — unified semantic status badge appearance.
+   Loaded after inline typography styles so font and padding have one authoritative
+   value. No filtering, status computation, or data handling is changed. */
+
+/* Shared foundation: apply only to actual status badges, not navigation counts,
+   document note labels, phase tags, or other decorative pills. */
+html body .badge:not(.nav-badge),
+html body .status-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center;
+  vertical-align: middle;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 1.25 !important;
+  white-space: nowrap;
+}
+
+/* A stable semantic palette: these tokens intentionally do not vary by theme. */
+:root {
+  --bc-badge-confirmed-bg: #e8f1ff;
+  --bc-badge-confirmed-fg: #245b9c;
+  --bc-badge-dispatched-bg: #e0f2fe;
+  --bc-badge-dispatched-fg: #0369a1;
+  --bc-badge-part-delivered-bg: #fef3c7;
+  --bc-badge-part-delivered-fg: #92400e;
+  --bc-badge-delivered-bg: #d9f3ef;
+  --bc-badge-delivered-fg: #0f766e;
+  --bc-badge-to-invoice-bg: #ffedd5;
+  --bc-badge-to-invoice-fg: #c2410c;
+  --bc-badge-invoiced-bg: #dcfce7;
+  --bc-badge-invoiced-fg: #166534;
+  --bc-badge-part-paid-bg: #dcfce7;
+  --bc-badge-part-paid-fg: #15803d;
+  --bc-badge-paid-bg: #166534;
+  --bc-badge-paid-fg: #ffffff;
+}
+
+/* Sales Order status classes are shared with the SO register and its other
+   existing displays; status mapping remains in the original JavaScript. */
+html body .badge.badge-so-confirmed {background:var(--bc-badge-confirmed-bg)!important;color:var(--bc-badge-confirmed-fg)!important}
+html body .badge.badge-so-ofd {background:var(--bc-badge-dispatched-bg)!important;color:var(--bc-badge-dispatched-fg)!important}
+html body .badge.badge-so-partdel {background:var(--bc-badge-part-delivered-bg)!important;color:var(--bc-badge-part-delivered-fg)!important}
+html body .badge.badge-so-delivered {background:var(--bc-badge-delivered-bg)!important;color:var(--bc-badge-delivered-fg)!important}
+html body .badge.badge-so-to-invoice {background:var(--bc-badge-to-invoice-bg)!important;color:var(--bc-badge-to-invoice-fg)!important}
+html body .badge.badge-so-invoiced {background:var(--bc-badge-invoiced-bg)!important;color:var(--bc-badge-invoiced-fg)!important}
+html body .badge.badge-so-partial {background:var(--bc-badge-part-paid-bg)!important;color:var(--bc-badge-part-paid-fg)!important}
+html body .badge.badge-so-paid {background:var(--bc-badge-paid-bg)!important;color:var(--bc-badge-paid-fg)!important}
+
+/* Shared paid/partial-payment semantics for existing receipt payment pills. */
+html body .rct-pay-pill.paid {background:var(--bc-badge-paid-bg)!important;color:var(--bc-badge-paid-fg)!important}
+html body .rct-pay-pill.part {background:var(--bc-badge-part-paid-bg)!important;color:var(--bc-badge-part-paid-fg)!important}
+
+/* Companion flag: keep both badges readable within the Sales Order status cell. */
+#page-salesorders #so-register-table tbody td .badge-so-to-invoice {margin-left:6px}
