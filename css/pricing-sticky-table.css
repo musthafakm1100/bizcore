@@ -30,8 +30,25 @@
     overflow: hidden !important;
     display: flex !important;
     flex-direction: column !important;
+    align-items: stretch !important;
     margin-top: 0 !important;
     background: var(--bc-page-bg, #f4f7fa);
+  }
+  /* The Phase 5A monitor must occupy the full register width even under older
+     workspace align-items:start rules. Keep its existing 200px lead/card ratios. */
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip,
+  html body #page-costing.active .pricing-main-workspace > .bc5-note {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    align-self: stretch !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip {
+    min-height: 112px !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
   }
   html body #page-costing.active .pricing-register-area {
     display: flex !important;
@@ -46,7 +63,7 @@
     top: auto !important;
     flex: 0 0 48px !important;
     z-index: 5 !important;
-    margin-bottom: 10px !important;
+    margin-bottom: 5px !important;
   }
   /* The 10px breathing room is an opaque surface, not an open reveal strip. */
   html body #page-costing.active .pricing-register-card {
