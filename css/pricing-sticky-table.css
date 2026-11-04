@@ -136,3 +136,51 @@ html body #page-costing .pricing-register-toolbar #pricing-clear-filters-btn.bc-
 html body #page-costing .pricing-register-toolbar #pricing-clear-filters-btn.bc-clear-active > i {
   color: var(--c-174b7a, #174b7a) !important;
 }
+
+/* V271.5.18 — Pricing-only individual soft monitor cards.
+   Preserve current KPI contents, click targets, measurements and sticky table. */
+@media (min-width:1101px) {
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip {
+    display: flex !important;
+    align-items: stretch !important;
+    column-gap: 8px !important;
+    margin: 5px 0 6px !important;
+    min-height: 112px !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-lead {
+    flex: 0 0 200px !important;
+    min-height: 112px !important;
+    border: 1px solid transparent !important;
+    border-radius: 10px !important;
+    box-shadow: 0 1px 4px rgba(15,23,42,.09) !important;
+    overflow: hidden !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other {
+    display: grid !important;
+    gap: 8px !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card {
+    min-height: 112px !important;
+    border: 1px solid #e1e7ef !important;
+    border-radius: 10px !important;
+    background: #fff !important;
+    box-shadow: 0 1px 4px rgba(15,23,42,.07) !important;
+    overflow: hidden !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card:not(:disabled):hover {
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card[aria-pressed=true] {
+    background: #eef4fb !important;
+    border-color: var(--c-8bb4e6,#8bb4e6) !important;
+    box-shadow: inset 0 -3px 0 var(--c-173a5e,#173a5e) !important;
+  }
+}
