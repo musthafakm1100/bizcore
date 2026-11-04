@@ -4589,7 +4589,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=271.4.3-phase23';
+      s.src = 'js/app.js?v=271.5.14.1-badges';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4671,7 +4671,7 @@ console.log('BizCore Firebase ready ✅');
   // Runs after the main app; failure here should never block the app itself.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=228', { updateViaCache: 'none' }).catch(err => {
+      navigator.serviceWorker.register('sw.js?v=2715141', { updateViaCache: 'none' }).catch(err => {
         console.warn('Service worker registration failed:', err);
       });
     });
