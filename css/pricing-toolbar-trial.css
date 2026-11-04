@@ -1,0 +1,94 @@
+/* BizCore V271.5.16 — Pricing register desktop appearance trial ONLY.
+   Existing markup, events, filters, export, pagination and statuses remain untouched.
+   Theme-dependent surfaces use the existing theme-aware --c-* tokens. */
+@media (min-width: 761px) {
+  html body #page-costing .pricing-register-toolbar.bc-filterbar {
+    background: var(--c-edf5ff, #edf5ff) !important;
+    border: 1px solid var(--c-c9d9e8, #c9d9e8) !important;
+    border-radius: 9px !important;
+    box-shadow: 0 1px 2px rgba(24, 44, 75, .045) !important;
+    padding: 0 10px !important;
+    height: 48px !important;
+    min-height: 48px !important;
+    flex-wrap: nowrap !important;
+  }
+  html body #page-costing .pricing-register-toolbar .bc-filterbar-right {
+    flex-wrap: nowrap !important;
+    gap: 7px !important;
+  }
+  html body #page-costing .pricing-register-toolbar :is(
+    #pricing-sort, #pricing-customer-filter, #pricing-status-filter,
+    #pricing-doc-search, .bc-date .bc-date-trigger, .bc-date button.bc-date-btn
+  ) {
+    background: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 7px !important;
+    color: #334155 !important;
+    font-size: 13px !important;
+    font-weight: 400 !important;
+    box-shadow: none !important;
+  }
+  html body #page-costing .pricing-register-toolbar #pricing-doc-search::placeholder {
+    color: #8191a8 !important;
+  }
+  html body #page-costing .pricing-register-toolbar :is(
+    #pricing-sort, #pricing-customer-filter, #pricing-status-filter,
+    #pricing-doc-search, .bc-date .bc-date-trigger, .bc-date button.bc-date-btn
+  ):focus-visible {
+    outline: 2px solid var(--c-2e75b6, #2e75b6) !important;
+    outline-offset: 1px !important;
+  }
+  /* Two compact icon buttons, preserving their original onclick handlers. */
+  html body #page-costing .pricing-register-toolbar :is(
+    #pricing-clear-filters-btn, #pricing-export-excel-btn
+  ) {
+    flex: 0 0 34px !important;
+    width: 34px !important;
+    min-width: 34px !important;
+    max-width: 34px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 7px !important;
+    background: #f8fafc !important;
+    box-shadow: none !important;
+  }
+  html body #page-costing .pricing-register-toolbar :is(
+    #pricing-clear-filters-btn, #pricing-export-excel-btn
+  ) > span { display: none !important; }
+  html body #page-costing .pricing-register-toolbar :is(
+    #pricing-clear-filters-btn, #pricing-export-excel-btn
+  ) > i { margin: 0 !important; font-size: 17px !important; }
+  html body #page-costing .pricing-register-toolbar #pricing-clear-filters-btn > i {
+    color: var(--c-174b7a, #174b7a) !important;
+  }
+  html body #page-costing .pricing-register-toolbar #pricing-export-excel-btn .bc-xls-ico {
+    color: #15803d !important;
+  }
+  html body #page-costing .pricing-register-toolbar :is(
+    #pricing-clear-filters-btn, #pricing-export-excel-btn
+  ):hover:not(:disabled) {
+    background: var(--c-f0f6ff, #f0f6ff) !important;
+    border-color: var(--c-8bb4e6, #8bb4e6) !important;
+  }
+  /* Header color is a softer theme tint than the toolbar, not an extra grid. */
+  html body #page-costing .pricing-register-table thead th {
+    background: var(--c-eaf2f9, #eaf2f9) !important;
+    color: #475569 !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    height: 39px !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+    letter-spacing: 0.01em !important;
+  }
+  html body #page-costing .pricing-register-table thead th .sort-arrow,
+  html body #page-costing .pricing-register-table thead th .sort-indicator {
+    color: #94a3b8;
+  }
+}
