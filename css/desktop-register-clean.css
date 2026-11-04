@@ -117,3 +117,46 @@
     line-height: inherit;
   }
 }
+
+
+/* V271.5.13 — Pricing desktop register matches the existing Quotation register.
+   The Quotation row renderer uses 14px/400/#111827 for ordinary row text.
+   Scope intentionally excludes Pricing entry modal, all other registers,
+   monitor cards, filters, and all functional behavior. */
+@media (min-width: 761px) {
+  html body #page-costing .pricing-register-table thead th {
+    font-family: inherit !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    color: #536273 !important;
+    letter-spacing: .01em !important;
+    line-height: 1.2 !important;
+  }
+  html body #page-costing .pricing-register-table tbody td,
+  html body #page-costing .pricing-register-table tbody :is(
+    .pricing-doc-no,
+    .pricing-doc-customer,
+    .pricing-doc-muted,
+    .pricing-doc-profit,
+    .pricing-doc-margin,
+    .pricing-doc-link
+  ) {
+    font-family: inherit !important;
+    font-size: 14px !important;
+    font-weight: 400 !important;
+    color: #111827 !important;
+    line-height: 1.35 !important;
+  }
+  /* Ensure hover does not make quotation references theme-colored. */
+  html body #page-costing .pricing-register-table tbody .pricing-doc-link:hover {
+    color: #111827 !important;
+    text-decoration: underline;
+  }
+  /* Keep business-critical negative numbers visually distinguishable. */
+  html body #page-costing .pricing-register-table tbody :is(
+    .pricing-doc-profit.is-negative,
+    .pricing-doc-margin.is-negative
+  ) {
+    color: var(--red, #b42318) !important;
+  }
+}
