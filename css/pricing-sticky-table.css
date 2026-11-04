@@ -1,0 +1,113 @@
+/* BizCore V271.5.17 — Pricing-only pinned header & scrollable table.
+   Existing filters, ordering, paging, monitors, transactions remain unmodified. */
+@media (min-width:1101px) {
+  /* The application shell is already flex. Contain scrolling to Pricing rows,
+     rather than allowing records to move through monitor/toolbar gaps. */
+  html body .content:has(> #page-costing.active) {
+    min-height: 0 !important;
+    overflow: hidden !important;
+    padding-bottom: 8px !important;
+  }
+  html body #page-costing.active {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    background: var(--bc-page-bg, #f4f7fa);
+  }
+  html body #page-costing.active > .bc5-strip,
+  html body #page-costing.active > .bc5-note,
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip,
+  html body #page-costing.active .pricing-main-workspace > .bc5-note {
+    flex: 0 0 auto !important;
+    position: relative;
+    z-index: 2;
+  }
+  html body #page-costing.active .pricing-main-workspace {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    margin-top: 0 !important;
+    background: var(--bc-page-bg, #f4f7fa);
+  }
+  html body #page-costing.active .pricing-register-area {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    background: var(--bc-page-bg, #f4f7fa) !important;
+  }
+  html body #page-costing.active .pricing-register-toolbar {
+    position: relative !important;
+    top: auto !important;
+    flex: 0 0 48px !important;
+    z-index: 5 !important;
+    margin-bottom: 10px !important;
+  }
+  /* The 10px breathing room is an opaque surface, not an open reveal strip. */
+  html body #page-costing.active .pricing-register-card {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    background: #fff !important;
+    position: relative !important;
+    z-index: 2 !important;
+  }
+  html body #page-costing.active .pricing-register-table-wrap {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    background: #fff !important;
+    position: relative;
+  }
+  html body #page-costing.active .pricing-register-table {
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+  }
+  html body #page-costing.active .pricing-register-table thead th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 4 !important;
+    background: var(--c-eaf2f9, #eaf2f9) !important;
+    background-clip: padding-box !important;
+    box-shadow: 0 1px 0 #cbd5e1 !important;
+  }
+  html body #page-costing.active .pricing-register-card > .rows-per-page-bar {
+    flex: 0 0 auto !important;
+    background: #fff !important;
+    z-index: 2 !important;
+    border-top: 1px solid #e2e8f0;
+  }
+}
+/* The original tablet/mobile scroll implementation stays unchanged. */
+
+/* Clear Filters icon state is presentation-only. Existing clear action remains. */
+html body #page-costing .pricing-register-toolbar #pricing-clear-filters-btn:disabled,
+html body #page-costing .pricing-register-toolbar #pricing-clear-filters-btn.bc-clear-inactive {
+  opacity: .52 !important;
+  cursor: default !important;
+  background: #f8fafc !important;
+  border-color: #dce3ec !important;
+}
+html body #page-costing .pricing-register-toolbar #pricing-clear-filters-btn:disabled > i,
+html body #page-costing .pricing-register-toolbar #pricing-clear-filters-btn.bc-clear-inactive > i {
+  color: #94a3b8 !important;
+}
+html body #page-costing .pricing-register-toolbar #pricing-clear-filters-btn.bc-clear-active {
+  opacity: 1 !important;
+  background: var(--c-edf5ff, #edf5ff) !important;
+  border-color: var(--c-8bb4e6, #8bb4e6) !important;
+  cursor: pointer !important;
+}
+html body #page-costing .pricing-register-toolbar #pricing-clear-filters-btn.bc-clear-active > i {
+  color: var(--c-174b7a, #174b7a) !important;
+}
