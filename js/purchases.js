@@ -100,11 +100,11 @@ function piPayPill(pi){
   const C = piCore(), st = C.payStatusOf(pi), d = C.daysUntil(pi.dueDate, piToday());
   if (st === 'Paid') return '<span class="pi-pay paid">Paid</span>';
   const due = d === null ? '' : d < 0 ? ` · ${-d}d overdue` : d === 0 ? ' · due today' : ` · due ${piDate(pi.dueDate)}`;
-  return `<span class="pi-pay ${d !== null && d < 0 ? 'over' : 'open'}">${piEsc(st)}${due}</span>`;
+  return `<span class="pi-pay ${d !== null && d < 0 ? 'over' : st === 'Part paid' ? 'part' : 'open'}">${piEsc(st)}${due}</span>`;
 }
 /** Paid / Part paid / Unpaid pill (credit = nothing paid at entry). */
 function piStatusPill(st, credit){
-  return st === 'Paid' ? '<span class="pi-pay paid">Paid</span>' : st === 'Part paid' ? '<span class="pi-pay open">Part paid</span>' : `<span class="pi-pay open">${credit ? 'Unpaid (credit)' : 'Unpaid'}</span>`;
+  return st === 'Paid' ? '<span class="pi-pay paid">Paid</span>' : st === 'Part paid' ? '<span class="pi-pay part">Part paid</span>' : `<span class="pi-pay open">${credit ? 'Unpaid (credit)' : 'Unpaid'}</span>`;
 }
 function renderPurchaseRegister(){
   const lib = piLib(), body = document.getElementById('pireg-body'); if (!lib || !body) return;
@@ -120,7 +120,7 @@ function renderPurchaseRegister(){
   const scope = all.filter(p => (!sup || p.supplierName === sup) && (!ds.from || (p.date || '') >= ds.from) && (!ds.to || (p.date || '') <= ds.to)
     && (!q || [p.piNo, p.supplierName, p.supplierInvoiceNo, p.zohoBillNo, ...(p.lines || []).map(l => l.soNo), ...(p.lines || []).map(l => l.desc)].some(v => String(v || '').toLowerCase().includes(q))));
   const posted = scope.filter(p => p.status !== 'Voided');
-  const open = all.filter(p => p.status !== 'Voided' && C.payStatusOf(p) !== 'Paid');
+  const open = posted.filter(p => C.payStatusOf(p) !== 'Paid');
   const overdue = open.filter(p => { const d = C.daysUntil(p.dueDate, today); return d !== null && d < 0; });
   const soon = open.filter(p => { const d = C.daysUntil(p.dueDate, today); return d !== null && d >= 0 && d <= 7; });
   const setT = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };

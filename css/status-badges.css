@@ -55,3 +55,88 @@ html body .rct-pay-pill.part {background:var(--bc-badge-part-paid-bg)!important;
 
 /* Companion flag: keep both badges readable within the Sales Order status cell. */
 #page-salesorders #so-register-table tbody td .badge-so-to-invoice {margin-left:6px}
+
+
+/* V271.5.15 — ONE semantic visual system, covering existing register status
+   classes. No status names, calculations, sorting, or persistence changes. */
+:root {
+  --bc-badge-neutral-bg:#f1f5f9; --bc-badge-neutral-fg:#475569;
+  --bc-badge-info-bg:#e8f1ff; --bc-badge-info-fg:#245b9c;
+  --bc-badge-purple-bg:#f3e8ff; --bc-badge-purple-fg:#6b21a8;
+  --bc-badge-amber-bg:#fef3c7; --bc-badge-amber-fg:#92400e;
+  --bc-badge-warning-bg:#ffedd5; --bc-badge-warning-fg:#c2410c;
+  --bc-badge-danger-bg:#fee2e2; --bc-badge-danger-fg:#991b1b;
+  --bc-badge-rejected-bg:#fecaca; --bc-badge-rejected-fg:#7f1d1d;
+  --bc-badge-complete-bg:#dcfce7; --bc-badge-complete-fg:#166534;
+}
+/* Only status indicators, not counters, navigation badges, document note pills,
+   transaction-type labels, or product/item tags. */
+html body :is(.rct-pay-pill,.rct-status,.pi-pay,.pi-status.voided) {
+  display:inline-flex!important;align-items:center!important;justify-content:center;
+  vertical-align:middle;padding:4px 10px!important;border-radius:999px!important;
+  font-size:12px!important;font-weight:500!important;line-height:1.25!important;
+  white-space:nowrap;
+}
+/* Quotation lifecycle. */
+html body .badge.badge-draft {background:var(--bc-badge-neutral-bg)!important;color:var(--bc-badge-neutral-fg)!important}
+html body .badge.badge-sent {background:var(--bc-badge-info-bg)!important;color:var(--bc-badge-info-fg)!important}
+html body .badge.badge-won {background:var(--bc-badge-complete-bg)!important;color:var(--bc-badge-complete-fg)!important}
+html body .badge.badge-lost {background:var(--bc-badge-danger-bg)!important;color:var(--bc-badge-danger-fg)!important}
+html body .badge.badge-expired {background:var(--bc-badge-amber-bg)!important;color:var(--bc-badge-amber-fg)!important}
+html body .badge.badge-revised {background:var(--bc-badge-purple-bg)!important;color:var(--bc-badge-purple-fg)!important}
+html body .badge.badge-cancelled {background:var(--bc-badge-danger-bg)!important;color:var(--bc-badge-danger-fg)!important}
+/* RFQ lifecycle. */
+html body .badge.badge-rfq-new {background:var(--bc-badge-info-bg)!important;color:var(--bc-badge-info-fg)!important}
+html body .badge.badge-rfq-pricing {background:var(--bc-badge-amber-bg)!important;color:var(--bc-badge-amber-fg)!important}
+html body .badge.badge-rfq-quoted {background:var(--bc-badge-complete-bg)!important;color:var(--bc-badge-complete-fg)!important}
+html body .badge.badge-rfq-nobid {background:var(--bc-badge-neutral-bg)!important;color:var(--bc-badge-neutral-fg)!important}
+html body .badge.badge-rfq-overdue {background:var(--bc-badge-danger-bg)!important;color:var(--bc-badge-danger-fg)!important}
+/* Delivery Notes: in transit, completed, partial customer acceptance, rejected.
+   Keep distinct from Sales Order's Partially Delivered (amber). */
+html body :is(#page-deliverynotes,#page-customerinvoices,#page-receipts) .badge.badge-dn-awaiting,
+html body .badge.badge-dn-awaiting {background:var(--bc-badge-neutral-bg)!important;color:var(--bc-badge-neutral-fg)!important}
+html body :is(#page-deliverynotes,#page-customerinvoices,#page-receipts) .badge.badge-dn-confirmation,
+html body .badge.badge-dn-confirmation {background:var(--bc-badge-dispatched-bg)!important;color:var(--bc-badge-dispatched-fg)!important}
+html body :is(#page-deliverynotes,#page-customerinvoices,#page-receipts) .badge.badge-dn-delivered,
+html body .badge.badge-dn-delivered {background:var(--bc-badge-delivered-bg)!important;color:var(--bc-badge-delivered-fg)!important}
+html body :is(#page-deliverynotes,#page-customerinvoices,#page-receipts) .badge.badge-dn-partial,
+html body .badge.badge-dn-partial {background:var(--bc-badge-purple-bg)!important;color:var(--bc-badge-purple-fg)!important}
+html body :is(#page-deliverynotes,#page-customerinvoices,#page-receipts) .badge.badge-dn-rejected,
+html body .badge.badge-dn-rejected {background:var(--bc-badge-rejected-bg)!important;color:var(--bc-badge-rejected-fg)!important}
+/* Customer invoice issuance / credit actions: financial payment status is a
+   separate adjacent indicator and must not be recolored as issuance status. */
+html body .badge.inv-badge-issued {background:var(--bc-badge-info-bg)!important;color:var(--bc-badge-info-fg)!important}
+html body .badge.inv-badge-partcredit {background:var(--bc-badge-amber-bg)!important;color:var(--bc-badge-amber-fg)!important}
+html body .badge:is(.inv-badge-credited,.inv-badge-credit) {background:var(--bc-badge-danger-bg)!important;color:var(--bc-badge-danger-fg)!important}
+/* Customer invoice payment and receipt application pills. */
+html body .rct-pay-pill.paid {background:var(--bc-badge-paid-bg)!important;color:var(--bc-badge-paid-fg)!important}
+html body .rct-pay-pill.part {background:var(--bc-badge-part-paid-bg)!important;color:var(--bc-badge-part-paid-fg)!important}
+html body .rct-pay-pill.unpaid {background:var(--bc-badge-neutral-bg)!important;color:var(--bc-badge-neutral-fg)!important}
+html body .rct-pay-pill.overdue {background:var(--bc-badge-danger-bg)!important;color:var(--bc-badge-danger-fg)!important}
+html body .rct-pay-pill.over {background:var(--bc-badge-purple-bg)!important;color:var(--bc-badge-purple-fg)!important}
+html body .rct-pay-pill.credited {background:var(--bc-badge-neutral-bg)!important;color:var(--bc-badge-neutral-fg)!important}
+html body .rct-status.posted {background:var(--bc-badge-delivered-bg)!important;color:var(--bc-badge-delivered-fg)!important}
+html body .rct-status.voided {background:var(--bc-badge-danger-bg)!important;color:var(--bc-badge-danger-fg)!important}
+/* Supplier invoices/payments; distinguish part paid visually from unpaid.
+   The 'part' class is added by existing display-only rendering in purchases.js. */
+html body .pi-pay.paid {background:var(--bc-badge-paid-bg)!important;color:var(--bc-badge-paid-fg)!important}
+html body .pi-pay.part {background:var(--bc-badge-part-paid-bg)!important;color:var(--bc-badge-part-paid-fg)!important}
+html body .pi-pay.open {background:var(--bc-badge-amber-bg)!important;color:var(--bc-badge-amber-fg)!important}
+html body .pi-pay.over {background:var(--bc-badge-danger-bg)!important;color:var(--bc-badge-danger-fg)!important}
+html body .pi-status.voided {background:var(--bc-badge-danger-bg)!important;color:var(--bc-badge-danger-fg)!important}
+/* Delivery acceptance summaries displayed as status chips in registers. */
+html body :is(#page-deliverynotes,#page-customerinvoices,#page-receipts) .dn-reg-result b,
+html body :is(#page-deliverynotes,#page-customerinvoices,#page-receipts) .dn-reg-pending {
+  display:inline-flex;align-items:center;border-radius:999px;
+  font-size:12px!important;font-weight:500!important;padding:4px 10px!important;line-height:1.25!important;
+}
+html body :is(#page-deliverynotes,#page-customerinvoices,#page-receipts) .dn-reg-result .ok {background:var(--bc-badge-complete-bg)!important;color:var(--bc-badge-complete-fg)!important}
+html body :is(#page-deliverynotes,#page-customerinvoices,#page-receipts) .dn-reg-result .warn {background:var(--bc-badge-amber-bg)!important;color:var(--bc-badge-amber-fg)!important}
+html body :is(#page-deliverynotes,#page-customerinvoices,#page-receipts) .dn-reg-result .bad {background:var(--bc-badge-danger-bg)!important;color:var(--bc-badge-danger-fg)!important}
+
+/* Unapplied receipt funds are pending allocation, not a payment-completion state. */
+html body .rct-pay-pill.unapplied {background:var(--bc-badge-amber-bg)!important;color:var(--bc-badge-amber-fg)!important}
+
+/* V271.5.15.1 — cancelled/voided share soft red, rejected is deeper red. */
+html body :is(.badge.badge-voided,.badge.badge-void,.badge.badge-canceled,.badge.badge-cancelled,.badge.badge-dn-voided,.badge.badge-dn-cancelled,.rct-status.voided,.pi-status.voided) {background:var(--bc-badge-danger-bg)!important;color:var(--bc-badge-danger-fg)!important}
+html body :is(.badge.badge-rejected,.badge.badge-dn-rejected) {background:var(--bc-badge-rejected-bg)!important;color:var(--bc-badge-rejected-fg)!important}

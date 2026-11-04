@@ -197,7 +197,7 @@ function renderReceiptRegister(){
     const a = r.allocations || [];
     if (r.status === 'Voided') return '<span class="rct-muted">— released —</span>';
     const shown = a.slice(0, 2).map(x => `<span class="rct-chip">${rctEsc(x.invNo)}</span>`).join('') + (a.length > 2 ? `<span class="rct-chip">+${a.length - 2}</span>` : '');
-    return shown + (rctNum(r.unapplied) > 0.005 ? ` <span class="rct-pay-pill part">${rctF(r.unapplied)} unapplied</span>` : '') || '<span class="rct-muted">—</span>';
+    return shown + (rctNum(r.unapplied) > 0.005 ? ` <span class="rct-pay-pill unapplied">${rctF(r.unapplied)} unapplied</span>` : '') || '<span class="rct-muted">—</span>';
   };
   const status = r => r.status === 'Voided' ? '<span class="rct-status voided">Voided</span>' : '<span class="rct-status posted">Posted</span>';
   const open = r => `openReceiptView('${rctEsc(r.id)}')`;
@@ -208,7 +208,7 @@ function renderReceiptRegister(){
   const cards = document.getElementById('rctreg-cards');
   if (cards) cards.innerHTML = rows.length ? rows.map(r => {
     const v = r.status === 'Voided', n = (r.allocations || []).length;
-    const pill = v ? '<span class="rct-status voided">Voided</span>' : rctNum(r.unapplied) > 0.005 ? `<span class="rct-pay-pill part">${rctF(r.unapplied)} unapplied</span>` : '<span class="rct-status posted">Posted</span>';
+    const pill = v ? '<span class="rct-status voided">Voided</span>' : rctNum(r.unapplied) > 0.005 ? `<span class="rct-pay-pill unapplied">${rctF(r.unapplied)} unapplied</span>` : '<span class="rct-status posted">Posted</span>';
     return `<article class="rct-card${v ? ' voided' : ''}" role="button" tabindex="0" onclick="${open(r)}"><div class="r1"><b>${rctEsc(r.rctNo)}</b>${pill}</div><div class="r2">${rctEsc(r.customer || '—')}</div>
       <div class="r3"><span>${rctShortDate(r.date)} · ${rctEsc(r.method)}${n ? ` · ${n} invoice${n === 1 ? '' : 's'}` : ''}</span><span class="amt">${v ? '<s>' + rctF(r.amount) + '</s>' : rctF(r.amount)}</span></div></article>`;
   }).join('') : '<div class="rct-empty">No receipts found</div>';
