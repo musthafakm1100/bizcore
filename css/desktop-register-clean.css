@@ -88,3 +88,32 @@
     font-weight: 400 !important;
   }
 }
+
+
+/* V271.5.12 — Pricing register typography correction (desktop only).
+   Matches the agreed 13px regular body / 12px medium header standard.
+   No layout, status, data, or interaction changes. */
+@media (min-width: 761px) {
+  html body #page-costing .pricing-register-table thead th {
+    font-size: 12px !important;
+    font-weight: 500 !important;
+  }
+  html body #page-costing .pricing-register-table tbody td {
+    font-size: 13px !important;
+    font-weight: 400 !important;
+  }
+  html body #page-costing .pricing-register-table tbody :is(
+    .pricing-doc-no,
+    .pricing-doc-customer,
+    .pricing-doc-profit,
+    .pricing-doc-margin,
+    .pricing-doc-link
+  ) {
+    font-size: 13px !important;
+    font-weight: 400 !important;
+  }
+  html body #page-costing .pricing-register-table tbody .pricing-doc-link {
+    font-family: inherit !important;
+    line-height: inherit;
+  }
+}
