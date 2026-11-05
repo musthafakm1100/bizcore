@@ -196,3 +196,121 @@
 @media (min-width:1101px){html body .bc5-strip .bc5-card:nth-child(2){--bc-ui-icon-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%2022V4m0%201c5-3%207%203%2012%200v12c-5%203-7-3-12%200%22%2F%3E%3C%2Fsvg%3E");}}
 @media (min-width:1101px){html body .bc5-strip .bc5-card:nth-child(3){--bc-ui-icon-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M14%202H6a2%202%200%200%200-2%202v16a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8Z%22%2F%3E%3Cpath%20d%3D%22M14%202v6h6M8%2015l3%203%205-6%22%2F%3E%3C%2Fsvg%3E");}}
 @media (min-width:1101px){html body .bc5-strip .bc5-card:nth-child(4){--bc-ui-icon-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m10.3%203.4-8.8%2015A2%202%200%200%200%203.2%2021h17.6a2%202%200%200%200%201.7-2.6l-8.8-15a2%202%200%200%200-3.4%200Z%22%2F%3E%3Cpath%20d%3D%22M12%209v4M12%2017h.01%22%2F%3E%3C%2Fsvg%3E");}}
+
+
+/* V271.5.21 — Unified desktop register scroll and header corrections.
+   Pricing V271.5.19 is the visual reference.  This block intentionally
+   controls presentation only; document rendering, filters, and data remain
+   owned by their existing modules.
+   Important: older register-standard.css uses #page-* #*-table (two IDs)
+   to assign top:48px to THs.  Override that specificity here. */
+@media (min-width:1101px) {
+  /* Reuse the same bounded workspace as Pricing for RFQ.  All rows, not
+     the overview/toolbar, are the scrolling element. */
+  html body .content:has(> #page-rfq.active) {
+    min-height:0!important; overflow:hidden!important; padding-bottom:8px!important;
+  }
+  html body #page-rfq.active {
+    display:flex!important;flex-direction:column!important;height:100%!important;
+    min-height:0!important;overflow:hidden!important;
+    background:var(--bc-page-bg,#f4f7fa)!important;
+  }
+  html body #page-rfq.active .rfq-main-workspace {
+    display:flex!important;flex-direction:column!important;align-items:stretch!important;
+    flex:1 1 auto!important;min-height:0!important;width:100%!important;
+    overflow:hidden!important;gap:0!important;
+    background:var(--bc-page-bg,#f4f7fa)!important;
+  }
+  html body #page-rfq.active .rfq-main-workspace>.bc5-strip,
+  html body #page-rfq.active .rfq-main-workspace>.bc5-note {
+    flex:0 0 auto!important;align-self:stretch!important;width:100%!important;
+    max-width:100%!important;box-sizing:border-box!important;
+  }
+  html body #page-rfq.active .rfq-main-workspace>.bc5-note {margin-bottom:4px!important;}
+  html body #page-rfq.active .rfq-register-area {
+    display:flex!important;flex-direction:column!important;flex:1 1 auto!important;
+    min-height:0!important;overflow:hidden!important;width:100%!important;
+    background:var(--bc-page-bg,#f4f7fa)!important;
+  }
+  /* Each toolbar is fixed in its page's vertical layout.  The 5px space
+     belongs to the opaque parent, not to transparent scrolling rows. */
+  html body :is(#page-rfq,#page-quotations,#page-salesorders,#page-deliverynotes,
+                #page-customerinvoices,#page-receipts,#page-purchaseinvoices,
+                #page-supplierpayments,#page-stock).active .bc-filterbar {
+    flex:0 0 var(--bc-ui-toolbar-height)!important;min-height:var(--bc-ui-toolbar-height)!important;
+    position:relative!important;top:auto!important;z-index:8!important;
+    margin-top:0!important;margin-bottom:var(--bc-ui-panel-gap)!important;
+  }
+  /* RFQ list is dynamically rebuilt; scroll its stable parent, so sorting
+     and pagination never remove or replace the scrolling container. */
+  html body #page-rfq.active #rfq-list {
+    flex:1 1 auto!important;min-height:0!important;width:100%!important;
+    overflow-y:auto!important;overflow-x:auto!important;position:relative!important;
+    border:1px solid var(--bc-ui-card-border)!important;
+    border-radius:var(--bc-ui-card-radius)!important;
+    background:#fff!important;overscroll-behavior:contain;
+    scrollbar-gutter:stable;
+  }
+  html body #page-rfq.active #rfq-list>.rfq-register {
+    background:#fff!important;overflow:visible!important;
+    border:0!important;border-radius:0!important;
+  }
+  html body #page-rfq.active #rfq-list .rfq-register table {
+    width:100%!important;border-collapse:separate!important;border-spacing:0!important;
+  }
+  html body #page-rfq.active #rfq-list .rfq-register thead th {
+    position:sticky!important;top:0!important;z-index:7!important;
+    background:var(--c-eaf2f9,#eaf2f9)!important;
+    color:var(--bc-ui-header-text)!important;font-size:var(--bc-ui-header-size)!important;
+    font-weight:var(--bc-ui-header-weight)!important;
+    box-shadow:0 1px 0 #cbd5e1!important;background-clip:padding-box!important;
+  }
+  html body #page-rfq.active>.rfq-main-workspace .rows-per-page-bar {
+    flex:0 0 auto!important;background:#fff!important;z-index:3!important;
+  }
+
+  /* Shared card chrome: visible 5px separation from the toolbar, and rounded
+     corners around the opaque table viewport (not around individual rows). */
+  html body :is(#page-quotations,#page-salesorders,#page-deliverynotes,
+                #page-customerinvoices,#page-receipts,#page-purchaseinvoices,
+                #page-supplierpayments,#page-stock).active
+    :is(.quotation-register-card,.so-register-card,.dn-register-card) {
+    border:1px solid var(--bc-ui-card-border)!important;
+    border-radius:var(--bc-ui-card-radius)!important;
+    overflow:hidden!important;background:#fff!important;
+    position:relative!important;z-index:2!important;
+  }
+  html body :is(#page-quotations,#page-salesorders,#page-deliverynotes,
+                #page-customerinvoices,#page-receipts,#page-purchaseinvoices,
+                #page-supplierpayments,#page-stock).active
+    :is(.quotation-table-scroll,.so-table-scroll,.dn-table-scroll) {
+    min-height:0!important;overflow-y:auto!important;overflow-x:auto!important;
+    background:#fff!important;position:relative!important;overscroll-behavior:contain;
+  }
+  /* Override the legacy top:48px rule, which created visible records above
+     the header and caused sticky headers to be pushed down while scrolling. */
+  html body #page-quotations.active #quotes-table thead th,
+  html body #page-salesorders.active #so-register-table thead th,
+  html body #page-deliverynotes.active #dn-register-table thead th,
+  html body #page-customerinvoices.active #dn-register-table thead th,
+  html body #page-receipts.active #dn-register-table thead th,
+  html body #page-purchaseinvoices.active #dn-register-table thead th,
+  html body #page-supplierpayments.active #dn-register-table thead th,
+  html body #page-stock.active #dn-register-table thead th {
+    position:sticky!important;top:0!important;z-index:7!important;
+    background:var(--c-eaf2f9,#eaf2f9)!important;
+    color:var(--bc-ui-header-text)!important;
+    font-size:var(--bc-ui-header-size)!important;
+    font-weight:var(--bc-ui-header-weight)!important;
+    box-shadow:0 1px 0 #cbd5e1!important;background-clip:padding-box!important;
+  }
+  html body #page-quotations.active #quotes-table {
+    border-collapse:separate!important;border-spacing:0!important;
+  }
+  /* Keep the visually approved neutral Sort By field when not focused. */
+  html body :is(#page-rfq,#page-quotations).active .bc-filterbar .bc-filter:not(:focus-visible) {
+    background:var(--bc-ui-input-background)!important;
+    color:var(--bc-ui-input-text)!important;
+    border-color:var(--bc-ui-input-border)!important;
+  }
+}
