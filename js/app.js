@@ -11410,8 +11410,19 @@ function soRenderTiles(scope,open){
   set('so-t-ofd-n',ofd.length); set('so-t-ofd-v',money(v.ofd));
   set('so-t-part-n',part.length); set('so-t-part-v',money(v.part));
   set('so-t-inv-n',inv.length); set('so-t-inv-v',money(v.inv));
-  const max=Math.max(v.conf,v.ofd,v.part,v.inv,0.01);
-  [['so-t-conf-bar',v.conf],['so-t-ofd-bar',v.ofd],['so-t-part-bar',v.part],['so-t-inv-bar',v.inv]].forEach(([id,x])=>{const e=document.getElementById(id); if(e) e.style.width=(x>0?Math.max(4,Math.round(x/max*100)):0)+'%';});
+  // Count-based monitor bars: all four tiles use the same order scope as denominator.
+  // 'To invoice' may overlap a delivery status; that is intentional and does not
+  // imply the bars must add to 100%. Amounts above remain independently calculated.
+  const totalOrders=scope.length;
+  [['so-t-conf-bar',conf.length],['so-t-ofd-bar',ofd.length],
+   ['so-t-part-bar',part.length],['so-t-inv-bar',inv.length]].forEach(([id,count])=>{
+    const e=document.getElementById(id);if(!e)return;
+    const percentage=totalOrders>0?Math.min(100,100*count/totalOrders):0;
+    e.style.width=percentage+'%';
+    const track=e.parentElement;
+    if(track){track.title=totalOrders?`${count} of ${totalOrders} orders (${percentage.toFixed(1)}%)`:'No orders';
+      track.setAttribute('aria-label',track.title);}
+  });
   set('so-m-deliver',conf.length+part.length); set('so-m-conf',conf.length); set('so-m-ofd',ofd.length); set('so-m-part',part.length); set('so-m-inv',inv.length);
   document.querySelector('#page-salesorders .so-tile-hot')?.classList.toggle('so-tile-zero',!inv.length);
 }

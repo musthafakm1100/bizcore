@@ -31,6 +31,40 @@ const financeAmounts={
  supplierpayments:{'Payments':'bc5-sp-payments','Fully Applied':'bc5-sp-full-amount','Partially Applied':'bc5-sp-partial-amount','Unapplied':'bc5-sp-unapplied-amount','Advances':'spreg-a-open'}
 };
 const moneyText=id=>{const v=readText(id);return v==='—'?'—':`SAR ${v}`};
+// Monitor bars represent record counts, not money and never a decorative percentage.
+// Denominators are sourced from existing in-memory register KPI elements only.
+const monitorTotalIds={
+ rfq:'rfq-k-total',costing:'pricing-doc-k-total',quotations:'quote-kpi-all',
+ deliverynotes:'dn-k-total',receipts:'rctreg-k-total',
+ purchaseinvoices:'pireg-k-total',supplierpayments:'spreg-k-total'
+};
+function monitorBarDenominator(cfg){
+ if(cfg.page==='customerinvoices'){
+  // Excludes credit notes: the four payment-status cards classify invoice records.
+  // These payment statuses are mutually exclusive in the existing invoice register.
+  const ids=['invreg-k-pay-unpaid','invreg-k-pay-partial','invreg-k-pay-paid','invreg-k-pay-overdue'];
+  const counts=ids.map(readNumber);
+  return counts.every(v=>v!==null)?counts.reduce((a,b)=>a+b,0):null;
+ }
+ return readNumber(monitorTotalIds[cfg.page]);
+}
+function updateMonitorBars(cfg,strip){
+ const total=monitorBarDenominator(cfg);
+ for(const card of strip.querySelectorAll('.bc5-card')){
+  const count=readNumber(card.dataset.metric);
+  const bar=card.querySelector('.bc5-bar i');
+  if(!bar)continue;
+  const valid=total!==null && total>0 && count!==null && !card.disabled;
+  const percent=valid?Math.max(0,Math.min(100,100*count/total)):0;
+  bar.style.width=`${percent}%`;
+  const track=bar.parentElement;
+  const caption=valid?`${count} of ${total} records (${percent.toFixed(1)}%)`:
+   (count===null?'Metric not yet available':total===0?'No records':'No count-based denominator available');
+  track.title=caption;
+  track.setAttribute('aria-label',caption);
+ }
+}
+
 const filterFunctions={rfq:(key)=>window.applyRFQMonitorFilter?.(key),costing:(key)=>window.filterPricingDocuments?.(key,$('pricing-doc-f-'+(key==='Saved'?'saved':key==='Converted'?'converted':'all'))),quotations:(key)=>window.setQuotationMonitorFilter?.(key==='all'?'':key),deliverynotes:(key)=>window.filterDNKPI?.(key),customerinvoices:(key)=>window.filterInvoiceKPI?.(key),receipts:(key)=>window.filterReceiptKPI?.(key),purchaseinvoices:(key)=>window.filterPurchaseKPI?.(key),supplierpayments:(key)=>window.filterSupplierPaymentKPI?.(key)};
 const leadValue=(cfg)=>{
  if(cfg.page==='costing'){
@@ -79,6 +113,7 @@ function install(){
       tile.querySelector('.bc5-number').textContent=tile===lead?leadValue(cfg):displayValue(id);
       if(tile.classList.contains('bc5-financial')){const amount=tile.dataset.amountMetric;tile.querySelector('.bc5-description').textContent=amount?moneyText(amount)+(tile.dataset.metric==='spreg-a-open'?' available':''):'Amount breakdown pending';}
     }
+    updateMonitorBars(cfg,strip);
     if(cfg.page==='rfq'){
       const total=readText('rfq-k-total'),avg=readText('rfq-k-avg');
       lead.querySelector('.bc5-description').textContent=`${leadValue(cfg)} open / ${total} RFQs · Avg age ${avg}`;
@@ -112,6 +147,8 @@ function install(){
   if(cfg.page==='costing')sources.push('pricing-doc-k-total');
   if(cfg.page==='quotations')sources.push('quote-kpi-all','quote-kpi-draft','quote-kpi-sent');
   if(cfg.page==='rfq')sources.push('rfq-k-total','rfq-k-avg');
+  if(cfg.page==='customerinvoices')sources.push('invreg-k-pay-unpaid','invreg-k-pay-partial','invreg-k-pay-paid','invreg-k-pay-overdue');
+  if(monitorTotalIds[cfg.page])sources.push(monitorTotalIds[cfg.page]);
   sources.push(...Object.values(financeAmounts[cfg.page]||{}).filter(Boolean));
   let queued=false;
   const schedule=()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;refresh()})};

@@ -8,7 +8,7 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v271524-ui';
+const CACHE_NAME = 'bizcore-shell-v271525-bars';
 const APP_SHELL = [
   './login.html',
   './delivery.html',
@@ -22,6 +22,8 @@ const APP_SHELL = [
   './css/stock-ui-standard.css?v=271.5.23',
   './css/bizcore-ui-audit.css?v=271.5.24',
   './js/stock-monitor-ui.js?v=271.5.23',
+  './js/phase5a-monitors.js?v=271.5.25',
+  './css/phase5a-monitors.css?v=271.5.25',
   './js/pricing-filter-visual.js?v=271.5.17',
   './css/bizcore-design.css?v=266.5',
   './css/typography.css?v=215',
@@ -63,7 +65,7 @@ const APP_SHELL = [
   './js/master-service.mjs?v=270.55',
   './js/ui-standard.js?v=269.1',
   './js/responsive.js?v=270.47',
-  './js/app.js?v=271.5.14.1-badges',
+  './js/app.js?v=271.5.25-bars',
   './js/estimate.js?v=271.3',
   './js/jobs.js?v=271.5.23',
   './js/job-cost-core.mjs?v=271.32',

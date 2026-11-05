@@ -76,7 +76,7 @@ button,.btn{font-size:14px!important;font-weight:600!important;}
 .doc-display-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.doc-display-panel{border:1px solid var(--border);border-radius:9px;padding:14px;background:#fff}.doc-display-panel h4{margin:0 0 4px;font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px}.doc-display-panel p{margin:0 0 12px;font-size:10px;color:var(--gray)}.doc-display-fields{display:grid;grid-template-columns:1fr 1fr;gap:7px 10px}.doc-display-check{display:flex;align-items:center;gap:7px;padding:7px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:11px;color:#334155;background:#f8fafc;cursor:pointer}.doc-display-check input{margin:0;accent-color:var(--c-174b7a)}@media(max-width:850px){.doc-display-grid{grid-template-columns:1fr}.doc-display-fields{grid-template-columns:1fr}}
 .bp-header-details{margin-top:7px;font-size:8px;line-height:1.45;color:#52687b}.bp-empty-note{color:#94a3b8;font-style:italic}.bp-footer{line-height:1.45}
 </style>
-<link rel="stylesheet" href="css/phase5a-monitors.css?v=271.5.3"/>
+<link rel="stylesheet" href="css/phase5a-monitors.css?v=271.5.25"/>
 <link rel="stylesheet" href="css/pricing-toolbar-trial.css?v=271.5.16"/>
 <link rel="stylesheet" href="css/pricing-sticky-table.css?v=271.5.19"/>
 <link rel="stylesheet" href="css/bizcore-ui-global.css?v=271.5.21"/>
@@ -4596,7 +4596,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=271.5.14.1-badges';
+      s.src = 'js/app.js?v=271.5.25-bars';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4780,7 +4780,7 @@ console.log('BizCore Firebase ready ✅');
   <span id="bc5-pi-overdue">—</span>
   <span id="bc5-sp-payments">—</span>
 </div>
-<script defer src="js/phase5a-monitors.js?v=271.5.23"></script>
+<script defer src="js/phase5a-monitors.js?v=271.5.25"></script>
 <script defer src="js/stock-monitor-ui.js?v=271.5.23"></script>
 </body>
 </html>

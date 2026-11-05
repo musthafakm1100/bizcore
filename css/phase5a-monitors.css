@@ -19,7 +19,7 @@ html body :is(#page-rfq,#page-costing,#page-quotations,#page-deliverynotes,#page
 .bc5-card .bc5-number{font-size:22px;line-height:1.1;font-weight:700;color:#0f172a}
 .bc5-card .bc5-description{font-size:11.5px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
 .bc5-bar{height:5px;background:#eef2f6;border-radius:3px;overflow:hidden;margin-top:auto;display:block}
-.bc5-bar i{display:block;height:100%;width:38%;background:#3b82f6;border-radius:3px}
+.bc5-bar i{display:block;height:100%;width:0;background:#3b82f6;border-radius:3px;transition:width .2s ease}
 .bc5-card[data-tone=green] .bc5-bar i{background:#22c55e}
 .bc5-card[data-tone=amber] .bc5-bar i{background:#f59e0b}
 .bc5-card[data-tone=red] .bc5-bar i{background:#ef4444}
@@ -77,3 +77,11 @@ html body .bc5-strip>.bc5-lead .bc5-description {color:#fff!important;}
 /* V271.5.3: financial subtitles display the actual amount without increasing the monitor height. */
 .bc5-card.bc5-financial .bc5-description{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;margin-top:4px}
 .bc5-card.bc5-financial .bc5-bar{margin-top:auto}
+
+/* V271.5.25: Payment statuses use the global semantic colors; fill width is computed from record counts. */
+.bc5-strip[aria-label="customerinvoices status summary"] .bc5-card[data-filter="pay-unpaid"] .bc5-bar i,
+.bc5-strip[aria-label="purchaseinvoices status summary"] .bc5-card[data-filter="pay-unpaid"] .bc5-bar i{background:#3b82f6}
+.bc5-strip[aria-label="customerinvoices status summary"] .bc5-card[data-filter="pay-partial"] .bc5-bar i,
+.bc5-strip[aria-label="purchaseinvoices status summary"] .bc5-card[data-filter="pay-partial"] .bc5-bar i{background:#4ade80}
+.bc5-strip[aria-label="customerinvoices status summary"] .bc5-card[data-filter="pay-paid"] .bc5-bar i,
+.bc5-strip[aria-label="purchaseinvoices status summary"] .bc5-card[data-filter="pay-paid"] .bc5-bar i{background:#166534}
