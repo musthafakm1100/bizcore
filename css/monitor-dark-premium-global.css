@@ -114,3 +114,127 @@
  html body #page-jobs.active .jb-monitor>.jb-monitor-tile:nth-child(4){--pm-icon-bg:var(--bc-monitor-icon-green-bg);--pm-icon-fg:var(--bc-monitor-icon-green);}
  html body #page-jobs.active .jb-monitor>.jb-monitor-tile:nth-child(5){--pm-icon-bg:var(--bc-monitor-icon-amber-bg);--pm-icon-fg:var(--bc-monitor-icon-amber);}
 }
+
+
+/* V271.5.29 — full-card semantic palette, Sales Order icons and Quotation alignment.
+   Pricing's approved monitor palette remains untouched. Keep the shared monitor
+   counts, amounts, click behavior and progress widths unchanged. */
+:root {
+ --bc-premium-amber-start:#594126; --bc-premium-amber-end:#30231c;
+ --bc-premium-slate-start:#38334f; --bc-premium-slate-end:#222037;
+}
+@media (min-width:1101px) {
+ /* These colors represent business statuses rather than the card's ordinal position.
+    This is shared by RFQ, Quotations, Delivery Notes, Invoice and Payment registers and Stock. */
+ html body #page-rfq.active .bc5-other>.bc5-card[data-tone="amber"],
+ html body .bc5-strip>.bc5-other>.bc5-card[data-tone="amber"] {
+   --pm-start:var(--bc-premium-amber-start);--pm-end:var(--bc-premium-amber-end);
+ }
+ html body .bc5-strip>.bc5-other>.bc5-card[data-tone="blue"] {
+   --pm-start:var(--bc-premium-navy-start);--pm-end:var(--bc-premium-navy-end);
+ }
+ html body .bc5-strip>.bc5-other>.bc5-card[data-tone="slate"] {
+   --pm-start:var(--bc-premium-slate-start);--pm-end:var(--bc-premium-slate-end);
+ }
+ html body .bc5-strip>.bc5-other>.bc5-card[data-tone="purple"] {
+   --pm-start:var(--bc-premium-purple-start);--pm-end:var(--bc-premium-purple-end);
+ }
+ html body .bc5-strip>.bc5-other>.bc5-card[data-tone="green"] {
+   --pm-start:var(--bc-premium-teal-start);--pm-end:var(--bc-premium-teal-end);
+ }
+ html body .bc5-strip>.bc5-other>.bc5-card[data-tone="red"] {
+   --pm-start:var(--bc-premium-burgundy-start);--pm-end:var(--bc-premium-burgundy-end);
+ }
+ /* Keep existing business status distinctions when the data-tone is generic. */
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="pay-unpaid"],
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="payment"] {
+   --pm-start:var(--bc-premium-navy-start);--pm-end:var(--bc-premium-navy-end);
+ }
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="pay-partial"],
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="partially-allocated"],
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="partially-applied"] {
+   --pm-start:var(--bc-premium-purple-start);--pm-end:var(--bc-premium-purple-end);
+ }
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="pay-paid"],
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="fully-allocated"],
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="fully-applied"] {
+   --pm-start:var(--bc-premium-teal-start);--pm-end:var(--bc-premium-teal-end);
+ }
+ html body #st-visual-strip>.bc5-other>.bc5-card[data-stock-filter="in"] {
+   --pm-start:var(--bc-premium-teal-start);--pm-end:var(--bc-premium-teal-end);
+ }
+ /* Financial partial payment uses the approved light-green icon, not a purple icon. */
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="pay-partial"] {
+   --pm-icon-bg:var(--bc-monitor-icon-lightgreen-bg);--pm-icon-fg:var(--bc-monitor-icon-lightgreen);
+ }
+ /* Quotation: title, explanation and SAR amount form one left-aligned content column.
+    Keep the count at the far right, as on Pricing. */
+ html body #page-quotations.active .bc5-strip>.bc5-other>.bc5-card {
+   text-align:left!important;align-items:stretch!important;
+ }
+ html body #page-quotations.active .bc5-strip>.bc5-other>.bc5-card .bc5-card-header {
+   display:flex!important;align-items:center!important;justify-content:space-between!important;
+   min-height:36px!important;gap:8px!important;
+ }
+ html body #page-quotations.active .bc5-strip>.bc5-other>.bc5-card .bc5-card-header .bc5-label {
+   flex:1 1 auto!important;min-width:0!important;text-align:left!important;
+   padding-left:42px!important;
+ }
+ html body #page-quotations.active .bc5-strip>.bc5-other>.bc5-card .bc5-card-header .bc5-number {
+   margin-left:auto!important;flex:0 0 auto!important;text-align:right!important;
+ }
+ html body #page-quotations.active .bc5-strip>.bc5-other>.bc5-card .bc5-description,
+ html body #page-quotations.active .bc5-strip>.bc5-other>.bc5-card .bc5-sar-amount {
+   box-sizing:border-box!important;padding-left:42px!important;margin-left:0!important;
+   text-align:left!important;max-width:100%!important;white-space:nowrap!important;
+   overflow:hidden!important;text-overflow:ellipsis!important;
+ }
+ /* Sales Orders uses a separate monitor. Icons are real accessible-hidden SVG markup.
+    Arrange the title/amount/detail column beside the icon without increasing card height. */
+ html body #page-salesorders.active .so-tile-grid>.so-tile {
+   display:grid!important;grid-template-columns:34px minmax(0,1fr)!important;
+   grid-template-rows:auto auto auto 1fr auto!important;
+   column-gap:10px!important;align-content:start!important;
+   --so-badge-bg:var(--bc-monitor-icon-blue-bg);
+   --so-badge-color:var(--bc-monitor-icon-blue);
+ }
+ html body #page-salesorders.active .so-tile-grid>.so-tile[data-tone="amber"] {
+   --so-badge-bg:var(--bc-monitor-icon-amber-bg);--so-badge-color:var(--bc-monitor-icon-amber);
+ }
+ html body #page-salesorders.active .so-tile-grid>.so-tile[data-tone="purple"] {
+   --so-badge-bg:var(--bc-monitor-icon-purple-bg);--so-badge-color:var(--bc-monitor-icon-purple);
+ }
+ html body #page-salesorders.active .so-tile-grid>.so-tile[data-tone="orange"] {
+   --so-badge-bg:var(--bc-monitor-icon-red-bg);--so-badge-color:var(--bc-monitor-icon-red);
+ }
+ html body #page-salesorders.active .so-tile-grid>.so-tile .so-tile-icon {
+   display:flex!important;grid-column:1!important;grid-row:1 / span 3!important;
+   width:34px!important;height:34px!important;border-radius:9px!important;
+   justify-content:center!important;align-items:center!important;
+   background:var(--so-badge-bg)!important;color:var(--so-badge-color)!important;
+ }
+ html body #page-salesorders.active .so-tile-grid>.so-tile .so-tile-icon svg {
+   width:20px!important;height:20px!important;display:block!important;
+   fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;
+ }
+ html body #page-salesorders.active .so-tile-grid>.so-tile .so-tile-t {
+   grid-column:2!important;grid-row:1!important;min-width:0!important;
+   display:flex!important;align-items:center!important;gap:6px!important;
+ }
+ html body #page-salesorders.active .so-tile-grid>.so-tile .so-tile-t>span {
+   min-width:0!important;flex:1 1 auto!important;
+ }
+ html body #page-salesorders.active .so-tile-grid>.so-tile .so-tile-t>b {
+   margin-left:auto!important;flex:0 0 auto!important;
+ }
+ html body #page-salesorders.active .so-tile-grid>.so-tile .so-tile-val {
+   grid-column:2!important;grid-row:2!important;min-width:0!important;
+ }
+ html body #page-salesorders.active .so-tile-grid>.so-tile .so-tile-s {
+   grid-column:2!important;grid-row:3!important;min-width:0!important;
+ }
+ html body #page-salesorders.active .so-tile-grid>.so-tile .so-tile-bar {
+   grid-column:1 / -1!important;grid-row:5!important;width:100%!important;
+   align-self:end!important;margin-top:8px!important;
+ }
+}

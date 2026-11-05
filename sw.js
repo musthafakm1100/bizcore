@@ -8,7 +8,7 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v271528-semantic-monitor-icons';
+const CACHE_NAME = 'bizcore-shell-v271529-premium-cards-consistency';
 const APP_SHELL = [
   './login.html',
   './delivery.html',
@@ -22,7 +22,7 @@ const APP_SHELL = [
   './css/stock-ui-standard.css?v=271.5.23',
   './css/bizcore-ui-audit.css?v=271.5.24',
   './css/pricing-dark-premium-trial.css?v=271.5.26.1',
-  './css/monitor-dark-premium-global.css?v=271.5.28',
+  './css/monitor-dark-premium-global.css?v=271.5.29',
   './js/stock-monitor-ui.js?v=271.5.23',
   './js/phase5a-monitors.js?v=271.5.25',
   './css/phase5a-monitors.css?v=271.5.25',

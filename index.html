@@ -84,7 +84,7 @@ button,.btn{font-size:14px!important;font-weight:600!important;}
 <link rel="stylesheet" href="css/stock-ui-standard.css?v=271.5.23"/>
 <link rel="stylesheet" href="css/bizcore-ui-audit.css?v=271.5.24"/>
 <link rel="stylesheet" href="css/pricing-dark-premium-trial.css?v=271.5.26.1"/>
-<link rel="stylesheet" href="css/monitor-dark-premium-global.css?v=271.5.28"/>
+<link rel="stylesheet" href="css/monitor-dark-premium-global.css?v=271.5.29"/>
 <script src="js/pricing-filter-visual.js?v=271.5.17" defer></script>
 </head>
 <body>
@@ -489,15 +489,19 @@ document.addEventListener('error', function(e) {
       </button>
       <div class="so-tile-grid">
         <button type="button" class="so-tile" data-kpi-filter="status-confirmed" data-tone="blue" onclick="soTileClick('status-confirmed')" aria-pressed="false">
+          <span class="so-tile-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></span>
           <span class="so-tile-t"><span>Confirmed</span><b id="so-t-conf-n">0</b></span><span class="so-tile-val" id="so-t-conf-v">SAR 0.00</span><span class="so-tile-s">Nothing delivered yet</span><span class="so-tile-bar"><i id="so-t-conf-bar"></i></span>
         </button>
         <button type="button" class="so-tile" data-kpi-filter="status-ofd" data-tone="amber" onclick="soTileClick('status-ofd')" aria-pressed="false">
+          <span class="so-tile-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v10H3z"/><path d="M14 10h4l3 3v4h-7"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg></span>
           <span class="so-tile-t"><span>Out for delivery</span><b id="so-t-ofd-n">0</b></span><span class="so-tile-val" id="so-t-ofd-v">SAR 0.00</span><span class="so-tile-s">On the road now</span><span class="so-tile-bar"><i id="so-t-ofd-bar"></i></span>
         </button>
         <button type="button" class="so-tile" data-kpi-filter="status-partdel" data-tone="purple" onclick="soTileClick('status-partdel')" aria-pressed="false">
+          <span class="so-tile-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M4 10h16M12 4v6"/><path d="m8 16 2 2 5-5"/></svg></span>
           <span class="so-tile-t"><span>Partially delivered</span><b id="so-t-part-n">0</b></span><span class="so-tile-val" id="so-t-part-v">SAR 0.00</span><span class="so-tile-s">Balance to deliver</span><span class="so-tile-bar"><i id="so-t-part-bar"></i></span>
         </button>
         <button type="button" class="so-tile so-tile-hot" data-kpi-filter="pending-invoice" data-tone="orange" onclick="soTileClick('pending-invoice')" aria-pressed="false">
+          <span class="so-tile-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5M9 13h7M9 17h5"/></svg></span>
           <span class="so-tile-t"><span>To invoice</span><b id="so-t-inv-n">0</b></span><span class="so-tile-val" id="so-t-inv-v">SAR 0.00</span><span class="so-tile-s">Delivered, not billed</span><span class="so-tile-bar"><i id="so-t-inv-bar"></i></span>
         </button>
       </div>
