@@ -846,8 +846,8 @@ ${sig([['Received by', rb.employeeName], ['Paid by', rb.createdBy], ['Approved b
     built = true;
     page.innerHTML = `<div class="dn-register-area module-register-area jb-reg">
 <div class="jb-monitor" id="jb-monitor" role="group" aria-label="Job status monitor">
-<button type="button" class="jb-monitor-main" data-jb-monitor=""><span>JOBS</span><strong id="jbmon-total">0</strong><small>Total jobs</small></button>
-${[['Open','Open'],['In Progress','In Progress'],['Completed','Completed'],['To Invoice','To Invoice']].map(([status,label])=>`<button type="button" class="jb-monitor-tile" data-jb-monitor="${status}"${status === 'To Invoice' ? ' disabled title="Job invoicing is not yet implemented"' : ''}><span>${label}</span><strong data-jb-count="${status}">${status === 'To Invoice' ? '—' : '0'}</strong><i class="jb-monitor-track"><i class="jb-monitor-fill"></i></i></button>`).join('')}
+<button type="button" class="jb-monitor-main" data-jb-monitor=""><span>JOBS</span><strong id="jbmon-total">0</strong><small>Total jobs</small><small class="jb-monitor-amount" id="jbmon-total-amount">SAR — contract value</small></button>
+${[['Open','Open'],['In Progress','In Progress'],['Completed','Completed'],['To Invoice','To Invoice']].map(([status,label])=>`<button type="button" class="jb-monitor-tile" data-jb-monitor="${status}"${status === 'To Invoice' ? ' disabled title="Job invoicing is not yet implemented"' : ''}><span>${label}</span><strong data-jb-count="${status}">${status === 'To Invoice' ? '—' : '0'}</strong><small class="jb-monitor-amount" data-jb-amount="${status}">SAR —</small><i class="jb-monitor-track"><i class="jb-monitor-fill"></i></i></button>`).join('')}
 </div>
 <div class="dn-register-toolbar page-toolbar page-toolbar--sticky page-control-bar bc-filterbar" role="toolbar" aria-label="Job filters">
 <div class="dn-toolbar-left bc-filterbar-left"><span class="bc-filter-count" id="jbreg-count">0 jobs</span></div>
@@ -885,7 +885,13 @@ ${[['Open','Open'],['In Progress','In Progress'],['Completed','Completed'],['To 
       && (!q||[j.jobNo,j.company,j.project,j.poNo,j.qno].some(x=>low(x).includes(q))));
     const counts={};for(const job of base)counts[job.status||'Open']=(counts[job.status||'Open']||0)+1;
     $('jbmon-total').textContent=base.length;
+    // Display-only contract-value subtotals from the same already-loaded, scoped Jobs.
+    // The unimplemented To Invoice measure must not invent an amount.
+    const contractMoney = list => 'SAR ' + list.reduce((sum,j)=>sum+(Number(j.contractValue)||0),0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+    $('jbmon-total-amount').textContent=contractMoney(base)+' contract value';
     $('jb-monitor').querySelectorAll('[data-jb-monitor]').forEach(b=>{const status=b.dataset.jbMonitor;
+      const amount=b.querySelector('[data-jb-amount]');
+      if(amount) amount.textContent=status==='To Invoice'?'SAR — (not available)':contractMoney(base.filter(j=>(j.status||'Open')===status));
       b.classList.toggle('is-active',status===F.monitor&&!!status);
       if(status && status !== 'To Invoice'){const n=counts[status]||0;b.querySelector('strong').textContent=n;
         b.querySelector('.jb-monitor-fill').style.width=(base.length?Math.round(n/base.length*100):0)+'%';}else if(status === 'To Invoice'){b.querySelector('strong').textContent='—';}

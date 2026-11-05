@@ -80,7 +80,8 @@ button,.btn{font-size:14px!important;font-weight:600!important;}
 <link rel="stylesheet" href="css/pricing-toolbar-trial.css?v=271.5.16"/>
 <link rel="stylesheet" href="css/pricing-sticky-table.css?v=271.5.19"/>
 <link rel="stylesheet" href="css/bizcore-ui-global.css?v=271.5.21"/>
-<link rel="stylesheet" href="css/jobs-ui-standard.css?v=271.5.22"/>
+<link rel="stylesheet" href="css/jobs-ui-standard.css?v=271.5.23"/>
+<link rel="stylesheet" href="css/stock-ui-standard.css?v=271.5.23"/>
 <script src="js/pricing-filter-visual.js?v=271.5.17" defer></script>
 </head>
 <body>
@@ -4608,7 +4609,7 @@ onAuthStateChanged(auth, async user => {
         // V271.1: Contracting Estimation (estimate window, Cost Build-up, Contracting Settings)
         const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.3'; document.body.appendChild(es);
         // V271.2: Contracting Jobs (Create Job, Jobs register, Job view)
-        const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.4-sorting'; document.body.appendChild(jb);
+        const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.5.23'; document.body.appendChild(jb);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=271.11'; document.body.appendChild(ds);
         // V270.4.1: Administration → Users, Roles & Permissions
@@ -4778,6 +4779,7 @@ console.log('BizCore Firebase ready ✅');
   <span id="bc5-pi-overdue">—</span>
   <span id="bc5-sp-payments">—</span>
 </div>
-<script defer src="js/phase5a-monitors.js?v=271.5.8"></script>
+<script defer src="js/phase5a-monitors.js?v=271.5.23"></script>
+<script defer src="js/stock-monitor-ui.js?v=271.5.23"></script>
 </body>
 </html>

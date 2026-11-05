@@ -20,7 +20,7 @@ const pageConfigs=[
   {page:'purchaseinvoices',host:'pi-main-workspace',lead:['Outstanding Payables','pireg-a-payable','SAR · Payable to suppliers','all'],cards:[
     ['Unpaid','pireg-k-pay-unpaid','No payment made','slate','pay-unpaid'],['Partially Paid','pireg-k-pay-partial','Balance remaining','blue','pay-partial'],['Paid','pireg-k-pay-paid','Fully settled','green','pay-paid'],['Overdue','pireg-k-overdue','Past supplier due date','red','overdue']]},
   {page:'supplierpayments',host:'sp-main-workspace',lead:['Total Paid','spreg-a-paid','SAR · Cash paid including advances','all'],cards:[
-    ['Payments','spreg-k-payment','Invoice payments (including applied advances)','slate','payment'],['Fully Applied',null,'Application breakdown pending','green',null],['Partially Applied',null,'Application breakdown pending','blue',null],['Unapplied',null,'Application breakdown pending','amber',null],['Advances','spreg-a-open','SAR · Available supplier advances','purple','open']]}
+    ['Payments','spreg-k-payment','Invoice payments (including applied advances)','slate','payment'],['Fully Applied','bc5-sp-full-count','Invoice payments applied','green','fully-applied'],['Partially Applied','bc5-sp-partial-count','Advances partly used','blue','partially-applied'],['Unapplied','bc5-sp-unapplied-count','Supplier advances remaining','amber','unapplied'],['Advances','spreg-a-open','SAR · Available supplier advances','purple','open']]}
 ];
 // Read-only amount subtitles. Values are populated from each register's existing
 // filtered scope; no financial data or posting logic is changed.
@@ -28,7 +28,7 @@ const financeAmounts={
  customerinvoices:{'Unpaid':'bc5-inv-unpaid','Partially Paid':'bc5-inv-partial','Paid':'bc5-inv-paid','Overdue':'bc5-inv-overdue'},
  receipts:{'Receipts':'bc5-rct-receipts','Fully Allocated':'bc5-rct-fully','Partially Allocated':'bc5-rct-partial','Unallocated':'bc5-rct-unallocated'},
  purchaseinvoices:{'Unpaid':'bc5-pi-unpaid','Partially Paid':'bc5-pi-partial','Paid':'bc5-pi-paid','Overdue':'bc5-pi-overdue'},
- supplierpayments:{'Payments':'bc5-sp-payments','Fully Applied':null,'Partially Applied':null,'Unapplied':null,'Advances':'spreg-a-open'}
+ supplierpayments:{'Payments':'bc5-sp-payments','Fully Applied':'bc5-sp-full-amount','Partially Applied':'bc5-sp-partial-amount','Unapplied':'bc5-sp-unapplied-amount','Advances':'spreg-a-open'}
 };
 const moneyText=id=>{const v=readText(id);return v==='—'?'—':`SAR ${v}`};
 const filterFunctions={rfq:(key)=>window.applyRFQMonitorFilter?.(key),costing:(key)=>window.filterPricingDocuments?.(key,$('pricing-doc-f-'+(key==='Saved'?'saved':key==='Converted'?'converted':'all'))),quotations:(key)=>window.setQuotationMonitorFilter?.(key==='all'?'':key),deliverynotes:(key)=>window.filterDNKPI?.(key),customerinvoices:(key)=>window.filterInvoiceKPI?.(key),receipts:(key)=>window.filterReceiptKPI?.(key),purchaseinvoices:(key)=>window.filterPurchaseKPI?.(key),supplierpayments:(key)=>window.filterSupplierPaymentKPI?.(key)};
@@ -69,7 +69,7 @@ function install(){
   cfg.cards.forEach((entry,i)=>other.appendChild(createTile(cfg,entry,i)));
   strip.append(lead,other);
   // Hidden read-only KPI values are updated by existing register render functions.
-  const amountIds=Object.values(financeAmounts[cfg.page]||{}).filter(x=>x&&x.startsWith('bc5-'));
+  const amountIds=[...cfg.cards.map(c=>c[1]),...Object.values(financeAmounts[cfg.page]||{})].filter(x=>x&&x.startsWith('bc5-'));
   for(const id of amountIds){if(!$(id)){const span=document.createElement('span');span.id=id;span.hidden=true;span.setAttribute('aria-hidden','true');root.appendChild(span);}}
   const note=document.createElement('div');note.className='bc5-note';note.textContent='Select a tile to filter the register; select it again to show all. A dash indicates a measure requiring a future workflow update.';
   root.insertBefore(note,root.firstChild);root.insertBefore(strip,note);
@@ -84,7 +84,29 @@ function install(){
       lead.querySelector('.bc5-description').textContent=`${leadValue(cfg)} open / ${total} RFQs · Avg age ${avg}`;
     }
     if(cfg.page==='costing')lead.querySelector('.bc5-description').textContent=`${readText('pricing-doc-k-total')} total pricing records`;
-    if(cfg.page==='quotations')lead.querySelector('.bc5-description').textContent=`${readText('quote-kpi-all')} total quotations`;
+    if(cfg.page==='quotations'){
+      lead.querySelector('.bc5-description').textContent=`${readText('quote-kpi-all')} total quotations`;
+      // These are read-only net quotation amounts from the existing register scope.
+      // No extra database query; follow-up due has no implemented amount metric.
+      try {
+        if(typeof getQuotationOverviewScope==='function' && typeof calcQuote==='function'){
+          const scope=getQuotationOverviewScope();
+          const money=list=>'SAR '+list.reduce((sum,q)=>sum+(Number(calcQuote(q).net)||0),0)
+            .toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+          const sets=[['',scope.filter(q=>q.status==='Draft'||q.status==='Sent')],
+            ['Draft',scope.filter(q=>q.status==='Draft')],['Sent',scope.filter(q=>q.status==='Sent')],
+            ['Won',scope.filter(q=>q.status==='Won')]];
+          for(const [label,records] of sets){
+            const card=label?Array.from(strip.querySelectorAll('.bc5-card')).find(b=>b.querySelector('.bc5-label')?.textContent===label):lead;
+            if(!card)continue;
+            let amount=card.querySelector('.bc5-sar-amount');
+            if(!amount){amount=document.createElement('span');amount.className='bc5-sar-amount';
+              amount.setAttribute('aria-label','Net quotation amount');card.insertBefore(amount,card.querySelector('.bc5-bar')||null);}
+            amount.textContent=money(records);
+          }
+        }
+      }catch(e){console.warn('[BizCore] Quotation amount display unavailable:',e)}
+    }
   };
   const sources=[cfg.lead[1],...cfg.cards.map(c=>c[1])];
   if(cfg.page==='costing')sources.push('pricing-doc-k-total');

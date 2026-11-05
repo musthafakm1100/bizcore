@@ -1,0 +1,17 @@
+/* V271.5.23 — Stock & financial monitor UI aligned with Pricing, desktop only. */
+@media(min-width:1101px){
+ html body #page-stock.active .module-main-workspace{display:flex!important;flex-direction:column!important;min-height:0!important;gap:0!important;}
+ html body #page-stock.active .module-main-workspace::before{display:none!important;content:none!important;}
+ html body #page-stock.active .module-main-workspace>.module-monitor,
+ html body #page-stock.active .module-main-workspace>.module-monitor-rail{display:none!important;}
+ html body #page-stock.active .module-register-area{width:100%!important;max-width:100%!important;min-width:0!important;flex:1 1 auto!important;}
+ html body #page-stock.active .st-visual-monitor{flex:0 0 auto!important;}
+ html body #page-stock.active .st-visual-monitor .bc5-lead .bc5-description{font-variant-numeric:tabular-nums;}
+ html body #page-stock.active .st-visual-monitor .bc5-card .bc5-description{font-size:10.5px!important;font-variant-numeric:tabular-nums;}
+ html body #page-stock.active .st-visual-monitor [aria-pressed="true"]{outline:1px solid var(--c-8bb4e6,#8bb4e6);outline-offset:-1px;}
+ html body #page-stock.active .st-visual-note{margin-bottom:4px!important;}
+ /* Quotation cards retain counts, descriptions, and now show a compact SAR subtitle. */
+ html body #page-quotations.active .bc5-strip .bc5-sar-amount{display:block;font-size:10.5px;line-height:1.25;
+  font-weight:500;font-variant-numeric:tabular-nums;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+ html body #page-quotations.active .bc5-strip .bc5-lead .bc5-sar-amount{color:#fff;opacity:.94;}
+}
