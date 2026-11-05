@@ -1,0 +1,171 @@
+/* V271.5.22 — Jobs register desktop visual consistency.
+   Uses global BizCore UI tokens; preserves Job data, click handlers and workflows. */
+@media (min-width:1101px) {
+  html body .content:has(> #page-jobs.active) {
+    min-height:0!important; overflow:hidden!important; padding-bottom:8px!important;
+  }
+  html body #page-jobs.active {
+    display:flex!important; flex-direction:column!important; height:100%!important;
+    min-height:0!important; overflow:hidden!important;
+    background:var(--bc-page-bg,#f4f7fa)!important;
+  }
+  html body #page-jobs.active .jb-reg {
+    display:flex!important; flex-direction:column!important; flex:1 1 auto!important;
+    height:100%!important; min-height:0!important; min-width:0!important;
+    max-width:none!important; width:100%!important;
+    overflow:hidden!important; background:var(--bc-page-bg,#f4f7fa)!important;
+  }
+  html body #page-jobs.active .jb-monitor {
+    display:flex!important; flex-flow:row nowrap!important; align-items:stretch!important;
+    width:100%!important; max-width:100%!important; min-width:0!important;
+    height:var(--bc-ui-card-height)!important; min-height:var(--bc-ui-card-height)!important;
+    flex:0 0 var(--bc-ui-card-height)!important;
+    gap:var(--bc-ui-card-gap)!important;
+    margin:var(--bc-ui-panel-gap) 0 6px!important;
+    border:0!important; border-radius:0!important; box-shadow:none!important;
+    overflow:visible!important; background:transparent!important;
+  }
+  html body #page-jobs.active .jb-monitor>button {
+    box-sizing:border-box!important; height:var(--bc-ui-card-height)!important;
+    min-height:var(--bc-ui-card-height)!important; min-width:0!important;
+    padding:12px 14px!important;
+    border:1px solid var(--bc-ui-card-border)!important;
+    border-radius:var(--bc-ui-card-radius)!important;
+    box-shadow:var(--bc-ui-card-shadow)!important;
+    overflow:hidden!important; position:relative!important;
+  }
+  html body #page-jobs.active .jb-monitor>.jb-monitor-main {
+    flex:0 0 var(--bc-ui-monitor-lead-width)!important;
+    background:var(--c-173a5e,#173a5e)!important;
+    color:#fff!important;
+  }
+  html body #page-jobs.active .jb-monitor>.jb-monitor-tile {
+    flex:1 1 0!important; display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    grid-template-rows:auto 20px 1fr!important;
+    align-content:start!important; background:#fff!important;
+  }
+  html body #page-jobs.active .jb-monitor .jb-monitor-tile>span {
+    font-size:var(--bc-ui-monitor-label)!important;font-weight:500!important;
+    padding-left:43px!important; line-height:22px!important;
+  }
+  html body #page-jobs.active .jb-monitor .jb-monitor-tile>strong {
+    font-size:var(--bc-ui-monitor-value)!important;
+  }
+  html body #page-jobs.active .jb-monitor .jb-monitor-tile:after {
+    grid-row:2!important;font-size:var(--bc-ui-monitor-description)!important;
+    margin-left:43px!important;
+  }
+  html body #page-jobs.active .jb-monitor .jb-monitor-track {
+    grid-row:3!important; align-self:end!important;
+    margin-top:0!important; height:5px!important;
+  }
+  html body #page-jobs.active .jb-monitor .jb-monitor-main span {
+    font-size:var(--bc-ui-monitor-label)!important;font-weight:500!important;
+  }
+  html body #page-jobs.active .jb-monitor .jb-monitor-main strong {
+    font-size:var(--bc-ui-monitor-lead-value)!important;
+  }
+  html body #page-jobs.active .jb-monitor .jb-monitor-main small {
+    font-size:var(--bc-ui-monitor-description)!important;
+  }
+  /* Light silhouettes: no card recoloring. */
+  html body #page-jobs.active .jb-monitor>button::before {
+    content:"";position:absolute;top:11px;left:12px;
+    width:var(--bc-ui-icon-box);height:var(--bc-ui-icon-box);
+    border-radius:9px;background:var(--jb-icon-bg,#e8f2ff);
+    pointer-events:none;
+  }
+  html body #page-jobs.active .jb-monitor>button::after {
+    content:"";position:absolute;top:17px;left:18px;
+    width:var(--bc-ui-icon-size);height:var(--bc-ui-icon-size);
+    background:var(--jb-icon-fg,#2563eb);
+    -webkit-mask:var(--jb-icon-mask) center/contain no-repeat;
+    mask:var(--jb-icon-mask) center/contain no-repeat;
+    pointer-events:none;
+  }
+  html body #page-jobs.active .jb-monitor>.jb-monitor-main::before {left:auto;right:12px;--jb-icon-bg:rgba(255,255,255,.13);}
+  html body #page-jobs.active .jb-monitor>.jb-monitor-main::after {left:auto;right:18px;--jb-icon-fg:#e6f3ff;}
+  html body #page-jobs.active .jb-monitor>.jb-monitor-main {
+    --jb-icon-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M12 2 2 7l10 5 10-5-10-5Zm-9 9 9 5 9-5v3l-9 5-9-5v-3Zm0 6 9 5 9-5v3l-9 5-9-5v-3Z'/%3E%3C/svg%3E");
+  }
+  html body #page-jobs.active .jb-monitor>.jb-monitor-tile:nth-child(2) {
+    --jb-icon-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 5v5l4 2-1 2-5-3V7h2Z'/%3E%3C/svg%3E");
+  }
+  html body #page-jobs.active .jb-monitor>.jb-monitor-tile:nth-child(3) {
+    --jb-icon-bg:#f1e8ff;--jb-icon-fg:#7c3aed;
+    --jb-icon-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M4 2h3v20H4V2Zm5 3h11v4l-4 3 4 3v4H9V5Z'/%3E%3C/svg%3E");
+  }
+  html body #page-jobs.active .jb-monitor>.jb-monitor-tile:nth-child(4) {
+    --jb-icon-bg:#e7f8ed;--jb-icon-fg:#16a34a;
+    --jb-icon-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-2 14-4-4 1.5-1.5L10 13l6.5-6.5L18 8l-8 8Z'/%3E%3C/svg%3E");
+  }
+  html body #page-jobs.active .jb-monitor>.jb-monitor-tile:nth-child(5) {
+    --jb-icon-bg:#fff7ed;--jb-icon-fg:#d97706;
+    --jb-icon-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M3 2h18v20H3V2Zm3 4v2h12V6H6Zm0 5v2h8v-2H6Zm0 5v2h10v-2H6Z'/%3E%3C/svg%3E");
+  }
+  /* 5px masked separation: filter bar stays outside the scrolling viewport. */
+  html body #page-jobs.active .jb-reg>.bc-filterbar {
+    position:relative!important;top:auto!important;z-index:8!important;
+    display:flex!important;flex:0 0 var(--bc-ui-toolbar-height)!important;
+    min-height:var(--bc-ui-toolbar-height)!important;
+    height:var(--bc-ui-toolbar-height)!important;
+    margin:0 0 var(--bc-ui-panel-gap)!important;
+    padding:0 10px!important;
+    background:var(--c-edf5ff,#edf5ff)!important;
+    border:1px solid var(--c-c9d9e8,#c9d9e8)!important;
+    border-radius:9px!important;box-sizing:border-box!important;
+    flex-wrap:nowrap!important;
+  }
+  html body #page-jobs.active .bc-filterbar :is(.bc-filter,.bc-date-trigger,.bc-date-btn) {
+    height:var(--bc-ui-control-height)!important;min-height:var(--bc-ui-control-height)!important;
+    font-size:var(--bc-ui-control-font)!important;font-weight:400!important;
+    color:var(--bc-ui-input-text)!important;
+    background:var(--bc-ui-input-background)!important;
+    border:1px solid var(--bc-ui-input-border)!important;border-radius:7px!important;
+    box-shadow:none!important;
+  }
+  html body #page-jobs.active #jbreg-clear {
+    display:inline-flex!important;align-items:center!important;justify-content:center!important;
+    flex:0 0 var(--bc-ui-control-height)!important;
+    width:var(--bc-ui-control-height)!important;height:var(--bc-ui-control-height)!important;
+    padding:0!important;border:1px solid var(--bc-ui-input-border)!important;
+    border-radius:7px!important;background:var(--bc-ui-input-background)!important;
+  }
+  html body #page-jobs.active #jbreg-clear>span{display:none!important;}
+  html body #page-jobs.active #jbreg-clear>i{margin:0!important;font-size:17px!important;}
+  html body #page-jobs.active #jbreg-je {width:auto!important;max-width:none!important;flex:0 0 auto!important;
+    padding:0 12px!important;height:var(--bc-ui-control-height)!important;}
+  html body #page-jobs.active #jbreg-je>span {display:inline!important;}
+  html body #page-jobs.active .jb-reg>.dn-register-card {
+    display:flex!important;flex:1 1 auto!important;flex-direction:column!important;
+    min-height:0!important;overflow:hidden!important;
+    border:1px solid var(--bc-ui-card-border)!important;
+    border-radius:var(--bc-ui-card-radius)!important;background:#fff!important;
+  }
+  html body #page-jobs.active .jb-reg>.dn-register-card>.dn-table-scroll {
+    flex:1 1 auto!important;min-height:0!important;
+    overflow-x:auto!important;overflow-y:auto!important;
+    overscroll-behavior:contain;background:#fff!important;
+    position:relative!important;
+  }
+  html body #page-jobs.active .jb-reg-table {border-collapse:separate!important;border-spacing:0!important;}
+  html body #page-jobs.active .jb-reg-table thead th {
+    position:sticky!important;top:0!important;z-index:7!important;
+    background:var(--c-eaf2f9,#eaf2f9)!important;
+    color:var(--bc-ui-header-text)!important;
+    height:var(--bc-ui-header-height)!important;
+    font-size:var(--bc-ui-header-size)!important;
+    font-weight:var(--bc-ui-header-weight)!important;
+    box-shadow:0 1px 0 #cbd5e1!important;
+    background-clip:padding-box!important;
+  }
+  html body #page-jobs.active .jb-reg-table tbody td {
+    font-size:var(--bc-ui-row-font)!important;font-weight:400!important;
+    border-left:0!important;border-right:0!important;
+    border-bottom:1px solid var(--bc-ui-row-divider)!important;
+  }
+  html body #page-jobs.active .jb-reg-hint {
+    flex:0 0 auto!important;margin:5px 4px 0!important;
+  }
+}
