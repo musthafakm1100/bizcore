@@ -53,4 +53,18 @@
   html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-lead {
     box-shadow:0 3px 9px rgba(16,35,56,.17),inset 0 1px 0 rgba(255,255,255,.10) !important;
   }
+  /* V271.5.26.1 — Approved Pricing monitor typography, desktop only. */
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-lead > .bc5-label,
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card .bc5-card-header,
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card .bc5-label {
+    font-size:15px !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip :is(.bc5-lead,.bc5-card) .bc5-number {
+    font-size:23px !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip :is(.bc5-lead,.bc5-card) .bc5-description,
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip :is(.bc5-lead,.bc5-card) .bc5-sar-amount {
+    font-size:13px !important;
+  }
+
 }
