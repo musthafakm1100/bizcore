@@ -1,0 +1,113 @@
+/* BizCore V271.5.24 — desktop register visual consistency audit.
+   The approved Pricing V271.5.19 view is deliberately not overridden.
+   All rules are presentation-only: no data, event, filter or workflow changes.
+   Shared measurements come from bizcore-ui-global.css. */
+@media (min-width:1101px) {
+  /* These screens share the legacy Delivery Note register DOM, but their actual
+     table IDs are DIFFERENT.  V271.5.21 only addressed #dn-register-table,
+     leaving invoice, receipt, purchasing and stock headers vulnerable to the
+     older top:48px sticky rule.  Match the existing actual table IDs. */
+  html body :is(
+    #page-customerinvoices.active #invreg-table,
+    #page-receipts.active #rctreg-table,
+    #page-purchaseinvoices.active #pireg-table,
+    #page-supplierpayments.active #spreg-table,
+    #page-stock.active #streg-table,
+    #page-deliverynotes.active #dn-register-table,
+    #page-quotations.active #quotes-table,
+    #page-salesorders.active #so-register-table
+  ) { border-collapse:separate!important; border-spacing:0!important; }
+  html body :is(
+    #page-customerinvoices.active #invreg-table,
+    #page-receipts.active #rctreg-table,
+    #page-purchaseinvoices.active #pireg-table,
+    #page-supplierpayments.active #spreg-table,
+    #page-stock.active #streg-table,
+    #page-deliverynotes.active #dn-register-table,
+    #page-quotations.active #quotes-table,
+    #page-salesorders.active #so-register-table
+  ) thead th {
+    position:sticky!important; top:0!important; z-index:8!important;
+    background:var(--c-eaf2f9,#eaf2f9)!important;
+    color:var(--bc-ui-header-text,#475569)!important;
+    font-size:var(--bc-ui-header-size,12px)!important;
+    font-weight:var(--bc-ui-header-weight,500)!important;
+    background-clip:padding-box!important;
+    box-shadow:0 1px 0 #cbd5e1!important;
+    border-left:0!important; border-right:0!important;
+  }
+  /* Each legacy register owns a bounded, opaque scroll viewport. */
+  html body :is(
+    #page-customerinvoices,#page-receipts,#page-purchaseinvoices,
+    #page-supplierpayments,#page-stock,#page-deliverynotes,
+    #page-quotations,#page-salesorders
+  ).active :is(.dn-register-card,.quotation-register-card,.so-register-card) {
+    border:1px solid var(--bc-ui-card-border,#e1e7ef)!important;
+    border-radius:var(--bc-ui-card-radius,10px)!important;
+    background:#fff!important; position:relative!important;
+    display:flex!important; flex-direction:column!important;
+    flex:1 1 auto!important; min-height:0!important;
+    overflow:hidden!important;
+  }
+  html body :is(
+    #page-customerinvoices,#page-receipts,#page-purchaseinvoices,
+    #page-supplierpayments,#page-stock,#page-deliverynotes,
+    #page-quotations,#page-salesorders
+  ).active :is(.dn-table-scroll,.quotation-table-scroll,.so-table-scroll) {
+    flex:1 1 auto!important;min-height:0!important;
+    overflow:auto!important; overscroll-behavior:contain!important;
+    background:#fff!important; position:relative!important;
+  }
+  /* Controls and monitors remain opaque and outside the row scroller. */
+  html body :is(
+    #page-customerinvoices,#page-receipts,#page-purchaseinvoices,
+    #page-supplierpayments,#page-stock,#page-deliverynotes,
+    #page-quotations,#page-salesorders
+  ).active .bc-filterbar {
+    z-index:9!important; position:relative!important; top:auto!important;
+    flex-shrink:0!important; margin-bottom:var(--bc-ui-panel-gap,5px)!important;
+  }
+  html body :is(
+    #page-customerinvoices,#page-receipts,#page-purchaseinvoices,
+    #page-supplierpayments,#page-stock,#page-deliverynotes,
+    #page-quotations,#page-salesorders
+  ).active :is(.module-register-area,.dn-register-area,.quotation-register-area,.salesorders-register-area) {
+    min-height:0!important; overflow:hidden!important;
+    background:var(--bc-page-bg,#f4f7fa)!important;
+  }
+  /* Stock's legacy rail is suppressed only on desktop; ensure the horizontal
+     strip takes all available width and doesn't share space with a stale rail. */
+  html body #page-stock.active .st-visual-monitor {
+    width:100%!important; max-width:100%!important;
+    align-self:stretch!important; min-width:0!important;
+  }
+  html body #page-stock.active .module-register-area {
+    display:flex!important;flex-direction:column!important;
+    flex:1 1 auto!important; min-height:0!important; overflow:hidden!important;
+  }
+  html body #page-stock.active .module-main-workspace {
+    flex:1 1 auto!important; height:100%!important; overflow:hidden!important;
+    background:var(--bc-page-bg,#f4f7fa)!important;
+  }
+  /* Row typography: readable neutral text and horizontal separators only.
+     Does not override colored status badges or interactive accent icons. */
+  html body :is(
+    #page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,
+    #page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock
+  ).active :is(.dn-register-card,.quotation-register-card,.so-register-card) tbody td {
+    font-size:var(--bc-ui-row-font,14px)!important;
+    font-weight:400!important;
+    border-left:0!important;border-right:0!important;
+    border-bottom:1px solid var(--bc-ui-row-divider,#e9eef4)!important;
+  }
+  /* The separate Jobs component follows the same shared table chrome. */
+  html body #page-jobs.active .jb-reg>.dn-register-card {
+    border-radius:var(--bc-ui-card-radius,10px)!important;
+    border:1px solid var(--bc-ui-card-border,#e1e7ef)!important;
+    overflow:hidden!important; background:#fff!important;
+  }
+  html body #page-jobs.active .jb-reg-table thead th {
+    position:sticky!important;top:0!important;z-index:8!important;
+    background:var(--c-eaf2f9,#eaf2f9)!important;
+  }
+}
