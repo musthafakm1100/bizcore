@@ -185,8 +185,14 @@
  }
  html body #page-jobs.active .jb-monitor .jb-monitor-tile>.jb-monitor-track{grid-row:3!important;}
  html body #page-jobs.active .jb-monitor .jb-monitor-tile::after{
-   position:absolute!important;top:17px!important;left:18px!important;
+   /* Reset the old Jobs description pseudo-element's grid placement/margin.
+      This pseudo-element is now the icon, which must sit inside its icon box. */
+   content:""!important; display:block!important; position:absolute!important;
+   top:17px!important;left:18px!important;
    width:var(--bc-ui-icon-size)!important;height:var(--bc-ui-icon-size)!important;
+   margin:0!important; padding:0!important;
+   grid-column:auto!important;grid-row:auto!important;
+   transform:none!important;line-height:0!important;
  }
  html body #page-jobs.active .jb-monitor .jb-monitor-main>.jb-monitor-amount{
    margin-top:2px!important;font-size:10.5px!important;font-weight:500!important;color:#fff!important;opacity:.92!important;
