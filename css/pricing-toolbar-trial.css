@@ -8,8 +8,8 @@
     border-radius: 9px !important;
     box-shadow: 0 1px 2px rgba(24, 44, 75, .045) !important;
     padding: 0 10px !important;
-    height: 48px !important;
-    min-height: 48px !important;
+    height: var(--bc-ui-toolbar-height,48px) !important;
+    min-height: var(--bc-ui-toolbar-height,48px) !important;
     flex-wrap: nowrap !important;
   }
   html body #page-costing .pricing-register-toolbar .bc-filterbar-right {
@@ -20,11 +20,11 @@
     #pricing-sort, #pricing-customer-filter, #pricing-status-filter,
     #pricing-doc-search, .bc-date .bc-date-trigger, .bc-date button.bc-date-btn
   ) {
-    background: #f8fafc !important;
-    border: 1px solid #cbd5e1 !important;
+    background: var(--bc-ui-input-background,#f8fafc) !important;
+    border: 1px solid var(--bc-ui-input-border,#cbd5e1) !important;
     border-radius: 7px !important;
     color: #334155 !important;
-    font-size: 13px !important;
+    font-size: var(--bc-ui-control-font,13px) !important;
     font-weight: 400 !important;
     box-shadow: none !important;
   }
@@ -43,18 +43,18 @@
     #pricing-clear-filters-btn, #pricing-export-excel-btn
   ) {
     flex: 0 0 34px !important;
-    width: 34px !important;
-    min-width: 34px !important;
-    max-width: 34px !important;
-    height: 34px !important;
-    min-height: 34px !important;
+    width: var(--bc-ui-control-height,34px) !important;
+    min-width: var(--bc-ui-control-height,34px) !important;
+    max-width: var(--bc-ui-control-height,34px) !important;
+    height: var(--bc-ui-control-height,34px) !important;
+    min-height: var(--bc-ui-control-height,34px) !important;
     padding: 0 !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
-    border: 1px solid #cbd5e1 !important;
+    border: 1px solid var(--bc-ui-input-border,#cbd5e1) !important;
     border-radius: 7px !important;
-    background: #f8fafc !important;
+    background: var(--bc-ui-input-background,#f8fafc) !important;
     box-shadow: none !important;
   }
   html body #page-costing .pricing-register-toolbar :is(
@@ -79,9 +79,9 @@
   html body #page-costing .pricing-register-table thead th {
     background: var(--c-eaf2f9, #eaf2f9) !important;
     color: #475569 !important;
-    font-size: 12px !important;
-    font-weight: 500 !important;
-    height: 39px !important;
+    font-size: var(--bc-ui-header-size,12px) !important;
+    font-weight: var(--bc-ui-header-weight,500) !important;
+    height: var(--bc-ui-header-height,39px) !important;
     border-left: 0 !important;
     border-right: 0 !important;
     border-bottom: 1px solid #cbd5e1 !important;

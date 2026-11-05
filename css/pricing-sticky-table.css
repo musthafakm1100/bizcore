@@ -143,9 +143,9 @@ html body #page-costing .pricing-register-toolbar #pricing-clear-filters-btn.bc-
   html body #page-costing.active .pricing-main-workspace > .bc5-strip {
     display: flex !important;
     align-items: stretch !important;
-    column-gap: 8px !important;
-    margin: 5px 0 6px !important;
-    min-height: 112px !important;
+    column-gap: var(--bc-ui-card-gap,8px) !important;
+    margin: var(--bc-ui-panel-gap,5px) 0 6px !important;
+    min-height: var(--bc-ui-card-height,112px) !important;
     background: transparent !important;
     border: 0 !important;
     border-radius: 0 !important;
@@ -153,25 +153,25 @@ html body #page-costing .pricing-register-toolbar #pricing-clear-filters-btn.bc-
     box-shadow: none !important;
   }
   html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-lead {
-    flex: 0 0 200px !important;
-    min-height: 112px !important;
+    flex: 0 0 var(--bc-ui-monitor-lead-width,200px) !important;
+    min-height: var(--bc-ui-card-height,112px) !important;
     border: 1px solid transparent !important;
-    border-radius: 10px !important;
+    border-radius: var(--bc-ui-card-radius,10px) !important;
     box-shadow: 0 1px 4px rgba(15,23,42,.09) !important;
     overflow: hidden !important;
   }
   html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other {
     display: grid !important;
-    gap: 8px !important;
+    gap: var(--bc-ui-card-gap,8px) !important;
     flex: 1 1 auto !important;
     min-width: 0 !important;
   }
   html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card {
-    min-height: 112px !important;
-    border: 1px solid #e1e7ef !important;
-    border-radius: 10px !important;
+    min-height: var(--bc-ui-card-height,112px) !important;
+    border: 1px solid var(--bc-ui-card-border,#e1e7ef) !important;
+    border-radius: var(--bc-ui-card-radius,10px) !important;
     background: #fff !important;
-    box-shadow: 0 1px 4px rgba(15,23,42,.07) !important;
+    box-shadow: var(--bc-ui-card-shadow,0 1px 4px rgba(15,23,42,.07)) !important;
     overflow: hidden !important;
   }
   html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card:not(:disabled):hover {
@@ -190,11 +190,11 @@ html body #page-costing .pricing-register-toolbar #pricing-clear-filters-btn.bc-
 @media (min-width:1101px) {
   html body #page-costing.active .pricing-main-workspace > .bc5-strip :is(.bc5-lead,.bc5-card) {position:relative !important;}
   html body #page-costing.active .pricing-main-workspace > .bc5-strip :is(.bc5-lead,.bc5-card)::before {
-    content:"";position:absolute;top:11px;left:12px;width:34px;height:34px;
+    content:"";position:absolute;top:11px;left:12px;width:var(--bc-ui-icon-box,34px);height:var(--bc-ui-icon-box,34px);
     border-radius:9px;background:var(--pricing-icon-bg,#eff6ff);pointer-events:none;
   }
   html body #page-costing.active .pricing-main-workspace > .bc5-strip :is(.bc5-lead,.bc5-card)::after {
-    content:"";position:absolute;top:17px;left:18px;width:22px;height:22px;
+    content:"";position:absolute;top:17px;left:18px;width:var(--bc-ui-icon-size,22px);height:var(--bc-ui-icon-size,22px);
     background:var(--pricing-icon-color,#2563eb);pointer-events:none;
     -webkit-mask-position:center;-webkit-mask-repeat:no-repeat;-webkit-mask-size:contain;
     mask-position:center;mask-repeat:no-repeat;mask-size:contain;

@@ -1,0 +1,198 @@
+/* V271.5.20 BizCore Global UI Design System — visual-only, desktop.
+ * Token changes here propagate to the register components below.
+ * No records, Firebase, filtering, pagination or business workflow code altered.
+ * Pricing V271.5.19 remains the accepted visual baseline.
+ */
+:root {
+ --bc-ui-card-height:112px; --bc-ui-card-gap:8px; --bc-ui-card-radius:10px;
+ --bc-ui-card-border:#e1e7ef; --bc-ui-card-shadow:0 1px 4px rgba(15,23,42,.07);
+ --bc-ui-monitor-lead-width:200px; --bc-ui-monitor-label:12.5px;
+ --bc-ui-monitor-value:22px; --bc-ui-monitor-lead-value:26px;
+ --bc-ui-monitor-description:11.5px; --bc-ui-icon-box:34px; --bc-ui-icon-size:22px;
+ --bc-ui-toolbar-height:48px; --bc-ui-control-height:34px; --bc-ui-control-font:13px;
+ --bc-ui-input-background:#f8fafc; --bc-ui-input-border:#cbd5e1; --bc-ui-input-text:#334155;
+ --bc-ui-header-height:39px; --bc-ui-header-size:12px; --bc-ui-header-weight:500;
+ --bc-ui-header-text:#475569; --bc-ui-row-font:14px; --bc-ui-row-color:#111827;
+ --bc-ui-panel-gap:5px; --bc-ui-row-divider:#e9eef4;
+ --bc-ui-icon-blue:#2563eb; --bc-ui-icon-purple:#7c3aed;
+ --bc-ui-icon-green:#16a34a; --bc-ui-icon-red:#dc2626;
+ --bc-ui-icon-amber:#d97706;
+}
+@media (min-width:1101px) {
+ /* Match the approved Pricing card appearance on the shared phase-5 monitors. */
+ html body .bc5-strip {
+   display:flex!important;align-items:stretch!important;column-gap:var(--bc-ui-card-gap)!important;
+   margin:var(--bc-ui-panel-gap) 0 6px!important;min-height:var(--bc-ui-card-height)!important;
+   background:transparent!important;border:0!important;border-radius:0!important;
+   box-shadow:none!important;overflow:visible!important; width:100%!important;max-width:100%!important;
+   box-sizing:border-box!important;
+ }
+ html body .bc5-strip>.bc5-lead {
+   flex:0 0 var(--bc-ui-monitor-lead-width)!important;min-height:var(--bc-ui-card-height)!important;
+   border:1px solid transparent!important;border-radius:var(--bc-ui-card-radius)!important;
+   box-shadow:var(--bc-ui-card-shadow)!important;overflow:hidden!important;
+ }
+ html body .bc5-strip>.bc5-other {
+   flex:1 1 auto!important;min-width:0!important;display:grid!important;
+   gap:var(--bc-ui-card-gap)!important;
+ }
+ html body .bc5-strip>.bc5-other>.bc5-card {
+   background:#fff!important;min-height:var(--bc-ui-card-height)!important;
+   border:1px solid var(--bc-ui-card-border)!important;border-radius:var(--bc-ui-card-radius)!important;
+   box-shadow:var(--bc-ui-card-shadow)!important;overflow:hidden!important;
+ }
+ html body .bc5-strip .bc5-card-header {font-size:var(--bc-ui-monitor-label)!important;}
+ html body .bc5-strip .bc5-card .bc5-number {font-size:var(--bc-ui-monitor-value)!important;}
+ html body .bc5-strip .bc5-lead .bc5-number {font-size:var(--bc-ui-monitor-lead-value)!important;}
+ html body .bc5-strip .bc5-description {font-size:var(--bc-ui-monitor-description)!important;}
+ html body .bc5-strip .bc5-card:not(:disabled):hover {background:#f8fafc!important;border-color:#cbd5e1!important;}
+ html body .bc5-strip .bc5-card[aria-pressed=true] {background:#eef4fb!important;border-color:var(--c-8bb4e6,#8bb4e6)!important;}
+ /* Decorative only; the card itself remains exactly the same color. */
+ html body .bc5-strip :is(.bc5-lead,.bc5-card){position:relative!important;}
+ html body .bc5-strip :is(.bc5-lead,.bc5-card)::before {
+   content:"";position:absolute;top:11px;left:12px;width:var(--bc-ui-icon-box);height:var(--bc-ui-icon-box);
+   border-radius:9px;background:var(--bc-ui-icon-bg,#eff6ff);pointer-events:none;
+ }
+ html body .bc5-strip :is(.bc5-lead,.bc5-card)::after {
+   content:"";position:absolute;top:17px;left:18px;width:var(--bc-ui-icon-size);height:var(--bc-ui-icon-size);
+   background:var(--bc-ui-icon-color,var(--bc-ui-icon-blue));pointer-events:none;
+   -webkit-mask:var(--bc-ui-icon-mask) center / contain no-repeat;
+   mask:var(--bc-ui-icon-mask) center / contain no-repeat;
+ }
+ html body .bc5-strip>.bc5-lead::before{left:auto;right:12px;--bc-ui-icon-bg:rgba(255,255,255,.13);}
+ html body .bc5-strip>.bc5-lead::after{left:auto;right:18px;--bc-ui-icon-color:#e6f3ff;}
+ html body .bc5-strip>.bc5-lead>.bc5-label{padding-right:36px;}
+ html body .bc5-strip .bc5-card-header>.bc5-label,
+ html body .bc5-strip .bc5-card>.bc5-description{padding-left:42px;}
+ html body .bc5-strip .bc5-card:nth-child(1){--bc-ui-icon-bg:#e8f2ff;--bc-ui-icon-color:var(--bc-ui-icon-blue);}
+ html body .bc5-strip .bc5-card:nth-child(2){--bc-ui-icon-bg:#f1e8ff;--bc-ui-icon-color:var(--bc-ui-icon-purple);}
+ html body .bc5-strip .bc5-card:nth-child(3){--bc-ui-icon-bg:#e7f8ed;--bc-ui-icon-color:var(--bc-ui-icon-green);}
+ html body .bc5-strip .bc5-card:nth-child(4){--bc-ui-icon-bg:#feeaea;--bc-ui-icon-color:var(--bc-ui-icon-red);}
+ html body .bc5-strip .bc5-card:nth-child(5){--bc-ui-icon-bg:#fff7ed;--bc-ui-icon-color:var(--bc-ui-icon-amber);}
+ /* All existing register toolbars retain their controls, order and click handlers. */
+ html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock) .bc-filterbar {
+   background:var(--c-edf5ff,#edf5ff)!important;border:1px solid var(--c-c9d9e8,#c9d9e8)!important;
+   border-radius:9px!important;box-shadow:0 1px 2px rgba(24,44,75,.045)!important;
+   padding:0 10px!important;min-height:var(--bc-ui-toolbar-height)!important;
+   height:var(--bc-ui-toolbar-height)!important;flex-wrap:nowrap!important;
+   box-sizing:border-box!important;
+ }
+ html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock) .bc-filterbar :is(.bc-filter,.bc-date-trigger,.bc-date-btn) {
+   background:var(--bc-ui-input-background)!important;
+   color:var(--bc-ui-input-text)!important;border:1px solid var(--bc-ui-input-border)!important;
+   font-size:var(--bc-ui-control-font)!important;font-weight:400!important;border-radius:7px!important;
+   height:var(--bc-ui-control-height)!important;min-height:var(--bc-ui-control-height)!important;
+   box-shadow:none!important;
+ }
+ html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock) .bc-filterbar :is(.bc-filter,.bc-date-trigger,.bc-date-btn):focus-visible {
+   outline:2px solid var(--c-2e75b6,#2e75b6)!important;outline-offset:1px!important;
+ }
+ html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock) .bc-filterbar .bc-filter-btn {
+   width:var(--bc-ui-control-height)!important;min-width:var(--bc-ui-control-height)!important;
+   max-width:var(--bc-ui-control-height)!important;height:var(--bc-ui-control-height)!important;
+   min-height:var(--bc-ui-control-height)!important;flex:0 0 var(--bc-ui-control-height)!important;
+   padding:0!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;
+   border:1px solid var(--bc-ui-input-border)!important;border-radius:7px!important;
+   background:var(--bc-ui-input-background)!important;
+ }
+ html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock) .bc-filterbar .bc-filter-btn>span{display:none!important;}
+ html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock) .bc-filterbar .bc-filter-btn>i {margin:0!important;font-size:17px!important;}
+ html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock) .bc-filterbar .bc-filter-btn:disabled {opacity:.52!important;cursor:default!important;}
+ html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock) .bc-filterbar .bc-filter-btn.bc-clear-inactive {opacity:.52!important;}
+ html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock) .bc-filterbar .bc-filter-btn.bc-clear-active {opacity:1!important;background:var(--c-edf5ff,#edf5ff)!important;border-color:var(--c-8bb4e6,#8bb4e6)!important;}
+ html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock) .bc-filterbar .bc-filter-btn .bc-xls-ico {color:#15803d!important;}
+ html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock) .bc-filterbar .bc-filterbar-right {gap:7px!important;flex-wrap:nowrap!important;}
+ /* Shared header / row typography, subtle horizontal rules, no vertical grid. */
+ html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock) :is(.pricing-register-table,.quotation-register-card table,.so-register-card table,.dn-register-card table) thead th {
+   height:var(--bc-ui-header-height)!important;min-height:var(--bc-ui-header-height)!important;
+   background:var(--c-eaf2f9,#eaf2f9)!important;color:var(--bc-ui-header-text)!important;
+   font-size:var(--bc-ui-header-size)!important;font-weight:var(--bc-ui-header-weight)!important;
+   border-left:0!important;border-right:0!important;
+   border-bottom:1px solid #cbd5e1!important;letter-spacing:.01em!important;
+ }
+ html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock) :is(.pricing-register-table,.quotation-register-card table,.so-register-card table,.dn-register-card table) tbody td {
+   font-size:var(--bc-ui-row-font)!important;font-weight:400!important;
+   border-left:0!important;border-right:0!important;border-bottom:1px solid var(--bc-ui-row-divider)!important;
+ }
+ html body :is(#page-rfq,#page-costing,#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock) :is(.pricing-register-table,.quotation-register-card table,.so-register-card table,.dn-register-card table) tbody td:not(:has(.badge,.status-badge,.status-pill)) {color:var(--bc-ui-row-color);}
+ /* Section spacing, opaque masks and scrollable data under sticky headings. */
+ html body :is(#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock).active {display:flex!important;flex-direction:column!important;height:100%!important;min-height:0!important;overflow:hidden!important;background:var(--bc-page-bg,#f4f7fa)!important;}
+ html body .content:has(> :is(#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock).active) {min-height:0!important;overflow:hidden!important;padding-bottom:8px!important;}
+ html body :is(#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock).active :is(.module-main-workspace,.salesorders-workspace) {
+   display:flex!important;flex-direction:column!important;align-items:stretch!important;
+   flex:1 1 auto!important;min-height:0!important;overflow:hidden!important;
+   width:100%!important;background:var(--bc-page-bg,#f4f7fa)!important;
+ }
+ html body :is(#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock).active :is(.module-register-area,.salesorders-register-area,.rfq-register-area,.dn-register-area,.quotation-register-area) {
+   display:flex!important;flex-direction:column!important;flex:1 1 auto!important;
+   min-height:0!important;overflow:hidden!important;width:100%!important;
+   background:var(--bc-page-bg,#f4f7fa)!important;
+ }
+ html body :is(#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock).active .bc5-strip {flex:0 0 auto!important;align-self:stretch!important;}
+ html body :is(#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock).active .bc5-note {flex:0 0 auto!important;margin-bottom:4px!important;}
+ html body :is(#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock).active .bc-filterbar {position:relative!important;top:auto!important;flex:0 0 var(--bc-ui-toolbar-height)!important;
+   z-index:6!important;margin-bottom:var(--bc-ui-panel-gap)!important;}
+ html body :is(#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock).active :is(.dn-register-card,.quotation-register-card,.so-register-card) {
+   display:flex!important;flex-direction:column!important;flex:1 1 auto!important;
+   min-height:0!important;overflow:hidden!important;background:#fff!important;
+ }
+ html body :is(#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock).active :is(.dn-table-scroll,.quotation-table-scroll,.so-table-scroll) {
+   overflow-y:auto!important;overflow-x:auto!important;flex:1 1 auto!important;min-height:0!important;
+   overscroll-behavior:contain;background:#fff!important;position:relative!important;
+ }
+ html body :is(#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock).active :is(.dn-register-card,.quotation-register-card,.so-register-card) table {
+   border-collapse:separate!important;border-spacing:0!important;
+ }
+ html body :is(#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock).active :is(.dn-register-card,.quotation-register-card,.so-register-card) table thead th {
+   position:sticky!important;top:0!important;z-index:4!important;
+   background-clip:padding-box!important;box-shadow:0 1px 0 #cbd5e1!important;
+ }
+ html body :is(#page-quotations,#page-salesorders,#page-deliverynotes,#page-customerinvoices,#page-receipts,#page-purchaseinvoices,#page-supplierpayments,#page-stock).active :is(.dn-register-card,.quotation-register-card,.so-register-card) .rows-per-page-bar {
+   flex:0 0 auto!important;background:#fff!important;z-index:3!important;
+ }
+}
+/* Existing mobile/tablet layout stays untouched for this foundation rollout. */
+
+@media (min-width:1101px) {
+  /* Jobs and Sales Orders retain their existing KPI data and click behavior,
+     but receive the same shared dimensions and soft-card styling. */
+  html body #page-jobs .jb-monitor,
+  html body #page-salesorders .so-tiles {
+    display:flex!important;align-items:stretch!important;column-gap:var(--bc-ui-card-gap)!important;
+    background:transparent!important;border:0!important;box-shadow:none!important;
+    border-radius:0!important;overflow:visible!important;min-height:var(--bc-ui-card-height)!important;
+    margin-top:var(--bc-ui-panel-gap)!important;
+  }
+  html body #page-salesorders .so-tile-grid {display:grid!important;gap:var(--bc-ui-card-gap)!important;}
+  html body #page-jobs .jb-monitor>button,
+  html body #page-salesorders .so-tiles .so-tile {
+    min-height:var(--bc-ui-card-height)!important;border:1px solid var(--bc-ui-card-border)!important;
+    border-radius:var(--bc-ui-card-radius)!important;box-shadow:var(--bc-ui-card-shadow)!important;
+    overflow:hidden!important;
+  }
+  html body #page-jobs .jb-monitor>.jb-monitor-main,
+  html body #page-salesorders .so-tiles>.so-tile-lead {
+    flex:0 0 var(--bc-ui-monitor-lead-width)!important;
+    background:var(--c-173a5e,#173a5e)!important;color:#fff!important;
+  }
+  html body #page-jobs .jb-monitor .jb-monitor-tile>span,
+  html body #page-salesorders .so-tile .so-tile-t {font-size:var(--bc-ui-monitor-label)!important;}
+  html body #page-jobs .jb-monitor .jb-monitor-tile>strong,
+  html body #page-salesorders .so-tile .so-tile-t b {font-size:var(--bc-ui-monitor-value)!important;}
+  html body #page-jobs .jb-monitor .jb-monitor-main strong,
+  html body #page-salesorders .so-tile-lead>b {font-size:var(--bc-ui-monitor-lead-value)!important;}
+  html body #page-jobs .jb-reg-table thead th {
+    background:var(--c-eaf2f9,#eaf2f9)!important;color:var(--bc-ui-header-text)!important;
+    font-size:var(--bc-ui-header-size)!important;font-weight:var(--bc-ui-header-weight)!important;
+    height:var(--bc-ui-header-height)!important;border-left:0!important;border-right:0!important;
+  }
+  html body #page-jobs .jb-reg-table tbody td {font-size:var(--bc-ui-row-font)!important;font-weight:400!important;
+    border-left:0!important;border-right:0!important;border-bottom:1px solid var(--bc-ui-row-divider)!important;}
+}
+
+/* Icon silhouettes, reused from approved Pricing icons. */
+@media (min-width:1101px){html body .bc5-strip .bc5-lead{--bc-ui-icon-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m12%202%209%205-9%205-9-5%209-5Z%22%2F%3E%3Cpath%20d%3D%22m3%2012%209%205%209-5%22%2F%3E%3Cpath%20d%3D%22m3%2017%209%205%209-5%22%2F%3E%3C%2Fsvg%3E");}}
+@media (min-width:1101px){html body .bc5-strip .bc5-card:nth-child(1){--bc-ui-icon-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%202h14M5%2022h14M7%202v5l5%205-5%205v5M17%202v5l-5%205%205%205v5%22%2F%3E%3C%2Fsvg%3E");}}
+@media (min-width:1101px){html body .bc5-strip .bc5-card:nth-child(2){--bc-ui-icon-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%2022V4m0%201c5-3%207%203%2012%200v12c-5%203-7-3-12%200%22%2F%3E%3C%2Fsvg%3E");}}
+@media (min-width:1101px){html body .bc5-strip .bc5-card:nth-child(3){--bc-ui-icon-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M14%202H6a2%202%200%200%200-2%202v16a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8Z%22%2F%3E%3Cpath%20d%3D%22M14%202v6h6M8%2015l3%203%205-6%22%2F%3E%3C%2Fsvg%3E");}}
+@media (min-width:1101px){html body .bc5-strip .bc5-card:nth-child(4){--bc-ui-icon-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m10.3%203.4-8.8%2015A2%202%200%200%200%203.2%2021h17.6a2%202%200%200%200%201.7-2.6l-8.8-15a2%202%200%200%200-3.4%200Z%22%2F%3E%3Cpath%20d%3D%22M12%209v4M12%2017h.01%22%2F%3E%3C%2Fsvg%3E");}}
