@@ -1,0 +1,56 @@
+/* BizCore V271.5.26 — Dark Premium Fill trial, Pricing desktop monitor only.
+   Does not change structure, counts, filter handlers or progress widths. */
+@media (min-width:1101px) {
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card {
+    --premium-start:#16345b;
+    --premium-end:#0b1f39;
+    --premium-icon-bg:rgba(64,157,255,.19);
+    --premium-icon-fg:#8dcaff;
+    background:linear-gradient(150deg,var(--premium-start),var(--premium-end)) !important;
+    border-color:rgba(255,255,255,.10) !important;
+    box-shadow:0 3px 9px rgba(16,35,56,.15),inset 0 1px 0 rgba(255,255,255,.10) !important;
+    color:#f5f8ff !important;
+    transition:box-shadow .16s ease,filter .16s ease !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card:nth-child(2) {
+    --premium-start:#442550;--premium-end:#281636;
+    --premium-icon-bg:rgba(208,133,255,.19);--premium-icon-fg:#e1bcff;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card:nth-child(3) {
+    --premium-start:#16494d;--premium-end:#0b2836;
+    --premium-icon-bg:rgba(91,231,181,.16);--premium-icon-fg:#9af5cc;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card:nth-child(4) {
+    --premium-start:#562835;--premium-end:#301723;
+    --premium-icon-bg:rgba(255,129,147,.18);--premium-icon-fg:#ffb3bd;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card :is(.bc5-label,.bc5-number,.bc5-description,.bc5-sar-amount) {
+    color:#f6f8ff !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card .bc5-description {
+    opacity:.84 !important;
+  }
+  /* Keep icon shapes and positions; recolor their translucent backgrounds and glyphs. */
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card::before {
+    background:var(--premium-icon-bg) !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card::after {
+    background:var(--premium-icon-fg) !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card .bc5-bar {
+    background:rgba(255,255,255,.20) !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card:not(:disabled):hover {
+    background:linear-gradient(150deg,var(--premium-start),var(--premium-end)) !important;
+    border-color:rgba(255,255,255,.30) !important;
+    filter:brightness(1.10);
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-other > .bc5-card[aria-pressed="true"] {
+    background:linear-gradient(150deg,var(--premium-start),var(--premium-end)) !important;
+    border-color:#a8d6ff !important;
+    box-shadow:0 0 0 2px rgba(147,197,253,.5),0 3px 10px rgba(16,35,56,.16) !important;
+  }
+  html body #page-costing.active .pricing-main-workspace > .bc5-strip > .bc5-lead {
+    box-shadow:0 3px 9px rgba(16,35,56,.17),inset 0 1px 0 rgba(255,255,255,.10) !important;
+  }
+}
