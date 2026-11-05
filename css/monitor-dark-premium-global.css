@@ -1,0 +1,78 @@
+/* BizCore V271.5.27 — Global Dark Premium monitor trial.
+   Approved Pricing V271.5.26.1 is the visual reference. Desktop monitors only.
+   One shared palette and typography; no metric, status, bar-width or click logic changes. */
+:root {
+ --bc-premium-title-size:15px;
+ --bc-premium-count-size:23px;
+ --bc-premium-detail-size:13px;
+ --bc-premium-navy-start:#16345b; --bc-premium-navy-end:#0b1f39;
+ --bc-premium-purple-start:#442550; --bc-premium-purple-end:#281636;
+ --bc-premium-teal-start:#16494d; --bc-premium-teal-end:#0b2836;
+ --bc-premium-burgundy-start:#562835; --bc-premium-burgundy-end:#301723;
+ --bc-premium-neutral-start:#293d53; --bc-premium-neutral-end:#15283a;
+}
+@media(min-width:1101px){
+ /* Apply filled surfaces to the shared phase-5 monitor component outside Pricing.
+    The first card retains its theme-derived lead background. */
+ html body .bc5-strip:not(#nonexistent)>.bc5-other>.bc5-card {
+  --pm-start:var(--bc-premium-navy-start);--pm-end:var(--bc-premium-navy-end);
+  --pm-icon-bg:rgba(64,157,255,.19);--pm-icon-fg:#8dcaff;
+  background:linear-gradient(150deg,var(--pm-start),var(--pm-end))!important;
+  color:#f6f8ff!important;border-color:rgba(255,255,255,.12)!important;
+  box-shadow:0 3px 9px rgba(16,35,56,.15),inset 0 1px 0 rgba(255,255,255,.09)!important;
+ }
+ html body .bc5-strip>.bc5-other>.bc5-card:nth-child(2){--pm-start:var(--bc-premium-purple-start);--pm-end:var(--bc-premium-purple-end);--pm-icon-bg:rgba(208,133,255,.19);--pm-icon-fg:#e1bcff;}
+ html body .bc5-strip>.bc5-other>.bc5-card:nth-child(3){--pm-start:var(--bc-premium-teal-start);--pm-end:var(--bc-premium-teal-end);--pm-icon-bg:rgba(91,231,181,.16);--pm-icon-fg:#9af5cc;}
+ html body .bc5-strip>.bc5-other>.bc5-card:nth-child(4){--pm-start:var(--bc-premium-burgundy-start);--pm-end:var(--bc-premium-burgundy-end);--pm-icon-bg:rgba(255,129,147,.18);--pm-icon-fg:#ffb3bd;}
+ html body .bc5-strip>.bc5-other>.bc5-card:nth-child(n+5){--pm-start:var(--bc-premium-neutral-start);--pm-end:var(--bc-premium-neutral-end);--pm-icon-bg:rgba(168,191,216,.18);--pm-icon-fg:#c9d8ea;}
+ html body .bc5-strip>.bc5-other>.bc5-card :is(.bc5-label,.bc5-number,.bc5-description,.bc5-sar-amount){color:#f6f8ff!important;}
+ html body .bc5-strip>.bc5-other>.bc5-card .bc5-description{opacity:.87!important;}
+ html body .bc5-strip>.bc5-other>.bc5-card::before{background:var(--pm-icon-bg)!important;}
+ html body .bc5-strip>.bc5-other>.bc5-card::after{background:var(--pm-icon-fg)!important;}
+ html body .bc5-strip>.bc5-other>.bc5-card .bc5-bar{background:rgba(255,255,255,.20)!important;}
+ html body .bc5-strip>.bc5-other>.bc5-card:hover:not(:disabled){background:linear-gradient(150deg,var(--pm-start),var(--pm-end))!important;filter:brightness(1.08);}
+ html body .bc5-strip>.bc5-other>.bc5-card[aria-pressed="true"]{background:linear-gradient(150deg,var(--pm-start),var(--pm-end))!important;border-color:#a8d6ff!important;box-shadow:0 0 0 2px rgba(147,197,253,.5),0 3px 10px rgba(16,35,56,.16)!important;}
+ /* Central typography tokens apply to Pricing as well as other shared monitors. */
+ html body .bc5-strip>.bc5-lead>.bc5-label,
+ html body .bc5-strip>.bc5-other>.bc5-card :is(.bc5-card-header,.bc5-label){font-size:var(--bc-premium-title-size)!important;}
+ html body .bc5-strip :is(.bc5-lead,.bc5-card) .bc5-number{font-size:var(--bc-premium-count-size)!important;}
+ html body .bc5-strip :is(.bc5-lead,.bc5-card) :is(.bc5-description,.bc5-sar-amount){font-size:var(--bc-premium-detail-size)!important;}
+ /* Jobs has a separate monitor DOM; use the same palette, spacing and typography. */
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile {
+  --pm-start:var(--bc-premium-navy-start);--pm-end:var(--bc-premium-navy-end);
+  --pm-icon-bg:rgba(64,157,255,.19);--pm-icon-fg:#8dcaff;
+  background:linear-gradient(150deg,var(--pm-start),var(--pm-end))!important;
+  border-color:rgba(255,255,255,.12)!important;color:#f6f8ff!important;
+  box-shadow:0 3px 9px rgba(16,35,56,.15),inset 0 1px 0 rgba(255,255,255,.09)!important;
+ }
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile:nth-child(3){--pm-start:var(--bc-premium-purple-start);--pm-end:var(--bc-premium-purple-end);--pm-icon-bg:rgba(208,133,255,.19);--pm-icon-fg:#e1bcff;}
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile:nth-child(4){--pm-start:var(--bc-premium-teal-start);--pm-end:var(--bc-premium-teal-end);--pm-icon-bg:rgba(91,231,181,.16);--pm-icon-fg:#9af5cc;}
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile:nth-child(5){--pm-start:var(--bc-premium-burgundy-start);--pm-end:var(--bc-premium-burgundy-end);--pm-icon-bg:rgba(255,129,147,.18);--pm-icon-fg:#ffb3bd;}
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile:nth-child(n+6){--pm-start:var(--bc-premium-neutral-start);--pm-end:var(--bc-premium-neutral-end);--pm-icon-bg:rgba(168,191,216,.18);--pm-icon-fg:#c9d8ea;}
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile :is(span,strong,small,.jb-monitor-amount){color:#f6f8ff!important;}
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile::before{background:var(--pm-icon-bg)!important;}
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile::after{background:var(--pm-icon-fg)!important;}
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile .jb-monitor-track{background:rgba(255,255,255,.20)!important;}
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile:hover{background:linear-gradient(150deg,var(--pm-start),var(--pm-end))!important;filter:brightness(1.08);}
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile.is-active{background:linear-gradient(150deg,var(--pm-start),var(--pm-end))!important;outline:2px solid #a8d6ff;outline-offset:-2px;}
+ html body #page-jobs.active .jb-monitor :is(.jb-monitor-main span,.jb-monitor-tile>span){font-size:var(--bc-premium-title-size)!important;}
+ html body #page-jobs.active .jb-monitor :is(.jb-monitor-main strong,.jb-monitor-tile>strong){font-size:var(--bc-premium-count-size)!important;}
+ html body #page-jobs.active .jb-monitor :is(.jb-monitor-main small,.jb-monitor-amount){font-size:var(--bc-premium-detail-size)!important;}
+ /* Sales Orders tiles are a third implementation. Preserve the leading theme tile. */
+ html body #page-salesorders.active .so-tile-grid>.so-tile{
+  --pm-start:var(--bc-premium-navy-start);--pm-end:var(--bc-premium-navy-end);
+  background:linear-gradient(150deg,var(--pm-start),var(--pm-end))!important;
+  color:#f6f8ff!important;border-color:rgba(255,255,255,.12)!important;
+  box-shadow:0 3px 9px rgba(16,35,56,.15),inset 0 1px 0 rgba(255,255,255,.09)!important;
+ }
+ html body #page-salesorders.active .so-tile-grid>.so-tile:nth-child(2){--pm-start:var(--bc-premium-purple-start);--pm-end:var(--bc-premium-purple-end);}
+ html body #page-salesorders.active .so-tile-grid>.so-tile:nth-child(3){--pm-start:var(--bc-premium-teal-start);--pm-end:var(--bc-premium-teal-end);}
+ html body #page-salesorders.active .so-tile-grid>.so-tile:nth-child(4){--pm-start:var(--bc-premium-burgundy-start);--pm-end:var(--bc-premium-burgundy-end);}
+ html body #page-salesorders.active .so-tile-grid>.so-tile :is(.so-tile-t,.so-tile-t span,.so-tile-t b,.so-tile-val,.so-tile-s){color:#f6f8ff!important;}
+ html body #page-salesorders.active .so-tile-grid>.so-tile .so-tile-bar{background:rgba(255,255,255,.20)!important;}
+ html body #page-salesorders.active .so-tile-grid>.so-tile:hover{background:linear-gradient(150deg,var(--pm-start),var(--pm-end))!important;filter:brightness(1.08);}
+ html body #page-salesorders.active .so-tile-grid>.so-tile.active{background:linear-gradient(150deg,var(--pm-start),var(--pm-end))!important;border-color:#a8d6ff!important;box-shadow:0 0 0 2px rgba(147,197,253,.5)!important;}
+ html body #page-salesorders.active .so-tiles :is(.so-tile-lead small,.so-tile-t){font-size:var(--bc-premium-title-size)!important;}
+ html body #page-salesorders.active .so-tiles :is(.so-tile-lead>b,.so-tile-t>b){font-size:var(--bc-premium-count-size)!important;}
+ html body #page-salesorders.active .so-tiles :is(.so-tile-val,.so-tile-s,.so-tile-l2){font-size:var(--bc-premium-detail-size)!important;}
+}
