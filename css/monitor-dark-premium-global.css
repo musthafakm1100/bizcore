@@ -76,3 +76,41 @@
  html body #page-salesorders.active .so-tiles :is(.so-tile-lead>b,.so-tile-t>b){font-size:var(--bc-premium-count-size)!important;}
  html body #page-salesorders.active .so-tiles :is(.so-tile-val,.so-tile-s,.so-tile-l2){font-size:var(--bc-premium-detail-size)!important;}
 }
+
+/* V271.5.28 — semantic icon badges on Dark Premium monitor cards.
+   IMPORTANT: keep card fills, label typography, DOM and progress percentages unchanged.
+   The card data-tone/data-filter, not its screen position, defines icon colors.
+   Update these central palette tokens to change all equivalent icon badges. */
+:root {
+ --bc-monitor-icon-blue-bg:rgba(52,139,245,.22); --bc-monitor-icon-blue:#8dcaff;
+ --bc-monitor-icon-amber-bg:rgba(245,158,11,.23); --bc-monitor-icon-amber:#ffd17a;
+ --bc-monitor-icon-purple-bg:rgba(168,85,247,.22); --bc-monitor-icon-purple:#d6adff;
+ --bc-monitor-icon-green-bg:rgba(34,197,94,.19); --bc-monitor-icon-green:#80efb4;
+ --bc-monitor-icon-red-bg:rgba(239,68,68,.23); --bc-monitor-icon-red:#ffaaa9;
+ --bc-monitor-icon-slate-bg:rgba(174,191,209,.18); --bc-monitor-icon-slate:#d3deed;
+ --bc-monitor-icon-lightgreen-bg:rgba(74,222,128,.18); --bc-monitor-icon-lightgreen:#a2f4b5;
+}
+@media(min-width:1101px){
+ /* Override the old position-based icon variables for the shared monitor. */
+ html body .bc5-strip>.bc5-other>.bc5-card[data-tone="blue"]{--pm-icon-bg:var(--bc-monitor-icon-blue-bg);--pm-icon-fg:var(--bc-monitor-icon-blue);}
+ html body .bc5-strip>.bc5-other>.bc5-card[data-tone="amber"]{--pm-icon-bg:var(--bc-monitor-icon-amber-bg);--pm-icon-fg:var(--bc-monitor-icon-amber);}
+ html body .bc5-strip>.bc5-other>.bc5-card[data-tone="purple"]{--pm-icon-bg:var(--bc-monitor-icon-purple-bg);--pm-icon-fg:var(--bc-monitor-icon-purple);}
+ html body .bc5-strip>.bc5-other>.bc5-card[data-tone="green"]{--pm-icon-bg:var(--bc-monitor-icon-green-bg);--pm-icon-fg:var(--bc-monitor-icon-green);}
+ html body .bc5-strip>.bc5-other>.bc5-card[data-tone="red"]{--pm-icon-bg:var(--bc-monitor-icon-red-bg);--pm-icon-fg:var(--bc-monitor-icon-red);}
+ html body .bc5-strip>.bc5-other>.bc5-card[data-tone="slate"]{--pm-icon-bg:var(--bc-monitor-icon-slate-bg);--pm-icon-fg:var(--bc-monitor-icon-slate);}
+ /* Business semantics take precedence where a page's existing data-tone is generic. */
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="pay-unpaid"],
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="payment"]{--pm-icon-bg:var(--bc-monitor-icon-blue-bg);--pm-icon-fg:var(--bc-monitor-icon-blue);}
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="pay-partial"]{--pm-icon-bg:var(--bc-monitor-icon-lightgreen-bg);--pm-icon-fg:var(--bc-monitor-icon-lightgreen);}
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="pay-paid"]{--pm-icon-bg:var(--bc-monitor-icon-green-bg);--pm-icon-fg:var(--bc-monitor-icon-green);}
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="partially-allocated"],
+ html body .bc5-strip>.bc5-other>.bc5-card[data-filter="partially-applied"]{--pm-icon-bg:var(--bc-monitor-icon-purple-bg);--pm-icon-fg:var(--bc-monitor-icon-purple);}
+ html body #st-visual-strip>.bc5-other>.bc5-card[data-stock-filter="in"]{--pm-icon-bg:var(--bc-monitor-icon-green-bg);--pm-icon-fg:var(--bc-monitor-icon-green);}
+ /* Stock's available metric was originally assigned blue; its visual accent is green. */
+ html body #st-visual-strip>.bc5-other>.bc5-card[data-stock-filter="in"] .bc5-bar i{background:#22c55e;}
+ /* Jobs has separate markup; apply the approved color vocabulary by the named card. */
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile:nth-child(2){--pm-icon-bg:var(--bc-monitor-icon-blue-bg);--pm-icon-fg:var(--bc-monitor-icon-blue);}
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile:nth-child(3){--pm-icon-bg:var(--bc-monitor-icon-purple-bg);--pm-icon-fg:var(--bc-monitor-icon-purple);}
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile:nth-child(4){--pm-icon-bg:var(--bc-monitor-icon-green-bg);--pm-icon-fg:var(--bc-monitor-icon-green);}
+ html body #page-jobs.active .jb-monitor>.jb-monitor-tile:nth-child(5){--pm-icon-bg:var(--bc-monitor-icon-amber-bg);--pm-icon-fg:var(--bc-monitor-icon-amber);}
+}
