@@ -86,6 +86,7 @@ button,.btn{font-size:14px!important;font-weight:600!important;}
 <link rel="stylesheet" href="css/pricing-dark-premium-trial.css?v=271.5.26.1"/>
 <link rel="stylesheet" href="css/monitor-dark-premium-global.css?v=271.5.29.1"/>
 <link rel="stylesheet" href="css/master-sidebar-option-b.css?v=271.5.30"/>
+<link rel="stylesheet" href="css/master-customers-pricing-standard.css?v=271.5.31"/>
 <script src="js/pricing-filter-visual.js?v=271.5.17" defer></script>
 </head>
 <body>
@@ -863,21 +864,19 @@ document.addEventListener('error', function(e) {
 <div class="page" id="page-categories"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-category"></i></div><h2>Product Categories</h2><p>Organize products into categories for faster searching, reporting, and inventory control.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
 <!-- SETUP PAGE -->
 <div class="page" id="page-masters"><div class="setup-shell masters-shell"><aside aria-label="Masters navigation" class="setup-nav masters-nav" id="masters-nav"><div class="setup-nav-head"><div class="setup-nav-title"><i class="ti ti-database"></i><span class="masters-nav-heading-text">Master Data</span></div><button type="button" class="masters-nav-toggle" id="masters-nav-toggle" aria-controls="masters-nav" aria-expanded="true" aria-label="Collapse Master Data navigation" title="Collapse Master Data navigation"><i class="ti ti-chevron-left" aria-hidden="true"></i></button><div class="setup-nav-subtitle">Operational business records and reusable data</div></div><div class="setup-nav-group"><div class="setup-nav-group-title">Business Data</div><button class="setup-tab masters-tab" id="mtab-customers" onclick="switchMastersTab('customers')"><i class="ti ti-users"></i><span class="tab-copy"><span class="tab-title">Customers</span></span></button><button class="setup-tab masters-tab" id="mtab-suppliers" onclick="switchMastersTab('suppliers')"><i class="ti ti-building-store"></i><span class="tab-copy"><span class="tab-title">Suppliers</span></span></button><button class="setup-tab masters-tab" id="mtab-products" onclick="switchMastersTab('products')"><i class="ti ti-package"></i><span class="tab-copy"><span class="tab-title">Products</span></span></button><button class="setup-tab masters-tab" id="mtab-employees" onclick="switchMastersTab('employees')"><i class="ti ti-users-group"></i><span class="tab-copy"><span class="tab-title">Employees</span></span></button><button class="setup-tab masters-tab" id="mtab-units" onclick="switchMastersTab('units')"><i class="ti ti-ruler-measure"></i><span class="tab-copy"><span class="tab-title">Units of Measure</span></span></button><button class="setup-tab masters-tab" id="mtab-categories" onclick="switchMastersTab('categories')"><i class="ti ti-category"></i><span class="tab-copy"><span class="tab-title">Categories</span></span></button></div></aside><div class="setup-workspace masters-workspace"><div class="masters-tab-content" id="masters-tab-customers">
-<div class="card">
-<div class="card-header page-command-header">
-<h3>Customer directory</h3>
-<div style="display:flex;gap:8px;align-items:center">
-<button class="btn btn-secondary btn-sm" onclick="openImportModal('customers')" title="Import customers from Excel"><i class="ti ti-table-import"></i>Import Excel</button>
-<button class="btn btn-danger btn-sm master-bulk-delete" id="customers-delete-selected" onclick="deleteSelectedMasterRecords('customers')" disabled><i class="ti ti-trash"></i>Delete selected <span id="customers-selected-count"></span></button>
-<button class="btn btn-primary btn-sm page-primary-command" onclick="openAddCustomer()"><i class="ti ti-plus"></i>Add customer</button>
+<div class="card bc-master-customer-card">
+<div class="card-header page-command-header bc-master-directory-heading"><h3>Customer directory</h3></div>
+<div class="bc-master-customer-toolbar page-control-bar" role="toolbar" aria-label="Customer directory tools">
+  <input id="cust-search" oninput="renderCustomers()" placeholder="Search customers…" aria-label="Search customers" type="text"/>
+  <label class="bc-master-sort-label" for="master-sort-customers">Sort by</label>
+  <select class="bc-master-sort" id="master-sort-customers" aria-label="Sort customers" onchange="bcMasterSortChanged('customers',renderCustomers)"><option value="company-asc">Company A–Z</option><option value="company-desc">Company Z–A</option><option value="contact-asc">Contact A–Z</option><option value="city-asc">City A–Z</option><option value="quotes-desc">Most quotations</option><option value="total-desc">Highest quotation value</option></select>
+  <div class="bc-master-toolbar-actions">
+    <button type="button" class="btn btn-secondary btn-sm bc-master-icon-action" onclick="openImportModal('customers')" title="Import customers from Excel" aria-label="Import customers from Excel"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i></button>
+    <button type="button" class="btn btn-danger btn-sm master-bulk-delete bc-master-icon-action" id="customers-delete-selected" onclick="deleteSelectedMasterRecords('customers')" disabled title="Delete selected customers" aria-label="Delete selected customers"><i class="ti ti-trash" aria-hidden="true"></i><span id="customers-selected-count" class="bc-master-selected-count"></span></button>
+    <button type="button" class="btn btn-primary btn-sm page-primary-command bc-master-create" onclick="openAddCustomer()"><i class="ti ti-plus" aria-hidden="true"></i>New Customer</button>
+  </div>
 </div>
-</div>
-<div class="card-body" style="padding:14px 16px 0">
-<div class="filter-bar page-control-bar">
-<input id="cust-search" oninput="renderCustomers()" placeholder="Search customers…" type="text"/><label class="bc-master-sort-label" for="master-sort-customers">Sort by</label><select class="bc-master-sort" id="master-sort-customers" aria-label="Sort customers" onchange="bcMasterSortChanged('customers',renderCustomers)"><option value="company-asc">Company A–Z</option><option value="company-desc">Company Z–A</option><option value="contact-asc">Contact A–Z</option><option value="city-asc">City A–Z</option><option value="quotes-desc">Most quotations</option><option value="total-desc">Highest quotation value</option></select>
-</div>
-</div>
-<div class="list-table-scroll">
+<div class="list-table-scroll bc-master-customer-table-scroll">
 <table>
 <thead><tr><th class="master-select-col"><input id="customers-select-all" class="master-row-check" type="checkbox" onkeydown="event.stopPropagation()" aria-label="Select all customers on this page" onclick="event.stopPropagation();toggleMasterPageSelection('customers',this.checked)"></th><th class="sortable-register-th" data-sort-screen="customers" data-sort-key="company" onclick="setRegisterSort('customers','company',renderCustomers)">Company</th><th class="sortable-register-th" data-sort-screen="customers" data-sort-key="contact" onclick="setRegisterSort('customers','contact',renderCustomers)">Default contact</th><th class="sortable-register-th" data-sort-screen="customers" data-sort-key="title" onclick="setRegisterSort('customers','title',renderCustomers)">Title</th><th class="sortable-register-th" data-sort-screen="customers" data-sort-key="city" onclick="setRegisterSort('customers','city',renderCustomers)">City</th><th class="sortable-register-th" data-sort-screen="customers" data-sort-key="phone" onclick="setRegisterSort('customers','phone',renderCustomers)">Phone</th><th class="sortable-register-th center" data-sort-screen="customers" data-sort-key="quotes" onclick="setRegisterSort('customers','quotes',renderCustomers)">Quotes</th><th class="sortable-register-th right" data-sort-screen="customers" data-sort-key="total" onclick="setRegisterSort('customers','total',renderCustomers)">Total value</th></tr></thead>
 <tbody id="customers-tbody"></tbody>

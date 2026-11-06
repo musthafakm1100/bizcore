@@ -1,0 +1,143 @@
+/* BizCore V271.5.31 — Customer Directory uses approved Pricing register tokens.
+   Scoped to Customers only. Does not alter data, actions, sorting or pagination. */
+@media (min-width: 761px) {
+  html body #page-masters #masters-tab-customers.active .bc-master-customer-card {
+    display:flex;flex-direction:column;min-width:0;min-height:0;
+    background:transparent;border:0;box-shadow:none;overflow:visible;
+    gap:0;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-directory-heading {
+    flex:0 0 auto;min-height:40px;padding:7px 12px;
+    background:#fff;border:1px solid #e1e7ef;border-radius:9px;
+    margin-bottom:var(--bc-ui-panel-gap,5px);
+  }
+  html body #page-masters #masters-tab-customers .bc-master-directory-heading h3 {
+    font-size:14px!important;font-weight:500!important;letter-spacing:0;
+    color:var(--bc-ui-input-text,#334155);
+  }
+  html body #page-masters #masters-tab-customers .bc-master-customer-toolbar {
+    flex:0 0 auto;display:flex;align-items:center;gap:7px;
+    box-sizing:border-box;min-width:0;width:100%;height:var(--bc-ui-toolbar-height,48px);
+    min-height:var(--bc-ui-toolbar-height,48px);padding:0 10px;
+    border:1px solid var(--c-c9d9e8,#c9d9e8);border-radius:9px;
+    background:var(--c-edf5ff,#edf5ff);box-shadow:0 1px 2px rgba(24,44,75,.045);
+    margin:0 0 var(--bc-ui-panel-gap,5px);
+  }
+  html body #page-masters #masters-tab-customers .bc-master-customer-toolbar :is(input,select) {
+    height:var(--bc-ui-control-height,34px)!important;
+    min-height:var(--bc-ui-control-height,34px)!important;
+    font-size:var(--bc-ui-control-font,13px)!important;
+    font-weight:400!important;color:var(--bc-ui-input-text,#334155)!important;
+    background:var(--bc-ui-input-background,#f8fafc)!important;
+    border:1px solid var(--bc-ui-input-border,#cbd5e1)!important;
+    border-radius:7px!important;box-shadow:none!important;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-customer-toolbar #cust-search {
+    flex:1 1 240px;width:auto!important;max-width:420px;min-width:140px;
+    padding:0 11px!important;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-customer-toolbar .bc-master-sort-label {
+    font-size:13px!important;color:#64748b!important;font-weight:400!important;
+    margin-left:auto;white-space:nowrap;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-customer-toolbar .bc-master-sort {
+    flex:0 0 155px;width:155px;min-width:140px;padding:0 9px!important;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-toolbar-actions {
+    display:flex;align-items:center;gap:7px;flex:0 0 auto;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-icon-action {
+    position:relative;display:inline-flex;align-items:center;justify-content:center;
+    width:var(--bc-ui-control-height,34px)!important;
+    min-width:var(--bc-ui-control-height,34px)!important;
+    height:var(--bc-ui-control-height,34px)!important;padding:0!important;
+    color:#64748b;background:var(--bc-ui-input-background,#f8fafc)!important;
+    border:1px solid var(--bc-ui-input-border,#cbd5e1)!important;
+    border-radius:7px!important;box-shadow:none!important;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-icon-action[title^="Import"] i {color:#15803d!important;}
+  html body #page-masters #masters-tab-customers .bc-master-icon-action:disabled {opacity:.48;cursor:default;}
+  html body #page-masters #masters-tab-customers .bc-master-selected-count:not(:empty) {
+    position:absolute;top:-7px;right:-6px;padding:1px 4px;border-radius:9px;
+    background:#e7eef8;color:#334155;font-size:10px;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-create {
+    height:var(--bc-ui-control-height,34px)!important;min-height:var(--bc-ui-control-height,34px)!important;
+    margin:0!important;padding:0 12px!important;font-size:13px!important;font-weight:500!important;
+    border-radius:7px!important;white-space:nowrap;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-customer-table-scroll {
+    min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;
+    border:1px solid var(--c-c9d9e8,#c9d9e8);border-radius:9px;
+    background:#fff;position:relative;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-customer-table-scroll table {
+    width:100%;border-collapse:separate!important;border-spacing:0!important;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-customer-table-scroll thead th {
+    position:sticky!important;top:0!important;z-index:5!important;
+    height:var(--bc-ui-header-height,39px)!important;
+    background:var(--c-eaf2f9,#eaf2f9)!important;
+    color:var(--bc-ui-header-text,#475569)!important;
+    font-size:var(--bc-ui-header-size,12px)!important;
+    font-weight:var(--bc-ui-header-weight,500)!important;
+    letter-spacing:.01em;border-left:0!important;border-right:0!important;
+    border-bottom:1px solid #cbd5e1!important;box-shadow:0 1px 0 #cbd5e1!important;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-customer-table-scroll tbody td {
+    color:var(--bc-ui-row-color,#111827)!important;
+    font-size:var(--bc-ui-row-font,14px)!important;font-weight:400!important;
+    border-left:0!important;border-right:0!important;
+    border-bottom:1px solid #e8edf3!important;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-customer-table-scroll tbody td :is(strong,b) {
+    font-weight:400!important;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-customer-table-scroll tbody td small {
+    color:#718096!important;font-size:11px!important;font-weight:400!important;
+  }
+  html body #page-masters #masters-tab-customers .rows-per-page-bar {
+    background:#fff;border:1px solid #e1e7ef;border-radius:8px;
+    margin-top:5px;flex:0 0 auto;
+  }
+}
+/* Use a contained, independently scrolling table only where desktop has enough height. */
+@media (min-width:1101px) {
+  html body .content:has(> #page-masters.active #masters-tab-customers.active) {
+    overflow:hidden!important;min-height:0!important;
+  }
+  html body #page-masters.active:has(#masters-tab-customers.active) {
+    display:flex!important;flex-direction:column!important;
+    height:100%!important;min-height:0!important;overflow:hidden!important;
+  }
+  html body #page-masters.active:has(#masters-tab-customers.active) > .masters-shell {
+    display:grid!important;flex:1 1 auto!important;height:100%!important;
+    min-height:0!important;overflow:hidden!important;
+  }
+  html body #page-masters.active #masters-tab-customers.active {
+    height:100%!important;min-height:0!important;display:flex!important;flex-direction:column!important;
+  }
+  html body #page-masters.active #masters-tab-customers.active > .bc-master-customer-card {
+    flex:1 1 auto!important;min-height:0!important;overflow:hidden!important;
+  }
+  html body #page-masters.active #masters-tab-customers.active .bc-master-customer-table-scroll {
+    flex:1 1 auto!important;min-height:0!important;
+  }
+  html body #page-masters.active .masters-workspace:has(#masters-tab-customers.active) {
+    height:100%!important;min-height:0!important;overflow:hidden!important;
+  }
+}
+@media (min-width:761px) and (max-width:1100px) {
+  #page-masters #masters-tab-customers .bc-master-customer-toolbar {height:auto;min-height:48px;flex-wrap:wrap;padding:7px 9px;}
+  #page-masters #masters-tab-customers .bc-master-customer-table-scroll {max-height:calc(100dvh - 330px);}
+}
+@media (max-width:760px) {
+  #page-masters #masters-tab-customers .bc-master-customer-toolbar {
+    display:flex;flex-wrap:wrap;gap:7px;padding:9px;border:1px solid var(--c-c9d9e8,#c9d9e8);
+    border-radius:9px;background:var(--c-edf5ff,#edf5ff);margin-bottom:5px;
+  }
+  #page-masters #masters-tab-customers .bc-master-customer-toolbar #cust-search {flex:1 1 100%;width:100%;}
+  #page-masters #masters-tab-customers .bc-master-toolbar-actions {display:flex;gap:6px;flex-wrap:wrap;}
+  #page-masters #masters-tab-customers .bc-master-icon-action {min-width:34px;min-height:34px;}
+  #page-masters #masters-tab-customers .bc-master-customer-table-scroll {overflow-x:auto;border-radius:9px;}
+}
