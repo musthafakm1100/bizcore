@@ -141,3 +141,23 @@
   #page-masters #masters-tab-customers .bc-master-icon-action {min-width:34px;min-height:34px;}
   #page-masters #masters-tab-customers .bc-master-customer-table-scroll {overflow-x:auto;border-radius:9px;}
 }
+
+/* V271.5.31.1 — Customer table right-edge refinement (desktop only).
+   Keep the approved column order, font sizes, widths and sticky scrolling. */
+@media (min-width:761px) {
+  html body #page-masters #masters-tab-customers .bc-master-customer-table-scroll {
+    scrollbar-color:#9aa8b8 #f1f5f9;
+    scrollbar-width:thin;
+    background:#fff;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-customer-table-scroll thead th:last-child,
+  html body #page-masters #masters-tab-customers .bc-master-customer-table-scroll tbody td:last-child {
+    padding-right:24px!important;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-customer-table-scroll thead th:last-child {
+    border-top-right-radius:8px;
+  }
+  html body #page-masters #masters-tab-customers .bc-master-customer-table-scroll::-webkit-scrollbar {width:10px;height:10px;}
+  html body #page-masters #masters-tab-customers .bc-master-customer-table-scroll::-webkit-scrollbar-track {background:#f1f5f9;border-radius:9px;}
+  html body #page-masters #masters-tab-customers .bc-master-customer-table-scroll::-webkit-scrollbar-thumb {background:#9aa8b8;border:2px solid #f1f5f9;border-radius:9px;}
+}
