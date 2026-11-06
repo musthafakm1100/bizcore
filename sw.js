@@ -8,13 +8,15 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v2715291-semantic-monitor-colors';
+const CACHE_NAME = 'bizcore-shell-v271530-master-sidebar';
 const APP_SHELL = [
   './login.html',
   './delivery.html',
   './index.html',
   './mycash.html',
   './css/main.css?v=270.58',
+  './css/master-sidebar-option-b.css?v=271.5.30',
+  './js/master-sidebar-option-b.js?v=271.5.30',
   './css/pricing-toolbar-trial.css?v=271.5.16',
   './css/pricing-sticky-table.css?v=271.5.19',
   './css/bizcore-ui-global.css?v=271.5.21',
