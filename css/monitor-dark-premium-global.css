@@ -1,4 +1,7 @@
-/* BizCore V271.5.27 — Global Dark Premium monitor trial.
+/* BizCore V271.5.29.1 — correct semantic CSS precedence: remove phantom ID selector.
+   This allows later [data-tone] declarations for full card backgrounds and icons
+   to override the navy default, while leaving Pricing and business logic intact.
+   Original: BizCore V271.5.27 — Global Dark Premium monitor trial.
    Approved Pricing V271.5.26.1 is the visual reference. Desktop monitors only.
    One shared palette and typography; no metric, status, bar-width or click logic changes. */
 :root {
@@ -14,7 +17,7 @@
 @media(min-width:1101px){
  /* Apply filled surfaces to the shared phase-5 monitor component outside Pricing.
     The first card retains its theme-derived lead background. */
- html body .bc5-strip:not(#nonexistent)>.bc5-other>.bc5-card {
+ html body .bc5-strip>.bc5-other>.bc5-card {
   --pm-start:var(--bc-premium-navy-start);--pm-end:var(--bc-premium-navy-end);
   --pm-icon-bg:rgba(64,157,255,.19);--pm-icon-fg:#8dcaff;
   background:linear-gradient(150deg,var(--pm-start),var(--pm-end))!important;
