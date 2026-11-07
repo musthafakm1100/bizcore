@@ -64,3 +64,49 @@
 #sup-view-modal .product-profile-section-title span{font-weight:500!important}
 #cust-view-modal .profile-txn-table td .badge,
 #sup-view-modal .profile-txn-table td .badge{font-weight:400!important}
+
+/* V271.5.35.1 — Approved compact Customer / Supplier detail layout, not a skin over the old grids. */
+#cust-view-modal .modal,#sup-view-modal .modal {height:auto!important;max-height:min(88vh,850px)!important;min-height:0!important;overflow:hidden}
+#cust-view-modal .modal-body,#sup-view-modal .modal-body {flex:0 1 auto!important;overflow-y:auto!important;min-height:0; scrollbar-width:thin; background:#f8fafc}
+#cust-view-modal .modal-footer,#sup-view-modal .modal-footer {margin-top:0!important}
+#cust-view-modal .business-profile,#sup-view-modal .business-profile {padding:12px 16px!important}
+#cust-view-modal .product-profile-hero,#sup-view-modal .product-profile-hero {padding:10px 14px!important;min-height:65px!important;margin-bottom:8px!important;background:linear-gradient(112deg,#f1f7ff,#e8f2ff)!important}
+#cust-view-modal .product-profile-icon,#sup-view-modal .product-profile-icon {flex-shrink:0}
+#cust-view-modal .product-profile-identity h3,#sup-view-modal .product-profile-identity h3 {font-size:17px!important;font-weight:500!important;color:#25517b!important}
+#cust-view-modal .bc-party-tabs,#sup-view-modal .bc-party-tabs {margin-bottom:10px}
+#cust-view-modal .bc-party-pane,#sup-view-modal .bc-party-pane {gap:10px}
+#cust-view-modal .bc-detail-top,#sup-view-modal .bc-detail-top {display:grid;grid-template-columns:minmax(0,1.18fr) minmax(0,.82fr);gap:10px;align-items:stretch}
+#cust-view-modal .bc-detail-card,#sup-view-modal .bc-detail-card {margin:0!important;min-height:0;border:1px solid #d3e1ef!important;background:#fff;border-radius:9px;overflow:hidden}
+#cust-view-modal .bc-detail-card .product-profile-section-title,#sup-view-modal .bc-detail-card .product-profile-section-title {background:#eef4fb!important;height:32px;min-height:32px;padding:0 12px!important;font-size:13px!important;font-weight:500!important;text-transform:none!important}
+#cust-view-modal .bc-detail-fields,#sup-view-modal .bc-detail-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start}
+#cust-view-modal .bc-detail-field,#sup-view-modal .bc-detail-field {display:flex;align-items:center;justify-content:flex-start;gap:8px;min-height:38px;padding:6px 12px;border-bottom:1px solid #e7edf5;min-width:0}
+#cust-view-modal .bc-detail-field:nth-child(odd),#sup-view-modal .bc-detail-field:nth-child(odd) {border-right:1px solid #e7edf5}
+#cust-view-modal .bc-detail-field:nth-last-child(-n+2),#sup-view-modal .bc-detail-field:nth-last-child(-n+2) {border-bottom:0}
+#cust-view-modal .bc-detail-label,#sup-view-modal .bc-detail-label {color:#64748b;font-size:12px!important;font-weight:400!important;flex:0 0 39%;letter-spacing:0!important;text-transform:none!important}
+#cust-view-modal .bc-detail-value,#sup-view-modal .bc-detail-value {color:#334155;font-size:13px!important;font-weight:400!important;min-width:0;overflow-wrap:anywhere}
+#cust-view-modal .bc-company-name,#sup-view-modal .bc-company-name {font-weight:500!important;color:#25517b!important}
+#cust-view-modal .bc-contacts-compact,#sup-view-modal .bc-contacts-compact {padding:4px 12px}
+#cust-view-modal .bc-contacts-compact .profile-contact-row,#sup-view-modal .bc-contacts-compact .profile-contact-row {min-height:37px!important;line-height:1.35}
+#cust-view-modal .bc-contacts-compact strong,#sup-view-modal .bc-contacts-compact strong {font-weight:400!important;color:#334155!important}
+#cust-view-modal .bc-address-inline,#sup-view-modal .bc-address-inline {display:grid;grid-template-columns:minmax(210px,1.15fr) minmax(0,2.8fr);gap:10px;padding:8px 12px;align-items:center}
+#cust-view-modal .bc-address-main,#sup-view-modal .bc-address-main {display:flex;flex-direction:column;gap:2px;color:#334155;font-size:13px;line-height:1.45}
+#cust-view-modal .bc-address-facts,#sup-view-modal .bc-address-facts {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-left:1px solid #d7e2ed}
+#cust-view-modal .bc-address-facts>div,#sup-view-modal .bc-address-facts>div {display:flex;flex-direction:column;gap:3px;padding:5px 10px;border-right:1px solid #e1e9f1;min-width:0}
+#cust-view-modal .bc-address-facts>div:last-child,#sup-view-modal .bc-address-facts>div:last-child {border-right:0}
+#cust-view-modal .bc-address-facts .bc-detail-label,#sup-view-modal .bc-address-facts .bc-detail-label {flex:0 0 auto;font-size:11px!important}
+#cust-view-modal .bch-card,#sup-view-modal .bch-card {max-height:165px!important;overflow-y:auto!important}
+#cust-view-modal .bch-empty,#sup-view-modal .bch-empty {padding:9px 12px!important;font-size:12px!important}
+#cust-view-modal .bch-row,#sup-view-modal .bch-row {font-size:12px!important;padding:5px 10px!important}
+#cust-view-modal .bch-who,#sup-view-modal .bch-who {font-weight:400!important}
+#cust-view-modal .bc-detail-notes,#sup-view-modal .bc-detail-notes {padding:9px 12px;font-size:13px;font-weight:400;color:#334155;line-height:1.45;white-space:pre-wrap}
+#cust-view-modal .product-profile-empty,#sup-view-modal .product-profile-empty {padding:10px 0;font-size:12px}
+@media(max-width:800px) {
+ #cust-view-modal .bc-detail-top,#sup-view-modal .bc-detail-top {grid-template-columns:1fr}
+ #cust-view-modal .bc-address-inline,#sup-view-modal .bc-address-inline {grid-template-columns:1fr}
+ #cust-view-modal .bc-address-facts,#sup-view-modal .bc-address-facts {border-left:0;border-top:1px solid #d7e2ed;padding-top:6px;grid-template-columns:repeat(2,minmax(0,1fr));row-gap:6px}
+}
+@media(max-width:500px) {
+ #cust-view-modal .bc-detail-fields,#sup-view-modal .bc-detail-fields {grid-template-columns:1fr}
+ #cust-view-modal .bc-detail-field:nth-child(odd),#sup-view-modal .bc-detail-field:nth-child(odd) {border-right:0}
+ #cust-view-modal .bc-detail-field:nth-last-child(2),#sup-view-modal .bc-detail-field:nth-last-child(2) {border-bottom:1px solid #e7edf5}
+}
