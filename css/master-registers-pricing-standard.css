@@ -159,3 +159,76 @@
   html body #page-masters.active #masters-tab-employees.active:has(#employee-form-panel:not([style*="display:none"])) > .card {overflow:auto!important;}
   html body #page-masters.active #masters-tab-employees.active:has(#employee-form-panel:not([style*="display:none"])) .bc-master-register-table-scroll {flex:0 0 auto!important;max-height:340px!important;}
 }
+
+/* V271.5.34 — UOM and Category layout alignment.
+   The legacy table.cm-table rule in main.css uses width:auto!important and
+   side margins; restore the full-width Pricing/Customers register contract.
+   Scope is deliberately limited to these two Master Data tables. */
+@media (min-width:761px) {
+  html body #page-masters #masters-tab-units .bc-master-register-table-scroll,
+  html body #page-masters #masters-tab-categories .bc-master-register-table-scroll {
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    margin:0!important;
+    padding:0!important;
+    box-sizing:border-box!important;
+    overflow-x:auto!important;
+    overflow-y:auto!important;
+    border-radius:9px!important;
+    background:#fff!important;
+  }
+  html body #page-masters #masters-tab-units .bc-master-register-table-scroll > table.cm-table,
+  html body #page-masters #masters-tab-categories .bc-master-register-table-scroll > table.cm-table {
+    display:table!important;
+    width:100%!important;
+    min-width:790px!important;
+    max-width:none!important;
+    margin:0!important;
+    border-spacing:0!important;
+    border-collapse:separate!important;
+    table-layout:auto!important;
+  }
+  html body #page-masters #masters-tab-units .bc-master-register-table-scroll > table.cm-table th,
+  html body #page-masters #masters-tab-categories .bc-master-register-table-scroll > table.cm-table th {
+    font-size:var(--bc-ui-header-size,12px)!important;
+    font-weight:var(--bc-ui-header-weight,500)!important;
+    height:var(--bc-ui-header-height,39px)!important;
+    padding:8px 12px!important;
+    background:var(--c-eaf2f9,#eaf2f9)!important;
+    color:var(--bc-ui-header-text,#475569)!important;
+  }
+  html body #page-masters #masters-tab-units .bc-master-register-table-scroll > table.cm-table td,
+  html body #page-masters #masters-tab-categories .bc-master-register-table-scroll > table.cm-table td {
+    font-family:var(--bc-font,Inter,'Segoe UI',Roboto,Arial,sans-serif)!important;
+    font-size:var(--bc-ui-row-font,14px)!important;
+    font-weight:400!important;
+    padding:8px 12px!important;
+    line-height:1.4!important;
+    color:var(--bc-ui-row-color,#111827)!important;
+  }
+  html body #page-masters #masters-tab-units .bc-master-register-table-scroll > table.cm-table th:last-child,
+  html body #page-masters #masters-tab-units .bc-master-register-table-scroll > table.cm-table td:last-child,
+  html body #page-masters #masters-tab-categories .bc-master-register-table-scroll > table.cm-table th:last-child,
+  html body #page-masters #masters-tab-categories .bc-master-register-table-scroll > table.cm-table td:last-child {
+    padding-right:24px!important;
+  }
+  html body #page-masters #masters-tab-units .bc-master-register-toolbar,
+  html body #page-masters #masters-tab-categories .bc-master-register-toolbar {
+    width:100%!important;
+    box-sizing:border-box!important;
+  }
+  /* Preserve the editor/merge form visibility when these pages scroll. */
+  html body #page-masters #masters-tab-units .uom-form-panel,
+  html body #page-masters #masters-tab-categories .uom-form-panel {
+    flex:0 0 auto;
+  }
+}
+@media (max-width:760px) {
+  #page-masters #masters-tab-units .bc-master-register-table-scroll > table.cm-table,
+  #page-masters #masters-tab-categories .bc-master-register-table-scroll > table.cm-table {
+    min-width:790px!important;
+    width:100%!important;
+    margin:0!important;
+  }
+}
