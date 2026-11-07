@@ -7542,6 +7542,20 @@ function switchPartyDetailsTab(button, pane) {
   const body=profile.closest('.modal-body');
   if(body) body.scrollTop=0;
 }
+// V271.5.36: Shared master profile header. Never manufacture type or creation date.
+function bcPartyHeader(type, record) {
+  const customer=type==='customer';
+  const name=escapeHtml(String(record.company||'—'));
+  const city=escapeHtml(String(record.city||'—'));
+  const code=escapeHtml(String(record.code||'—'));
+  const kindValue=customer
+    ? (record.customerType||record.type||'')
+    : (record.supplierType||record.type|| (Array.isArray(record.supplierKinds)&&record.supplierKinds.length ? record.supplierKinds.map(k=>({manpower:'Manpower',subcontractor:'Subcontractor'}[k]||k)).join(', ') : ''));
+  const kind=escapeHtml(String(kindValue||'—'));
+  const created=record.createdAt||record.created||record.creationTime||record.createdOn||'';
+  const since=created ? escapeHtml(fmtDate(String(created))||'—') : '—';
+  return `<div class="product-profile-hero bc-party-hero"><div class="bc-party-name-group"><div class="product-profile-icon"><i class="ti ${customer?'ti-building':'ti-building-store'}"></i></div><div class="bc-party-name-text"><h3 title="${name}">${name}</h3><span class="bc-party-city">${city}</span></div></div><div class="bc-party-hero-fact"><span>${customer?'Customer':'Supplier'} ID</span><strong>${code}</strong></div><div class="bc-party-hero-fact"><span>${customer?'Customer':'Supplier'} Type</span><strong title="${kind}">${kind}</strong></div><div class="bc-party-hero-fact"><span>Since</span><strong>${since}</strong></div><span class="product-profile-status"><i class="ti ti-circle-check-filled"></i> Active</span></div>`;
+}
 function viewCustomer(id) {
   const c = customers.find(x=>x.id===id); if (!c) return;
   const cname=normalizeMasterValue(c.company);
@@ -7561,7 +7575,7 @@ function viewCustomer(id) {
   txns.sort((a,b)=>profileTxnDate(b.date).localeCompare(profileTxnDate(a.date)));
   const txnRows=txns.slice(0,10).map(t=>`<tr data-txn-type="${t.type}"><td>${fmtDate(t.date)||'—'}</td><td><button class="profile-doc-link" onclick="${t.open}">${t.no}</button></td><td>${t.type}</td><td><span class="badge ${t.type==='Sales Order'?getSOBadgeClass(t.status):getStatusClass(t.status)}">${t.status}</span></td><td class="right">${t.amount==null?'—':fmtShort(t.amount)}</td></tr>`).join('')||'<tr><td colspan="5" class="profile-no-txns">No transactions found for this customer.</td></tr>';
   document.getElementById('cust-view-body').innerHTML=`<div class="product-profile business-profile">
-    <div class="product-profile-hero"><div class="product-profile-identity"><div class="product-profile-icon"><i class="ti ti-building"></i></div><div><div class="product-profile-eyebrow">CUSTOMER PROFILE</div><h3>${c.company}</h3>${c.companyAr?`<div class="profile-arabic-name" dir="rtl">${esc(c.companyAr)}</div>`:''}<div class="product-profile-meta">${c.city?`<span>${c.city}</span>`:''}${c.vat?`<span>VAT ${c.vat}</span>`:''}</div></div></div><span class="product-profile-status"><i class="ti ti-circle-check-filled"></i> Active</span></div>
+    ${bcPartyHeader('customer',c)}
     <div class="bc-party-tabs" role="tablist" aria-label="Details sections">
       <button type="button" class="bc-party-tab active" role="tab" aria-selected="true" onclick="switchPartyDetailsTab(this,'information')"><i class="ti ti-address-book"></i> Customer Information</button>
       <button type="button" class="bc-party-tab" role="tab" aria-selected="false" onclick="switchPartyDetailsTab(this,'activity')"><i class="ti ti-chart-line"></i> Activity &amp; Usage</button>
@@ -8076,7 +8090,7 @@ function viewSupplier(id) {
   const addr=partyAddressSummary(sp);
   const txnRows=txns.slice(0,10).map(t=>`<tr data-txn-type="Pricing"><td>${fmtDate(t.date)||'—'}</td><td><button class="profile-doc-link" onclick="${t.open}">${t.no}</button></td><td>Pricing</td><td><span class="badge ${getStatusClass(t.status)}">${t.status}</span></td><td class="right">—</td></tr>`).join('')||'<tr><td colspan="5" class="profile-no-txns">No pricing transactions found for this supplier.</td></tr>';
   document.getElementById('sup-view-body').innerHTML=`<div class="product-profile business-profile">
-    <div class="product-profile-hero"><div class="product-profile-identity"><div class="product-profile-icon"><i class="ti ti-building-store"></i></div><div><div class="product-profile-eyebrow">SUPPLIER PROFILE</div><h3>${sp.company}</h3>${sp.companyAr?`<div class="profile-arabic-name" dir="rtl">${esc(sp.companyAr)}</div>`:''}<div class="product-profile-meta">${sp.cat?`<span>${sp.cat}</span>`:''}${sp.city?`<span>${sp.city}</span>`:''}</div></div></div><span class="product-profile-status"><i class="ti ti-circle-check-filled"></i> Active</span></div>
+    ${bcPartyHeader('supplier',sp)}
     <div class="bc-party-tabs" role="tablist" aria-label="Details sections">
       <button type="button" class="bc-party-tab active" role="tab" aria-selected="true" onclick="switchPartyDetailsTab(this,'information')"><i class="ti ti-address-book"></i> Supplier Information</button>
       <button type="button" class="bc-party-tab" role="tab" aria-selected="false" onclick="switchPartyDetailsTab(this,'activity')"><i class="ti ti-chart-line"></i> Activity &amp; Usage</button>
