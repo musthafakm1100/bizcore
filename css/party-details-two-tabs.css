@@ -1,0 +1,66 @@
+/* V271.5.35 — Compact two-tab Customer / Supplier detail windows.
+   Approved: medium-weight company name only, normal-weight field values. */
+#cust-view-modal .modal, #sup-view-modal .modal{
+  width:min(1180px,96vw)!important;max-width:1180px!important;
+  height:min(88vh,850px)!important;display:flex;flex-direction:column;
+}
+#cust-view-modal .modal-header,#sup-view-modal .modal-header{min-height:46px;flex:none}
+#cust-view-modal .modal-header h2,#sup-view-modal .modal-header h2{font-size:16px!important;font-weight:500!important}
+#cust-view-modal .modal-body,#sup-view-modal .modal-body{
+  min-height:0;flex:1;overflow-y:auto!important;overscroll-behavior:contain;
+  scrollbar-width:thin;background:#f8fafc;padding:0!important;
+}
+#cust-view-modal .modal-footer,#sup-view-modal .modal-footer{flex:none;min-height:52px}
+#cust-view-modal .business-profile,#sup-view-modal .business-profile{padding:12px 16px 14px;font-size:13px;color:#344255}
+#cust-view-modal .product-profile-hero,#sup-view-modal .product-profile-hero{padding:10px 14px;min-height:66px;margin-bottom:8px;gap:12px}
+#cust-view-modal .product-profile-identity h3,#sup-view-modal .product-profile-identity h3{font-size:17px!important;font-weight:500!important;color:#234a75!important;margin:0 0 3px}
+#cust-view-modal .product-profile-eyebrow,#sup-view-modal .product-profile-eyebrow{font-size:10px;font-weight:400;letter-spacing:.035em}
+#cust-view-modal .product-profile-meta,#sup-view-modal .product-profile-meta{font-size:12px;font-weight:400}
+#cust-view-modal .product-profile-status,#sup-view-modal .product-profile-status{font-size:12px;font-weight:400}
+#cust-view-modal .product-profile-icon,#sup-view-modal .product-profile-icon{width:40px;height:40px}
+.bc-party-tabs{display:flex;align-items:center;border-bottom:1px solid #d3dfec;gap:10px;margin:0 0 10px}
+.bc-party-tab{display:flex;align-items:center;gap:7px;padding:9px 13px;background:transparent;border:0;border-bottom:2px solid transparent;font:inherit;font-size:14px;font-weight:400;color:#4b6078;cursor:pointer}
+.bc-party-tab.active{border-bottom-color:var(--blue,#2563eb);color:#244a76;font-weight:500;background:#eaf2fb;border-radius:6px 6px 0 0}
+.bc-party-tab:focus-visible{outline:2px solid #60a5fa;outline-offset:-2px}
+.bc-party-pane[hidden]{display:none!important}
+.bc-party-pane{display:flex;flex-direction:column;gap:10px}
+#cust-view-modal .product-profile-grid,#sup-view-modal .product-profile-grid{margin:0;gap:10px}
+#cust-view-modal .product-profile-card,#sup-view-modal .product-profile-card{margin:0;box-shadow:none;border-color:#dce5ef}
+#cust-view-modal .product-profile-section-title,#sup-view-modal .product-profile-section-title{height:32px;padding:0 12px;font-size:13px!important;font-weight:500!important;letter-spacing:0;text-transform:none;background:#f0f5fb}
+#cust-view-modal .product-profile-fields>div,#sup-view-modal .product-profile-fields>div{min-height:47px;padding:6px 11px}
+#cust-view-modal .product-profile-fields label,#sup-view-modal .product-profile-fields label{font-size:12px!important;font-weight:400!important;color:#64748b}
+#cust-view-modal .product-profile-fields strong,#sup-view-modal .product-profile-fields strong,
+#cust-view-modal .product-profile-fields span,#sup-view-modal .product-profile-fields span,
+#cust-view-modal .party-address-readable strong,#sup-view-modal .party-address-readable strong,
+#cust-view-modal .party-address-facts strong,#sup-view-modal .party-address-facts strong,
+#cust-view-modal .profile-contact-row strong,#sup-view-modal .profile-contact-row strong{
+  font-size:13px!important;font-weight:400!important;color:#334155;
+}
+#cust-view-modal .party-address-layout,#sup-view-modal .party-address-layout{padding:8px 12px;gap:12px}
+#cust-view-modal .party-address-facts>div,#sup-view-modal .party-address-facts>div{padding:7px 10px}
+#cust-view-modal .party-address-facts label,#sup-view-modal .party-address-facts label{font-size:12px;font-weight:400}
+#cust-view-modal .profile-contact-row,#sup-view-modal .profile-contact-row{min-height:37px}
+#cust-view-modal .profile-default-chip,#sup-view-modal .profile-default-chip{font-size:11px!important;font-weight:400!important}
+#cust-view-modal .bch-card,#sup-view-modal .bch-card{max-height:220px;overflow:auto}
+#cust-view-modal .profile-recent,#sup-view-modal .profile-recent{margin:0}
+#cust-view-modal .profile-recent-head,#sup-view-modal .profile-recent-head{height:34px;background:#f0f5fb}
+#cust-view-modal .profile-recent-head>span:first-child,#sup-view-modal .profile-recent-head>span:first-child{font-size:13px;font-weight:500;letter-spacing:0;text-transform:none}
+#cust-view-modal .product-profile-usage,#sup-view-modal .product-profile-usage{padding:10px;gap:6px}
+#cust-view-modal .product-profile-usage strong,#sup-view-modal .profile-compact-stats strong{font-weight:500!important}
+#cust-view-modal .profile-txn-table th,#sup-view-modal .profile-txn-table th{font-size:12px!important;font-weight:500!important}
+#cust-view-modal .profile-txn-table td,#sup-view-modal .profile-txn-table td{font-size:13px!important;font-weight:400!important}
+#cust-view-modal .profile-doc-link,#sup-view-modal .profile-doc-link{font-weight:400!important}
+#cust-view-modal .btn,#sup-view-modal .btn{font-weight:500}
+@media(max-width:760px){
+  #cust-view-modal .modal,#sup-view-modal .modal{width:96vw!important;height:92vh!important}
+  #cust-view-modal .product-profile-grid,#sup-view-modal .product-profile-grid{grid-template-columns:1fr}
+  .bc-party-tabs{gap:3px}.bc-party-tab{font-size:12px;padding:9px 8px}
+}
+
+/* Only the customer/supplier company-name field uses a medium accent. */
+#cust-view-modal .product-profile-fields>div:first-child strong,
+#sup-view-modal .product-profile-fields>div:first-child strong{font-weight:500!important;color:#234a75!important}
+#cust-view-modal .product-profile-section-title span,
+#sup-view-modal .product-profile-section-title span{font-weight:500!important}
+#cust-view-modal .profile-txn-table td .badge,
+#sup-view-modal .profile-txn-table td .badge{font-weight:400!important}

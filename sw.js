@@ -8,13 +8,14 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v2715342-uom-actions';
+const CACHE_NAME = 'bizcore-shell-v271535-party-details';
 const APP_SHELL = [
   './login.html',
   './delivery.html',
   './index.html',
   './mycash.html',
   './css/main.css?v=270.58',
+  './css/party-details-two-tabs.css?v=271.5.35',
   './css/master-sidebar-option-b.css?v=271.5.30',
   './css/master-customers-pricing-standard.css?v=271.5.31.1',
   './css/master-registers-pricing-standard.css?v=271.5.34.2',
@@ -71,7 +72,7 @@ const APP_SHELL = [
   './js/master-service.mjs?v=270.55',
   './js/ui-standard.js?v=269.1',
   './js/responsive.js?v=270.47',
-  './js/app.js?v=271.5.25-bars',
+  './js/app.js?v=271.5.35-party-details',
   './js/estimate.js?v=271.3',
   './js/jobs.js?v=271.5.23',
   './js/job-cost-core.mjs?v=271.32',
