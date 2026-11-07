@@ -88,7 +88,7 @@ button,.btn{font-size:14px!important;font-weight:600!important;}
 <link rel="stylesheet" href="css/master-sidebar-option-b.css?v=271.5.30"/>
 <link rel="stylesheet" href="css/master-customers-pricing-standard.css?v=271.5.31.1"/>
 <script src="js/pricing-filter-visual.js?v=271.5.17" defer></script>
-<link rel="stylesheet" href="css/master-registers-pricing-standard.css?v=271.5.32"/>
+<link rel="stylesheet" href="css/master-registers-pricing-standard.css?v=271.5.33"/>
 </head>
 <body>
 <script>
@@ -888,79 +888,68 @@ document.addEventListener('error', function(e) {
     <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
   </select></label><div class="pagination" id="customers-pagination"></div></div>
 </div>
-</div><div class="masters-tab-content" id="masters-tab-suppliers">
+</div><div class="masters-tab-content bc-master-register-standard" data-bc-register-standard="1" id="masters-tab-suppliers">
 <div class="card">
-<div class="card-header page-command-header">
+<div class="card-header page-command-header bc-master-directory-heading">
 <h3><i class="ti ti-building-store" style="margin-right:6px"></i>Supplier directory</h3>
-<div style="display:flex;gap:8px;align-items:center">
-<button class="btn btn-secondary btn-sm" onclick="openImportModal('suppliers')" title="Import suppliers from Excel"><i class="ti ti-table-import"></i>Import Excel</button>
-<button class="btn btn-danger btn-sm master-bulk-delete" id="suppliers-delete-selected" onclick="deleteSelectedMasterRecords('suppliers')" disabled><i class="ti ti-trash"></i>Delete selected <span id="suppliers-selected-count"></span></button>
-<button class="btn btn-primary btn-sm page-primary-command" onclick="openAddSupplier()"><i class="ti ti-plus"></i>Add supplier</button>
+
 </div>
-</div>
-<div class="card-body" style="padding:14px 16px 0">
-<div class="filter-bar page-control-bar">
-<input id="sup-search" oninput="renderSuppliers()" placeholder="Search suppliers…" style="width:280px" type="text"/><label class="bc-master-sort-label" for="master-sort-suppliers">Sort by</label><select class="bc-master-sort" id="master-sort-suppliers" aria-label="Sort suppliers" onchange="bcMasterSortChanged('suppliers',renderSuppliers)"><option value="company-asc">Company A–Z</option><option value="company-desc">Company Z–A</option><option value="contact-asc">Contact A–Z</option><option value="category-asc">Category A–Z</option><option value="city-asc">City A–Z</option><option value="quotes-desc">Most RFQs</option></select>
-</div>
-</div>
-<div class="list-table-scroll">
+<div class="card-body bc-master-register-toolbar" style="padding:14px 16px 0">
+
+<input id="sup-search" oninput="renderSuppliers()" placeholder="Search suppliers…" type="text"/><label class="bc-master-sort-label" for="master-sort-suppliers">Sort by</label><select aria-label="Sort suppliers" class="bc-master-sort" id="master-sort-suppliers" onchange="bcMasterSortChanged('suppliers',renderSuppliers)"><option value="company-asc">Company A–Z</option><option value="company-desc">Company Z–A</option><option value="contact-asc">Contact A–Z</option><option value="category-asc">Category A–Z</option><option value="city-asc">City A–Z</option><option value="quotes-desc">Most RFQs</option></select>
+
+<div class="bc-master-toolbar-actions"><button aria-label="Import Excel" class="btn btn-secondary btn-sm bc-master-icon-action" onclick="openImportModal('suppliers')" title="Import suppliers from Excel"><i class="ti ti-table-import"></i></button><button aria-label="Delete selected" class="btn btn-danger btn-sm master-bulk-delete bc-master-icon-action" disabled="" id="suppliers-delete-selected" onclick="deleteSelectedMasterRecords('suppliers')" title="Delete selected"><i class="ti ti-trash"></i><span id="suppliers-selected-count"></span></button><button class="btn btn-primary btn-sm page-primary-command bc-master-create" onclick="openAddSupplier()"><i class="ti ti-plus"></i>Add supplier</button></div></div>
+<div class="list-table-scroll bc-master-register-table-scroll">
 <table>
-<thead><tr><th class="master-select-col"><input id="suppliers-select-all" class="master-row-check" type="checkbox" onkeydown="event.stopPropagation()" aria-label="Select all suppliers on this page" onclick="event.stopPropagation();toggleMasterPageSelection('suppliers',this.checked)"></th><th class="sortable-register-th" data-sort-screen="suppliers" data-sort-key="company" onclick="setRegisterSort('suppliers','company',renderSuppliers)">Company</th><th class="sortable-register-th" data-sort-screen="suppliers" data-sort-key="contact" onclick="setRegisterSort('suppliers','contact',renderSuppliers)">Contact</th><th class="sortable-register-th" data-sort-screen="suppliers" data-sort-key="phone" onclick="setRegisterSort('suppliers','phone',renderSuppliers)">Phone</th><th class="sortable-register-th" data-sort-screen="suppliers" data-sort-key="email" onclick="setRegisterSort('suppliers','email',renderSuppliers)">Email</th><th class="sortable-register-th" data-sort-screen="suppliers" data-sort-key="category" onclick="setRegisterSort('suppliers','category',renderSuppliers)">Category</th><th class="sortable-register-th" data-sort-screen="suppliers" data-sort-key="city" onclick="setRegisterSort('suppliers','city',renderSuppliers)">City</th><th class="sortable-register-th center" data-sort-screen="suppliers" data-sort-key="quotes" onclick="setRegisterSort('suppliers','quotes',renderSuppliers)">Quotes received</th></tr></thead>
+<thead><tr><th class="master-select-col"><input aria-label="Select all suppliers on this page" class="master-row-check" id="suppliers-select-all" onclick="event.stopPropagation();toggleMasterPageSelection('suppliers',this.checked)" onkeydown="event.stopPropagation()" type="checkbox"/></th><th class="sortable-register-th" data-sort-key="company" data-sort-screen="suppliers" onclick="setRegisterSort('suppliers','company',renderSuppliers)">Company</th><th class="sortable-register-th" data-sort-key="contact" data-sort-screen="suppliers" onclick="setRegisterSort('suppliers','contact',renderSuppliers)">Contact</th><th class="sortable-register-th" data-sort-key="phone" data-sort-screen="suppliers" onclick="setRegisterSort('suppliers','phone',renderSuppliers)">Phone</th><th class="sortable-register-th" data-sort-key="email" data-sort-screen="suppliers" onclick="setRegisterSort('suppliers','email',renderSuppliers)">Email</th><th class="sortable-register-th" data-sort-key="category" data-sort-screen="suppliers" onclick="setRegisterSort('suppliers','category',renderSuppliers)">Category</th><th class="sortable-register-th" data-sort-key="city" data-sort-screen="suppliers" onclick="setRegisterSort('suppliers','city',renderSuppliers)">City</th><th class="sortable-register-th center" data-sort-key="quotes" data-sort-screen="suppliers" onclick="setRegisterSort('suppliers','quotes',renderSuppliers)">Quotes received</th></tr></thead>
 <tbody id="suppliers-tbody"></tbody>
 </table>
 </div>
 <div class="rows-per-page-bar" style="padding:8px 16px"><label class="rows-per-page-label">Rows per page
   <select class="rows-per-page-select" onchange="setRowsPerPage(this.value)">
-    <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
-  </select></label><div class="pagination" id="suppliers-pagination"></div></div>
+<option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
+</select></label><div class="pagination" id="suppliers-pagination"></div></div>
 </div>
-</div><div class="masters-tab-content" id="masters-tab-products">
+</div><div class="masters-tab-content bc-master-register-standard" data-bc-register-standard="1" id="masters-tab-products">
 <div class="card">
-<div class="card-header page-command-header">
+<div class="card-header page-command-header bc-master-directory-heading">
 <h3><i class="ti ti-package" style="margin-right:6px"></i>Product database</h3>
-<div style="display:flex;gap:8px;align-items:center">
-<button class="btn btn-secondary btn-sm" onclick="openImportModal('products')" title="Import products from Excel"><i class="ti ti-table-import"></i>Import Excel</button>
-<button class="btn btn-danger btn-sm master-bulk-delete" id="products-delete-selected" onclick="deleteSelectedMasterRecords('products')" disabled><i class="ti ti-trash"></i>Delete selected <span id="products-selected-count"></span></button>
-<button class="btn btn-primary btn-sm page-primary-command" onclick="openAddProduct()"><i class="ti ti-plus"></i>Add product</button>
+
 </div>
-</div>
-<div class="card-body" style="padding:14px 16px 0">
-<div class="filter-bar page-control-bar">
-<input id="prod-search-filter" oninput="renderProducts()" placeholder="Search products, brand, model…" style="width:280px" type="text"/>
+<div class="card-body bc-master-register-toolbar" style="padding:14px 16px 0">
+
+<input id="prod-search-filter" oninput="renderProducts()" placeholder="Search products, brand, model…" type="text"/>
 <select id="prod-cat-filter" onchange="renderProducts()">
 <option value="">All categories</option>
 </select>
-<select id="prod-type-filter" onchange="prodPage=1;renderProducts()" aria-label="Type"><option value="">Goods &amp; services</option><option value="goods">Goods</option><option value="service">Services</option></select>
+<select aria-label="Type" id="prod-type-filter" onchange="prodPage=1;renderProducts()"><option value="">Goods &amp; services</option><option value="goods">Goods</option><option value="service">Services</option></select>
 <label class="bc-master-sort-label" for="master-sort-products">Sort by</label>
-<select class="bc-master-sort" id="master-sort-products" aria-label="Sort products" onchange="bcMasterSortChanged('products',renderProducts)"><option value="name-asc">Product name A–Z</option><option value="name-desc">Product name Z–A</option><option value="code-asc">Item code ↑</option><option value="code-desc">Item code ↓</option><option value="type-asc">Type A–Z</option><option value="category-asc">Category A–Z</option><option value="price-desc">Price high–low</option><option value="price-asc">Price low–high</option></select>
-</div>
-</div>
-<div class="list-table-scroll">
+<select aria-label="Sort products" class="bc-master-sort" id="master-sort-products" onchange="bcMasterSortChanged('products',renderProducts)"><option value="name-asc">Product name A–Z</option><option value="name-desc">Product name Z–A</option><option value="code-asc">Item code ↑</option><option value="code-desc">Item code ↓</option><option value="type-asc">Type A–Z</option><option value="category-asc">Category A–Z</option><option value="price-desc">Price high–low</option><option value="price-asc">Price low–high</option></select>
+
+<div class="bc-master-toolbar-actions"><button aria-label="Import Excel" class="btn btn-secondary btn-sm bc-master-icon-action" onclick="openImportModal('products')" title="Import products from Excel"><i class="ti ti-table-import"></i></button><button aria-label="Delete selected" class="btn btn-danger btn-sm master-bulk-delete bc-master-icon-action" disabled="" id="products-delete-selected" onclick="deleteSelectedMasterRecords('products')" title="Delete selected"><i class="ti ti-trash"></i><span id="products-selected-count"></span></button><button class="btn btn-primary btn-sm page-primary-command bc-master-create" onclick="openAddProduct()"><i class="ti ti-plus"></i>Add product</button></div></div>
+<div class="list-table-scroll bc-master-register-table-scroll">
 <table>
 <thead><tr>
-<th class="master-select-col"><input id="products-select-all" class="master-row-check" type="checkbox" onkeydown="event.stopPropagation()" aria-label="Select all products on this page" onclick="event.stopPropagation();toggleMasterPageSelection('products',this.checked)"></th><th style="width:52px">Image</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="code" onclick="setRegisterSort('products','code',renderProducts)">Item code</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="type" onclick="setRegisterSort('products','type',renderProducts)">Type</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="name" onclick="setRegisterSort('products','name',renderProducts)">Product name</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="brand" onclick="setRegisterSort('products','brand',renderProducts)">Brand</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="model" onclick="setRegisterSort('products','model',renderProducts)">Model no.</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="category" onclick="setRegisterSort('products','category',renderProducts)">Category</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="uom" onclick="setRegisterSort('products','uom',renderProducts)">UOM</th><th class="sortable-register-th right" data-sort-screen="products" data-sort-key="price" onclick="setRegisterSort('products','price',renderProducts)">Default price</th><th class="sortable-register-th" data-sort-screen="products" data-sort-key="specs" onclick="setRegisterSort('products','specs',renderProducts)">Specs</th>
+<th class="master-select-col"><input aria-label="Select all products on this page" class="master-row-check" id="products-select-all" onclick="event.stopPropagation();toggleMasterPageSelection('products',this.checked)" onkeydown="event.stopPropagation()" type="checkbox"/></th><th style="width:52px">Image</th><th class="sortable-register-th" data-sort-key="code" data-sort-screen="products" onclick="setRegisterSort('products','code',renderProducts)">Item code</th><th class="sortable-register-th" data-sort-key="type" data-sort-screen="products" onclick="setRegisterSort('products','type',renderProducts)">Type</th><th class="sortable-register-th" data-sort-key="name" data-sort-screen="products" onclick="setRegisterSort('products','name',renderProducts)">Product name</th><th class="sortable-register-th" data-sort-key="brand" data-sort-screen="products" onclick="setRegisterSort('products','brand',renderProducts)">Brand</th><th class="sortable-register-th" data-sort-key="model" data-sort-screen="products" onclick="setRegisterSort('products','model',renderProducts)">Model no.</th><th class="sortable-register-th" data-sort-key="category" data-sort-screen="products" onclick="setRegisterSort('products','category',renderProducts)">Category</th><th class="sortable-register-th" data-sort-key="uom" data-sort-screen="products" onclick="setRegisterSort('products','uom',renderProducts)">UOM</th><th class="sortable-register-th right" data-sort-key="price" data-sort-screen="products" onclick="setRegisterSort('products','price',renderProducts)">Default price</th><th class="sortable-register-th" data-sort-key="specs" data-sort-screen="products" onclick="setRegisterSort('products','specs',renderProducts)">Specs</th>
 </tr></thead>
 <tbody id="products-tbody"></tbody>
 </table>
 </div>
-<div style="padding:8px 16px" class="rows-per-page-bar"><label class="rows-per-page-label">Rows per page
+<div class="rows-per-page-bar" style="padding:8px 16px"><label class="rows-per-page-label">Rows per page
     <select class="rows-per-page-select" onchange="setRowsPerPage(this.value)">
-      <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
-    </select></label><div class="pagination" id="prod-pagination"></div></div>
+<option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
+</select></label><div class="pagination" id="prod-pagination"></div></div>
 </div>
-</div><div class="masters-tab-content" id="masters-tab-employees">
+</div><div class="masters-tab-content bc-master-register-standard" data-bc-register-standard="1" id="masters-tab-employees">
 <div class="card employee-master-card">
-<div class="card-header page-command-header">
+<div class="card-header page-command-header bc-master-directory-heading">
 <div><h3><i class="ti ti-users-group" style="margin-right:7px"></i>Employee directory</h3><p class="employee-master-subtitle">One employee record can carry multiple operational roles and document-expiry dates.</p></div>
-<div style="display:flex;gap:8px;align-items:center">
-<button class="btn btn-secondary btn-sm" onclick="openImportModal('employees')" title="Import employees from Excel"><i class="ti ti-table-import"></i>Import Excel</button>
-<button class="btn btn-primary btn-sm page-primary-command" onclick="openEmployeeForm()"><i class="ti ti-user-plus"></i>Add employee</button>
+
 </div>
-</div>
-<div class="card-body employee-toolbar">
+<div class="card-body employee-toolbar bc-master-register-toolbar">
 <input id="emp-search" oninput="renderEmployees()" placeholder="Search employee, role, Iqama or mobile…" type="text"/>
-<select id="emp-status-filter" onchange="renderEmployees()"><option value="active">Active employees</option><option value="all">All employees</option><option value="expiring">Documents expiring in 90 days</option></select><label class="bc-master-sort-label" for="master-sort-employees">Sort by</label><select class="bc-master-sort" id="master-sort-employees" aria-label="Sort employees" onchange="bcMasterSortChanged('employees',renderEmployees)"><option value="employee-asc">Employee A–Z</option><option value="employee-desc">Employee Z–A</option><option value="department-asc">Department A–Z</option><option value="status-asc">Status A–Z</option><option value="iqama-asc">Iqama number ↑</option></select>
-</div>
+<select id="emp-status-filter" onchange="renderEmployees()"><option value="active">Active employees</option><option value="all">All employees</option><option value="expiring">Documents expiring in 90 days</option></select><label class="bc-master-sort-label" for="master-sort-employees">Sort by</label><select aria-label="Sort employees" class="bc-master-sort" id="master-sort-employees" onchange="bcMasterSortChanged('employees',renderEmployees)"><option value="employee-asc">Employee A–Z</option><option value="employee-desc">Employee Z–A</option><option value="department-asc">Department A–Z</option><option value="status-asc">Status A–Z</option><option value="iqama-asc">Iqama number ↑</option></select>
+<div class="bc-master-toolbar-actions"><button aria-label="Import Excel" class="btn btn-secondary btn-sm bc-master-icon-action" onclick="openImportModal('employees')" title="Import employees from Excel"><i class="ti ti-table-import"></i></button><button class="btn btn-primary btn-sm page-primary-command bc-master-create" onclick="openEmployeeForm()"><i class="ti ti-user-plus"></i>Add employee</button></div></div>
 <div class="employee-form-panel employee-profile-form" id="employee-form-panel" style="display:none">
 <div class="employee-form-head employee-profile-head"><div><h4 id="employee-form-title">New employee</h4><p>Employee profile, operational roles and document validity.</p></div><button aria-label="Close employee form" class="close-btn" onclick="closeEmployeeForm()">✕</button></div>
 <div class="employee-profile-hero">
@@ -1000,9 +989,9 @@ document.addEventListener('error', function(e) {
 <section class="employee-compact-card employee-doc-section">
 <h5><i class="ti ti-id"></i><span>Employee documents</span></h5>
 <div class="employee-document-grid employee-document-grid-compact">
-<div class="employee-document-card"><div class="form-group"><label>Iqama number</label><input id="emp-iqama" type="text" inputmode="numeric" pattern="[0-9]{10}" maxlength="10" autocomplete="off" placeholder="10-digit Iqama number" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)"/></div><div class="form-group"><label>Iqama expiry date</label><input id="emp-iqama-expiry" type="date"/></div></div>
+<div class="employee-document-card"><div class="form-group"><label>Iqama number</label><input autocomplete="off" id="emp-iqama" inputmode="numeric" maxlength="10" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)" pattern="[0-9]{10}" placeholder="10-digit Iqama number" type="text"/></div><div class="form-group"><label>Iqama expiry date</label><input id="emp-iqama-expiry" type="date"/></div></div>
 <div class="employee-document-card"><div class="form-group"><label>Passport number</label><input id="emp-passport" placeholder="Passport number"/></div><div class="form-group"><label>Passport expiry date</label><input id="emp-passport-expiry" type="date"/></div></div>
-<div class="employee-document-card"><div class="form-group"><label>Driving licence number</label><input id="emp-license" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="Driving licence number" oninput="this.value=this.value.replace(/\D/g,'')"/></div><div class="form-group"><label>Driving licence expiry date</label><input id="emp-license-expiry" type="date"/></div></div>
+<div class="employee-document-card"><div class="form-group"><label>Driving licence number</label><input autocomplete="off" id="emp-license" inputmode="numeric" oninput="this.value=this.value.replace(/\D/g,'')" pattern="[0-9]*" placeholder="Driving licence number" type="text"/></div><div class="form-group"><label>Driving licence expiry date</label><input id="emp-license-expiry" type="date"/></div></div>
 </div>
 </section>
 </div>
@@ -1017,61 +1006,61 @@ document.addEventListener('error', function(e) {
 </div>
 </div>
 <div class="employee-expiry-summary" id="employee-expiry-summary"></div>
-<div class="employee-table-wrap"><table class="employee-table"><thead><tr><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="employee" onclick="setRegisterSort('employees','employee',renderEmployees)">Employee</th><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="department" onclick="setRegisterSort('employees','department',renderEmployees)">Department / Designation</th><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="roles" onclick="setRegisterSort('employees','roles',renderEmployees)">Roles</th><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="contact" onclick="setRegisterSort('employees','contact',renderEmployees)">Contact</th><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="iqama" onclick="setRegisterSort('employees','iqama',renderEmployees)">Iqama</th><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="passport" onclick="setRegisterSort('employees','passport',renderEmployees)">Passport</th><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="license" onclick="setRegisterSort('employees','license',renderEmployees)">Driving licence</th><th class="sortable-register-th" data-sort-screen="employees" data-sort-key="status" onclick="setRegisterSort('employees','status',renderEmployees)">Status</th><th class="center">Actions</th></tr></thead><tbody id="employees-tbody"></tbody></table></div>
+<div class="employee-table-wrap bc-master-register-table-scroll"><table class="employee-table"><thead><tr><th class="sortable-register-th" data-sort-key="employee" data-sort-screen="employees" onclick="setRegisterSort('employees','employee',renderEmployees)">Employee</th><th class="sortable-register-th" data-sort-key="department" data-sort-screen="employees" onclick="setRegisterSort('employees','department',renderEmployees)">Department / Designation</th><th class="sortable-register-th" data-sort-key="roles" data-sort-screen="employees" onclick="setRegisterSort('employees','roles',renderEmployees)">Roles</th><th class="sortable-register-th" data-sort-key="contact" data-sort-screen="employees" onclick="setRegisterSort('employees','contact',renderEmployees)">Contact</th><th class="sortable-register-th" data-sort-key="iqama" data-sort-screen="employees" onclick="setRegisterSort('employees','iqama',renderEmployees)">Iqama</th><th class="sortable-register-th" data-sort-key="passport" data-sort-screen="employees" onclick="setRegisterSort('employees','passport',renderEmployees)">Passport</th><th class="sortable-register-th" data-sort-key="license" data-sort-screen="employees" onclick="setRegisterSort('employees','license',renderEmployees)">Driving licence</th><th class="sortable-register-th" data-sort-key="status" data-sort-screen="employees" onclick="setRegisterSort('employees','status',renderEmployees)">Status</th><th class="center">Actions</th></tr></thead><tbody id="employees-tbody"></tbody></table></div>
 <div class="rows-per-page-bar" style="padding:8px 16px"><label class="rows-per-page-label">Rows per page
   <select class="rows-per-page-select" onchange="setRowsPerPage(this.value)">
-    <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
-  </select></label><div class="pagination" id="employees-pagination"></div></div>
+<option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
+</select></label><div class="pagination" id="employees-pagination"></div></div>
 </div>
-</div><div class="masters-tab-content" id="masters-tab-units">
+</div><div class="masters-tab-content bc-master-register-standard" data-bc-register-standard="1" id="masters-tab-units">
 <div class="card uom-master-card">
-  <div class="card-header page-command-header">
-    <div><h3><i class="ti ti-ruler-measure" style="margin-right:6px"></i>Units of Measure</h3><p class="uom-master-subtitle">Control quantity precision and keyboard increments across BizCore documents.</p></div>
-    <div class="cm-head-btns"><button class="btn btn-secondary btn-sm" type="button" onclick="addSuggestedServiceUoms()" title="Month, Visit, Trip, Man-day, Man-hour, Sq.m, Cu.m"><i class="ti ti-plus"></i>Add suggested service units</button><button class="btn btn-primary btn-sm page-primary-command" onclick="openUomForm()"><i class="ti ti-plus"></i>Add UOM</button></div>
-  </div>
-  <div class="card-body uom-toolbar cm-toolbar">
-    <div class="cm-search"><i class="ti ti-search" aria-hidden="true"></i><input id="uom-search" oninput="renderUomMaster()" placeholder="Search code or unit name…" type="search" aria-label="Search units"/></div>
-    <div class="cat-filters" id="uom-filters"></div>
-    <span class="uom-count" id="uom-count"></span>
-  </div>
-  <div class="uom-form-panel" id="uom-form-panel" style="display:none">
-    <div class="uom-form-head"><div><h4 id="uom-form-title">New unit of measure</h4><p>Set how quantities are entered and rounded.</p></div><button class="close-btn" onclick="closeUomForm()">✕</button></div>
-    <div class="uom-form-grid">
-      <div class="form-group"><label>UOM code *</label><input id="uom-code" maxlength="12" placeholder="e.g. PCS"/></div>
-      <div class="form-group"><label>Unit name *</label><input id="uom-name" placeholder="e.g. Pieces"/></div>
-      <div class="form-group"><label>Decimal places</label><select id="uom-decimals" onchange="syncUomStepSuggestion()"><option value="0">0 — Whole numbers only</option><option value="1">1 decimal place</option><option value="2">2 decimal places</option><option value="3">3 decimal places</option></select></div>
-      <div class="form-group"><label>Quantity step</label><input id="uom-step" inputmode="decimal" placeholder="1"/></div>
-      <div class="form-group"><label for="uom-usedfor">Used for</label><select id="uom-usedfor"><option value="goods">Goods</option><option value="service">Services</option><option value="both">Both</option></select></div>
-      <div class="form-group"><label>Status</label><select id="uom-active"><option value="true">Active</option><option value="false">Inactive</option></select></div>
-    </div>
-    <div class="uom-form-actions"><button class="btn btn-secondary" onclick="closeUomForm()">Cancel</button><button class="btn btn-primary" onclick="saveUomMaster()"><i class="ti ti-device-floppy"></i>Save UOM</button></div>
-  </div>
-  <div style="overflow-x:auto"><table class="uom-table cm-table"><thead id="uom-thead"></thead><tbody id="uom-tbody"></tbody></table></div>
+<div class="card-header page-command-header bc-master-directory-heading">
+<div><h3><i class="ti ti-ruler-measure" style="margin-right:6px"></i>Units of Measure</h3><p class="uom-master-subtitle">Control quantity precision and keyboard increments across BizCore documents.</p></div>
+
 </div>
-</div><div class="masters-tab-content" id="masters-tab-categories">
+<div class="card-body uom-toolbar cm-toolbar bc-master-register-toolbar">
+<div class="cm-search"><i aria-hidden="true" class="ti ti-search"></i><input aria-label="Search units" id="uom-search" oninput="renderUomMaster()" placeholder="Search code or unit name…" type="search"/></div>
+<div class="cat-filters" id="uom-filters"></div>
+<span class="uom-count" id="uom-count"></span>
+<div class="bc-master-toolbar-actions"><button class="btn btn-secondary btn-sm bc-master-suggested" onclick="addSuggestedServiceUoms()" title="Month, Visit, Trip, Man-day, Man-hour, Sq.m, Cu.m" type="button"><i class="ti ti-plus"></i>Add suggested service units</button><button class="btn btn-primary btn-sm page-primary-command bc-master-create" onclick="openUomForm()"><i class="ti ti-plus"></i>Add UOM</button></div></div>
+<div class="uom-form-panel" id="uom-form-panel" style="display:none">
+<div class="uom-form-head"><div><h4 id="uom-form-title">New unit of measure</h4><p>Set how quantities are entered and rounded.</p></div><button class="close-btn" onclick="closeUomForm()">✕</button></div>
+<div class="uom-form-grid">
+<div class="form-group"><label>UOM code *</label><input id="uom-code" maxlength="12" placeholder="e.g. PCS"/></div>
+<div class="form-group"><label>Unit name *</label><input id="uom-name" placeholder="e.g. Pieces"/></div>
+<div class="form-group"><label>Decimal places</label><select id="uom-decimals" onchange="syncUomStepSuggestion()"><option value="0">0 — Whole numbers only</option><option value="1">1 decimal place</option><option value="2">2 decimal places</option><option value="3">3 decimal places</option></select></div>
+<div class="form-group"><label>Quantity step</label><input id="uom-step" inputmode="decimal" placeholder="1"/></div>
+<div class="form-group"><label for="uom-usedfor">Used for</label><select id="uom-usedfor"><option value="goods">Goods</option><option value="service">Services</option><option value="both">Both</option></select></div>
+<div class="form-group"><label>Status</label><select id="uom-active"><option value="true">Active</option><option value="false">Inactive</option></select></div>
+</div>
+<div class="uom-form-actions"><button class="btn btn-secondary" onclick="closeUomForm()">Cancel</button><button class="btn btn-primary" onclick="saveUomMaster()"><i class="ti ti-device-floppy"></i>Save UOM</button></div>
+</div>
+<div class="bc-master-register-table-scroll" style="overflow-x:auto"><table class="uom-table cm-table"><thead id="uom-thead"></thead><tbody id="uom-tbody"></tbody></table></div>
+</div>
+</div><div class="masters-tab-content bc-master-register-standard" data-bc-register-standard="1" id="masters-tab-categories">
 <!-- V270.4.12 (mockup CU_1): categories for goods and for services -->
 <div class="card uom-master-card cat-master-card">
-  <div class="card-header page-command-header">
-    <div><h3><i class="ti ti-category" style="margin-right:6px"></i>Categories</h3><p class="uom-master-subtitle">Group products and services; each category is for goods or for services.</p></div>
-    <button class="btn btn-primary btn-sm page-primary-command" onclick="openCategoryForm()"><i class="ti ti-plus"></i>Add category</button>
-  </div>
-  <div class="uom-form-panel" id="cat-form-panel" style="display:none">
-    <div class="uom-form-head"><div><h4 id="cat-form-title">New category</h4><p>Used for goods or for services — the product form offers only the categories of its type.</p></div><button class="close-btn" onclick="closeCategoryForm()">✕</button></div>
-    <div class="uom-form-grid cat-form-grid">
-      <div class="form-group"><label for="cat-name">Category name *</label><input id="cat-name" maxlength="80" placeholder="e.g. Inspection &amp; testing"/></div>
-      <div class="form-group"><label>Used for *</label><div class="cat-seg" role="radiogroup" aria-label="Used for"><label><input type="radio" name="cat-type" id="cat-type-goods" value="goods" checked/><span><i class="ti ti-package"></i>Goods</span></label><label><input type="radio" name="cat-type" id="cat-type-service" value="service"/><span><i class="ti ti-tool"></i>Services</span></label></div></div>
-      <div class="form-group"><label for="cat-active">Status</label><select id="cat-active"><option value="true">Active</option><option value="false">Off</option></select></div>
-    </div>
-    <div class="cat-form-note" id="cat-form-note" hidden></div>
-    <div class="uom-form-actions"><button class="btn btn-secondary" onclick="closeCategoryForm()">Cancel</button><button class="btn btn-primary" onclick="saveCategoryMaster()"><i class="ti ti-device-floppy"></i>Save</button></div>
-  </div>
-  <div class="card-body uom-toolbar cat-toolbar cm-toolbar">
-    <div class="cm-search"><i class="ti ti-search" aria-hidden="true"></i><input id="cat-search" oninput="renderCategoryMaster()" placeholder="Search category…" type="search" aria-label="Search categories"/></div>
-    <div class="cat-filters" id="cat-filters"></div>
-    <span class="uom-count" id="cat-count"></span>
-  </div>
-  <div style="overflow-x:auto"><table class="uom-table cm-table"><thead id="cat-thead"></thead><tbody id="cat-tbody"></tbody></table></div>
-  <div class="cat-note">Delete only a category no item uses. A category switched off stays on the items that have it but is not offered for new items. Merge moves every item of a category into another category of the same type and removes the merged one; each item keeps the change in its history.</div>
+<div class="card-header page-command-header bc-master-directory-heading">
+<div><h3><i class="ti ti-category" style="margin-right:6px"></i>Categories</h3><p class="uom-master-subtitle">Group products and services; each category is for goods or for services.</p></div>
+
+</div>
+<div class="uom-form-panel" id="cat-form-panel" style="display:none">
+<div class="uom-form-head"><div><h4 id="cat-form-title">New category</h4><p>Used for goods or for services — the product form offers only the categories of its type.</p></div><button class="close-btn" onclick="closeCategoryForm()">✕</button></div>
+<div class="uom-form-grid cat-form-grid">
+<div class="form-group"><label for="cat-name">Category name *</label><input id="cat-name" maxlength="80" placeholder="e.g. Inspection &amp; testing"/></div>
+<div class="form-group"><label>Used for *</label><div aria-label="Used for" class="cat-seg" role="radiogroup"><label><input checked="" id="cat-type-goods" name="cat-type" type="radio" value="goods"/><span><i class="ti ti-package"></i>Goods</span></label><label><input id="cat-type-service" name="cat-type" type="radio" value="service"/><span><i class="ti ti-tool"></i>Services</span></label></div></div>
+<div class="form-group"><label for="cat-active">Status</label><select id="cat-active"><option value="true">Active</option><option value="false">Off</option></select></div>
+</div>
+<div class="cat-form-note" hidden="" id="cat-form-note"></div>
+<div class="uom-form-actions"><button class="btn btn-secondary" onclick="closeCategoryForm()">Cancel</button><button class="btn btn-primary" onclick="saveCategoryMaster()"><i class="ti ti-device-floppy"></i>Save</button></div>
+</div>
+<div class="card-body uom-toolbar cat-toolbar cm-toolbar bc-master-register-toolbar">
+<div class="cm-search"><i aria-hidden="true" class="ti ti-search"></i><input aria-label="Search categories" id="cat-search" oninput="renderCategoryMaster()" placeholder="Search category…" type="search"/></div>
+<div class="cat-filters" id="cat-filters"></div>
+<span class="uom-count" id="cat-count"></span>
+<div class="bc-master-toolbar-actions"><button class="btn btn-primary btn-sm page-primary-command bc-master-create" onclick="openCategoryForm()"><i class="ti ti-plus"></i>Add category</button></div></div>
+<div class="bc-master-register-table-scroll" style="overflow-x:auto"><table class="uom-table cm-table"><thead id="cat-thead"></thead><tbody id="cat-tbody"></tbody></table></div>
+<div class="cat-note">Delete only a category no item uses. A category switched off stays on the items that have it but is not offered for new items. Merge moves every item of a category into another category of the same type and removes the merged one; each item keeps the change in its history.</div>
 </div>
 </div></div></div></div><div class="page" id="page-setup">
 <div class="setup-shell">
@@ -4790,6 +4779,6 @@ console.log('BizCore Firebase ready ✅');
 <script defer src="js/phase5a-monitors.js?v=271.5.25"></script>
 <script defer src="js/stock-monitor-ui.js?v=271.5.23"></script>
 <script defer src="js/master-sidebar-option-b.js?v=271.5.30"></script>
-<script defer src="js/master-registers-pricing-standard.js?v=271.5.32"></script>
+
 </body>
 </html>
