@@ -2324,7 +2324,10 @@ function compareBizCoreDocumentNumbers(a,b,type){
   return x.seq-y.seq || x.revision-y.revision || compareRegisterValues(x.raw,y.raw);
 }
 /* Phase 1 — one source of truth for dropdown and table-header sorting. */
-const BC_REGISTER_SELECTS={customers:'master-sort-customers',suppliers:'master-sort-suppliers',products:'master-sort-products',employees:'master-sort-employees',quotation:'filter-sort',pricing:'pricing-sort',so:'so-sort',dn:'dn-sort',inv:'invreg-sort',rct:'rctreg-sort',pi:'pireg-sort',sp:'spreg-sort'};
+const BC_REGISTER_SELECTS={customers:'master-sort-customers',suppliers:'master-sort-suppliers',products:'master-sort-products',employees:'master-sort-employees',quotation:'filter-sort',pricing:'pricing-sort',so:'so-sort',dn:'dn-sort',inv:'invreg-sort',rct:'rctreg-sort',pi:'pireg-sort',sp:'spreg-sort',rfq:'rfq-sort'};
+/* V271.5.38: 'rfq' was missing above, so clicking an RFQ column header whose key had no entry in the
+   RFQ-specific label map below (Reference, Type, Status, Age, Progress) never found its dropdown and
+   got its sort cleared on the very next render — only RFQ No., RFQ Date, Due Date and Customer worked. */
 /* V271.4.3: Master registers share header/dropdown sort state; nothing persisted to records. */
 function bcMasterSortChanged(screen,renderFn){
   const select=document.getElementById(BC_REGISTER_SELECTS[screen]);
@@ -2367,9 +2370,13 @@ function setRegisterSort(screen,key,renderFn){
   registerSortState[screen]={key,dir:(cur&&cur.key===key&&cur.dir==='asc')?'desc':'asc'};
   const dropdown=document.getElementById(BC_REGISTER_SELECTS[screen]);
   if(dropdown){
-    const value=key+'-'+registerSortState[screen].dir;
+    // RFQ No./Date/Due Date/Customer already have purpose-written option labels and values
+    // ("number-asc" etc.) — route those through the same names instead of adding duplicates.
+    const rfqLabelKey={no:'number',date:'date',due:'due',customer:'customer'};
+    const dkey=(screen==='rfq'&&rfqLabelKey[key])||key;
+    const value=dkey+'-'+registerSortState[screen].dir;
     if(![...dropdown.options].some(o=>o.value===value)){
-      const label=dropdown.closest('.bc-filterbar-left')?.querySelector('label')?.textContent?.trim()||key;
+      const label=dropdown.closest('.bc-filterbar-left')?.querySelector('label')?.textContent?.trim()||(key.charAt(0).toUpperCase()+key.slice(1));
       dropdown.add(new Option(label+' '+(registerSortState[screen].dir==='asc'?'↑':'↓'),value));
     }
     dropdown.value=value;
@@ -8225,11 +8232,16 @@ function rfqAge(rfq) {
   return {ageDays, overdue, dueStr: fmtDate(rfq.due), ageLabel};
 }
 
+const RFQ_TYPE_LABELS={product:'Product',service:'Service',mixed:'Mixed',contracting:'Contracting'};
+function rfqTypeLabel(r){ return RFQ_TYPE_LABELS[r.requestType||'product']||'Product'; }
+function rfqTypeBadgeHtml(r){ const t=r.requestType||'product'; return `<span class="badge rfq-type-badge rfq-type-${t}">${rfqTypeLabel(r)}</span>`; }
 function renderRFQPage() {
   // Selecting the toolbar's Sort By must supersede earlier column-header sorting.
   const rfqSelection=document.getElementById('rfq-sort')?.value||'created-desc';
   const header=registerSortState.rfq;
   const map={no:'number',date:'date',due:'due',customer:'customer'};
+  // V271.5.38: any column (reference/type/status/age/progress) keeps its own sort once clicked —
+  // the fix is in setRegisterSort/BC_REGISTER_SELECTS, this check just has to agree with it.
   if(header && rfqSelection!==((map[header.key]||header.key)+'-'+header.dir))delete registerSortState.rfq;
   const today = bcLocalISO();
   const getRfqDisplayStatus = r => {
@@ -8249,7 +8261,10 @@ function renderRFQPage() {
     rfqCustSel.value = names.includes(cur) ? cur : '';
   }
   const rfqCust = rfqCustSel ? rfqCustSel.value : '';
-  const rfqScope = rfqCust ? rfqs.filter(r => r.company === rfqCust) : rfqs;
+  const rfqTypeSel = document.getElementById('rfq-type-filter');
+  const rfqType = rfqTypeSel ? rfqTypeSel.value : '';
+  const rfqScope = (rfqCust ? rfqs.filter(r => r.company === rfqCust) : rfqs)
+    .filter(r => !rfqType || (r.requestType || 'product') === rfqType);
   const statusFiltered = rfqFilter === 'all'
     ? rfqScope
     : rfqFilter === 'Open'
@@ -8327,7 +8342,7 @@ function renderRFQPage() {
   }
   document.querySelectorAll('#page-rfq [data-rfq-monitor-filter]').forEach(el=>el.classList.remove('active'));
 
-  sorted=sortRegisterRows(sorted,'rfq',{no:r=>r.rfqNo,customer:r=>r.company,reference:r=>r.ref,date:r=>r.date,due:r=>r.due||'',status:r=>getRFQWorkflowStage(r),age:r=>{const a=rfqOpenAge(r);return a?a.days:-1;},progress:r=>{const qs=quotations.filter(q=>q.rfqId===r.id);return qs.some(q=>salesOrders.some(so=>so.quotationId===q.id))?'Sales Order':qs.length?'Quotation':(r.pricingItems&&r.pricingItems.length)?'Pricing':r.status||'RFQ'}});
+  sorted=sortRegisterRows(sorted,'rfq',{no:r=>r.rfqNo,customer:r=>r.company,reference:r=>r.ref,type:r=>rfqTypeLabel(r),date:r=>r.date,due:r=>r.due||'',status:r=>getRFQWorkflowStage(r),age:r=>{const a=rfqOpenAge(r);return a?a.days:-1;},progress:r=>{const qs=quotations.filter(q=>q.rfqId===r.id);return qs.some(q=>salesOrders.some(so=>so.quotationId===q.id))?'Sales Order':qs.length?'Quotation':(r.pricingItems&&r.pricingItems.length)?'Pricing':r.status||'RFQ'}});
   { const c=document.getElementById('rfq-register-count'); if(c) c.textContent=`${sorted.length} RFQ${sorted.length===1?'':'s'}`; }
 
   const list = document.getElementById('rfq-list');
@@ -8359,6 +8374,7 @@ function renderRFQPage() {
       <td class="rfq-cell-no">${r.rfqNo}</td>
       <td class="rfq-cell-customer" title="${r.company||''}">${r.company||'—'}</td>
       <td class="rfq-cell-muted" title="${r.ref||''}">${r.ref||'—'}</td>
+      <td>${rfqTypeBadgeHtml(r)}</td>
       <td class="rfq-cell-muted">${dateText}</td>
       <td class="rfq-cell-muted" style="${overdue?'color:var(--red);font-weight:700':''}">${dueStr}</td>
       <td><span class="badge ${stClass}">${getRFQWorkflowStageLabel(displayStatus)}</span></td>
@@ -8368,8 +8384,8 @@ function renderRFQPage() {
   }).join('');
 
   list.innerHTML = `<div class="rfq-register"><table>
-    <colgroup><col style="width:14%"><col style="width:22%"><col style="width:14%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup>
-    <thead><tr><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="no" onclick="event.stopPropagation();setRegisterSort('rfq','no',renderRFQPage)">RFQ No.</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="customer" onclick="event.stopPropagation();setRegisterSort('rfq','customer',renderRFQPage)">Customer</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="reference" onclick="event.stopPropagation();setRegisterSort('rfq','reference',renderRFQPage)">Reference</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="date" onclick="event.stopPropagation();setRegisterSort('rfq','date',renderRFQPage)">RFQ Date</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="due" onclick="event.stopPropagation();setRegisterSort('rfq','due',renderRFQPage)">Due Date</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="status" onclick="event.stopPropagation();setRegisterSort('rfq','status',renderRFQPage)">Status</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="age" onclick="event.stopPropagation();setRegisterSort('rfq','age',renderRFQPage)" title="Days since the RFQ was received, until a quotation is created">Age</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="progress" onclick="event.stopPropagation();setRegisterSort('rfq','progress',renderRFQPage)">Progress</th></tr></thead>
+    <colgroup><col style="width:13%"><col style="width:19%"><col style="width:12%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:9%"><col style="width:10%"></colgroup>
+    <thead><tr><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="no" onclick="event.stopPropagation();setRegisterSort('rfq','no',renderRFQPage)">RFQ No.</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="customer" onclick="event.stopPropagation();setRegisterSort('rfq','customer',renderRFQPage)">Customer</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="reference" onclick="event.stopPropagation();setRegisterSort('rfq','reference',renderRFQPage)">Reference</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="type" onclick="event.stopPropagation();setRegisterSort('rfq','type',renderRFQPage)">Type</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="date" onclick="event.stopPropagation();setRegisterSort('rfq','date',renderRFQPage)">RFQ Date</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="due" onclick="event.stopPropagation();setRegisterSort('rfq','due',renderRFQPage)">Due Date</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="status" onclick="event.stopPropagation();setRegisterSort('rfq','status',renderRFQPage)">Status</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="age" onclick="event.stopPropagation();setRegisterSort('rfq','age',renderRFQPage)" title="Days since the RFQ was received, until a quotation is created">Age</th><th class="sortable-register-th" data-sort-screen="rfq" data-sort-key="progress" onclick="event.stopPropagation();setRegisterSort('rfq','progress',renderRFQPage)">Progress</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
   updateRegisterSortIndicators();
@@ -8451,7 +8467,7 @@ function filterRFQ(status, btn) {
 
 function clearAllRFQFilters() {
   rfqFilter = 'all'; rfqPage = 1;
-  ['rfq-customer-filter','rfq-status-filter'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';});
+  ['rfq-customer-filter','rfq-type-filter','rfq-status-filter'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';});
   { const e=document.getElementById('rfq-sort'); if(e) e.value='created-desc'; }
   const search=document.getElementById('rfq-search'); if(search) search.value='';
   const from=document.getElementById('rfq-date-from'); if(from) from.value='';
