@@ -8234,7 +8234,7 @@ function rfqAge(rfq) {
 
 const RFQ_TYPE_LABELS={product:'Product',service:'Service',mixed:'Mixed',contracting:'Contracting'};
 function rfqTypeLabel(r){ return RFQ_TYPE_LABELS[r.requestType||'product']||'Product'; }
-function rfqTypeBadgeHtml(r){ const t=r.requestType||'product'; return `<span class="badge rfq-type-badge rfq-type-${t}">${rfqTypeLabel(r)}</span>`; }
+function rfqTypeBadgeHtml(r){ const t=r.requestType||'product'; return `<span class="rfq-type-text rfq-type-text-${t}">${rfqTypeLabel(r)}</span>`; }
 function renderRFQPage() {
   // Selecting the toolbar's Sort By must supersede earlier column-header sorting.
   const rfqSelection=document.getElementById('rfq-sort')?.value||'created-desc';

@@ -140,9 +140,3 @@ html body .rct-pay-pill.unapplied {background:var(--bc-badge-amber-bg)!important
 /* V271.5.15.1 — cancelled/voided share soft red, rejected is deeper red. */
 html body :is(.badge.badge-voided,.badge.badge-void,.badge.badge-canceled,.badge.badge-cancelled,.badge.badge-dn-voided,.badge.badge-dn-cancelled,.rct-status.voided,.pi-status.voided) {background:var(--bc-badge-danger-bg)!important;color:var(--bc-badge-danger-fg)!important}
 html body :is(.badge.badge-rejected,.badge.badge-dn-rejected) {background:var(--bc-badge-rejected-bg)!important;color:var(--bc-badge-rejected-fg)!important}
-
-/* V271.5.38 — RFQ Type column/filter pill. Same base .badge shape, its own colours (not a workflow status). */
-html body .badge.rfq-type-product {background:#e0f2fe!important;color:#0369a1!important}
-html body .badge.rfq-type-service {background:#ecfdf5!important;color:#15803d!important}
-html body .badge.rfq-type-mixed {background:#fff7ed!important;color:#c2410c!important}
-html body .badge.rfq-type-contracting {background:#f3e8ff!important;color:#7c3aed!important}
