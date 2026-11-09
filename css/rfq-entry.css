@@ -33,10 +33,18 @@
 #rfq-modal .rq-seg{display:flex;gap:2px;padding:3px;background:#eef2f6;border-radius:8px;height:34px}
 #rfq-modal .rq-seg label{flex:1;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:12.5px;font-weight:400;color:#475569;cursor:pointer;white-space:nowrap;user-select:none;margin:0;position:relative}
 #rfq-modal .rq-seg input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
-#rfq-modal .rq-seg label.on{background:#fff;color:var(--blue);font-weight:500;box-shadow:0 1px 2px rgba(15,23,42,.12),0 0 0 1px rgba(15,23,42,.05)}
+/* V271.5.41: the chosen request type is filled dark blue — the type decides the whole RFQ, so it has to read at a glance */
+/* (the !important beats the global `label{color:…!important}` rule in index.html's inline styles) */
+#rfq-modal .rq-seg label.on{background:var(--blue);color:#fff!important;font-weight:500;box-shadow:0 1px 2px rgba(15,23,42,.18)}
 #rfq-modal .rq-seg label:focus-within{outline:2px solid var(--blue-mid);outline-offset:1px}
+#rfq-modal .rq-seg label.on:focus-within{outline-color:#fff;outline-offset:-3px}   /* V271.5.41: a light ring reads on the filled pill */
 #rfq-modal .rq-seg.is-locked label{cursor:default}
 #rfq-modal .rq-seg.is-locked label:not(.on){opacity:.55}
+/* V271.5.41: Request type is required — amber label + inline message when nothing is chosen yet, no border box */
+#rfq-modal .rq-type-hint{display:none;align-items:center;gap:5px;margin-top:6px;font-size:11px;font-weight:600;color:#b45309}
+#rfq-modal .rq-type-hint-ic{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:#d97706;color:#fff;font-size:8.5px;font-weight:800;flex:0 0 auto}
+#rfq-modal .rq-type.is-missing #rfq-type-lbl{color:#b45309}
+#rfq-modal .rq-type.is-missing .rq-type-hint{display:flex}
 /* tabs (TB_3) */
 #rfq-modal .rq-tabsrow{display:flex;align-items:center;gap:12px;margin:12px 0 8px;flex-wrap:wrap}
 #rfq-modal .rq-tabs{display:inline-flex;gap:2px;padding:3px;background:#e7ecf2;border-radius:10px;max-width:100%;overflow-x:auto}

@@ -24,7 +24,7 @@
   const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const newId = () => 'rl' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const S = { type: 'product', lines: [], locked: false, tab: 'product', datesReady: false };
-  const kinds = () => (S.type === 'mixed' ? ['product', 'service'] : S.type === 'contracting' ? ['service'] : [S.type]);
+  const kinds = () => (!S.type ? [] : S.type === 'mixed' ? ['product', 'service'] : S.type === 'contracting' ? ['service'] : [S.type]);
   const svcLike = t => t === 'service' || t === 'contracting';
   const ofKind = k => S.lines.filter(l => l.kind === k);
   const filled = l => !!(String(l.desc || '').trim() || l.productId);
@@ -69,7 +69,10 @@
   }
   function load(r) {
     setupDates();
-    S.type = TYPES.includes(r && r.requestType) ? r.requestType : 'product';
+    // V271.5.41: Request type is required going forward — a new RFQ starts with none chosen;
+    // a record saved before this (no stored requestType) still defaults to Product so old data keeps displaying as it always has.
+    S.type = r ? (TYPES.includes(r.requestType) ? r.requestType : 'product') : '';
+    markTypeRequired(false);
     S.lines = (r && Array.isArray(r.rfqLines) ? r.rfqLines : [])
       .map((l, i) => ({ lineId: l.lineId || newId(), kind: l.kind === 'service' ? 'service' : 'product', sortOrder: Number.isFinite(Number(l.sortOrder)) ? Number(l.sortOrder) : i + 1,
         productId: l.productId || '', code: l.code || '', desc: l.desc || '', qty: l.qty == null ? '' : l.qty, uom: l.uom || '', remarks: l.remarks || '' }))
@@ -102,6 +105,7 @@
   }
   /** First problem as { title, message, focus } or null. */
   function validate() {
+    if (!S.type) { markTypeRequired(true); return { title: 'Request type required', message: 'Select a request type — Product, Service, Mixed or Contracting — before saving this RFQ.', focus: $('rfq-type-seg') }; }
     const rec = getDate('rfq-date'), today = window.BCDate ? BCDate.today() : '';
     if (rec && today && rec > today) return { title: 'Date received is in the future', message: 'The RFQ cannot be received after today. Enter today’s date or an earlier one.', focus: $('rfq-date') };
     if (rec && rec < receivedMin()) return { title: 'Date received is too far back', message: `RFQs can be entered up to ${backDays()} days back (from ${window.BCDate.format(receivedMin())}). The allowance is set in Administration → Numbering & Defaults → Document Defaults.`, focus: $('rfq-date') };
@@ -128,6 +132,7 @@
   function setDates(received, due) { setupDates(); setDate('rfq-date', received); setDate('rfq-due', due); }
 
   /* ── request type ── */
+  function markTypeRequired(on) { $('rfq-type-group')?.classList.toggle('is-missing', !!on); }
   function syncType() {
     document.querySelectorAll('#rfq-type-seg label').forEach(lb => { const on = lb.dataset.type === S.type; lb.classList.toggle('on', on); const i = lb.querySelector('input'); if (i) { i.checked = on; i.disabled = S.locked; } });
     $('rfq-type-seg')?.classList.toggle('is-locked', S.locked);
@@ -136,7 +141,7 @@
     set('rfq-site-lbl', svcLike(t) ? 'Site / location' : t === 'mixed' ? 'Delivery / site location' : 'Delivery location');
     set('rfq-reqdate-lbl', svcLike(t) ? 'Required start' : t === 'mixed' ? 'Required by' : 'Required delivery');
     set('rfq-desc-lbl', svcLike(t) ? 'Scope of work' : t === 'mixed' ? 'Scope of work / general requirements' : 'General requirements');
-    const dw = $('rfq-duration-wrap'); if (dw) dw.hidden = t === 'product';
+    const dw = $('rfq-duration-wrap'); if (dw) dw.hidden = !t || t === 'product';   // V271.5.41: also hidden until a type is chosen
     const d = $('rfq-desc'); if (d) d.placeholder = t === 'product' ? 'General instructions, approved brands, standards, delivery conditions…' : 'Describe the work, site conditions, working hours, safety / permit needs…';
   }
   function setType(v) {
@@ -146,7 +151,7 @@
     const losing = goneKinds.reduce((n, k) => n + ofKind(k).filter(filled).length, 0);
     const apply = () => {
       S.type = v; kinds().forEach(k => { if (!ofKind(k).length) S.lines.push(blank(k)); });
-      S.tab = kinds()[0]; syncType(); render(); dirty();
+      S.tab = kinds()[0]; markTypeRequired(false); syncType(); render(); dirty();
     };
     if (losing && typeof window.bizcoreShowSafeDialog === 'function') {
       const what = goneKinds[0] === 'service' ? 'service' : 'item';
@@ -251,7 +256,11 @@
     const q = input.value.trim().toLowerCase();
     if (!q) { closeDD(); return; }
     const words = q.split(/\s+/).filter(Boolean);
-    ddList = masterProducts().filter(p => p && !p.deleted && words.every(w => `${p.code || ''} ${p.name || ''} ${p.brand || ''} ${p.model || ''}`.toLowerCase().includes(w))).slice(0, 8);
+    // V271.5.41: Item Description searches only the matching half of the Item Master — goods for a Product line,
+    // services for a Service line (Mixed keeps both lists, one per tab). Contracting stays unchanged: scope items
+    // are free text, not matched against the master.
+    const byType = S.type === 'contracting' ? null : (l.kind === 'service' ? 'service' : 'goods');
+    ddList = masterProducts().filter(p => p && !p.deleted && (!byType || (byType === 'service' ? p.type === 'service' : p.type !== 'service')) && words.every(w => `${p.code || ''} ${p.name || ''} ${p.brand || ''} ${p.model || ''}`.toLowerCase().includes(w))).slice(0, 8);
     ddIdx = -1; ddLine = l; ddInput = input;
     if (!dd) { dd = document.createElement('div'); dd.className = 'rq-dd'; dd.setAttribute('role', 'listbox'); document.body.appendChild(dd); dd.addEventListener('mousedown', e => { e.preventDefault(); const it = e.target.closest('[data-i]'); if (it) choose(Number(it.dataset.i)); }); }
     // V270.2.8: the first choice keeps the typed text (Enter); ↓ moves to the Item Master matches

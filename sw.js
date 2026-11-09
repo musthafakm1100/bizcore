@@ -8,7 +8,7 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v271540';
+const CACHE_NAME = 'bizcore-shell-v271541';
 const APP_SHELL = [
   './login.html',
   './delivery.html',
@@ -27,7 +27,7 @@ const APP_SHELL = [
   './css/estimate.css?v=271.4-sorting',
   './css/invoicing.css?v=270.50',
   './css/jobs-ui-standard.css?v=271.5.23.1',
-  './css/main.css?v=271.5.39',
+  './css/main.css?v=271.5.41',
   './css/master-customers-pricing-standard.css?v=271.5.31.1',
   './css/master-registers-pricing-standard.css?v=271.5.34.2',
   './css/master-sidebar-option-b.css?v=271.5.30',
@@ -48,7 +48,7 @@ const APP_SHELL = [
   './css/receipts.css?v=266.5',
   './css/register-standard.css?v=271.5.38',
   './css/responsive.css?v=268.4',
-  './css/rfq-entry.css?v=271.2',
+  './css/rfq-entry.css?v=271.5.41',
   './css/safe-area.css?v=269.2',
   './css/shell.css?v=269.1',
   './css/sidebar-compact.css?v=271.5.9',
@@ -62,7 +62,7 @@ const APP_SHELL = [
   './js/account-core.mjs?v=268.2',
   './js/account-service.mjs?v=270.43',
   './js/accounts.js?v=268.51',
-  './js/app.js?v=271.5.40',
+  './js/app.js?v=271.5.41',
   './js/bc-date.js?v=270.52',
   './js/cash-ui.js?v=271.32',
   './js/cashbank.js?v=269.3',
@@ -103,7 +103,7 @@ const APP_SHELL = [
   './js/receipt-service.mjs?v=270.43',
   './js/receipts.js?v=271.5.40',
   './js/responsive.js?v=270.47',
-  './js/rfq-entry.js?v=271.2',
+  './js/rfq-entry.js?v=271.5.41',
   './js/role-core.mjs?v=271.5.40',
   './js/role-service.mjs?v=271.32',
   './js/running-totals.mjs?v=269.3',

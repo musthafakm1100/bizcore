@@ -612,6 +612,13 @@ td.center,th.center{text-align:center}
 .rfq-age.ok{background:#d4edda;color:#155724}
 .rfq-age.warn{background:#ffeeba;color:#856404}
 .rfq-age.over{background:#f8d7da;color:#721c24}
+/* V271.5.41: RFQ view header type pill — right side, next to Close. Same hues as the register's Type column. */
+.rv-type-badge{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 10px;border-radius:6px;font-size:11px;font-weight:700;border:1px solid;white-space:nowrap}
+.rv-type-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
+.rv-type-product{background:#e6f2fb;border-color:#bfe0f7;color:#0369a1}
+.rv-type-service{background:#e4f7ea;border-color:#bfe8cd;color:#15803d}
+.rv-type-mixed{background:#fdece0;border-color:#f8cfae;color:#c2410c}
+.rv-type-contracting{background:#f0e9fc;border-color:#d9c7f7;color:#7c3aed}
 .badge-rfq-new{background:var(--st-blue-bg);color:var(--st-blue-fg)}
 .badge-rfq-pricing{background:var(--st-amber-bg);color:var(--st-amber-fg)}
 .badge-rfq-quoted{background:var(--st-green-bg);color:var(--st-green-fg)}

@@ -8235,6 +8235,8 @@ function rfqAge(rfq) {
 const RFQ_TYPE_LABELS={product:'Product',service:'Service',mixed:'Mixed',contracting:'Contracting'};
 function rfqTypeLabel(r){ return RFQ_TYPE_LABELS[r.requestType||'product']||'Product'; }
 function rfqTypeBadgeHtml(r){ const t=r.requestType||'product'; return `<span class="rfq-type-text rfq-type-text-${t}">${rfqTypeLabel(r)}</span>`; }
+// V271.5.41: a colored type pill for the RFQ view header — same palette as the register's Type column, for all 4 request types.
+function rfqTypeHeaderBadgeHtml(r){ const t=r.requestType||'product'; return `<span class="rv-type-badge rv-type-${t}">${rfqTypeLabel(r)}</span>`; }
 function renderRFQPage() {
   // Selecting the toolbar's Sort By must supersede earlier column-header sorting.
   const rfqSelection=document.getElementById('rfq-sort')?.value||'created-desc';
@@ -9224,6 +9226,7 @@ function viewRFQ(id) {
   const stage=getRFQWorkflowStage(r);
   const age=rfqOpenAge(r);
   document.getElementById('rfq-view-title').innerHTML=`<span class="rv-no">${E(r.rfqNo)}</span><span class="badge ${stClass} rv-pill">${E(getRFQWorkflowStageLabel(displayStatus))}</span>${rfqAgeBadgeHtml(age)}`;
+  const typeBadgeEl=document.getElementById('rfq-view-type-badge'); if(typeBadgeEl) typeBadgeEl.innerHTML=rfqTypeHeaderBadgeHtml(r);
   document.getElementById('rfq-view-modal').querySelector('.modal-header')?.classList.add('rv-hd');
   document.getElementById('rfq-view-body').className = 'modal-body rfq-view-body rv-body';
   document.getElementById('rfq-view-footer').className = 'modal-footer rfq-view-footer';
