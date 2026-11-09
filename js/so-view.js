@@ -695,10 +695,13 @@ function sovRender(soId, opts = {}){
     const a = acts.list.find(x => x.key === k); if (a) { sovPopClose(); a.run(); }
   };
 
-  // keep an open list in place after a refresh (data changed underneath)
+  // keep an open list in place after a refresh (data changed underneath). V271.5.40: the desktop cards and the
+  // phone cards both carry the same data-sov-pop key, so picking the FIRST match could grab the hidden desktop
+  // (or hidden phone) anchor and wrongly close a list that is still open and visible on the other layout.
   const st = modal._sovPop;
   if (st && st.key) {
-    const anchor = modal.querySelector(`[data-sov-pop="${st.key}"]`) || (st.key.startsWith('menu') ? modal.querySelector(st.key === 'menu' ? '.sov-head-more' : '.sov-more-btn') : null);
+    const anchor = [...modal.querySelectorAll(`[data-sov-pop="${st.key}"]`)].find(a => a.offsetParent !== null)
+      || (st.key.startsWith('menu') ? modal.querySelector(st.key === 'menu' ? '.sov-head-more' : '.sov-more-btn') : null);
     if (anchor && anchor.offsetParent !== null) sovPopShow(anchor, st.key, true); else sovPopClose();
   }
   // older purchase records for this order (only when a tab that needs them is shown)

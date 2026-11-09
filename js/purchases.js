@@ -91,7 +91,7 @@ let _piKpi = 'all';
 function filterPurchaseKPI(k){ _piKpi = k; const st = document.getElementById('pireg-status'); if (st) st.value = k === 'all' ? '' : k; renderPurchaseRegister(); }
 function clearPurchaseRegisterFilters(){
   ['pireg-q', 'pireg-status', 'pireg-supplier'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
-  const s = document.getElementById('pireg-sort'); if (s) s.value = 'date-desc';
+  const s = document.getElementById('pireg-sort'); if (s) s.value = 'created-desc';
   if (window.BCDateFilter) BCDateFilter.set('pireg', { preset: 'all' });
   _piKpi = 'all'; renderPurchaseRegister();
 }
@@ -111,7 +111,7 @@ function renderPurchaseRegister(){
   lib.start();
   const C = piCore(), today = piToday();
   const val = id => (document.getElementById(id)?.value || '');
-  const q = val('pireg-q').trim().toLowerCase(), sort = val('pireg-sort') || 'date-desc';
+  const q = val('pireg-q').trim().toLowerCase(), sort = val('pireg-sort') || 'created-desc';
   const ds = window.BCDateFilter ? BCDateFilter.get('pireg') : { preset: 'all', from: '', to: '' };
   const supSel = document.getElementById('pireg-supplier');
   const all = piInvoices();
@@ -158,7 +158,7 @@ function renderPurchaseRegister(){
   if (typeof sortRegisterRows === 'function') rows = sortRegisterRows(rows, 'pi', { created: p => bcRegisterCreated(p), no: p => p.piNo, date: p => p.date, supplier: p => p.supplierName, amount: p => piN(p.totals && p.totals.total), due: p => p.dueDate, status: p => p.status });
   setT('pireg-count', `${rows.length} invoice${rows.length === 1 ? '' : 's'}`);
   const clear = document.getElementById('pireg-clear');
-  if (clear) { const active = !!(q || sup || ds.preset !== 'all' || sort !== 'date-desc' || _piKpi !== 'all'); clear.disabled = !active; clear.classList.toggle('active', active); }
+  if (clear) { const active = !!(q || sup || ds.preset !== 'all' || sort !== 'created-desc' || _piKpi !== 'all'); clear.disabled = !active; clear.classList.toggle('active', active); }
   const orders = p => { const s = [...new Set((p.lines || []).flatMap(l => (l.allocations || []).map(a => a.soNo)).filter(Boolean))]; const stock = (p.lines || []).some(l => piN(l.stockQty) > 0);
     return s.slice(0, 2).map(x => `<span class="pi-chip">${piEsc(x)}</span>`).join('') + (s.length > 2 ? `<span class="pi-chip">+${s.length - 2}</span>` : '') + (stock ? '<span class="pi-chip stock"><i class="ti ti-box"></i>stock</span>' : '') || '<span class="pi-muted">—</span>'; };
   const openFn = p => `openPurchaseInvoiceView('${piEsc(p.id)}')`;

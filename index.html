@@ -36,7 +36,7 @@
 <link href="css/shell.css?v=269.1" rel="stylesheet"/>
 <link href="css/accounts.css?v=268.2" rel="stylesheet"/>
 <link href="css/cash.css?v=268.32" rel="stylesheet"/>
-<link href="css/purchases.css?v=268.7" rel="stylesheet"/>
+<link href="css/purchases.css?v=271.5.40" rel="stylesheet"/>
 <link href="css/responsive.css?v=268.4" rel="stylesheet"/>
 <link href="css/theme.css?v=266.5" rel="stylesheet"/>
 <link href="css/so-register.css?v=271.5.10" rel="stylesheet"/>
@@ -2374,7 +2374,7 @@ import * as JobCostCore from './js/job-cost-core.mjs?v=271.32';   // V271.3 Cont
 import { createJobCostService } from './js/job-cost-service.mjs?v=271.33';
 import * as UserCore from './js/user-core.mjs?v=270.43';
 import { createUserService } from './js/user-service.mjs?v=271.32';
-import * as RoleCore from './js/role-core.mjs?v=271.32';
+import * as RoleCore from './js/role-core.mjs?v=271.5.40';
 import { createRoleService } from './js/role-service.mjs?v=271.32';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
@@ -4594,11 +4594,11 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=271.5.39-rfq-type-typography';
+      s.src = 'js/app.js?v=271.5.40';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
-        const sv = document.createElement('script'); sv.id = 'bizcore-so-view-script'; sv.src = 'js/so-view.js?v=270.59'; document.body.appendChild(sv);
+        const sv = document.createElement('script'); sv.id = 'bizcore-so-view-script'; sv.src = 'js/so-view.js?v=271.5.40'; document.body.appendChild(sv);
         // V270.1: the Pricing screen (tabs, line menu, price references, phone cards)
         const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.24'; document.body.appendChild(pu);
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
@@ -4614,19 +4614,19 @@ onAuthStateChanged(auth, async user => {
         // V270.4.1: Administration → Users, Roles & Permissions
         const us = document.createElement('script'); us.id = 'bizcore-users-script'; us.src = 'js/users.js?v=270.43'; document.body.appendChild(us);
         // V270.4.2: what the screens show for the role (sidebar, guarded actions)
-        const pm = document.createElement('script'); pm.id = 'bizcore-permissions-script'; pm.src = 'js/permissions-ui.js?v=271.2'; document.body.appendChild(pm); };
+        const pm = document.createElement('script'); pm.id = 'bizcore-permissions-script'; pm.src = 'js/permissions-ui.js?v=271.5.40'; document.body.appendChild(pm); };
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js
-    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=271.5.15-badges'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
+    const loadPurchases = () => { const pu = document.createElement('script'); pu.id = 'bizcore-purchases-script'; pu.src = 'js/purchases.js?v=271.5.40'; pu.onload = loadSP; pu.onerror = () => { console.error('[BizCore] purchases.js could not be loaded'); start(); }; document.body.appendChild(pu); };
     // V268.3: supplier-payments.js (Supplier Payments, advances, edits) after purchases.js
     // V268.4: stock.js (Purchasing → Stock) after supplier-payments.js
     const loadStock = () => { const st = document.createElement('script'); st.id = 'bizcore-stock-script'; st.src = 'js/stock.js?v=271.3'; st.onload = start; st.onerror = () => { console.error('[BizCore] stock.js could not be loaded'); start(); }; document.body.appendChild(st); };
-    const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=271.5.8'; sp.onload = loadStock; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
+    const loadSP = () => { const sp = document.createElement('script'); sp.id = 'bizcore-supplierpayments-script'; sp.src = 'js/supplier-payments.js?v=271.5.40'; sp.onload = loadStock; sp.onerror = () => { console.error('[BizCore] supplier-payments.js could not be loaded'); start(); }; document.body.appendChild(sp); };
     // V267.2: cash-ui.js + cashbank.js (Cash & Bank) after accounts.js, before app.js
     const loadCash = () => { const u = document.createElement('script'); u.id = 'bizcore-cashui-script'; u.src = 'js/cash-ui.js?v=271.32'; u.onload = u.onerror = () => { const c = document.createElement('script'); c.id = 'bizcore-cashbank-script'; c.src = 'js/cashbank.js?v=269.3'; c.onload = loadPurchases; c.onerror = () => { console.error('[BizCore] cashbank.js could not be loaded'); loadPurchases(); }; document.body.appendChild(c); }; document.body.appendChild(u); };
     // V266: receipts.js (Payment Receipts) after invoicing.js, before app.js
-    inv.onload = () => { const r = document.createElement('script'); r.id = 'bizcore-receipts-script'; r.src = 'js/receipts.js?v=271.5.15-badges'; r.onload = () => { const pa = document.createElement('script'); pa.id = 'bizcore-accounts-script'; pa.src = 'js/accounts.js?v=268.51'; pa.onload = loadCash; pa.onerror = () => { console.error('[BizCore] accounts.js could not be loaded'); loadCash(); }; document.body.appendChild(pa); }; r.onerror = () => { console.error('[BizCore] receipts.js could not be loaded'); start(); }; document.body.appendChild(r); };
+    inv.onload = () => { const r = document.createElement('script'); r.id = 'bizcore-receipts-script'; r.src = 'js/receipts.js?v=271.5.40'; r.onload = () => { const pa = document.createElement('script'); pa.id = 'bizcore-accounts-script'; pa.src = 'js/accounts.js?v=268.51'; pa.onload = loadCash; pa.onerror = () => { console.error('[BizCore] accounts.js could not be loaded'); loadCash(); }; document.body.appendChild(pa); }; r.onerror = () => { console.error('[BizCore] receipts.js could not be loaded'); start(); }; document.body.appendChild(r); };
     inv.onerror = () => { console.error('[BizCore] invoicing.js could not be loaded'); start(); };
     document.body.appendChild(inv);
   }

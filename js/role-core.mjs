@@ -39,7 +39,9 @@ export const ACTS = Object.freeze([['v', 'View'], ['c', 'Create'], ['e', 'Edit']
 
 /** V270.4.3 Special Rights (approved mockup UR_4). was: where the choice lived before; dflt: the starting value of a role.
  *  The Administrator role always has every right. Record / void payment receipts are the Payment Receipts module's
- *  Create / Cancel boxes (they moved there from Billing Settings). */
+ *  Create / Cancel boxes (they moved there from Billing Settings).
+ *  V271.5.40: "Export to Excel" was removed as a restrictable right — Excel export is now open for every role,
+ *  matching every other register's export button, which was never gated by any right. */
 export const RIGHTS = Object.freeze([
   { id: 'seeCost', label: 'See cost, margin and profit', hint: 'Profit tab on Sales Orders, Selling → P/L on purchase invoices', group: 'Pricing & profit', was: 'Purchase Settings' },
   { id: 'approveMargin', label: 'Approve pricing below the minimum margin', hint: 'Decides the approval requests (can be chosen as approver)', group: 'Pricing & profit', was: 'admin only' },
@@ -52,7 +54,6 @@ export const RIGHTS = Object.freeze([
   { id: 'fullEdit', label: 'Full edit (figures), not only limited edit', hint: 'Where the setting is “Limited for all, full with the right”', group: 'Editing & locks', was: 'admin only' },
   { id: 'forceRelease', label: "Force-release another user's lock", group: 'Editing & locks', was: 'admin only' },
   { id: 'backdate', label: 'Backdate beyond the backdate limit', hint: 'RFQ date received (Administration → Numbering & Defaults)', group: 'Editing & locks' },
-  { id: 'exportExcel', label: 'Export to Excel', group: 'Data', dflt: true },
   { id: 'printDocs', label: 'Print / PDF customer documents', hint: 'Quotations, delivery notes, invoices, credit notes, receipts, statements', group: 'Data', dflt: true },
 ]);
 export const RIGHT_IDS = RIGHTS.map(r => r.id);

@@ -53,9 +53,7 @@
     openEmployeeForm: args => ['employees', args[0] ? 'e' : 'c'], editEmployeeFromView: ['employees', 'e'], deleteEmployee: ['employees', 'x'],
     openImportModal: args => { const m = MASTER_OF(args[0]); return m ? [m, 'c'] : null; },
     deleteSelectedMasterRecords: args => { const m = MASTER_OF(args[0]); return m ? [m, 'x'] : null; },
-    // V270.4.3 Special Rights: Excel export, print / PDF of customer documents
-    openQuotationExcelExportDialog: ['@', 'exportExcel'], openPricingExcelExportDialog: ['@', 'exportExcel'],
-    exportQuotationRegisterExcel: ['@', 'exportExcel'], exportPricingRegisterExcel: ['@', 'exportExcel'],
+    // V270.4.3 Special Rights: print / PDF of customer documents (Excel export is open for every role as of V271.5.40 — no right gates it)
     printQuotation: ['@', 'printDocs'], printWithSelectedTemplate: ['@', 'printDocs'], printCustomerInvoice: ['@', 'printDocs'],
     printCreditNote: ['@', 'printDocs'], printDeliveryNote: ['@', 'printDocs'], printReceipt: ['@', 'printDocs'],
     invPrintDocument: ['@', 'printDocs'], cbPrintStatement: ['@', 'printDocs'],
@@ -112,8 +110,6 @@
     ['customers', 'suppliers', 'products', 'employees'].forEach(t => {
       const b = document.getElementById('mtab-' + t); if (b) b.classList.toggle('bc-perm-hidden', !window.bcCan(t, 'v'));
     });
-    // V270.4.3: Excel export buttons follow the Special Right
-    ['quotation-export-excel-btn', 'pricing-export-excel-btn'].forEach(id => { const b = document.getElementById(id); if (b) b.classList.toggle('bc-perm-hidden', !window.bcRight('exportExcel')); });
     applyNewButtons();
     applySetupTabs();
   }

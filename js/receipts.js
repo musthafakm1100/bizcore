@@ -132,7 +132,7 @@ function filterReceiptKPI(k){
 function setReceiptStatusFilter(v){ _rctKpi = v || 'all'; renderReceiptRegister(); }
 function clearReceiptRegisterFilters(){
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
-  set('rctreg-q', ''); set('rctreg-status', ''); set('rctreg-customer', ''); set('rctreg-sort', 'date-desc');
+  set('rctreg-q', ''); set('rctreg-status', ''); set('rctreg-customer', ''); set('rctreg-sort', 'created-desc');
   if (window.BCDateFilter) BCDateFilter.set('rctreg', { preset: 'all' });
   _rctKpi = 'all'; renderReceiptRegister();
 }
@@ -144,7 +144,7 @@ function renderReceiptRegister(){
   syncReceiptPageState();
   const body = document.getElementById('rctreg-body'); if (!body) return;
   const val = id => (document.getElementById(id)?.value || '');
-  const q = val('rctreg-q').trim().toLowerCase(), sort = val('rctreg-sort') || 'date-desc';
+  const q = val('rctreg-q').trim().toLowerCase(), sort = val('rctreg-sort') || 'created-desc';
   const ds = window.BCDateFilter ? BCDateFilter.get('rctreg') : { preset: 'all', from: '', to: '' };
   const from = ds.from || null, to = ds.to || null;
   const custSel = document.getElementById('rctreg-customer');
@@ -192,7 +192,7 @@ function renderReceiptRegister(){
   if (typeof sortRegisterRows === 'function') rows = sortRegisterRows(rows, 'rct', { created: r => bcRegisterCreated(r), no: r => r.rctNo, date: r => r.date, customer: r => r.customer, method: r => r.method, amount: r => rctNum(r.amount), status: r => r.status });
   setT('rctreg-count', `${rows.length} receipt${rows.length === 1 ? '' : 's'}`);
   const clear = document.getElementById('rctreg-clear');
-  if (clear) { const active = !!(q || cust || ds.preset !== 'all' || sort !== 'date-desc' || _rctKpi !== 'all'); clear.disabled = !active; clear.classList.toggle('active', active); }
+  if (clear) { const active = !!(q || cust || ds.preset !== 'all' || sort !== 'created-desc' || _rctKpi !== 'all'); clear.disabled = !active; clear.classList.toggle('active', active); }
   const chips = r => {
     const a = r.allocations || [];
     if (r.status === 'Voided') return '<span class="rct-muted">— released —</span>';

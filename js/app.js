@@ -4031,7 +4031,7 @@ function getQuotationOverviewScope() {
 function updateQuotationFilterHighlights() {
   const status=document.getElementById('filter-status')?.value || '';
   const customer=document.getElementById('filter-customer')?.value || '';
-  const sort=document.getElementById('filter-sort')?.value || 'date-desc';
+  const sort=document.getElementById('filter-sort')?.value || 'created-desc';
   const search=(document.getElementById('search-input')?.value || '').trim();
   const from=document.getElementById('filter-date-from')?.value || '';
   const to=document.getElementById('filter-date-to')?.value || '';
@@ -4040,7 +4040,7 @@ function updateQuotationFilterHighlights() {
   const sortEl=document.getElementById('filter-sort');
   const searchEl=document.getElementById('search-input');
   if(customerEl) customerEl.classList.toggle('filter-active', !!customer);
-  if(sortEl) sortEl.classList.toggle('filter-active', sort !== 'date-desc');
+  if(sortEl) sortEl.classList.toggle('filter-active', sort !== 'created-desc');
   if(searchEl) searchEl.classList.toggle('filter-active', !!search);
 
   document.querySelectorAll('#page-quotations [data-overview-key]').forEach(item => item.classList.remove('active'));
@@ -4051,7 +4051,7 @@ function updateQuotationFilterHighlights() {
   updateQuotationOverviewTint();
 
   const clearBtn=document.getElementById('quotation-clear-filters-btn');
-  const hasActive=!!(status || customer || search || from || to || sort !== 'date-desc');
+  const hasActive=!!(status || customer || search || from || to || sort !== 'created-desc');
   if(clearBtn){
     clearBtn.classList.toggle('active', hasActive);
     clearBtn.disabled=!hasActive;
@@ -4069,7 +4069,7 @@ function clearAllQuotationFilters() {
   if(status) status.value='';
   if(customer) customer.value='';
   if(search) search.value='';
-  if(sort) sort.value='date-desc';
+  if(sort) sort.value='created-desc';
   if(from) from.value='';
   if(to) to.value='';
   updateQuotationDateFilterUI('All Dates','all');
@@ -4086,7 +4086,7 @@ function getQuotationRegisterExportRows(){
   const search=(document.getElementById('search-input')?.value || '').trim().toLowerCase();
   const fStatus=document.getElementById('filter-status')?.value || '';
   const fCust=document.getElementById('filter-customer')?.value || '';
-  const fSort=document.getElementById('filter-sort')?.value || 'date-desc';
+  const fSort=document.getElementById('filter-sort')?.value || 'created-desc';
   const fFrom=document.getElementById('filter-date-from')?.value || '';
   const fTo=document.getElementById('filter-date-to')?.value || '';
 
@@ -11298,7 +11298,7 @@ function clearAllSOFilters() {
   soDateFilter={mode:'all',from:null,to:null};
   const search=document.getElementById('so-search');if(search)search.value='';
   const customer=document.getElementById('so-customer-filter');if(customer)customer.value='';
-  const sort=document.getElementById('so-sort');if(sort)sort.value='date-desc';
+  const sort=document.getElementById('so-sort');if(sort)sort.value='created-desc';
   const preset=document.getElementById('so-date-preset');if(preset)preset.value='all';
   const statusSel=document.getElementById('so-status-filter');if(statusSel)statusSel.value='';
   const from=document.getElementById('so-d-from');if(from)from.value='';
@@ -11311,7 +11311,7 @@ function clearAllSOFilters() {
 function renderSOPage() {
   const search=(document.getElementById('so-search')?.value||'').trim().toLowerCase();
   const customerFilter=document.getElementById('so-customer-filter')?.value||'';
-  const sortValue=document.getElementById('so-sort')?.value||'date-desc';
+  const sortValue=document.getElementById('so-sort')?.value||'created-desc';
 
   let all=salesOrders.map(so=>({...so,_status:soOrderStatus(so),_toInvoice:soHasInvoiceableQty(so)}));   // V269.2: no payment in the order status
 
@@ -11380,7 +11380,7 @@ function renderSOPage() {
   updateSOOverviewTint();
   soRenderTilesNote(list.length,scope.length);
   const clearBtn=document.getElementById('so-clear-filters-btn');
-  const hasFilters=!!(customerFilter||search||soDateFilter.mode!=='all'||sortValue!=='date-desc'||soKpiFilter!=='none'||soFilter!=='all');
+  const hasFilters=!!(customerFilter||search||soDateFilter.mode!=='all'||sortValue!=='created-desc'||soKpiFilter!=='none'||soFilter!=='all');
   if(clearBtn){
     clearBtn.classList.toggle('active',hasFilters);
     clearBtn.disabled=!hasFilters;
@@ -12356,12 +12356,12 @@ function filterDNKPI(key,card){
 }
 function clearAllDNFilters(){
  dnKpiFilter='all';dnDateFilter={mode:'all',from:null,to:null};
- const ids={ 'dn-search':'','dn-status-filter':'','dn-customer-filter':'','dn-sort':'date-desc','dn-date-preset':'all'};Object.entries(ids).forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.value=v});renderDNPage();
+ const ids={ 'dn-search':'','dn-status-filter':'','dn-customer-filter':'','dn-sort':'created-desc','dn-date-preset':'all'};Object.entries(ids).forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.value=v});renderDNPage();
 }
 function renderDNPage(){
  const body=document.getElementById('dn-register-tbody');if(!body)return;
  const q=(document.getElementById('dn-search')?.value||'').trim().toLowerCase();
- const sort=document.getElementById('dn-sort')?.value||'date-desc';
+ const sort=document.getElementById('dn-sort')?.value||'created-desc';
  // V265: the Status filter is the same filter as the Delivery Monitor (kept in sync); Customer narrows the scope.
  const dnCustSel=document.getElementById('dn-customer-filter');
  const dnAll=allDeliveryNotes();
@@ -12389,7 +12389,7 @@ function renderDNPage(){
  else rows.sort((a,b)=>(b.d.date||'').localeCompare(a.d.date||'')||(b.d.dnNo||'').localeCompare(a.d.dnNo||'',undefined,{numeric:true}));
  rows=sortRegisterRows(rows,'dn',{created:x=>bcRegisterCreated(x.d),no:x=>x.d.dnNo,date:x=>x.d.date,customer:x=>x.so.customer,so:x=>x.so.soNo,po:x=>x.so.poNo,items:x=>(x.d.items||[]).length,status:x=>x.status});
  const ce=document.getElementById('dn-register-count');if(ce)ce.textContent=`${rows.length} delivery note${rows.length===1?'':'s'}`;
- const clear=document.getElementById('dn-clear-filters-btn');if(clear){const active=!!(q||cust||dnDateFilter.mode!=='all'||sort!=='date-desc'||dnKpiFilter!=='all');clear.disabled=!active;clear.classList.toggle('active',active)}
+ const clear=document.getElementById('dn-clear-filters-btn');if(clear){const active=!!(q||cust||dnDateFilter.mode!=='all'||sort!=='created-desc'||dnKpiFilter!=='all');clear.disabled=!active;clear.classList.toggle('active',active)}
  body.innerHTML=rows.length?rows.map(x=>`<tr class="quotation-clickable-row" tabindex="0" role="button" onclick="viewDeliveryNote('${x.so.id}',${x.i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewDeliveryNote('${x.so.id}',${x.i})}"><td>${escapeHtml(x.d.dnNo||'—')}</td><td>${fmtDate(x.d.date)}</td><td>${escapeHtml(x.so.customer||'—')}</td><td>${escapeHtml(x.so.soNo||'—')}</td><td>${escapeHtml(x.so.poNo||'—')}</td><td class="center">${(x.d.items||[]).length}</td><td>${x.d.customerConfirmed?(()=>{const sm=dnConfirmationSummary(x.d);return `<span class="dn-reg-result">${sm.accepted?`<b class="ok">${sm.accepted} accepted</b>`:''}${sm.partial?`<b class="warn">${sm.partial} partial</b>`:''}${sm.rejected?`<b class="bad">${sm.rejected} rejected</b>`:''}</span>`})():'<span class="dn-reg-pending">Pending</span>'}</td><td><span class="badge ${getDNBadgeClass(x.status)}">${x.status}</span></td></tr>`).join(''):'<tr><td colspan="8"><div class="empty-state"><i class="ti ti-truck-delivery"></i><strong>No delivery notes found</strong><p>Adjust the filters to see other delivery records.</p></div></td></tr>';
 }
 
@@ -12993,7 +12993,7 @@ async function saveDNDispatchAction(){
     }
     r=await svc.correctDispatch({operationId,dnId:d.id,salesOrderId:so.id,expectedRevision,reason,date:next.date,vehicle:next.vehicle,deliveredBy:next.deliveredBy?{name:next.deliveredBy,type:next.deliveredByType,employeeId:next.deliveredByEmployeeId}:null,remarks:next.remarks,lines});
    }
-   closeModal('dn-dispatch-action-modal');
+   modal._saving=false;closeModal('dn-dispatch-action-modal');   // V271.5.40: closeModal no-ops while _saving is set — clear it first, or the modal (and its order lock) never actually closes
    showCommittedDeliveryNote(so.id,r.dn);
    showToast(r.alreadyApplied?'This change was already saved.':mode==='void'?'Delivery Note voided':'Dispatch corrected',r.alreadyApplied?'info':'success');
   }catch(e){console.error('[BizCore DN dispatch change]',e);showToast(deliveryErrorMessage(e),'error','Not Saved');if(e&&e.code==='stale-revision'){modal._saving=false;closeModal('dn-dispatch-action-modal');reopenDeliveryNoteById(so.id,d.id);}}

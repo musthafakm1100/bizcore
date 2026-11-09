@@ -26,6 +26,24 @@ function spTypePill(p){ const t = SP_TYPE[spTypeOf(p)]; return `<span class="sp-
 function spAmountOf(p){ return p.kind === 'payment' && !(piN(p.amount) > 0.005) ? piN(p.discount) : piN(p.amount); }
 /** Invoice payment value including advances applied to invoice payments; excludes new advance issues, cash back and voids. */
 function spMonitorInvoicePaymentValue(payments){ return payments.filter(p => p.status !== 'Voided' && spTypeOf(p) === 'payment').reduce((total,p) => total + piN(p.amount), 0); }
+/** Phase 5A: Allocation measures from posted supplier-payment records.
+ * Invoice payments settle exactly one PI; advances alone hold unused supplier funds.
+ * "Partially applied" is an advance with both a used and remaining balance.
+ * Remaining advances are shown under both Unapplied and Advances (different views
+ * of the SAME balance), never added to Total Paid a second time.
+ */
+function spPaymentAllocationSummary(payments, core){
+  const active = (payments || []).filter(p => p && p.status !== 'Voided');
+  const invoicePayments = active.filter(p => spTypeOf(p) === 'payment');
+  const advances = active.filter(p => p.kind === 'advance');
+  const round = v => Math.round((Number(v) || 0) * 100) / 100;
+  const appliedPayment = round(invoicePayments.reduce((sum,p) => sum + piN(p.amount), 0));
+  const partialAdvances = advances.filter(p => piN(p.advanceUsed) > 0.005 && core.advanceLeftOf(p) > 0.005);
+  const remainingAdvances = advances.filter(p => core.advanceLeftOf(p) > 0.005);
+  const partlyUsed = round(partialAdvances.reduce((sum,p) => sum + piN(p.advanceUsed), 0));
+  const available = round(remainingAdvances.reduce((sum,p) => sum + core.advanceLeftOf(p), 0));
+  return {invoicePayments,partialAdvances,remainingAdvances,appliedPayment,partlyUsed,available};
+}
 /** First name of the custodian who still has to confirm a cash line of this payment (null when none). */
 function spWaitingFor(p){
   if (p.status === 'Voided' || !p.entryId) return null;
@@ -68,7 +86,7 @@ let _spKpi = 'all';
 function filterSupplierPaymentKPI(k){ _spKpi = k || 'all'; const st = document.getElementById('spreg-status'); if (st) st.value = _spKpi === 'all' ? '' : _spKpi; renderSupplierPayments(); }
 function clearSupplierPaymentFilters(){
   ['spreg-q', 'spreg-status', 'spreg-supplier'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
-  const s = document.getElementById('spreg-sort'); if (s) s.value = 'date-desc';
+  const s = document.getElementById('spreg-sort'); if (s) s.value = 'created-desc';
   if (window.BCDateFilter) BCDateFilter.set('spreg', { preset: 'all' });
   _spKpi = 'all'; renderSupplierPayments();
 }
@@ -77,7 +95,7 @@ function renderSupplierPayments(){
   lib.start(); piStartAccounts();
   const C = piCore();
   const val = id => (document.getElementById(id)?.value || '');
-  const q = val('spreg-q').trim().toLowerCase(), sort = val('spreg-sort') || 'date-desc';
+  const q = val('spreg-q').trim().toLowerCase(), sort = val('spreg-sort') || 'created-desc';
   const ds = window.BCDateFilter ? BCDateFilter.get('spreg') : { preset: 'all', from: '', to: '' };
   const all = spPays();
   const supSel = document.getElementById('spreg-supplier');
@@ -92,6 +110,7 @@ function renderSupplierPayments(){
   const is = k => p => k === 'payment' ? ['payment', 'discount'].includes(spTypeOf(p)) : spTypeOf(p) === k;
   const openAdv = live.filter(p => p.kind === 'advance' && C.advanceLeftOf(p) > 0.005);
   const waiting = live.filter(p => spWaitingFor(p));
+  const allocation = spPaymentAllocationSummary(live, C);
   const setT = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   setT('spreg-k-total', scope.length); setT('spreg-k-live', live.length); setT('spreg-k-payment', live.filter(is('payment')).length); setT('spreg-k-advance', live.filter(is('advance')).length);
   setT('spreg-k-cashback', live.filter(is('cashback')).length); setT('spreg-k-voided', scope.length - live.length);
@@ -99,15 +118,24 @@ function renderSupplierPayments(){
   // Invoice payment value includes advance funds applied to an invoice.
   // Do NOT subtract advanceTotal here: it is part of the recorded invoice payment.
   // Total Paid below uses physical cash paid (advances issued once, not again on use).
-  setT('bc5-sp-payments', piF(spMonitorInvoicePaymentValue(live)));
+  setT('bc5-sp-payments', piF(allocation.appliedPayment));
+  setT('bc5-sp-full-count', allocation.invoicePayments.length);
+  setT('bc5-sp-full-amount', piF(allocation.appliedPayment));
+  setT('bc5-sp-partial-count', allocation.partialAdvances.length);
+  setT('bc5-sp-partial-amount', piF(allocation.partlyUsed));
+  setT('bc5-sp-unapplied-count', allocation.remainingAdvances.length);
+  setT('bc5-sp-unapplied-amount', piF(allocation.available));
 
   document.querySelectorAll('#page-supplierpayments [data-sp-kpi]').forEach(e => { const on = e.dataset.spKpi === _spKpi; e.classList.toggle('active', on); e.setAttribute('aria-pressed', on ? 'true' : 'false'); });
   const st = document.getElementById('spreg-status'); if (st) st.value = _spKpi === 'all' ? '' : _spKpi;
   let rows = scope.filter(p => _spKpi === 'all' || (_spKpi === 'Voided' ? p.status === 'Voided' : _spKpi === 'open' ? openAdv.includes(p) : _spKpi === 'waiting' ? waiting.includes(p)
+    : _spKpi === 'fully-applied' ? allocation.invoicePayments.includes(p)
+    : _spKpi === 'partially-applied' ? allocation.partialAdvances.includes(p)
+    : _spKpi === 'unapplied' ? allocation.remainingAdvances.includes(p)
     : p.status !== 'Voided' && is(_spKpi)(p)));
   // figures of the rows shown: money that left (an advance used on an invoice is not counted twice)
-  setT('spreg-a-paid', piF(rows.filter(p => p.status !== 'Voided' && p.kind !== 'cashback').reduce((x, p) => x + piN(p.amount) - piN(p.advanceTotal), 0)));
-  setT('spreg-a-open', piF(openAdv.reduce((x, p) => x + C.advanceLeftOf(p), 0)));
+  setT('spreg-a-paid', piF(live.filter(p => p.kind !== 'cashback').reduce((x, p) => x + piN(p.amount) - piN(p.advanceTotal), 0)));
+  setT('spreg-a-open', piF(allocation.available));
   const byNo = (a, b) => String(a.spNo || '').localeCompare(String(b.spNo || ''), undefined, { numeric: true });
   if (sort === 'date-asc') rows.sort((a, b) => String(a.date).localeCompare(String(b.date)) || byNo(a, b));
   else if (sort === 'no-asc') rows.sort(byNo);
@@ -117,7 +145,7 @@ function renderSupplierPayments(){
   if (typeof sortRegisterRows === 'function') rows = sortRegisterRows(rows, 'sp', { created: p => bcRegisterCreated(p), no: p => p.spNo, date: p => p.date, supplier: p => p.supplierName, type: p => SP_TYPE[spTypeOf(p)][0], amount: p => spAmountOf(p) });
   setT('spreg-count', `${rows.length} payment${rows.length === 1 ? '' : 's'}`);
   const clear = document.getElementById('spreg-clear');
-  if (clear) { const active = !!(q || sup || ds.preset !== 'all' || sort !== 'date-desc' || _spKpi !== 'all'); clear.disabled = !active; clear.classList.toggle('active', active); }
+  if (clear) { const active = !!(q || sup || ds.preset !== 'all' || sort !== 'created-desc' || _spKpi !== 'all'); clear.disabled = !active; clear.classList.toggle('active', active); }
   const openFn = p => `openSupplierPaymentView('${piEsc(p.id)}')`;
   const amt = p => p.status === 'Voided' ? `<s>${piF(spAmountOf(p))}</s>` : piF(spAmountOf(p));
   body.innerHTML = rows.length ? rows.map(p => `<tr class="quotation-clickable-row${p.status === 'Voided' ? ' sp-row-voided' : ''}" tabindex="0" role="button" data-sp="${piEsc(p.id)}" onclick="${openFn(p)}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${openFn(p)}}">
