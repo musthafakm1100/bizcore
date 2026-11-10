@@ -107,6 +107,13 @@
   function paintLineCat(tr) {
     const b = tr && tr.querySelector('.qt-lmeta .qt-wcat'); if (!b) return;
     const v = tr.dataset.wcat || '', d = defaultCat();
+    // V271.7: a line that follows the quotation's default shows only a small grey "Category: default" (click to change)
+    if (v && d && v === d && tr.dataset.catMissing !== '1') {
+      b.classList.remove('is-missing', 'is-other'); b.classList.add('is-def');
+      b.innerHTML = '<span>Category: default</span><i aria-hidden="true">▾</i>'; b.title = 'Follows the quotation\'s default (' + v + ') — click to give this line its own category';
+      return;
+    }
+    b.classList.remove('is-def');
     paintCatChip(b, v, { missing: catsRequired() && tr.dataset.catMissing === '1', other: !!(v && d && v !== d) });
   }
   function setLineCat(tr, v, own) {
@@ -135,7 +142,7 @@
 
   /* ═════════ 3. the scope line on the Quotation Entry ═════════ */
   const rows = () => [...document.querySelectorAll('#items-tbody tr[data-line-type="item"][data-row-kind="scope"]')];
-  const SRC = { rfq: 'Copied from RFQ', block: 'From block', svc: 'Service standard scope', prev: 'From' };
+  const SRC = { rfq: 'Copied from RFQ', block: 'From block', svc: 'Service standard scope', prev: 'From', est: 'From the estimate' };
   function srcLabel(s) { if (!s) return ''; const [k, ref] = String(s).split(':'); return k === 'prev' ? 'From ' + (ref || 'earlier quotation') : (SRC[k] || '') + (k !== 'block' && ref ? ' · ' + ref : ''); }
   /** called by addItemRow for every scope row: title, category chip, tags, the scope editor */
   function rowInit(tr, item) {
@@ -657,7 +664,7 @@
     [['service-add-btn', 'qs-ins-s'], ['product-search-bar', 'qs-ins-p']].forEach(([host, id]) => {
       const h = $(host); if (!h || $(id)) return;
       const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'pr-btn qs-ins-btn';
-      b.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Insert…';
+      b.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Insert Text…';
       b.title = 'Insert a text block or lines from a previous quotation';
       b.addEventListener('mousedown', e => e.preventDefault());   // keeps the selected line
       b.addEventListener('click', () => openPicker({}));
@@ -862,12 +869,12 @@
   function afterOpen(q) {
     openQ = q || null;
     ensureInsertButtons(); ensureDefaultControl(); watchWidth();
-    window._qsRfqUsed = !!(q && q.rfqScopeUsed);
+    window._qsRfqUsed = !!(q && q.rfqScopeUsed) || !!(!q && window._pendingEstimate && window._pendingEstimate.rfqScopeUsed);   // V271.7: the estimate already used the requirements
     const inp = $('f-wcat');
     if (inp) {
       delete inp.dataset.missing;
       const r = rfqOfOpen(q);
-      inp.value = (q && q.workCategory) || (r && r.workCategory) || '';
+      inp.value = (q && q.workCategory) || (window._pendingEstimate && window._pendingEstimate.workCategory) || (r && r.workCategory) || '';   // V271.7: from the estimate
       paintCatChip($('qs-wdef-b'), inp.value, {});
       // lines with no category of their own (new lines, lines from the estimate, older quotations) follow the default
       rows().forEach(tr => { if (!tr.dataset.wcat && inp.value) setLineCat(tr, inp.value, false); else paintLineCat(tr); });

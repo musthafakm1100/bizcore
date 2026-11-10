@@ -8,7 +8,7 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v27161';
+const CACHE_NAME = 'bizcore-shell-v2717';
 const APP_SHELL = [
   './login.html',
   './delivery.html',
@@ -24,7 +24,7 @@ const APP_SHELL = [
   './css/delivery-compact.css?v=266.5',
   './css/desktop-register-clean.css?v=271.5.13',
   './css/doc-view.css?v=266.5',
-  './css/estimate.css?v=271.4-sorting',
+  './css/estimate.css?v=271.7',
   './css/invoicing.css?v=270.50',
   './css/jobs-ui-standard.css?v=271.5.23.1',
   './css/main.css?v=271.5.41',
@@ -45,7 +45,7 @@ const APP_SHELL = [
   './css/purchases.css?v=271.5.40',
   './css/quotation.css?v=270.22',
   './css/quote-rich.css?v=270.61',
-  './css/quote-scope.css?v=271.6',
+  './css/quote-scope.css?v=271.7',
   './css/receipts.css?v=266.5',
   './css/register-standard.css?v=271.5.38',
   './css/responsive.css?v=268.4',
@@ -74,7 +74,7 @@ const APP_SHELL = [
   './js/delivery-service.mjs?v=270.46',
   './js/doc-pages.js?v=270.59',
   './js/doc-zoom.js?v=270.48',
-  './js/estimate.js?v=271.6.1',
+  './js/estimate.js?v=271.7',
   './js/invoice-core.mjs?v=266.0',
   './js/invoice-service.mjs?v=270.43',
   './js/invoicing.js?v=271.5.4',
@@ -97,7 +97,7 @@ const APP_SHELL = [
   './js/purchase-service.mjs?v=271.3',
   './js/purchases.js?v=271.5.40',
   './js/quotation-ui.js?v=271.6',
-  './js/quote-scope.js?v=271.6',
+  './js/quote-scope.js?v=271.7',
   './js/quote-cost.js?v=270.59',
   './js/quote-rich.js?v=271.6',
   './js/receipt-core.mjs?v=266.4',

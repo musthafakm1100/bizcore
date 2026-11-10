@@ -70,15 +70,30 @@
     o.expenseCategories = Array.isArray(r.expenseCategories) ? r.expenseCategories : Array.isArray(p.expenseCategories) ? p.expenseCategories : d.expenseCategories;
     return o;
   }
-  function labourRate(trade) { const t = low(trade); const x = settings().labourRates.find(l => low(l.trade) === t); return x ? num(x.rate) : 0; }
+  /** V271.7: the day rate of a trade — hired (rate) or own staff (ownRate, the internal cost) */
+  function labourRate(trade, own) { const t = low(trade); const x = settings().labourRates.find(l => low(l.trade) === t); return x ? num(own ? x.ownRate : x.rate) : 0; }
 
   /* ══ calculation (pure) ══ */
-  function lineAmt(kind, l) { if (!l) return 0; return kind === 'manpower' ? r2(num(l.men) * num(l.days) * num(l.rate)) : r2(num(l.qty) * num(l.rate)); }
+  /** One cost line as entered (V271.7: material + waste %). In a per-unit item (perUnit) material, subcontract and
+      equipment lines are for ONE unit — lineMult() gives the factor; manpower is always for the whole item. */
+  function lineAmt(kind, l) {
+    if (!l) return 0;
+    if (kind === 'manpower') return r2(num(l.men) * num(l.days) * num(l.rate));
+    const base = num(l.qty) * num(l.rate);
+    return r2(kind === 'material' && num(l.waste) > 0 ? base * (1 + num(l.waste) / 100) : base);
+  }
+  const lineMult = (it, kind, l) => (it && it.perUnit && kind !== 'manpower' && !(l && l.quick) && num(it.qty) > 0 ? num(it.qty) : 1);
   function itemCost(it) {
-    const t = { material: 0, manpower: 0, subcontract: 0, other: 0 }, b = (it && it.build) || {};
-    KINDS.forEach(({ k }) => (b[k] || []).forEach(l => { t[k] = r2(t[k] + lineAmt(k, l)); }));
+    const t = { material: 0, manpower: 0, subcontract: 0, other: 0, manpowerOwn: 0 }, b = (it && it.build) || {};
+    KINDS.forEach(({ k }) => (b[k] || []).forEach(l => { const a = r2(lineAmt(k, l) * lineMult(it, k, l)); t[k] = r2(t[k] + a); if (k === 'manpower' && l.own) t.manpowerOwn = r2(t.manpowerOwn + a); }));
     t.total = r2(t.material + t.manpower + t.subcontract + t.other);
     return t;
+  }
+  /** V271.7: a selling price typed for the item (🔒) — by amount or by rate × qty; null when it follows the markup */
+  function typedSell(it) {
+    if (!it || !it.sellLocked) return null;
+    const v = it.sellBy === 'rate' ? r2(num(it.sellRate) * num(it.qty)) : r2(num(it.sellAmt));
+    return v >= 0 ? v : null;
   }
   const secCode = i => { let s = '', n = i; do { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1; } while (n >= 0); return s; };
   /** Splits `total` over the weights in cents, so the parts add up exactly (the rest goes to the largest part). */
@@ -90,9 +105,11 @@
     if (diff) { let big = 0; weights.forEach((w, i) => { if (w > weights[big]) big = i; }); parts[big] = r2(parts[big] + diff); }
     return parts;
   }
-  /** Everything the screen shows, from one estimate. */
+  /** Everything the screen shows, from one estimate.
+      V271.7: items may carry a typed selling price (🔒) — it is kept exactly; the other items share the selling price
+      built from their cost (overheads + contingency + markup), and the rounding of the lump sum goes to them only. */
   function calc(est) {
-    const by = { material: 0, manpower: 0, subcontract: 0, other: 0 };
+    const by = { material: 0, manpower: 0, subcontract: 0, other: 0, manpowerOwn: 0 };
     const oh = num(est.overheadPct) / 100, ct = num(est.contingencyPct) / 100, mk = num(est.markupPct) / 100;
     const flat = [];
     const secs = (est.sections || []).map((s, si) => {
@@ -100,27 +117,48 @@
       const items = (s.items || []).map((it, ii) => {
         const c = itemCost(it);
         KINDS.forEach(({ k }) => { st[k] = r2(st[k] + c[k]); by[k] = r2(by[k] + c[k]); });
+        by.manpowerOwn = r2(by.manpowerOwn + c.manpowerOwn);
         st.total = r2(st.total + c.total);
-        const row = { id: it.id, code: code + (ii + 1), cost: c, qty: num(it.qty) };
+        const ts = typedSell(it);
+        const row = { id: it.id, code: code + (ii + 1), cost: c, qty: num(it.qty), locked: ts != null, typed: ts };
         flat.push(row); return row;
       });
       return { id: s.id, code, title: s.title || '', totals: st, items };
     });
     const direct = r2(by.material + by.manpower + by.subcontract + by.other);
     const overhead = r2(direct * oh), contingency = r2(direct * ct), totalCost = r2(direct + overhead + contingency);
-    const markup = r2(totalCost * mk), sell = r2(totalCost + markup);
+    const locked = flat.filter(x => x.locked), free = flat.filter(x => !x.locked);
+    const lockedSum = r2(locked.reduce((a, x) => a + x.typed, 0));
+    let markup, freeSell;
+    if (!locked.length) { markup = r2(totalCost * mk); freeSell = r2(totalCost + markup); }   // as before V271.7
+    else {
+      const fd = r2(free.reduce((a, x) => a + x.cost.total, 0)), fTotal = r2(fd * (1 + oh + ct));
+      markup = r2(fTotal * mk); freeSell = r2(fTotal + markup);
+    }
+    const sell = r2(freeSell + lockedSum);
     const offer = num(est.roundTo) > 0 ? r2(num(est.roundTo)) : sell;
-    const profit = r2(offer - totalCost);
-    // each item's selling amount: its share of the selling price (adds up exactly)
-    const sells = distribute(sell, flat.map(x => x.cost.total));
-    flat.forEach((x, i) => { x.sell = sells[i]; x.sellRate = x.qty > 0 ? r2(x.sell / x.qty) : 0; x.costRate = x.qty > 0 ? r2(x.cost.total / x.qty) : 0; });
-    secs.forEach(s => { s.sell = r2(s.items.reduce((a, x) => a + x.sell, 0)); });
-    // the section amounts the quotation prints (V271.2): shares of the offered lump sum
-    const offerParts = distribute(offer, secs.map(s => s.totals.total));
-    secs.forEach((s, i) => { s.offer = offerParts[i]; });
-    const marginPct = offer > 0 ? profit / offer * 100 : 0, markupPct = totalCost > 0 ? profit / totalCost * 100 : 0;
-    return { secs, flat, by, direct, overhead, contingency, totalCost, markup, sell, offer, profit, marginPct, markupPct,
-      itemCount: flat.length, uncosted: flat.filter(x => !(x.cost.total > 0)).length };
+    // each item's selling amount: typed ones as typed; the others share the calculated selling price by cost
+    const fs = distribute(freeSell, free.map(x => x.cost.total));
+    free.forEach((x, i) => { x.sell = fs[i]; });
+    locked.forEach(x => { x.sell = x.typed; });
+    // each item's part of the offered lump sum (the quotation's line amounts): the rounding goes to the calculated items
+    const freeOffer = r2(offer - lockedSum);
+    if (free.some(x => x.cost.total > 0) && freeOffer >= 0) {
+      const fo = distribute(freeOffer, free.map(x => x.cost.total)); free.forEach((x, i) => { x.offer = fo[i]; }); locked.forEach(x => { x.offer = x.typed; });
+    } else {
+      const ao = distribute(offer, flat.map(x => x.sell)); flat.forEach((x, i) => { x.offer = ao[i]; });
+    }
+    flat.forEach(x => { x.sellRate = x.qty > 0 ? r2(x.sell / x.qty) : 0; x.costRate = x.qty > 0 ? r2(x.cost.total / x.qty) : 0;
+      const lc = x.cost.total * (1 + oh + ct); x.markupPct = lc > 0 ? r2((x.sell / lc - 1) * 100) : null; });
+    secs.forEach(s => { s.sell = r2(s.items.reduce((a, x) => a + x.sell, 0)); s.offer = r2(s.items.reduce((a, x) => a + x.offer, 0)); });
+    // items priced by hand without a cost: their price is outside the profit figures (their cost is not known)
+    const pricedNoCost = flat.filter(x => x.locked && !(x.cost.total > 0) && x.typed > 0);
+    const costedOffer = r2(offer - pricedNoCost.reduce((a, x) => a + x.offer, 0));
+    const profit = r2(costedOffer - totalCost);
+    const marginPct = costedOffer > 0 ? profit / costedOffer * 100 : 0, markupPct = totalCost > 0 ? profit / totalCost * 100 : 0;
+    return { secs, flat, by, direct, overhead, contingency, totalCost, markup, sell, freeSell, lockedSum, lockedCount: locked.length, offer, costedOffer, profit, marginPct, markupPct,
+      itemCount: flat.length, uncosted: flat.filter(x => !(x.cost.total > 0) && !(x.locked && x.typed > 0)).length, pricedNoCost: pricedNoCost.length,
+      noCost: flat.filter(x => !(x.cost.total > 0)).length };
   }
   function summaryOf(c) {
     return { itemCount: c.itemCount, directCost: c.direct, byType: { ...c.by }, overhead: c.overhead, contingency: c.contingency, totalCost: c.totalCost,
@@ -128,7 +166,7 @@
   }
   /** Margin status against Pricing Settings (minimum / target), the same method Pricing uses. Information only. */
   function marginState(c) {
-    if (!(c.offer > 0) || !(c.totalCost > 0)) return { state: 'none', text: 'Enter costs to see the profit.' };
+    if (!(c.costedOffer > 0) || !(c.totalCost > 0)) return { state: 'none', text: 'Enter costs to see the profit.' };
     let ps = {}; try { ps = typeof activePricingSettings === 'function' ? activePricingSettings() : {}; } catch (e) {}
     const byMargin = ps.marginMethod === 'gross_margin', pct = byMargin ? c.marginPct : c.markupPct, name = byMargin ? 'margin' : 'markup';
     const min = num(ps.minMargin), tgt = num(ps.targetMargin);
@@ -148,7 +186,7 @@
   const allItems = () => E.est.sections.flatMap(s => s.items || []);
   const blankBuild = () => ({ material: [], manpower: [], subcontract: [], other: [] });
   const blankItem = (o = {}) => ({ id: newId('ei'), desc: '', unit: 'LS', qty: 1, build: blankBuild(), ...o });
-  const blankLine = k => ({ id: newId('el'), ...(k === 'manpower' ? { trade: '', supplierId: '', supplierName: '', men: 1, days: 1, rate: '' } : k === 'material' ? { productId: '', desc: '', supplierId: '', supplierName: '', qty: 1, unit: 'Nos', rate: '' } : k === 'subcontract' ? { desc: '', supplierId: '', supplierName: '', qty: 1, unit: 'LS', rate: '' } : { desc: '', qty: 1, unit: 'Day', rate: '' }) });
+  const blankLine = (k, own) => ({ id: newId('el'), ...(k === 'manpower' ? { trade: '', supplierId: '', supplierName: '', men: 1, days: 1, rate: '', ...(own ? { own: true } : {}) } : k === 'material' ? { productId: '', desc: '', supplierId: '', supplierName: '', qty: 1, unit: 'Nos', rate: '' } : k === 'subcontract' ? { desc: '', supplierId: '', supplierName: '', qty: 1, unit: 'LS', rate: '' } : { desc: '', qty: 1, unit: 'Day', rate: '' }) });
 
   function fromRfq(r) {
     const cs = settings();
@@ -162,7 +200,7 @@
   }
   function normalize(d) {
     const est = clone(d) || {};
-    est.sections = (Array.isArray(est.sections) ? est.sections : []).map(s => ({ id: s.id || newId('es'), title: s.title || '', items: (Array.isArray(s.items) ? s.items : []).map(it => ({ ...it, id: it.id || newId('ei'), build: { ...blankBuild(), ...(it.build || {}) } })) }));
+    est.sections = (Array.isArray(est.sections) ? est.sections : []).map(s => ({ id: s.id || newId('es'), title: s.title || '', ...(s.workCat ? { workCat: s.workCat } : {}), items: (Array.isArray(s.items) ? s.items : []).map(it => ({ ...it, id: it.id || newId('ei'), build: { ...blankBuild(), ...(it.build || {}) } })) }));
     if (!est.sections.length) est.sections = [{ id: newId('es'), title: 'Scope of work', items: [blankItem()] }];
     ['site', 'duration', 'estimateDate', 'quoteStyle', 'internalNotes'].forEach(k => { if (est[k] == null) est[k] = k === 'quoteStyle' ? 'lumpsum' : ''; });
     return est;
@@ -206,8 +244,8 @@
 <div class="es-work">
 <div class="es-main">
 <div class="es-tabs" role="tablist" id="es-tabs"></div>
-<section class="es-panel on" data-panel="items"><div class="es-gt" id="es-grid"></div><div class="es-hint">Click a cost (or press F2 on a line) to open its Cost Build-up · Sell Amount = cost + overheads + contingency + markup, shared over the items</div></section>
-<section class="es-panel" data-panel="manpower"><div class="es-list" id="es-manpower"></div><div class="es-hint">All hired manpower in this estimate. Click a line to open its item.</div></section>
+<section class="es-panel on" data-panel="items"><div class="es-rfqbn" id="es-rfqbn" hidden></div><div class="es-gt" id="es-grid"></div><div class="es-hint">Cost cells: type a figure directly, or click it (F2) for the Cost Build-up · Sell / Unit or Sell Amount: type either to fix the price (🔒) — the other items follow the Markup %</div></section>
+<section class="es-panel" data-panel="manpower"><div class="es-list" id="es-manpower"></div><div class="es-hint">All manpower in this estimate — hired and own staff. Click a line to open its item.</div></section>
 <section class="es-panel" data-panel="subcontract"><div class="es-list" id="es-subcontract"></div><div class="es-hint">All subcontract work in this estimate. Click a line to open its item.</div></section>
 <section class="es-panel" data-panel="notes"><div class="es-notehead"><span>Internal notes — never printed on the quotation</span><span id="es-note-count">0 / 2000</span></div><textarea class="es-ta" id="es-notes" maxlength="2000" placeholder="Assumptions, exclusions, site visit notes, supplier remarks…"></textarea></section>
 </div>
@@ -246,6 +284,8 @@
     grid.addEventListener('input', onGridInput);
     grid.addEventListener('click', onGridClick);
     grid.addEventListener('keydown', onGridKey);
+    grid.addEventListener('focusout', onGridBlur);
+    $('es-rfqbn').addEventListener('click', onBannerClick);
     grid.addEventListener('focusin', e => {
       if (dd && e.target !== dd.input) closeDD();
       const tr = e.target.closest('tr[data-iid]'); if (!tr) return; select(tr.dataset.iid);
@@ -321,7 +361,7 @@
   }
 
   /* ── rendering ── */
-  function renderAll() { renderHeader(); renderBar(); renderTabs(); renderGrid(); renderSide(); renderLists(); renderNotes(); renderFooter(); showTab(E.tab); }
+  function renderAll() { renderHeader(); renderBar(); renderTabs(); renderBanner(); renderGrid(); renderSide(); renderLists(); renderNotes(); renderFooter(); showTab(E.tab); }
   function renderHeader() {
     const r = rfqOf(); if (!r) return;
     let ps = {}; try { ps = typeof activePricingSettings === 'function' ? activePricingSettings() : {}; } catch (e) {}
@@ -355,81 +395,168 @@
     if (t === 'notes') setTimeout(() => $('es-notes').focus({ preventScroll: true }), 30);
   }
   const ro = () => (E.ro ? ' disabled' : '');
+  /* V271.7 helpers: quick cost (a figure typed straight in a cost cell), work categories, scope */
+  const R = () => window.BCRich;
+  const plain = h => (h && R() ? R().toText(h) : String(h || '').replace(/<[^>]*>/g, ' ')).trim();
+  const SCOPE_MAX = 30000;
+  const builtUp = it => KINDS.some(({ k }) => (it.build[k] || []).some(l => !l.quick));
+  const quickOf = (it, k) => (it.build[k] || []).find(l => l.quick);
+  function setQuick(it, k, v) {
+    it.build[k] = (it.build[k] || []).filter(l => !l.quick);
+    if (String(v).trim() === '' || !(num(v) > 0)) return;
+    it.build[k].push(k === 'manpower' ? { id: newId('el'), quick: true, trade: 'Typed figure', supplierId: '', supplierName: '', men: 1, days: 1, rate: v }
+      : { id: newId('el'), quick: true, productId: '', desc: 'Typed figure', supplierId: '', supplierName: '', qty: 1, unit: 'LS', rate: v });
+  }
+  function workCats() {
+    try { if (window.BCScope && BCScope.serviceCats) return BCScope.serviceCats(); } catch (_) {}
+    try { return (typeof categoryMaster !== 'undefined' ? categoryMaster : []).filter(c => c.type === 'service' && c.active !== false).map(c => c.name).sort(); } catch (_) { return []; }
+  }
+  const secOfItem = id => { const h = findItem(id); return h ? h.s : null; };
+  const itemCat = (it, s) => String((it && it.workCat) || (s && s.workCat) || '');
+  const LOCK_SVG = '<svg viewBox="0 0 20 20" width="11" height="11" aria-hidden="true"><rect x="4.5" y="9" width="11" height="8" rx="1.6" fill="currentColor"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>';
+  function sellNote(x) {
+    if (x.locked && !(x.cost.total > 0)) return '<span class="es-wn">typed · no cost — margin unknown</span>';
+    const m = x.markupPct == null ? '' : 'markup ' + fq(r2(x.markupPct)) + ' %';
+    return x.locked ? `<span class="${x.markupPct != null && x.markupPct < 0 ? 'es-wn' : 'es-okn'}">typed${m ? ' · ' + m : ''}</span>` : (m ? m + ' · calculated' : '');
+  }
+  function itemRowHtml(s, it, x) {
+    const quick = !builtUp(it), editable = !E.ro;
+    const costCell = k => {
+      if (quick && editable) { const q = quickOf(it, k); return `<td class="es-qc"><input class="es-in es-num es-qin${q ? ' is-typed' : ''}" data-f="q-${k}" value="${q ? esc(fq(num(q.rate))) : ''}" placeholder="0.00" inputmode="decimal" aria-label="${KIND[k].label} cost of ${x.code}"></td>`; }
+      return `<td class="es-r es-val es-cost${x.cost[k] ? '' : ' es-m'}" data-act="build" data-c="${k}" title="Open the Cost Build-up">${x.cost[k] ? `<span class="es-bl">${fmt(x.cost[k])}</span>` : '—'}</td>`;
+    };
+    const ownCat = it.workCat && it.workCat !== (s.workCat || '');
+    const scopeOpen = !!it.scopeHtml || E.scopeOpen === it.id;
+    const lockCls = x.locked ? ' is-lock' : '';
+    return `<tr class="es-it${E.sel === it.id ? ' is-sel' : ''}${x.cost.total > 0 || x.locked ? '' : ' no-cost'}${x.locked && !(x.cost.total > 0) ? ' is-pnc' : ''}" data-iid="${it.id}" data-sid="${s.id}">
+<td class="es-no">${x.code}</td>
+<td><textarea class="es-in" data-f="desc" rows="1" maxlength="2000" placeholder="Item description" aria-label="Item ${x.code} description"${ro()}>${esc(it.desc)}</textarea>
+<div class="es-dmeta">${x.cost.subcontract > 0 && x.cost.subcontract === x.cost.total ? '<span class="es-tag t-sub">Subcontract</span>' : ''}${ownCat ? `<button type="button" class="es-cat is-own" data-act="item-cat" title="This item's own work category"${E.ro ? ' disabled' : ''}>${esc(it.workCat)}</button>` : ''}${!scopeOpen && !E.ro ? '<button type="button" class="es-lnk es-sm" data-act="scope-open">+ Scope of work</button>' : ''}</div></td>
+<td><input class="es-in" data-f="unit" data-dd="unit" value="${esc(it.unit)}" maxlength="12" autocomplete="off" aria-label="Unit"${ro()}></td>
+<td><input class="es-in es-num" data-f="qty" value="${esc(fq(it.qty))}" inputmode="decimal" aria-label="Quantity"${ro()}></td>
+${KINDS.map(({ k }) => costCell(k)).join('')}
+<td class="es-r es-val es-tot es-cost" data-c="total" data-act="build" title="Open the Cost Build-up">${x.cost.total > 0 ? `<span class="es-cost es-bl" data-act="build" title="Open the Cost Build-up">${fmt(x.cost.total)}</span>` : (E.ro ? 'No cost' : '<button type="button" class="es-lnk es-sm" data-act="build">+ Add cost</button>')}</td>
+<td class="es-r es-val es-u es-cu" data-c="crate">${x.cost.total > 0 && x.qty > 0 ? fmt(x.costRate) : '—'}</td>
+<td class="es-u"><input class="es-in es-num es-sin${x.locked && it.sellBy === 'rate' ? ' is-lock' : ''}" data-f="sellRate" value="${x.qty > 0 && (x.locked || x.sell > 0) ? esc(fmt(x.locked && it.sellBy === 'rate' ? num(it.sellRate) : x.sellRate)) : ''}" placeholder="—" inputmode="decimal" aria-label="Sell rate of ${x.code}"${ro()}></td>
+<td><div class="es-sw${lockCls}">${x.locked ? `<button type="button" class="es-lk" data-act="unlock" title="Typed price — click to release it (it follows the Markup % again)" aria-label="Release the typed price"${E.ro ? ' disabled' : ''}>${LOCK_SVG}</button>` : ''}<input class="es-in es-num es-sin${x.locked && it.sellBy !== 'rate' ? ' is-lock' : ''}" data-f="sellAmt" value="${x.locked || x.sell > 0 ? esc(fmt(x.sell)) : ''}" placeholder="0.00" inputmode="decimal" aria-label="Sell amount of ${x.code}"${ro()}></div><div class="es-snote" data-c="note">${sellNote(x)}</div></td>
+<td><button type="button" class="es-kbtn" data-act="item-menu" title="Line actions" aria-label="Item ${x.code} actions">⋮</button></td></tr>`
+      + (scopeOpen ? `<tr class="es-scrow" data-iid="${it.id}" data-sid="${s.id}"><td></td><td colspan="11"><div class="es-scbox"><div class="es-schd"><b>Scope of work</b>${it.scopeSrc === 'rfq' ? '<span class="es-tag t-src">From RFQ requirements</span>' : ''}<span class="es-sp" style="flex:1"></span>${E.ro ? '' : '<div class="es-scbar"></div><button type="button" class="es-lnk es-sm" data-act="scope-close" title="Remove the scope of this item">Remove</button>'}</div><div class="es-scdoc" data-scope="${it.id}"></div></div></td><td></td></tr>` : '');
+  }
+  const subRowHtml = sc => `<tr class="es-sub" data-subof="${sc.id}"><td></td><td colspan="3">Section ${sc.code} subtotal</td>${KINDS.map(({ k }) => `<td class="es-r es-val${sc.totals[k] ? '' : ' es-m'}">${sc.totals[k] ? fmt(sc.totals[k]) : '—'}</td>`).join('')}<td class="es-r">${fmt(sc.totals.total)}</td><td class="es-cu"></td><td></td><td class="es-r">${fmt(sc.sell)}</td><td></td></tr>`;
+  const footHtml = c => `<tr><td></td><td colspan="3">Direct Cost · ${c.itemCount} Item${c.itemCount === 1 ? '' : 's'}</td>${KINDS.map(({ k }) => `<td class="es-r">${fmt(c.by[k])}</td>`).join('')}<td class="es-r">${fmt(c.direct)}</td><td class="es-cu"></td><td></td><td class="es-r">${fmt(c.sell)}</td><td></td></tr>`;
   function renderGrid() {
     const c = calc(E.est), byId = new Map(c.flat.map(x => [x.id, x]));
-    const cells = (t, cls = '') => KINDS.map(({ k }) => `<td class="es-r es-val ${cls}${t[k] ? '' : ' es-m'}"${cls ? ` data-k="${k}"` : ''}>${t[k] ? fmt(t[k]) : '—'}</td>`).join('');
     let body = '';
     E.est.sections.forEach((s, si) => {
       const sc = c.secs[si];
-      body += `<tr class="es-sec" data-sid="${s.id}"><td class="es-no">${sc.code}</td><td colspan="9"><input class="es-in" data-f="title" value="${esc(s.title)}" placeholder="Section title" maxlength="160" aria-label="Section ${sc.code} title"${ro()}></td>
+      body += `<tr class="es-sec" data-sid="${s.id}"><td class="es-no">${sc.code}</td><td colspan="11"><div class="es-secrow"><input class="es-in" data-f="title" value="${esc(s.title)}" placeholder="Section title" maxlength="160" aria-label="Section ${sc.code} title"${ro()}>
+<button type="button" class="es-cat${s.workCat ? '' : ' is-empty'}" data-act="sec-cat" title="Work category of this section — its items follow it"${E.ro ? ' disabled' : ''}>${s.workCat ? esc(s.workCat) : 'Work category…'} ▾</button></div></td>
 <td>${E.ro ? '' : `<button type="button" class="es-kbtn" data-act="sec-menu" title="Section actions" aria-label="Section ${sc.code} actions">⋮</button>`}</td></tr>`;
-      (s.items || []).forEach((it, ii) => {
-        const x = byId.get(it.id), onlySub = x.cost.subcontract > 0 && x.cost.subcontract === x.cost.total;
-        body += `<tr class="es-it${E.sel === it.id ? ' is-sel' : ''}${x.cost.total > 0 ? '' : ' no-cost'}" data-iid="${it.id}" data-sid="${s.id}">
-<td class="es-no">${x.code}</td>
-<td><textarea class="es-in" data-f="desc" rows="1" maxlength="2000" placeholder="Item description" aria-label="Item ${x.code} description"${ro()}>${esc(it.desc)}</textarea>${onlySub ? '<span class="es-tag t-sub">Subcontract</span>' : ''}</td>
-<td><input class="es-in" data-f="unit" data-dd="unit" value="${esc(it.unit)}" maxlength="12" autocomplete="off" aria-label="Unit"${ro()}></td>
-<td><input class="es-in es-num" data-f="qty" value="${esc(fq(it.qty))}" inputmode="decimal" aria-label="Quantity"${ro()}></td>
-${KINDS.map(({ k }) => `<td class="es-r es-val es-cost${x.cost[k] ? '' : ' es-m'}" data-act="build" title="Open the Cost Build-up">${x.cost[k] ? fmt(x.cost[k]) : '—'}</td>`).join('')}
-<td class="es-r es-val es-tot es-cost" data-act="build" title="${x.cost.total > 0 ? 'Cost per ' + esc(it.unit || 'unit') + ': ' + fmt(x.costRate) : 'No cost yet — open the Cost Build-up'}">${x.cost.total > 0 ? fmt(x.cost.total) : 'No cost'}</td>
-<td class="es-r es-val" title="${x.qty > 0 ? 'Sell rate per ' + esc(it.unit || 'unit') + ': ' + fmt(x.sellRate) : ''}">${fmt(x.sell)}</td>
-<td><button type="button" class="es-kbtn" data-act="item-menu" title="Line actions" aria-label="Item ${x.code} actions">⋮</button></td></tr>`;
-      });
-      if ((s.items || []).length) body += `<tr class="es-sub"><td></td><td colspan="3">Section ${sc.code} subtotal</td>${cells(sc.totals)}<td class="es-r">${fmt(sc.totals.total)}</td><td class="es-r">${fmt(sc.sell)}</td><td></td></tr>`;
-      else body += `<tr class="es-sub"><td></td><td colspan="10" class="es-m">No items in this section${E.ro ? '' : ` — <button type="button" class="es-lnk" data-act="add-item" data-sid="${s.id}">+ Add Item</button>`}</td></tr>`;
+      (s.items || []).forEach(it => { body += itemRowHtml(s, it, byId.get(it.id)); });
+      if ((s.items || []).length) body += subRowHtml(sc);
+      else body += `<tr class="es-sub"><td></td><td colspan="12" class="es-m">No items in this section${E.ro ? '' : ` — <button type="button" class="es-lnk" data-act="add-item" data-sid="${s.id}">+ Add Item</button>`}</td></tr>`;
     });
-    if (!E.ro) body += `<tr class="es-add"><td></td><td colspan="10"><button type="button" class="es-lnk" data-act="add-item">+ Add Item</button> &nbsp;·&nbsp; <button type="button" class="es-lnk" data-act="add-section">+ Add Section</button></td></tr>`;
-    $('es-grid').innerHTML = `<table class="es-tbl"><colgroup><col class="c-no"><col><col class="c-unit"><col class="c-qty"><col class="c-amt"><col class="c-amt"><col class="c-amt"><col class="c-amt"><col class="c-tot"><col class="c-sell"><col class="c-menu"></colgroup>
-<thead><tr><th>#</th><th>Description</th><th>Unit</th><th class="es-r">Qty</th><th class="es-r">Material</th><th class="es-r">Manpower</th><th class="es-r">Subcontract</th><th class="es-r">Equip. / Other</th><th class="es-r">Total Cost</th><th class="es-r">Sell Amount</th><th></th></tr></thead>
+    if (!E.ro) body += `<tr class="es-add"><td></td><td colspan="12"><button type="button" class="es-lnk" data-act="add-item">+ Add Item</button> &nbsp;·&nbsp; <button type="button" class="es-lnk" data-act="add-section">+ Add Section</button> &nbsp;·&nbsp; <button type="button" class="es-lnk" data-act="copy-est">Copy from a previous estimate…</button></td></tr>`;
+    $('es-grid').innerHTML = `<table class="es-tbl"><colgroup><col class="c-no"><col><col class="c-unit"><col class="c-qty"><col class="c-amt"><col class="c-amt"><col class="c-amt"><col class="c-amt"><col class="c-tot"><col class="c-rate c-cu"><col class="c-rate"><col class="c-sell"><col class="c-menu"></colgroup>
+<thead><tr><th>#</th><th>Description</th><th>Unit</th><th class="es-r">Qty</th><th class="es-r">Material</th><th class="es-r">Manpower</th><th class="es-r">Subcontract</th><th class="es-r">Equip. / Other</th><th class="es-r">Total Cost</th><th class="es-r es-cu">Cost / Unit</th><th class="es-r">Sell / Unit</th><th class="es-r">Sell Amount</th><th></th></tr></thead>
 <tbody>${body}</tbody>
-<tfoot><tr><td></td><td colspan="3">Direct Cost · ${c.itemCount} Item${c.itemCount === 1 ? '' : 's'}</td>${KINDS.map(({ k }) => `<td class="es-r">${fmt(c.by[k])}</td>`).join('')}<td class="es-r">${fmt(c.direct)}</td><td class="es-r">${fmt(c.sell)}</td><td></td></tr></tfoot></table>
+<tfoot>${footHtml(c)}</tfoot></table>
 <datalist id="es-units">${UNITS.map(u => `<option value="${esc(u)}"></option>`).join('')}</datalist>`;
     $('es-grid').querySelectorAll('textarea.es-in').forEach(grow);
+    mountScopes();
+  }
+  /** the scope editors under the items (formatted text, the quotation's Format bar) */
+  function mountScopes() {
+    $('es-grid').querySelectorAll('.es-scdoc[data-scope]').forEach(ed => {
+      const it = findItem(ed.dataset.scope)?.it; if (!it) return;
+      if (R()) { R().make(ed, { html: it.scopeHtml || '', placeholder: 'Scope of work for this item — what is included, specifications… (printed on the quotation under the line)' }); if (E.ro) ed.setAttribute('contenteditable', 'false'); }
+      else ed.textContent = plain(it.scopeHtml);
+      const bar = ed.closest('.es-scbox').querySelector('.es-scbar'); if (bar && R()) R().wireBar(bar);
+    });
   }
   function grow(t) { t.style.height = 'auto'; t.style.height = Math.max(30, t.scrollHeight + 2) + 'px'; }
   function refreshNumbers() {   // after a change that does not change the rows: figures only (keeps the caret where it is)
-    const c = calc(E.est), byId = new Map(c.flat.map(x => [x.id, x]));
+    const c = calc(E.est), byId = new Map(c.flat.map(x => [x.id, x])), act = document.activeElement;
     $('es-grid').querySelectorAll('tr.es-it').forEach(tr => {
-      const x = byId.get(tr.dataset.iid); if (!x) return;
-      const tds = tr.querySelectorAll('td.es-val'); const last = tds.length - 1;
-      tds[last].textContent = fmt(x.sell);
+      const x = byId.get(tr.dataset.iid), it = findItem(tr.dataset.iid)?.it; if (!x || !it) return;
+      tr.classList.toggle('no-cost', !(x.cost.total > 0 || x.locked)); tr.classList.toggle('is-pnc', x.locked && !(x.cost.total > 0));
+      KINDS.forEach(({ k }) => { const td = tr.querySelector(`td[data-c="${k}"]`); if (td) { td.classList.toggle('es-m', !x.cost[k]); td.innerHTML = x.cost[k] ? `<span class="es-bl">${fmt(x.cost[k])}</span>` : '—'; } });
+      const tt = tr.querySelector('td[data-c="total"]'); if (tt && !tt.contains(act)) tt.innerHTML = x.cost.total > 0 ? `<span class="es-cost es-bl" data-act="build" title="Open the Cost Build-up">${fmt(x.cost.total)}</span>` : (E.ro ? 'No cost' : '<button type="button" class="es-lnk es-sm" data-act="build">+ Add cost</button>');
+      const cr = tr.querySelector('td[data-c="crate"]'); if (cr) cr.textContent = x.cost.total > 0 && x.qty > 0 ? fmt(x.costRate) : '—';
+      const sr = tr.querySelector('[data-f="sellRate"]'), sa = tr.querySelector('[data-f="sellAmt"]');
+      if (sr && sr !== act) { sr.value = x.qty > 0 && (x.locked || x.sell > 0) ? fmt(x.locked && it.sellBy === 'rate' ? num(it.sellRate) : x.sellRate) : ''; sr.classList.toggle('is-lock', x.locked && it.sellBy === 'rate'); }
+      if (sa && sa !== act) { sa.value = x.locked || x.sell > 0 ? fmt(x.sell) : ''; sa.classList.toggle('is-lock', x.locked && it.sellBy !== 'rate'); }
+      const sw = tr.querySelector('.es-sw'); if (sw) { sw.classList.toggle('is-lock', x.locked); const lk = sw.querySelector('.es-lk'); if (x.locked && !lk) sw.insertAdjacentHTML('afterbegin', `<button type="button" class="es-lk" data-act="unlock" title="Typed price — click to release it" aria-label="Release the typed price">${LOCK_SVG}</button>`); if (!x.locked && lk) lk.remove(); }
+      const nt = tr.querySelector('[data-c="note"]'); if (nt) nt.innerHTML = sellNote(x);
     });
-    const ft = $('es-grid').querySelector('tfoot td:nth-last-child(2)'); if (ft) ft.textContent = fmt(c.sell);
+    c.secs.forEach(sc => { const row = $('es-grid').querySelector(`tr[data-subof="${sc.id}"]`); if (row) row.outerHTML = subRowHtml(sc); });
+    const tf = $('es-grid').querySelector('tfoot'); if (tf) tf.innerHTML = footHtml(c);
     renderSide(c);
+  }
+  function renderBanner() {
+    const bn = $('es-rfqbn'), r = rfqOf(); if (!bn) return;
+    const text = r && String(r.desc || '').trim();
+    if (!text || E.ro) { bn.hidden = true; return; }
+    bn.hidden = false;
+    bn.innerHTML = `<div class="es-bnrow"><span><b>${esc(r.rfqNo || 'The RFQ')}</b> has the customer's requirements.</span><span class="es-sp" style="flex:1"></span><button type="button" class="es-lnk" data-act="bn-view">${E.bnOpen ? 'Hide' : 'View'}</button><button type="button" class="btn btn-secondary es-bnbtn" data-act="bn-use">Use as scope of the selected item</button></div>${E.bnOpen ? `<div class="es-bntext">${esc(text)}</div>` : ''}`;
+  }
+  function onBannerClick(e) {
+    const b = e.target.closest('[data-act]'); if (!b || !E || E.ro) return;
+    if (b.dataset.act === 'bn-view') { E.bnOpen = !E.bnOpen; renderBanner(); return; }
+    if (b.dataset.act === 'bn-use') {
+      const r = rfqOf(); const hit = E.sel ? findItem(E.sel) : null;
+      const target = hit ? hit.it : allItems().find(it => !plain(it.scopeHtml));
+      if (!target || !r) { toast('Click an item first, then use the requirements as its scope.', 'warning'); return; }
+      const go = () => { target.scopeHtml = R() ? R().plainToHtml(String(r.desc || '').trim()) : esc(r.desc); target.scopeSrc = 'rfq'; E.sel = target.id; renderGrid(); changed();
+        toast('The customer\'s requirements are now the scope of this item — rewrite them in your own words.', 'success', 'Scope copied'); };
+      if (plain(target.scopeHtml)) { const dlg = window.bizcoreShowSafeDialog; if (typeof dlg === 'function') return dlg({ icon: 'ti-file-text', title: 'Replace This Item\'s Scope?', message: 'The item already has a scope of work.', buttons: [{ text: 'Cancel', cls: 'secondary' }, { text: 'Replace', cls: 'primary', action: go }] }); }
+      go();
+    }
   }
   function renderSide(c) {
     c = c || calc(E.est);
     const cs = settings(), ms = marginState(c), D = c.direct || 1;
-    const step = num(cs.roundStep), down = step > 0 ? Math.floor(c.sell / step) * step : 0;
-    const pctIn = (k, label) => `<div class="es-kv"><span class="es-pct">${label} <input data-f="${k}" value="${esc(fq(E.est[k]))}" inputmode="decimal" aria-label="${label} %"${ro()}><small>%</small></span><b>${fmt(k === 'overheadPct' ? c.overhead : k === 'contingencyPct' ? c.contingency : c.markup)}</b></div>`;
+    const step = num(cs.roundStep), base = c.sell;
+    const down = step > 0 ? Math.floor(base / step) * step : 0, up = step > 0 ? Math.ceil(base / step) * step : 0;
+    const pctIn = (k, label, sub) => `<div class="es-kv"><span class="es-pct">${label} <input data-f="${k}" value="${esc(fq(E.est[k]))}" inputmode="decimal" aria-label="${label} %"${ro()}><small>%</small></span><b>${fmt(k === 'overheadPct' ? c.overhead : k === 'contingencyPct' ? c.contingency : c.markup)}</b></div>${sub ? `<div class="es-kv es-psubrow"><span>${sub}</span></div>` : ''}`;
+    const chips = [];
+    if (!E.ro && step > 0) {
+      if (down > 0 && down !== num(E.est.roundTo) && down !== base) chips.push(`<button type="button" class="es-chip" data-act="use-round" data-v="${down}">Round down to ${fmt(down)}</button>`);
+      if (up > 0 && up !== num(E.est.roundTo) && up !== base) chips.push(`<button type="button" class="es-chip" data-act="use-round" data-v="${up}">Round up to ${fmt(up)}</button>`);
+    }
+    const diff = r2(c.offer - c.sell);
     $('es-side').innerHTML = `
 <div class="es-grp"><h4>Direct Cost By Type</h4>
 <div class="es-bar2">${KINDS.map(({ k, color }) => `<i style="width:${c.direct > 0 ? (c.by[k] / D * 100).toFixed(2) : 0}%;background:${color}"></i>`).join('')}</div>
-${KINDS.map(({ k, label, color }) => `<div class="es-kv"><span><i class="es-d" style="background:${color}"></i>${label}${k === 'manpower' ? ' (Hired)' : ''}</span><b>${fmt(c.by[k])}</b></div>`).join('')}
+${KINDS.map(({ k, label, color }) => `<div class="es-kv"><span><i class="es-d" style="background:${color}"></i>${label}${k === 'manpower' ? (c.by.manpowerOwn > 0 ? '' : ' (Hired)') : ''}</span><b>${fmt(c.by[k])}</b></div>${k === 'manpower' && c.by.manpowerOwn > 0 ? `<div class="es-kv es-kv2"><span>hired ${fmt(r2(c.by.manpower - c.by.manpowerOwn))} · own staff ${fmt(c.by.manpowerOwn)}</span></div>` : ''}`).join('')}
 <div class="es-kv es-sum"><span>Direct Cost</span><b>${fmt(c.direct)}</b></div></div>
 <div class="es-grp"><h4>Overheads &amp; Profit <small>% of direct cost</small></h4>
 ${pctIn('overheadPct', 'Overheads')}${pctIn('contingencyPct', 'Contingency')}
 <div class="es-kv es-sum"><span>Total Cost</span><b>${fmt(c.totalCost)}</b></div>
-${pctIn('markupPct', 'Markup')}
+${pctIn('markupPct', 'Markup', c.lockedCount ? 'for the calculated items' : '')}
 <div class="es-sell"><span>Selling Price</span><span id="es-sellv">${fmt(c.sell)}</span></div>
+${c.lockedCount ? `<div class="es-split"><div><span>Calculated · ${c.itemCount - c.lockedCount} item${c.itemCount - c.lockedCount === 1 ? '' : 's'}</span><b>${fmt(c.freeSell)}</b></div><div><span>Typed 🔒 · ${c.lockedCount} item${c.lockedCount === 1 ? '' : 's'}</span><b>${fmt(c.lockedSum)}</b></div></div>` : ''}
 <div class="es-round"><span>Round to (lump sum)</span><input data-f="roundTo" value="${num(E.est.roundTo) > 0 ? esc(fq(E.est.roundTo)) : ''}" placeholder="${esc(fmt(c.sell))}" inputmode="decimal" aria-label="Lump sum price"${ro()}></div>
-${!E.ro && down > 0 && down !== num(E.est.roundTo) && down !== c.sell ? `<div style="text-align:right;margin:-2px 0 4px"><button type="button" class="es-chip" data-act="use-round" data-v="${down}">Use ${fmt(down)}</button></div>` : ''}
-<div class="es-res" data-state="${ms.state}">
+${chips.length ? `<div class="es-rchips">${chips.join('')}</div>` : ''}
+${diff && c.lockedCount ? `<div class="es-note2" style="margin:0 0 4px">The ${fmt(Math.abs(diff))} ${diff > 0 ? 'added by' : 'taken off by'} rounding goes to the calculated items — typed prices stay exactly as typed.</div>` : ''}
+<div class="es-res" data-state="${c.pricedNoCost && ms.state === 'ok' ? 'low' : ms.state}">
 <div class="es-kv"><span>Quoted Price</span><b>${fmt(c.offer)}</b></div>
-<div class="es-kv"><span>Profit</span><b>${fmt(c.profit)}</b></div>
-<div class="es-kv"><span>Margin · Markup</span><b>${c.offer > 0 ? fq(r2(c.marginPct)) + ' % · ' + fq(r2(c.markupPct)) + ' %' : '—'}</b></div>
-<div class="es-st">${esc(ms.text)}</div></div>
+<div class="es-kv"><span>Profit${c.pricedNoCost ? ' (costed items)' : ''}</span><b>${fmt(c.profit)}</b></div>
+<div class="es-kv"><span>Margin · Markup</span><b>${c.costedOffer > 0 && c.totalCost > 0 ? fq(r2(c.marginPct)) + ' % · ' + fq(r2(c.markupPct)) + ' %' : '—'}</b></div>
+<div class="es-st">${esc(ms.text)}</div>
+${c.pricedNoCost ? `<div class="es-st es-wn">${c.pricedNoCost} item${c.pricedNoCost === 1 ? ' has' : 's have'} a selling price but no cost — ${c.pricedNoCost === 1 ? 'its' : 'their'} profit is not known. You can still make the quotation; add the cost when you have it.</div>` : ''}</div>
 <div class="es-note2">Defaults for Overheads, Contingency and Markup come from Administration → Contracting Settings; changed here for this estimate only. Quoted Price = the rounded lump sum (or the selling price when not rounded), excl. VAT.</div></div>`;
   }
   function renderLists() {
     const c = calc(E.est), code = new Map(c.flat.map(x => [x.id, x.code]));
     const rows = k => E.est.sections.flatMap(s => (s.items || []).flatMap(it => (it.build[k] || []).map(l => ({ it, l }))));
     const mp = rows('manpower'), sc = rows('subcontract');
-    const tot = a => a.reduce((s, x) => s + lineAmt(x.k, x.l), 0);
+    const amtOf = x => r2(lineAmt(x.k, x.l) * lineMult(x.it, x.k, x.l));   // V271.7: per-unit items
+    const tot = a => a.reduce((s, x) => s + amtOf(x), 0);
     mp.forEach(x => { x.k = 'manpower'; }); sc.forEach(x => { x.k = 'subcontract'; });
-    $('es-manpower').innerHTML = mp.length ? `<table><thead><tr><th>Item</th><th>Trade</th><th>Manpower Supplier</th><th class="es-r">Men</th><th class="es-r">Days</th><th class="es-r">Man-days</th><th class="es-r">Day Rate</th><th class="es-r">Amount</th></tr></thead><tbody>${mp.map(({ it, l }) => `<tr class="es-click" data-iid="${it.id}"><td>${code.get(it.id)}</td><td>${esc(l.trade || '—')}</td><td>${esc(l.supplierName || '—')}</td><td class="es-r">${fq(num(l.men))}</td><td class="es-r">${fq(num(l.days))}</td><td class="es-r">${fq(r2(num(l.men) * num(l.days)))}</td><td class="es-r">${fmt(num(l.rate))}</td><td class="es-r">${fmt(lineAmt('manpower', l))}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="5">Total Manpower</td><td class="es-r">${fq(r2(mp.reduce((s, x) => s + num(x.l.men) * num(x.l.days), 0)))}</td><td></td><td class="es-r">${fmt(tot(mp))}</td></tr></tfoot></table>`
-      : '<div class="es-empty" style="margin:12px">No manpower in this estimate yet. Open an item\'s Cost Build-up to add hired manpower.</div>';
-    $('es-subcontract').innerHTML = sc.length ? `<table><thead><tr><th>Item</th><th>Description</th><th>Subcontractor</th><th class="es-r">Qty</th><th>Unit</th><th class="es-r">Rate</th><th class="es-r">Amount</th></tr></thead><tbody>${sc.map(({ it, l }) => `<tr class="es-click" data-iid="${it.id}"><td>${code.get(it.id)}</td><td>${esc(l.desc || '—')}</td><td>${esc(l.supplierName || '—')}</td><td class="es-r">${fq(num(l.qty))}</td><td>${esc(l.unit || '')}</td><td class="es-r">${fmt(num(l.rate))}</td><td class="es-r">${fmt(lineAmt('subcontract', l))}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="6">Total Subcontract</td><td class="es-r">${fmt(tot(sc))}</td></tr></tfoot></table>`
+    $('es-manpower').innerHTML = mp.length ? `<table><thead><tr><th>Item</th><th>Trade</th><th>Manpower Supplier</th><th class="es-r">Men</th><th class="es-r">Days</th><th class="es-r">Man-days</th><th class="es-r">Day Rate</th><th class="es-r">Amount</th></tr></thead><tbody>${mp.map(({ it, l }) => `<tr class="es-click" data-iid="${it.id}"><td>${code.get(it.id)}</td><td>${esc(l.trade || '—')}</td><td>${l.own ? '<i>Own staff</i>' : esc(l.supplierName || '—')}</td><td class="es-r">${fq(num(l.men))}</td><td class="es-r">${fq(num(l.days))}</td><td class="es-r">${fq(r2(num(l.men) * num(l.days)))}</td><td class="es-r">${fmt(num(l.rate))}</td><td class="es-r">${fmt(lineAmt('manpower', l))}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="5">Total Manpower</td><td class="es-r">${fq(r2(mp.reduce((s, x) => s + num(x.l.men) * num(x.l.days), 0)))}</td><td></td><td class="es-r">${fmt(tot(mp))}</td></tr></tfoot></table>`
+      : '<div class="es-empty" style="margin:12px">No manpower in this estimate yet. Open an item\'s Cost Build-up to add hired manpower or own staff.</div>';
+    $('es-subcontract').innerHTML = sc.length ? `<table><thead><tr><th>Item</th><th>Description</th><th>Subcontractor</th><th class="es-r">Qty</th><th>Unit</th><th class="es-r">Rate</th><th class="es-r">Amount</th></tr></thead><tbody>${sc.map(({ it, l }) => `<tr class="es-click" data-iid="${it.id}"><td>${code.get(it.id)}</td><td>${esc(l.desc || '—')}</td><td>${esc(l.supplierName || '—')}</td><td class="es-r">${fq(num(l.qty))}</td><td>${esc(l.unit || '')}</td><td class="es-r">${fmt(num(l.rate))}</td><td class="es-r">${fmt(amtOf({ it, l, k: 'subcontract' }))}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="6">Total Subcontract</td><td class="es-r">${fmt(tot(sc))}</td></tr></tfoot></table>`
       : '<div class="es-empty" style="margin:12px">No subcontract work in this estimate yet.</div>';
   }
   function renderNotes() { $('es-notes').value = E.est.internalNotes || ''; $('es-note-count').textContent = String(E.est.internalNotes || '').length + ' / 2000'; }
@@ -441,14 +568,18 @@ ${!E.ro && down > 0 && down !== num(E.est.roundTo) && down !== c.sell ? `<div st
       if (!String(it.desc || '').trim()) out.push({ block: true, text: `Item ${code.get(it.id)} has no description`, iid: it.id, f: 'desc' });
       else if (!(num(it.qty) > 0)) out.push({ block: true, text: `Item ${code.get(it.id)} has no quantity`, iid: it.id, f: 'qty' });
       KINDS.forEach(({ k }) => (it.build[k] || []).forEach(l => {
-        if ((k === 'manpower' || k === 'subcontract' || k === 'material') && String(l.supplierName || '').trim() && !supplierById(l.supplierId))
+        if ((k === 'manpower' || k === 'subcontract' || k === 'material') && !l.own && String(l.supplierName || '').trim() && !supplierById(l.supplierId))
           out.push({ block: true, text: `Item ${code.get(it.id)}: "${String(l.supplierName).trim()}" is not in the Supplier Master`, iid: it.id });
-        if (lineAmt(k, l) < 0) out.push({ block: true, text: `Item ${code.get(it.id)} has a negative cost line`, iid: it.id });
+        if (lineAmt(k, l) < 0 || num(l.waste) < 0) out.push({ block: true, text: `Item ${code.get(it.id)} has a negative cost line`, iid: it.id });
       }));
+      if (it.sellLocked && !(num(it.sellBy === 'rate' ? it.sellRate : it.sellAmt) >= 0)) out.push({ block: true, text: `Item ${code.get(it.id)}: the typed selling price is not a number`, iid: it.id, f: it.sellBy === 'rate' ? 'sellRate' : 'sellAmt' });
+      if (it.scopeHtml && String(it.scopeHtml).length > SCOPE_MAX) out.push({ block: true, text: `Item ${code.get(it.id)}: the scope of work is too long (over ${SCOPE_MAX / 1000} thousand characters)`, iid: it.id, f: 'desc' });
     });
     ['overheadPct', 'contingencyPct', 'markupPct'].forEach(k => { if (num(E.est[k]) < 0) out.push({ block: true, text: 'Percentages cannot be negative' }); });
     if (num(E.est.roundTo) < 0) out.push({ block: true, text: 'The lump sum cannot be negative' });
     if (c.uncosted) out.push({ block: false, text: `${c.uncosted} item${c.uncosted === 1 ? '' : 's'} without cost` });
+    if (c.pricedNoCost) out.push({ block: false, text: `${c.pricedNoCost} item${c.pricedNoCost === 1 ? '' : 's'} priced by hand without cost` });
+    if (c.lockedCount && num(E.est.roundTo) > 0 && c.offer < c.lockedSum) out.push({ block: false, text: 'the lump sum is below the typed prices — they are reduced in proportion' });
     return out;
   }
   function renderFooter() {
@@ -467,20 +598,44 @@ ${!E.ro && down > 0 && down !== num(E.est.roundTo) && down !== c.sell ? `<div st
     chk.className = 'es-chk' + (blocks.length ? ' is-todo' : '');
     chk.textContent = blocks.length ? 'To continue: ' + blocks.slice(0, 3).map((x, i) => '①②③'[i] + ' ' + x.text).join('  ') : '✓ Ready to save' + (notes.length ? ' · ' + notes.map(x => x.text).join(' · ') : ' · all items costed');
     $('es-save').disabled = !!blocks.length; $('es-save').title = blocks.length ? blocks[0].text : 'Save this estimate (Ctrl+S)';
-    const qb2 = $('es-quote'); if (!qb2.dataset.qid) { qb2.disabled = !!blocks.length || calc(E.est).uncosted > 0; qb2.title = blocks.length ? blocks[0].text : calc(E.est).uncosted ? 'Every item needs a cost before the quotation' : 'The quotation takes the items, the section amounts and the lump sum from this estimate'; }
+    const qb2 = $('es-quote'); if (!qb2.dataset.qid) { qb2.disabled = !!blocks.length || calc(E.est).uncosted > 0; qb2.title = blocks.length ? blocks[0].text : calc(E.est).uncosted ? 'Every item needs a cost (or a typed selling price) before the quotation' : 'The quotation takes the items, their scope, the section amounts and the lump sum from this estimate'; }
   }
   function changed() { if (!E) return; renderFooter(); }
 
   /* ── grid events ── */
   function onGridInput(e) {
     if (!E || E.ro) return;
-    const el = e.target, f = el.dataset.f; if (!f) return;
+    const el = e.target;
+    if (el.dataset && el.dataset.scope) {   // V271.7: the item's scope of work
+      const it = findItem(el.dataset.scope)?.it; if (!it) return;
+      const h = R() ? R().clean(el.innerHTML) : el.textContent; it.scopeHtml = plain(h) ? h : '';
+      changed(); return;
+    }
+    const f = el.dataset.f; if (!f) return;
     if (f === 'title') { const s = E.est.sections.find(x => x.id === el.closest('tr').dataset.sid); if (s) s.title = el.value; changed(); return; }
     const hit = findItem(el.closest('tr')?.dataset.iid); if (!hit) return;
     if (f === 'desc') { hit.it.desc = el.value; grow(el); }
     else if (f === 'unit') { hit.it.unit = el.value; unitDD(el, true, u => { hit.it.unit = u; el.value = u; changed(); }); }
     else if (f === 'qty') { hit.it.qty = el.value; el.classList.toggle('is-bad', el.value !== '' && !(num(el.value) > 0)); refreshNumbers(); }
+    else if (f.startsWith('q-')) {   // V271.7: a cost typed straight in the cell (no build-up)
+      const k = f.slice(2); setQuick(hit.it, k, el.value);
+      el.classList.toggle('is-typed', num(el.value) > 0); el.classList.toggle('is-bad', el.value !== '' && !(num(el.value) >= 0));
+      refreshNumbers(); renderTabs();
+    }
+    else if (f === 'sellAmt' || f === 'sellRate') {   // V271.7: a typed selling price (🔒); empty = follows the markup again
+      const it = hit.it;
+      if (String(el.value).trim() === '') { delete it.sellLocked; delete it.sellBy; delete it.sellAmt; delete it.sellRate; }
+      else { it.sellLocked = true; if (f === 'sellAmt') { it.sellBy = 'amt'; it.sellAmt = el.value; delete it.sellRate; } else { it.sellBy = 'rate'; it.sellRate = el.value; delete it.sellAmt; } }
+      el.classList.toggle('is-bad', el.value !== '' && !(num(el.value) >= 0));
+      refreshNumbers();
+    }
     changed();
+  }
+  function onGridBlur(e) {   // tidy the typed figures when leaving the field
+    const el = e.target; if (!E || E.ro || !el.dataset) return;
+    const f = el.dataset.f;
+    if ((f === 'sellAmt' || f === 'sellRate') && String(el.value).trim() !== '') setTimeout(() => { if (E && document.activeElement !== el) refreshNumbers(); }, 0);
+    if (f && f.startsWith('q-') && String(el.value).trim() !== '' && num(el.value) > 0) el.value = fq(num(el.value));
   }
   function onGridClick(e) {
     const b = e.target.closest('[data-act]'); if (!b) return;
@@ -489,6 +644,13 @@ ${!E.ro && down > 0 && down !== num(E.est.roundTo) && down !== c.sell ? `<div st
     if (act === 'item-menu') { itemMenu(b, tr.dataset.iid); return; }
     if (act === 'sec-menu') { secMenu(b, tr.dataset.sid); return; }
     if (E.ro) return;
+    // V271.7
+    if (act === 'sec-cat') { const s = E.est.sections.find(x => x.id === tr.dataset.sid); if (s) catMenu(b, s.workCat || '', v => after(() => { s.workCat = v; (s.items || []).forEach(it => { if (it.workCat === v) delete it.workCat; }); }), true); return; }
+    if (act === 'item-cat') { const h = findItem(tr.dataset.iid); if (h) catMenu(b, itemCat(h.it, h.s), v => after(() => { if (!v || v === (h.s.workCat || '')) delete h.it.workCat; else h.it.workCat = v; }), true, h.s.workCat); return; }
+    if (act === 'scope-open') { E.scopeOpen = tr.dataset.iid; select(tr.dataset.iid); renderGrid(); setTimeout(() => $('es-grid').querySelector(`.es-scdoc[data-scope="${tr.dataset.iid}"]`)?.focus(), 30); return; }
+    if (act === 'scope-close') { const it = findItem(tr.dataset.iid)?.it; if (!it) return; const go = () => after(() => { delete it.scopeHtml; delete it.scopeSrc; if (E.scopeOpen === it.id) E.scopeOpen = null; }); if (plain(it.scopeHtml)) return askDelete('Remove this item\'s scope of work?', String(plain(it.scopeHtml)).slice(0, 200), go); go(); return; }
+    if (act === 'unlock') { const it = findItem(tr.dataset.iid)?.it; if (it) { delete it.sellLocked; delete it.sellBy; delete it.sellAmt; delete it.sellRate; refreshNumbers(); changed(); } return; }
+    if (act === 'copy-est') { openCopy(); return; }
     if (act === 'add-item') { addItem(b.dataset.sid || (E.sel && findItem(E.sel)?.s.id) || E.est.sections[E.est.sections.length - 1].id); return; }
     if (act === 'add-section') { addSection(); }
   }
@@ -536,10 +698,14 @@ ${!E.ro && down > 0 && down !== num(E.est.roundTo) && down !== c.sell ? `<div st
   function itemMenu(anchor, iid) {
     const hit = findItem(iid); if (!hit) return; const i = hit.s.items.indexOf(hit.it), si = E.est.sections.indexOf(hit.s);
     const items = [{ v: 'build', label: E.ro ? 'View Cost Build-up' : 'Cost Build-up…', key: 'F2' }];
+    if (!E.ro) items.push({ v: 'scope', label: hit.it.scopeHtml ? 'Scope of Work' : 'Add Scope of Work' }, { v: 'cat', label: 'Work Category…' }, { v: 'unlock', label: 'Release Typed Price', disabled: !hit.it.sellLocked });
     if (!E.ro) items.push('-', { v: 'ins', label: 'Insert Item Below' }, { v: 'dup', label: 'Duplicate Item' }, { v: 'up', label: 'Move Up', disabled: i === 0 && si === 0 }, { v: 'down', label: 'Move Down', disabled: i === hit.s.items.length - 1 && si === E.est.sections.length - 1 },
       { v: 'tosec', label: 'Move To Section…', disabled: E.est.sections.length < 2 }, '-', { v: 'del', label: 'Delete Item', cls: 'es-danger' });
     openMenu(anchor, items, v => {
       if (v === 'build') return openBuild(iid);
+      if (v === 'scope') { E.scopeOpen = iid; renderGrid(); setTimeout(() => $('es-grid').querySelector(`.es-scdoc[data-scope="${iid}"]`)?.focus(), 30); return; }
+      if (v === 'cat') return catMenu(anchor, itemCat(hit.it, hit.s), c => after(() => { if (!c || c === (hit.s.workCat || '')) delete hit.it.workCat; else hit.it.workCat = c; }), true, hit.s.workCat);
+      if (v === 'unlock') { delete hit.it.sellLocked; delete hit.it.sellBy; delete hit.it.sellAmt; delete hit.it.sellRate; refreshNumbers(); changed(); return; }
       if (v === 'ins') return addItem(hit.s.id, i + 1);
       if (v === 'dup') { const cp = clone(hit.it); cp.id = newId('ei'); KINDS.forEach(({ k }) => (cp.build[k] || []).forEach(l => { l.id = newId('el'); })); delete cp.rfqLineId; after(() => { hit.s.items.splice(i + 1, 0, cp); E.sel = cp.id; }); return; }
       if (v === 'up' || v === 'down') return moveItem(hit, v === 'up' ? -1 : 1);
@@ -563,6 +729,14 @@ ${!E.ro && down > 0 && down !== num(E.est.roundTo) && down !== c.sell ? `<div st
       if (v === 'up' || v === 'down') return after(() => { secs.splice(si, 1); secs.splice(si + (v === 'up' ? -1 : 1), 0, s); });
       if (v === 'del') return askDelete(`Delete section ${secCode(si)}?`, (s.items.length ? `${s.items.length} item${s.items.length === 1 ? '' : 's'} and their cost build-up will be deleted too.` : 'The section is empty.'), () => after(() => { secs.splice(si, 1); }));
     });
+  }
+  /** V271.7: a work category (the service categories of Master Data → Categories) */
+  function catMenu(anchor, cur, onPick, allowNone, secDefault) {
+    const cats = workCats();
+    const items = cats.map(n => ({ v: n, label: esc(n) + (n === cur ? ' ✓' : '') }));
+    if (!items.length) items.push({ v: '', label: 'No service categories yet (Master Data → Categories)', disabled: true });
+    if (allowNone) items.push('-', { v: '__none', label: secDefault ? 'Same as the section (' + esc(secDefault) + ')' : 'No category' });
+    openMenu(anchor, items, v => onPick(v === '__none' ? '' : v));
   }
   function askDelete(title, message, ok) {
     const dlg = window.bizcoreShowSafeDialog;
@@ -615,71 +789,148 @@ ${!E.ro && down > 0 && down !== num(E.est.roundTo) && down !== c.sell ? `<div st
   }
   function closeBuild() { closeDD(); if (!E) return; E.bu = null; $('es-bu').hidden = true; renderGrid(); renderTabs(); renderSide(); renderLists(); changed(); const tr = $('es-grid').querySelector(`tr[data-iid="${E.sel}"]`); tr?.scrollIntoView({ block: 'nearest' }); }
   const COLS = {
-    material: [['desc', 'Item (Item Master or free text)', ''], ['supplierName', 'Supplier', '20%'], ['qty', 'Qty', '70px'], ['unit', 'Unit', '70px'], ['rate', 'Unit Cost', '96px'], ['amt', 'Amount', '104px'], ['x', '', '32px']],
-    manpower: [['trade', 'Trade', ''], ['supplierName', 'Manpower Supplier', '26%'], ['men', 'Men', '64px'], ['days', 'Days', '64px'], ['rate', 'Day Rate', '96px'], ['amt', 'Amount', '104px'], ['x', '', '32px']],
-    subcontract: [['desc', 'Description', ''], ['supplierName', 'Subcontractor', '26%'], ['qty', 'Qty', '70px'], ['unit', 'Unit', '70px'], ['rate', 'Rate', '96px'], ['amt', 'Amount', '104px'], ['x', '', '32px']],
+    material: [['desc', 'Item (Item Master or free text)', ''], ['supplierName', 'Supplier · quote ref', '20%'], ['qty', 'Qty', '70px'], ['unit', 'Unit', '70px'], ['rate', 'Unit Cost', '96px'], ['waste', 'Waste %', '74px'], ['amt', 'Amount', '104px'], ['x', '', '32px']],
+    manpower: [['type', 'Type', '92px'], ['trade', 'Trade', ''], ['supplierName', 'Agency · quote ref', '26%'], ['men', 'Men', '64px'], ['days', 'Days', '64px'], ['rate', 'Day Rate', '110px'], ['amt', 'Amount', '104px'], ['x', '', '32px']],
+    subcontract: [['desc', 'Description', ''], ['supplierName', 'Subcontractor · quote ref', '26%'], ['qty', 'Qty', '70px'], ['unit', 'Unit', '70px'], ['rate', 'Rate', '96px'], ['amt', 'Amount', '104px'], ['x', '', '32px']],
     other: [['desc', 'Description', ''], ['qty', 'Qty', '70px'], ['unit', 'Unit', '70px'], ['rate', 'Rate', '96px'], ['amt', 'Amount', '104px'], ['x', '', '32px']],
   };
-  const NUMF = new Set(['qty', 'men', 'days', 'rate']);
+  const NUMF = new Set(['qty', 'men', 'days', 'rate', 'waste']);
+  /** V271.7: the last cost used for an Item Master item in another estimate (the ones read in this session) */
+  function lastEstRate(productId, exceptLid) {
+    if (!productId) return null;
+    let best = null;
+    const look = (doc, label) => (doc.sections || []).forEach(s => (s.items || []).forEach(it => ((it.build || {}).material || []).forEach(l => {
+      if (String(l.productId) !== String(productId) || l.id === exceptLid || !(num(l.rate) > 0)) return;
+      const at = String(doc.updated || doc.estimateDate || '');
+      if (!best || at > best.at) best = { rate: num(l.rate), label, at };
+    })));
+    cache.forEach((d, key) => { const [rid, n] = key.split('#'); if (E && String(rid) === String(E.rfqId) && Number(n) === Number(E.version)) return; const r = RFQS().find(x => String(x.id) === rid); look(d, (r ? r.rfqNo : '') + ' V' + n); });
+    return best;
+  }
   function buLineRow(k, l) {
+    const own = k === 'manpower' && !!l.own;
+    const refIn = () => (k === 'other' ? '' : `<input class="es-in es-refin" data-f="ref" value="${esc(l.ref || '')}" maxlength="80" placeholder="Quote ref (internal)" aria-label="Supplier quote reference"${ro()}>`);
     const cell = ([f]) => {
       if (f === 'amt') return `<td class="es-r es-val" data-amt>${fmt(lineAmt(k, l))}</td>`;
       if (f === 'x') return `<td>${E.ro ? '' : `<button type="button" class="es-x" data-act="del-line" title="Delete line" aria-label="Delete line">✕</button>`}</td>`;
+      if (f === 'type') return `<td><button type="button" class="es-own${own ? ' is-own' : ''}" data-act="toggle-own" title="Hired (agency) or own staff — click to change"${E.ro ? ' disabled' : ''}>${own ? 'Own staff' : 'Hired'}</button></td>`;
       const v = l[f] == null ? '' : l[f];
       if (f === 'desc' && k === 'material') {
-        const ref = l.productId ? lastPaid(l.productId) : null;
-        return `<td><div class="es-wrap"><span class="es-src${l.productId ? ' m' : ''}" title="${l.productId ? 'From the Item Master' : 'Free text — not in the Item Master'}"></span><input class="es-in" data-f="desc" data-dd="product" value="${esc(v)}" maxlength="300" autocomplete="off" placeholder="Search the Item Master or type…" aria-label="Material"${ro()}></div>${ref ? `<div class="es-ref">Last paid ${fmt(ref.price)}${ref.no ? ' · ' + esc(ref.no) : ''}${E.ro ? '' : ` · <button type="button" data-act="use-paid" data-v="${ref.price}">use</button>`}</div>` : ''}</td>`;
+        const ref = l.productId ? lastPaid(l.productId) : null, le = l.productId ? lastEstRate(l.productId, l.id) : null;
+        const hints = [];
+        if (ref) hints.push(`Last bought ${E.ro ? fmt(ref.price) : `<button type="button" data-act="use-rate" data-v="${ref.price}" title="Use this cost">${fmt(ref.price)}</button>`}${ref.no ? ' · ' + esc(ref.no) : ''}`);
+        if (le) hints.push(`last estimate ${E.ro ? fmt(le.rate) : `<button type="button" data-act="use-rate" data-v="${le.rate}" title="Use this cost">${fmt(le.rate)}</button>`} · ${esc(le.label)}`);
+        return `<td><div class="es-wrap"><span class="es-src${l.productId ? ' m' : ''}" title="${l.productId ? 'From the Item Master' : 'Free text — not in the Item Master'}"></span><input class="es-in" data-f="desc" data-dd="product" value="${esc(v)}" maxlength="300" autocomplete="off" placeholder="Search the Item Master or type…" aria-label="Material"${ro()}></div>${hints.length ? `<div class="es-ref">${hints.join(' · ')}</div>` : ''}</td>`;
       }
-      if (f === 'trade') { const lr = labourRate(v); return `<td><input class="es-in" data-f="trade" value="${esc(v)}" list="es-trades" maxlength="60" placeholder="Trade" aria-label="Trade"${ro()}>${lr > 0 ? `<div class="es-ref">Labour Rates: ${fmt(lr)} / day</div>` : ''}</td>`; }
-      if (f === 'supplierName') { const bad = String(v).trim() && !supplierById(l.supplierId); return `<td><input class="es-in${bad ? ' is-bad' : ''}" data-f="supplierName" data-dd="supplier" value="${esc(v)}" maxlength="160" autocomplete="off" placeholder="${k === 'material' ? 'Optional' : 'Supplier Master'}" aria-label="Supplier"${ro()}>${bad ? '<div class="es-ref" style="color:#b42318">Not in the Supplier Master</div>' : ''}</td>`; }
+      if (f === 'trade') return `<td><input class="es-in" data-f="trade" value="${esc(v)}" list="es-trades" maxlength="60" placeholder="Trade" aria-label="Trade"${ro()}></td>`;
+      if (f === 'rate' && k === 'manpower') {
+        const lr = labourRate(l.trade, own), t = String(l.trade || '').trim();
+        const hint = lr > 0 ? `<div class="es-ref">${own ? 'internal rate' : 'Labour Rates'}: ${fmt(lr)}</div>` : (t && !l.quick && !(num(l.rate) > 0) ? `<div class="es-ref es-wn">No ${own ? 'own-staff ' : ''}rate for ${esc(t)} — set it in Administration → Contracting Settings → Labour Rates</div>` : '');
+        return `<td><input class="es-in es-num${t && !(lr > 0) && !(num(l.rate) > 0) && !l.quick ? ' is-warn' : ''}" data-f="rate" value="${esc(v !== '' ? fq(v) : '')}" inputmode="decimal" aria-label="Day rate"${ro()}>${hint}</td>`;
+      }
+      if (f === 'supplierName') {
+        if (own) return `<td><input class="es-in" value="— own employee —" disabled aria-label="Own staff">${refIn()}</td>`;
+        const bad = String(v).trim() && !supplierById(l.supplierId);
+        return `<td><input class="es-in${bad ? ' is-bad' : ''}" data-f="supplierName" data-dd="supplier" value="${esc(v)}" maxlength="160" autocomplete="off" placeholder="${k === 'material' ? 'Optional' : 'Supplier Master'}" aria-label="Supplier"${ro()}>${bad ? '<div class="es-ref es-bad">Not in the Supplier Master</div>' : ''}${refIn()}</td>`;
+      }
       if (f === 'unit') return `<td><input class="es-in" data-f="unit" data-dd="unit" value="${esc(v)}" maxlength="12" autocomplete="off" aria-label="Unit"${ro()}></td>`;
+      if (f === 'waste') return `<td><input class="es-in es-num" data-f="waste" value="${num(v) ? esc(fq(v)) : ''}" placeholder="0" inputmode="decimal" aria-label="Waste %"${ro()}></td>`;
       return `<td><input class="es-in${NUMF.has(f) ? ' es-num' : ''}" data-f="${f}" value="${esc(NUMF.has(f) && v !== '' ? fq(v) : v)}"${NUMF.has(f) ? ' inputmode="decimal"' : ' maxlength="300"'} aria-label="${f}"${ro()}></td>`;
     };
-    return `<tr data-lid="${l.id}">${COLS[k].map(cell).join('')}</tr>`;
+    return `<tr data-lid="${l.id}"${l.quick ? ' class="es-quickl"' : ''}>${COLS[k].map(cell).join('')}</tr>`;
   }
   function renderBuild() {
     const hit = findItem(E.bu); if (!hit) return;
     const c = calc(E.est), x = c.flat.find(y => y.id === hit.it.id), si = E.est.sections.indexOf(hit.s);
     const order = c.flat.map(y => y.id), pos = order.indexOf(hit.it.id);
+    const it = hit.it, per = !!it.perUnit, u = esc(it.unit || 'unit'), q = num(it.qty);
+    E.buShow = E.buShow || {};
+    const shown = k => (it.build[k] || []).length > 0 || (!E.ro && E.buShow[it.id + k]);
     const group = ({ k, label, color }) => {
-      const lines = hit.it.build[k] || [];
-      return `<div class="es-grpbox" data-k="${k}"><div class="es-gh"><span><i class="es-d" style="background:${color}"></i>${label}${k === 'manpower' ? ' (Hired)' : ''}</span><b data-gt>${x.cost[k] ? fmt(x.cost[k]) : '—'}</b></div>
+      const lines = it.build[k] || [];
+      const perK = per && k !== 'manpower';
+      const head = perK ? `<span class="es-gsub">· per 1 ${u}</span>` : k === 'manpower' && per ? '<span class="es-gsub">· for the whole item (crews are counted in days)</span>' : '';
+      const tot = perK ? `<span class="es-gsub">${fmt(lines.filter(l => !l.quick).reduce((a, l) => a + lineAmt(k, l), 0))} per ${u} × ${fq(q)} =</span> <b data-gt>${x.cost[k] ? fmt(x.cost[k]) : '—'}</b>` : `<b data-gt>${x.cost[k] ? fmt(x.cost[k]) : '—'}</b>`;
+      const adds = E.ro ? '' : k === 'manpower'
+        ? `<button type="button" class="es-lnk" data-act="add-line" data-k="manpower">+ Add Hired</button><button type="button" class="es-lnk" data-act="add-own">+ Add Own staff</button>`
+        : `<button type="button" class="es-lnk" data-act="add-line" data-k="${k}">+ Add ${k === 'other' ? 'Equipment / Other' : k === 'subcontract' ? 'Subcontract' : label}</button>`;
+      return `<div class="es-grpbox" data-k="${k}"><div class="es-gh"><span><i class="es-d" style="background:${color}"></i>${label}${head}</span><span class="es-gt2">${tot}</span></div>
 <table class="es-bt"><colgroup>${COLS[k].map(([, , w]) => `<col${w ? ` style="width:${w}"` : ''}>`).join('')}</colgroup>
-<thead><tr>${COLS[k].map(([f, h]) => `<th${['qty', 'men', 'days', 'rate', 'amt'].includes(f) ? ' class="es-r"' : ''}>${h}</th>`).join('')}</tr></thead>
-<tbody>${lines.map(l => buLineRow(k, l)).join('')}${E.ro ? (lines.length ? '' : `<tr><td colspan="${COLS[k].length}" class="es-m" style="padding:10px">None</td></tr>`) : `<tr class="es-add"><td colspan="${COLS[k].length}"><button type="button" class="es-lnk" data-act="add-line" data-k="${k}">+ Add ${k === 'other' ? 'Equipment / Other' : k === 'subcontract' ? 'Subcontract' : label}</button></td></tr>`}</tbody></table></div>`;
+<thead><tr>${COLS[k].map(([f, h]) => `<th${['qty', 'men', 'days', 'rate', 'amt', 'waste'].includes(f) ? ' class="es-r"' : ''}>${h}</th>`).join('')}</tr></thead>
+<tbody>${lines.map(l => buLineRow(k, l)).join('')}${E.ro ? '' : `<tr class="es-add"><td colspan="${COLS[k].length}">${adds}</td></tr>`}</tbody></table></div>`;
     };
+    const used = KINDS.filter(({ k }) => shown(k)), unused = KINDS.filter(({ k }) => !shown(k));
+    const tab = E.buTab === 'scope' ? 'scope' : 'cost';
     $('es-bu').innerHTML = `<div class="es-bu-hd"><button type="button" class="es-back" data-act="bu-done" title="Back to the items (Esc)" aria-label="Back to the items">${BACK_SVG}</button>
-<div class="es-bu-tt"><h3>${x.code} · ${esc(String(hit.it.desc || 'Untitled item').split('\n')[0])}</h3><div>${fq(num(hit.it.qty))} ${esc(hit.it.unit || '')} · Section ${secCode(si)} — ${esc(hit.s.title || 'Untitled section')}${E.ro ? ' · read only' : ''}</div></div><div class="es-sp" style="flex:1"></div>
+<div class="es-bu-tt"><h3>${x.code} · ${esc(String(it.desc || 'Untitled item').split('\n')[0])}</h3><div>${fq(q)} ${esc(it.unit || '')} · Section ${secCode(si)} — ${esc(hit.s.title || 'Untitled section')}${itemCat(it, hit.s) ? ' · ' + esc(itemCat(it, hit.s)) : ''}${E.ro ? ' · read only' : ''}</div></div><div class="es-sp" style="flex:1"></div>
+<span class="es-perl">Cost entered</span><div class="es-seg" role="group" aria-label="Cost entered"><button type="button" data-act="bu-per" data-v="whole" class="${per ? '' : 'on'}"${E.ro ? ' disabled' : ''}>For the whole item</button><button type="button" data-act="bu-per" data-v="unit" class="${per ? 'on' : ''}"${E.ro || !(q > 0) ? ' disabled' : ''}>Per 1 ${u} × ${fq(q)}</button></div>
 <button type="button" class="pr-btn" data-act="bu-prev"${pos <= 0 ? ' disabled' : ''}>‹ Previous</button><button type="button" class="pr-btn" data-act="bu-next"${pos >= order.length - 1 ? ' disabled' : ''}>Next ›</button></div>
-<div class="es-bu-body"><div class="es-bu-main">${KINDS.map(group).join('')}</div>
+<div class="es-bu-body"><div class="es-bu-main">
+<div class="es-butabs" role="tablist"><button type="button" role="tab" class="${tab === 'cost' ? 'on' : ''}" data-act="bu-tab" data-v="cost">Cost Build-up</button><button type="button" role="tab" class="${tab === 'scope' ? 'on' : ''}" data-act="bu-tab" data-v="scope">Scope of Work${plain(it.scopeHtml) ? ' <i class="es-dot2"></i>' : ''}</button></div>
+${tab === 'scope' ? `<div class="es-buscope">${E.ro ? '' : '<div class="es-scbar es-buscbar"></div>'}<div class="es-scdoc es-buscdoc" data-scope="${it.id}"></div><div class="es-note2">Printed on the quotation under this item's line. ${it.scopeSrc === 'rfq' ? 'Started from the RFQ requirements.' : ''}</div></div>`
+  : `${used.map(group).join('') || (E.ro ? '<div class="es-empty" style="margin:12px">No cost lines.</div>' : '')}
+${!E.ro && unused.length ? `<div class="es-addtypes"><span>${used.length ? 'Add another cost type:' : 'Add a cost type:'}</span>${unused.map(({ k, label, color }) => `<button type="button" class="es-addt" data-act="show-k" data-k="${k}"><i class="es-d" style="background:${color}"></i>+ ${k === 'other' ? 'Equipment / Other' : label}</button>`).join('')}</div>` : ''}`}
+</div>
 <aside class="es-bu-side" id="es-bu-side"></aside></div>
-<div class="es-bu-ft"><span class="es-chk" style="color:#64748b">Amounts are for the whole item (${fq(num(hit.it.qty))} ${esc(hit.it.unit || '')}). Material, manpower and subcontractor names come from the masters.</span><div class="es-sp" style="flex:1"></div><button type="button" class="btn btn-primary" id="es-bu-done" data-act="bu-done">Done</button></div>
+<div class="es-bu-ft"><span class="es-chk" style="color:#64748b">${per ? `Material, subcontract and equipment per 1 ${u} × ${fq(q)} · manpower for the whole item` : `Amounts are for the whole item (${fq(q)} ${esc(it.unit || '')})`} · waste is added to the material amount · quote references are internal, never printed.</span><div class="es-sp" style="flex:1"></div><button type="button" class="btn btn-primary" id="es-bu-done" data-act="bu-done">Done</button></div>
 <datalist id="es-trades">${settings().labourRates.filter(l => String(l.trade || '').trim()).map(l => `<option value="${esc(l.trade)}">${num(l.rate) > 0 ? fmt(l.rate) + ' / day' : ''}</option>`).join('')}</datalist>`;
+    if (tab === 'scope') {
+      const ed = $('es-bu').querySelector('.es-buscdoc');
+      if (ed && R()) { R().make(ed, { html: it.scopeHtml || '', placeholder: 'Scope of work for this item — what is included, specifications, deliverables…' }); if (E.ro) ed.setAttribute('contenteditable', 'false'); }
+      const bar = $('es-bu').querySelector('.es-buscbar'); if (bar && R()) R().wireBar(bar);
+    }
     renderBuSide();
   }
   function renderBuSide() {
     const hit = findItem(E.bu); if (!hit) return;
-    const c = calc(E.est), x = c.flat.find(y => y.id === hit.it.id), u = esc(hit.it.unit || 'unit');
+    const c = calc(E.est), x = c.flat.find(y => y.id === hit.it.id), u = esc(hit.it.unit || 'unit'), it = hit.it, act = document.activeElement;
+    const keepSell = act && act.closest && act.closest('#es-bu-side') && act.dataset.f;
+    if (keepSell) {   // typing in the side's price: refresh the other figures only
+      const side = $('es-bu-side');
+      side.querySelectorAll('[data-sv]').forEach(el => { const k = el.dataset.sv; el.textContent = k === 'crate' ? (x.qty > 0 && x.cost.total > 0 ? fmt(x.costRate) : '—') : k === 'note' ? '' : el.textContent; });
+      const other = side.querySelector(`[data-f="${act.dataset.f === 'bu-sellAmt' ? 'bu-sellRate' : 'bu-sellAmt'}"]`);
+      if (other) other.value = act.dataset.f === 'bu-sellAmt' ? (x.qty > 0 ? fmt(x.sellRate) : '') : fmt(x.sell);
+      const n = side.querySelector('[data-sv="snote"]'); if (n) n.innerHTML = sellNote(x);
+      return;
+    }
+    const hired = r2(x.cost.manpower - x.cost.manpowerOwn);
     $('es-bu-side').innerHTML = `<div class="es-card"><h4>This Item</h4>
-${KINDS.map(({ k, label, color }) => `<div class="es-kv"><span><i class="es-d" style="background:${color}"></i>${label}</span><b>${x.cost[k] ? fmt(x.cost[k]) : '—'}</b></div>`).join('')}
+${KINDS.map(({ k, label, color }) => k === 'manpower' && x.cost.manpowerOwn > 0
+  ? `<div class="es-kv"><span><i class="es-d" style="background:${color}"></i>Manpower · hired</span><b>${hired ? fmt(hired) : '—'}</b></div><div class="es-kv"><span><i class="es-d" style="background:${color}"></i>Manpower · own staff</span><b>${fmt(x.cost.manpowerOwn)}</b></div>`
+  : `<div class="es-kv"><span><i class="es-d" style="background:${color}"></i>${label}</span><b>${x.cost[k] ? fmt(x.cost[k]) : '—'}</b></div>`).join('')}
 <div class="es-kv es-sum"><span>Total Cost</span><b>${fmt(x.cost.total)}</b></div>
-<div class="es-kv"><span>Cost per ${u}</span><b>${x.qty > 0 ? fmt(x.costRate) : '—'}</b></div>
-<div class="es-kv"><span>Sell Amount</span><b>${fmt(x.sell)}</b></div>
-<div class="es-kv"><span>Sell Rate per ${u}</span><b>${x.qty > 0 ? fmt(x.sellRate) : '—'}</b></div></div>
+<div class="es-kv"><span>Cost per ${u}</span><b data-sv="crate">${x.qty > 0 && x.cost.total > 0 ? fmt(x.costRate) : '—'}</b></div>
+<div class="es-kv es-sum"><span>Sell Amount${x.locked ? ' 🔒' : ''}</span><input class="es-bsin${x.locked && it.sellBy !== 'rate' ? ' is-lock' : ''}" data-f="bu-sellAmt" value="${x.locked || x.sell > 0 ? esc(fmt(x.sell)) : ''}" placeholder="0.00" inputmode="decimal" aria-label="Sell amount"${ro()}></div>
+<div class="es-kv"><span>Sell Rate per ${u}</span><input class="es-bsin${x.locked && it.sellBy === 'rate' ? ' is-lock' : ''}" data-f="bu-sellRate" value="${x.qty > 0 && (x.locked || x.sell > 0) ? esc(fmt(x.locked && it.sellBy === 'rate' ? num(it.sellRate) : x.sellRate)) : ''}" placeholder="—" inputmode="decimal" aria-label="Sell rate"${ro()}></div>
+<div class="es-snote" data-sv="snote">${sellNote(x)}</div>
+${x.locked && !E.ro ? '<button type="button" class="es-lnk es-sm" data-act="bu-unlock">Release the typed price</button>' : `<div class="es-note2" style="margin:2px 0 0">${E.ro ? '' : 'Type either figure to fix this item\'s price (🔒).'}</div>`}</div>
 ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" style="margin:0">Reuse the build-up of a similar item from this or an earlier estimate. Quantities and days follow this item's quantity.</div><input class="es-copy-in" id="es-copy" data-dd="copy" autocomplete="off" placeholder="Search earlier estimates…" aria-label="Copy the build-up from"></div>`}`;
   }
   function refreshBu(tr, k) {   // one line changed: its amount, the group total, the side card, the window's figures
     const hit = findItem(E.bu); if (!hit) return;
     const l = (hit.it.build[k] || []).find(y => y.id === tr?.dataset.lid);
     if (l && tr) { const a = tr.querySelector('[data-amt]'); if (a) a.textContent = fmt(lineAmt(k, l)); }
-    const g = $('es-bu').querySelector(`.es-grpbox[data-k="${k}"] [data-gt]`); const ct = itemCost(hit.it); if (g) g.textContent = ct[k] ? fmt(ct[k]) : '—';
+    const ct = itemCost(hit.it), box = $('es-bu').querySelector(`.es-grpbox[data-k="${k}"] .es-gt2`);
+    if (box) { const per = hit.it.perUnit && k !== 'manpower', lines = hit.it.build[k] || [];
+      box.innerHTML = per ? `<span class="es-gsub">${fmt(lines.filter(l => !l.quick).reduce((a, l) => a + lineAmt(k, l), 0))} per ${esc(hit.it.unit || 'unit')} × ${fq(num(hit.it.qty))} =</span> <b data-gt>${ct[k] ? fmt(ct[k]) : '—'}</b>` : `<b data-gt>${ct[k] ? fmt(ct[k]) : '—'}</b>`; }
     renderBuSide(); changed();
   }
   function onBuInput(e) {
     if (!E || E.ro || !E.bu) return;
-    const el = e.target, f = el.dataset.f, tr = el.closest('tr[data-lid]'); if (!f || !tr) { if (el.id === 'es-copy') copySearch(el); return; }
+    const el = e.target, f = el.dataset.f, tr = el.closest('tr[data-lid]');
+    if (el.dataset && el.dataset.scope) { const it = findItem(el.dataset.scope)?.it; if (it) { const h = R() ? R().clean(el.innerHTML) : el.textContent; it.scopeHtml = plain(h) ? h : ''; changed(); } return; }   // V271.7
+    if (f === 'bu-sellAmt' || f === 'bu-sellRate') {   // V271.7: the item's typed selling price, from the side card
+      const it = findItem(E.bu)?.it; if (!it) return;
+      if (String(el.value).trim() === '') { delete it.sellLocked; delete it.sellBy; delete it.sellAmt; delete it.sellRate; }
+      else { it.sellLocked = true; if (f === 'bu-sellAmt') { it.sellBy = 'amt'; it.sellAmt = el.value; delete it.sellRate; } else { it.sellBy = 'rate'; it.sellRate = el.value; delete it.sellAmt; } }
+      el.classList.toggle('is-lock', String(el.value).trim() !== '');
+      renderBuSide(); changed(); return;
+    }
+    if (!f || !tr) { if (el.id === 'es-copy') copySearch(el); return; }
     const k = el.closest('.es-grpbox').dataset.k, hit = findItem(E.bu), l = hit.it.build[k].find(y => y.id === tr.dataset.lid); if (!l) return;
     l[f] = el.value;
+    if (l.quick) { delete l.quick; tr.classList.remove('es-quickl'); }   // a typed figure changed here becomes an ordinary cost line
+    if (k === 'manpower' && f === 'rate') paintRateHint(tr, l);
     if (f === 'desc' && k === 'material' && l.productId) { l.productId = ''; const s = tr.querySelector('.es-src'); if (s) { s.classList.remove('m'); s.title = 'Free text — not in the Item Master'; } }
     if (f === 'supplierName') { l.supplierId = ''; }
     if (NUMF.has(f)) el.classList.toggle('is-bad', el.value !== '' && !(num(el.value) >= 0 && Number.isFinite(Number(String(el.value).replace(/,/g, '')))));
@@ -690,11 +941,20 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     if (!E || E.ro || !E.bu) return;
     const el = e.target, tr = el.closest('tr[data-lid]'); if (!tr || el.dataset.f !== 'trade') return;
     const k = 'manpower', l = findItem(E.bu).it.build[k].find(y => y.id === tr.dataset.lid); if (!l) return;
-    const lr = labourRate(el.value);
-    if (lr > 0 && !(num(l.rate) > 0)) { l.rate = lr; const ri = tr.querySelector('[data-f="rate"]'); if (ri) ri.value = fq(lr); }
-    const ref = el.parentElement.querySelector('.es-ref'); if (ref) ref.remove();
-    if (lr > 0) el.insertAdjacentHTML('afterend', `<div class="es-ref">Labour Rates: ${fmt(lr)} / day</div>`);
+    const lr = labourRate(el.value, !!l.own);
+    const ri = tr.querySelector('[data-f="rate"]');
+    if (lr > 0 && !(num(l.rate) > 0)) { l.rate = lr; if (ri) ri.value = fq(lr); }
+    paintRateHint(tr, l);   // V271.7: the rate's hint (or "no rate for …") follows the trade
     refreshBu(tr, k);
+  }
+  function paintRateHint(tr, l) {
+    const ri = tr && tr.querySelector('[data-f="rate"]'); if (!ri) return;
+    const own = !!l.own, lr = labourRate(l.trade, own), t = String(l.trade || '').trim();
+    const old = ri.parentElement.querySelector('.es-ref'); if (old) old.remove();
+    const warn = t && !l.quick && !(lr > 0) && !(num(l.rate) > 0);
+    ri.classList.toggle('is-warn', !!warn);
+    if (lr > 0) ri.insertAdjacentHTML('afterend', `<div class="es-ref">${own ? 'internal rate' : 'Labour Rates'}: ${fmt(lr)}</div>`);
+    else if (warn) ri.insertAdjacentHTML('afterend', `<div class="es-ref es-wn">No ${own ? 'own-staff ' : ''}rate for ${esc(t)} — set it in Administration → Contracting Settings → Labour Rates</div>`);
   }
   function onBuBlur(e) {   // a typed supplier name that matches the master exactly (any case) is linked to it
     const el = e.target; if (!E || E.ro || el.dataset.f !== 'supplierName') return;
@@ -718,13 +978,23 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     const b = e.target.closest('[data-act]'); if (!b || !E) return;
     const act = b.dataset.act;
     if (act === 'bu-done') return closeBuild();
+    if (act === 'bu-tab') { E.buTab = b.dataset.v === 'scope' ? 'scope' : 'cost'; renderBuild(); if (E.buTab === 'scope') setTimeout(() => $('es-bu').querySelector('.es-buscdoc')?.focus(), 30); return; }
     if (act === 'bu-prev' || act === 'bu-next') { const order = calc(E.est).flat.map(y => y.id), i = order.indexOf(E.bu) + (act === 'bu-next' ? 1 : -1); if (order[i]) openBuild(order[i]); return; }
     if (E.ro) return;
     const hit = findItem(E.bu); if (!hit) return;
-    if (act === 'add-line') { const k = b.dataset.k, l = blankLine(k); hit.it.build[k].push(l); renderBuild(); changed(); const f = $('es-bu').querySelector(`tr[data-lid="${l.id}"] input`); f?.focus(); return; }
+    if (act === 'add-line' || act === 'add-own') { const k = act === 'add-own' ? 'manpower' : b.dataset.k, l = blankLine(k, act === 'add-own'); hit.it.build[k].push(l); renderBuild(); changed(); const f = $('es-bu').querySelector(`tr[data-lid="${l.id}"] input:not(:disabled)`); f?.focus(); return; }
+    if (act === 'show-k') { const k = b.dataset.k; E.buShow = E.buShow || {}; E.buShow[hit.it.id + k] = true; if (!(hit.it.build[k] || []).length) hit.it.build[k] = [blankLine(k)]; renderBuild(); changed(); $('es-bu').querySelector(`.es-grpbox[data-k="${k}"] tbody input:not(:disabled)`)?.focus(); return; }
+    if (act === 'bu-per') {   // V271.7: costs per 1 unit (× qty) or for the whole item; the lines' quantities are converted, the total stays
+      const toUnit = b.dataset.v === 'unit', q = num(hit.it.qty); if (!!hit.it.perUnit === toUnit || !(q > 0)) return;
+      ['material', 'subcontract', 'other'].forEach(k => (hit.it.build[k] || []).forEach(l => { if (l.quick) return; l.qty = r2(toUnit ? num(l.qty) / q : num(l.qty) * q); }));
+      if (toUnit) hit.it.perUnit = true; else delete hit.it.perUnit;
+      renderBuild(); changed(); toast(toUnit ? `Material, subcontract and equipment are now per 1 ${hit.it.unit || 'unit'} — quantities divided by ${fq(q)}.` : 'Costs are now for the whole item — quantities multiplied back.', 'info'); return;
+    }
+    if (act === 'bu-unlock') { delete hit.it.sellLocked; delete hit.it.sellBy; delete hit.it.sellAmt; delete hit.it.sellRate; renderBuSide(); changed(); return; }
     const tr = b.closest('tr[data-lid]'), k = b.closest('.es-grpbox')?.dataset.k;
     if (act === 'del-line' && tr && k) { hit.it.build[k] = hit.it.build[k].filter(l => l.id !== tr.dataset.lid); renderBuild(); changed(); return; }
-    if (act === 'use-paid' && tr) { const l = hit.it.build.material.find(y => y.id === tr.dataset.lid); if (l) { l.rate = num(b.dataset.v); const ri = tr.querySelector('[data-f="rate"]'); if (ri) ri.value = fq(l.rate); refreshBu(tr, 'material'); } }
+    if (act === 'use-rate' && tr) { const l = hit.it.build.material.find(y => y.id === tr.dataset.lid); if (l) { l.rate = num(b.dataset.v); delete l.quick; const ri = tr.querySelector('[data-f="rate"]'); if (ri) ri.value = fq(l.rate); refreshBu(tr, 'material'); } }
+    if (act === 'toggle-own' && tr) { const l = hit.it.build.manpower.find(y => y.id === tr.dataset.lid); if (l) { if (l.own) delete l.own; else { l.own = true; l.supplierId = ''; l.supplierName = ''; } const lr = labourRate(l.trade, !!l.own); if (lr > 0) l.rate = lr; renderBuild(); changed(); } }
   }
   function onBuKey(e) {
     if (dd && e.target === dd.input && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key)) { ddKey(e); return; }
@@ -827,14 +1097,113 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     const f = num(src.qty) > 0 && num(hit.it.qty) > 0 ? num(hit.it.qty) / num(src.qty) : 1;
     const go = () => {
       const b = clone(src.build || {});
-      KINDS.forEach(({ k }) => { b[k] = (b[k] || []).map(l => { const n = { ...l, id: newId('el') }; if (f !== 1) { if (k === 'manpower') n.days = r2(num(l.days) * f); else n.qty = r2(num(l.qty) * f); } return n; }); });
+      // V271.7: a per-unit source keeps its per-unit lines as they are (they follow this item's quantity by themselves)
+      KINDS.forEach(({ k }) => { b[k] = (b[k] || []).map(l => { const n = { ...l, id: newId('el') }; if (f !== 1 && !l.quick) { if (k === 'manpower') n.days = r2(num(l.days) * f); else if (!src.perUnit) n.qty = r2(num(l.qty) * f); } return n; }); });
       hit.it.build = { ...blankBuild(), ...b };
+      if (src.perUnit) hit.it.perUnit = true; else delete hit.it.perUnit;
       renderBuild(); changed(); toast('Build-up copied' + (f !== 1 ? ' and scaled ×' + fq(r2(f)) + ' to this item\'s quantity' : '') + ' — check the figures.', 'success');
     };
     const has = KINDS.some(({ k }) => (hit.it.build[k] || []).length);
     const dlg = window.bizcoreShowSafeDialog;
     if (has && typeof dlg === 'function') return dlg({ icon: 'ti-copy', title: 'Replace This Build-up?', message: 'The cost lines of this item will be replaced by the copied ones.', buttons: [{ text: 'Cancel', cls: 'secondary' }, { text: 'Replace', cls: 'primary', action: go }] });
     go();
+  }
+
+  /* ══ V271.7 — Copy from a previous estimate (sections / items with their build-ups, scope, category, typed prices) ══ */
+  let CP = null;
+  function closeCopy() { if (CP) { CP.ov.remove(); CP = null; } }
+  function openCopy() {
+    if (!E || E.ro) return;
+    closeCopy(); closeMenu(); closeDD();
+    const ov = document.createElement('div'); ov.className = 'es-cpov';
+    ov.innerHTML = `<div class="es-cp" role="dialog" aria-modal="true" aria-label="Copy from a previous estimate">
+<div class="es-cphd"><div><b>Copy from a Previous Estimate</b><small>Adds a copy to this estimate — the other estimate is not changed.</small></div><button type="button" class="es-cpx" data-cp="x" aria-label="Close">✕</button></div>
+<div class="es-cpsr"><input class="es-cpq" placeholder="Search by customer, RFQ number, reference or site…" aria-label="Search estimates"><small>This customer's estimates first</small></div>
+<div class="es-cpcols"><div class="es-cplist"></div><div class="es-cppv"></div></div>
+<div class="es-cpft"><span class="es-cpl">Insert as</span><label><input type="radio" name="es-cpto" value="new" checked> New sections at the end</label><label><input type="radio" name="es-cpto" value="sel"> Into the selected item's section</label><span class="es-sp" style="flex:1"></span><button type="button" class="btn btn-secondary" data-cp="x">Cancel</button><button type="button" class="btn btn-primary" data-cp="go" disabled>Copy</button></div></div>`;
+    document.body.appendChild(ov);
+    CP = { ov, q: '', sel: null, doc: null, picked: new Set(), opt: { build: true, scope: true, typed: false } };
+    ov.addEventListener('mousedown', e => { if (e.target === ov) closeCopy(); });
+    ov.addEventListener('input', e => { if (e.target.classList.contains('es-cpq')) { CP.q = e.target.value; paintCopyList(); } });
+    ov.addEventListener('change', e => {
+      const t = e.target;
+      if (t.dataset.opt) { CP.opt[t.dataset.opt] = t.checked; return; }
+      if (t.dataset.pi != null) { t.checked ? CP.picked.add(t.dataset.pi) : CP.picked.delete(t.dataset.pi); paintCopyPv(); return; }
+      if (t.dataset.ps != null) { const si = Number(t.dataset.ps); (CP.doc.sections[si].items || []).forEach((_, ii) => { const k = si + ':' + ii; t.checked ? CP.picked.add(k) : CP.picked.delete(k); }); paintCopyPv(); }
+    });
+    ov.addEventListener('click', async e => {
+      const b = e.target.closest('[data-cp]'); if (!b) return;
+      const a = b.dataset.cp;
+      if (a === 'x') return closeCopy();
+      if (a === 'go') return doCopy();
+      if (a.startsWith('v:')) {
+        const [rid, n] = a.slice(2).split('#'), r = RFQS().find(x => String(x.id) === rid); if (!r) return;
+        CP.sel = a.slice(2); CP.doc = null; CP.picked = new Set(); paintCopyList(); paintCopyPv();
+        const d = await loadVersion(r, Number(n)); if (!CP || CP.sel !== a.slice(2)) return;
+        CP.doc = d ? normalize(d) : null; CP.rfq = r; CP.n = Number(n); paintCopyPv();
+      }
+    });
+    paintCopyList(); paintCopyPv();
+    setTimeout(() => ov.querySelector('.es-cpq')?.focus(), 30);
+  }
+  function copySources() {
+    const cur = rfqOf(), q = low(CP.q), out = [];
+    RFQS().filter(r => r.requestType === 'contracting' && idxOf(r).length).forEach(r => idxOf(r).forEach(e => {
+      if (String(r.id) === String(E.rfqId) && Number(e.version) === Number(E.version)) return;
+      if (q && ![r.rfqNo, r.company, r.ref, r.site, r.project].some(v => low(v).includes(q))) return;
+      out.push({ r, e, same: !!cur && ((cur.custId && r.custId === cur.custId) || low(r.company) === low(cur.company)) });
+    }));
+    return out.sort((a, b) => (b.same - a.same) || String(b.e.updated || '').localeCompare(String(a.e.updated || ''))).slice(0, 60);
+  }
+  function paintCopyList() {
+    if (!CP) return;
+    const list = copySources();
+    CP.ov.querySelector('.es-cplist').innerHTML = list.length ? list.map(({ r, e }) => { const k = r.id + '#' + e.version; return `<button type="button" class="es-cpit${CP.sel === k ? ' on' : ''}" data-cp="v:${esc(k)}"><b>${esc(r.rfqNo || '')} · V${esc(e.version)} · ${esc(r.company || '')}</b><span>${esc(e.updated ? dmy(String(e.updated).slice(0, 10)) : '')} · ${esc(e.status || 'Saved')} · ${e.itemCount != null ? esc(e.itemCount) + ' item' + (Number(e.itemCount) === 1 ? '' : 's') + ' · ' : ''}quoted ${fmt(e.offerPrice != null ? e.offerPrice : e.sellTotal)}</span></button>`; }).join('')
+      : '<div class="es-empty" style="margin:12px">No other estimate found.</div>';
+  }
+  function paintCopyPv() {
+    if (!CP) return;
+    const pv = CP.ov.querySelector('.es-cppv'), go = CP.ov.querySelector('[data-cp="go"]');
+    if (!CP.sel) { pv.innerHTML = '<div class="es-empty" style="margin:12px">Choose an estimate to see its sections and items.</div>'; go.disabled = true; return; }
+    if (!CP.doc) { pv.innerHTML = '<div class="es-empty" style="margin:12px">Loading…</div>'; go.disabled = true; return; }
+    const c = calc(CP.doc), byId = new Map(c.flat.map(x => [x.id, x]));
+    pv.innerHTML = `<div class="es-cph">${esc(CP.rfq.rfqNo || '')} V${CP.n} — tick what to copy</div>`
+      + CP.doc.sections.map((s, si) => { const all = (s.items || []).length && (s.items || []).every((_, ii) => CP.picked.has(si + ':' + ii));
+        return `<label class="es-cprow es-cpsec"><input type="checkbox" data-ps="${si}"${all ? ' checked' : ''}><span>${secCode(si)}</span><span>${esc(s.title || 'Untitled section')}${s.workCat ? ' · ' + esc(s.workCat) : ''}</span><span></span><span class="es-r">Cost</span></label>`
+          + (s.items || []).map((it, ii) => { const x = byId.get(it.id); return `<label class="es-cprow"><input type="checkbox" data-pi="${si}:${ii}"${CP.picked.has(si + ':' + ii) ? ' checked' : ''}><span>${esc(x.code)}</span><span>${esc(String(it.desc || '').split('\n')[0])}${it.scopeHtml ? ' <i class="es-tag t-src">scope</i>' : ''}${it.sellLocked ? ' 🔒' : ''}</span><span>${fq(num(it.qty))} ${esc(it.unit || '')}</span><span class="es-r">${x.cost.total > 0 ? fmt(x.cost.total) : '—'}</span></label>`; }).join(''); }).join('')
+      + `<div class="es-cpopts"><label><input type="checkbox" data-opt="build"${CP.opt.build ? ' checked' : ''}> Copy the cost build-ups (material, manpower, subcontract, other)</label><label><input type="checkbox" data-opt="scope"${CP.opt.scope ? ' checked' : ''}> Copy each item's scope of work and category</label><label><input type="checkbox" data-opt="typed"${CP.opt.typed ? ' checked' : ''}> Copy typed selling prices (🔒) — off: the items follow this estimate's markup</label></div>
+<div class="es-cpnote">Rates are copied as they were then — check material and labour rates before saving. Quantities can be changed after copying.</div>`;
+    const n = CP.picked.size; go.disabled = !n; go.textContent = n ? `Copy ${n} item${n === 1 ? '' : 's'}` : 'Copy';
+  }
+  function doCopy() {
+    if (!CP || !CP.doc || !CP.picked.size) return;
+    const o = CP.opt, src = CP.doc, label = (CP.rfq.rfqNo || '') + ' V' + CP.n;
+    const mode = (CP.ov.querySelector('input[name="es-cpto"]:checked') || {}).value || 'new';
+    const cp = it => {
+      const n = clone(it); n.id = newId('ei'); delete n.rfqLineId;
+      if (o.build) KINDS.forEach(({ k }) => { n.build[k] = (n.build[k] || []).map(l => ({ ...l, id: newId('el') })); }); else { n.build = blankBuild(); delete n.perUnit; }
+      if (!o.scope) { delete n.scopeHtml; delete n.scopeSrc; delete n.workCat; }
+      if (!o.typed) { delete n.sellLocked; delete n.sellBy; delete n.sellAmt; delete n.sellRate; }
+      return n;
+    };
+    let count = 0;
+    after(() => {
+      if (mode === 'sel') {
+        const target = (E.sel && findItem(E.sel)?.s) || E.est.sections[E.est.sections.length - 1];
+        src.sections.forEach((s, si) => (s.items || []).forEach((it, ii) => { if (CP.picked.has(si + ':' + ii)) { const n = cp(it); if (o.scope && !n.workCat && s.workCat && s.workCat !== target.workCat) n.workCat = s.workCat; target.items.push(n); count++; } }));
+      } else {
+        src.sections.forEach((s, si) => {
+          const items = (s.items || []).filter((_, ii) => CP.picked.has(si + ':' + ii)).map(cp); if (!items.length) return;
+          E.est.sections.push({ id: newId('es'), title: s.title || '', ...(o.scope && s.workCat ? { workCat: s.workCat } : {}), items }); count += items.length;
+        });
+        // an empty starting item (nothing typed) is replaced by the copy
+        const first = E.est.sections[0];
+        const blank = it => !String(it.desc || '').trim() && !KINDS.some(({ k }) => (it.build[k] || []).length) && !it.scopeHtml && !it.sellLocked;
+        if (E.est.sections.length > 1 && first && ['', 'scope of work'].includes(low(first.title)) && (first.items || []).length === 1 && blank(first.items[0])) E.est.sections.shift();
+      }
+    });
+    closeCopy();
+    toast(`${count} item${count === 1 ? '' : 's'} copied from ${label}${o.build ? ' — check the rates before saving' : ''}.`, 'success', 'Copied');
   }
 
   /* ══ save ══ */
@@ -860,7 +1229,9 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     Object.assign(doc, { rfqId: String(r.id), version: n, status: 'Saved', created: E.est.created || now, updated: now, savedBy: who(), summary: summaryOf(c) });
     doc.roundTo = num(doc.roundTo) > 0 ? r2(num(doc.roundTo)) : 0;
     ['overheadPct', 'contingencyPct', 'markupPct'].forEach(k => { doc[k] = r2(num(doc[k])); });
-    doc.sections.forEach(s => s.items.forEach(it => { it.qty = num(it.qty); KINDS.forEach(({ k }) => { it.build[k] = (it.build[k] || []).filter(l => lineAmt(k, l) !== 0 || String(l.desc || l.trade || '').trim()).map(l => { const o = { ...l }; ['qty', 'men', 'days', 'rate'].forEach(f => { if (f in o) o[f] = num(o[f]); }); return o; }); }); }));
+    doc.sections.forEach(s => s.items.forEach(it => { it.qty = num(it.qty); KINDS.forEach(({ k }) => { it.build[k] = (it.build[k] || []).filter(l => lineAmt(k, l) !== 0 || (!l.quick && String(l.desc || l.trade || '').trim())).map(l => { const o = { ...l }; ['qty', 'men', 'days', 'rate', 'waste'].forEach(f => { if (f in o) o[f] = num(o[f]); }); return o; }); });
+      if (it.sellLocked) { if (it.sellBy === 'rate') it.sellRate = r2(num(it.sellRate)); else it.sellAmt = r2(num(it.sellAmt)); }   // V271.7
+      if (!plain(it.scopeHtml)) { delete it.scopeHtml; delete it.scopeSrc; } if (!it.perUnit) delete it.perUnit; }));
     const before = { estimateIndex: clone(r.estimateIndex), currentEstimateVersion: r.currentEstimateVersion, status: r.status };
     const entry = { version: n, status: 'Saved', created: doc.created, updated: now, savedBy: doc.savedBy, previousVersion: doc.previousVersion || null,
       itemCount: c.itemCount, directCost: c.direct, totalCost: c.totalCost, sellTotal: c.sell, offerPrice: c.offer, marginPct: r2(c.marginPct) };
@@ -902,11 +1273,11 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     if (dirty()) { if (!(await save())) return; }
     if (E.status !== 'Saved') { toast('Only a saved estimate can be quoted.', 'error'); return; }
     const c = calc(E.est);
-    if (c.uncosted) { toast(`${c.uncosted} item${c.uncosted === 1 ? ' has' : 's have'} no cost — every item needs a cost before the quotation.`, 'error'); return; }
+    if (c.uncosted) { toast(`${c.uncosted} item${c.uncosted === 1 ? ' has' : 's have'} no cost — every item needs a cost or a typed selling price before the quotation.`, 'error'); return; }
     if (!(c.offer > 0)) { toast('The quoted price is 0.', 'error'); return; }
     const r = rfqOf(); if (!r) return;
     const est = E.est, n = Number(E.version);
-    const shares = distribute(c.offer, c.flat.map(x => x.cost.total));
+    const shares = c.flat.map(x => x.offer);   // V271.7: typed prices exactly; the rounding sits on the calculated items
     const f = 1 + num(est.overheadPct) / 100 + num(est.contingencyPct) / 100;
     const lines = [];
     let k = 0;
@@ -916,6 +1287,14 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
         const share = shares[k], x = c.flat[k]; k++;
         const qty = num(it.qty) || 1, up = ceil2(share / qty), resid = r2(qty * up - share);
         const line = { rowKind: 'scope', freeScope: true, desc: String(it.desc || '').trim(), qty, uom: it.unit || 'LS', up, pricingSell: up, pricingBuy: r2(x.cost.total * f / qty), estItemId: it.id };
+        // V271.7: the item's scope and work category go to the quotation line (copied once — the estimate keeps its own)
+        if (plain(it.scopeHtml)) {
+          const dl = String(it.desc || '').trim().split('\n'), restTxt = dl.slice(1).join('\n').trim();
+          line.desc = dl[0].trim();   // the title stays one line; the rest of a long description goes on top of the scope
+          line.scopeHtml = (restTxt && R() ? R().plainToHtml(restTxt) + '<div><br></div>' : '') + (R() ? R().clean(it.scopeHtml) : it.scopeHtml);
+          line.scopeSrc = 'est:' + (r.rfqNo || '') + '-V' + n;
+        }
+        const wc = itemCat(it, s); if (wc) line.workCat = wc;
         if (resid > 0) { line.discBy = 'amt'; line.discAmt = resid; }
         lines.push(line);
       });
@@ -924,7 +1303,9 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
       style: est.quoteStyle === 'sections' ? 'sections' : 'lumpsum', showQty: true, offer: c.offer, itemCount: c.itemCount,
       budget: { material: c.by.material, manpower: c.by.manpower, subcontract: c.by.subcontract, other: c.by.other, overhead: c.overhead, contingency: c.contingency, totalCost: c.totalCost },
       plannedProfit: c.profit, site: est.site || '', duration: est.duration || '',
-      sections: c.secs.map(s => ({ code: s.code, title: s.title || '', amount: s.offer })) };
+      sections: c.secs.map(s => ({ code: s.code, title: s.title || '', amount: s.offer })),
+      workCategory: (est.sections.find(s => s.workCat) || {}).workCat || (allItems().find(it => it.workCat) || {}).workCat || '',
+      rfqScopeUsed: allItems().some(it => it.scopeSrc === 'rfq' && plain(it.scopeHtml)) };
     closeWin(); E = null;
     fillQuotation(r, ctx, lines, est);
   }
@@ -944,6 +1325,8 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     try { currentQuoteVatRate = Number(activeTaxSettings().rate) || 0; currentQuoteNoteStyle = ''; currentQuoteType = 'contracting'; } catch (_) {}
     setQuoteType('contracting', { locked: true });
     $('items-tbody').innerHTML = '';
+    window._pendingEstimate = ctx;   // V271.7: set before the lines, so the scope lines see the estimate's default category
+    if ($('f-wcat')) $('f-wcat').value = ctx.workCategory || '';
     lines.forEach(l => addItemRow(l));
     setQuotationPricingContext({ rfqNo: r.rfqNo, pricingRef: ctx.ref, cost: ctx.budget.totalCost, sell: ctx.offer, version: ctx.version });
     calcTotals();
@@ -1030,6 +1413,7 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     if (document.querySelector('.safe-exit-dialog,#app-confirm-overlay,.confirm-overlay')) return;
     if (e.key === 'Escape') {
       if (dd) { e.preventDefault(); e.stopImmediatePropagation(); closeDD(); return; }
+      if (CP) { e.preventDefault(); e.stopImmediatePropagation(); closeCopy(); return; }
       if (menu) { e.preventDefault(); e.stopImmediatePropagation(); closeMenu(); return; }
       e.preventDefault(); e.stopImmediatePropagation();
       if (E.bu) closeBuild(); else requestClose(false);
@@ -1057,9 +1441,9 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
 ${pct('overheadPct', 'Overheads %', 'of the direct cost')}${pct('contingencyPct', 'Contingency %', 'of the direct cost')}${pct('markupPct', 'Markup %', 'on the total cost')}${pct('roundStep', 'Lump sum rounding step', 'offered as "Use …" (rounded down), e.g. 100')}</section>
 <section class="cs-card"><h3>Job Budget Warnings</h3><p>Used by the Job view (estimate vs actual) in a later update.</p>
 ${pct('warnAmberPct', 'Amber at % of budget', '')}${pct('warnRedPct', 'Red over % of budget', '')}</section>
-<section class="cs-card"><h3>Labour Rates (Hired Manpower)</h3><p>The usual day rate per trade; picked up in the Cost Build-up when the rate is empty.</p>
-<table><thead><tr><th>Trade</th><th style="width:130px;text-align:right">Rate / Day</th><th style="width:34px"></th></tr></thead><tbody>
-${CS.labourRates.map((l, i) => `<tr><td><input data-lr="${i}" data-f="trade" value="${esc(l.trade)}" maxlength="60"${rdis}></td><td><input class="r" data-lr="${i}" data-f="rate" value="${num(l.rate) ? esc(fq(l.rate)) : ''}" placeholder="0.00" inputmode="decimal"${rdis}></td><td>${rdis ? '' : `<button type="button" class="cs-x" data-del-lr="${i}" title="Remove">✕</button>`}</td></tr>`).join('')}
+<section class="cs-card"><h3>Labour Rates</h3><p>The usual day rate per trade — hired (agency) and own staff (internal cost); picked up in the Cost Build-up when the rate is empty.</p>
+<table><thead><tr><th>Trade</th><th style="width:120px;text-align:right">Hired / Day</th><th style="width:120px;text-align:right">Own staff / Day</th><th style="width:34px"></th></tr></thead><tbody>
+${CS.labourRates.map((l, i) => `<tr><td><input data-lr="${i}" data-f="trade" value="${esc(l.trade)}" maxlength="60"${rdis}></td><td><input class="r" data-lr="${i}" data-f="rate" value="${num(l.rate) ? esc(fq(l.rate)) : ''}" placeholder="0.00" inputmode="decimal"${rdis}></td><td><input class="r" data-lr="${i}" data-f="ownRate" value="${num(l.ownRate) ? esc(fq(l.ownRate)) : ''}" placeholder="0.00" inputmode="decimal" aria-label="Own staff rate"${rdis}></td><td>${rdis ? '' : `<button type="button" class="cs-x" data-del-lr="${i}" title="Remove">✕</button>`}</td></tr>`).join('')}
 </tbody></table>${rdis ? '' : '<button type="button" class="cs-add" data-add="lr">+ Add Trade</button>'}</section>
 <section class="cs-card"><h3>Expense Categories</h3><p>For job expenses (petty cash, site costs) in a later update — each one counts as a cost type.</p>
 <table><thead><tr><th>Category</th><th style="width:170px">Cost Type</th><th style="width:34px"></th></tr></thead><tbody>
@@ -1088,7 +1472,7 @@ ${CS.expenseCategories.map((x, i) => `<tr><td><input data-ec="${i}" data-f="name
   function csClean() {
     const o = clone(CS);
     ['overheadPct', 'contingencyPct', 'markupPct', 'roundStep', 'warnAmberPct', 'warnRedPct'].forEach(k => { o[k] = r2(num(o[k])); });
-    o.labourRates = o.labourRates.map(l => ({ id: l.id || newId('lr'), trade: String(l.trade || '').trim(), rate: r2(num(l.rate)), unit: 'Day' })).filter(l => l.trade);
+    o.labourRates = o.labourRates.map(l => ({ id: l.id || newId('lr'), trade: String(l.trade || '').trim(), rate: r2(num(l.rate)), ...(num(l.ownRate) > 0 ? { ownRate: r2(num(l.ownRate)) } : {}), unit: 'Day' })).filter(l => l.trade);
     o.expenseCategories = o.expenseCategories.map(x => ({ id: x.id || newId('ec'), name: String(x.name || '').trim(), costType: KIND[x.costType] ? x.costType : 'other' })).filter(x => x.name);
     return o;
   }

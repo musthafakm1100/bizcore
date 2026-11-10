@@ -45,10 +45,10 @@
 <link href="css/pricing.css?v=270.22" rel="stylesheet"/>
 <link href="css/quotation.css?v=270.22" rel="stylesheet"/>
 <link href="css/quote-rich.css?v=270.61" rel="stylesheet"/>
-<link href="css/quote-scope.css?v=271.6" rel="stylesheet"/>
+<link href="css/quote-scope.css?v=271.7" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <link href="css/users.css?v=270.43" rel="stylesheet"/>
-<link href="css/estimate.css?v=271.4-sorting" rel="stylesheet"/>
+<link href="css/estimate.css?v=271.7" rel="stylesheet"/>
 <link href="css/sidebar-compact.css?v=271.5.9" rel="stylesheet"/>
 <link href="css/desktop-register-clean.css?v=271.5.13" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
@@ -4613,12 +4613,12 @@ onAuthStateChanged(auth, async user => {
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
         const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=271.6';
         // V271.6: scope of work, work categories, text blocks, annexure print, job scope — after the Quotation Entry screen
-        qu.onload = () => { const qs = document.createElement('script'); qs.id = 'bizcore-quote-scope-script'; qs.src = 'js/quote-scope.js?v=271.6'; document.body.appendChild(qs); };
+        qu.onload = () => { const qs = document.createElement('script'); qs.id = 'bizcore-quote-scope-script'; qs.src = 'js/quote-scope.js?v=271.7'; document.body.appendChild(qs); };
         document.body.appendChild(qu);
         // V270.2.6: the RFQ entry screen (request type, product / service lines, requirements)
         const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=271.6'; document.body.appendChild(rq);
         // V271.1: Contracting Estimation (estimate window, Cost Build-up, Contracting Settings)
-        const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.6.1'; document.body.appendChild(es);
+        const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.7'; document.body.appendChild(es);
         // V271.2: Contracting Jobs (Create Job, Jobs register, Job view)
         const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.6'; document.body.appendChild(jb);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)

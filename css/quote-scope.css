@@ -18,7 +18,8 @@
    category · source tags · Expand on one line under the figures */
 #quote-modal .qt-lmeta{position:relative;z-index:1;display:flex;align-items:center;column-gap:8px;row-gap:3px;flex-wrap:wrap;min-height:24px;margin:3px 0 4px;padding:0 4px;width:var(--qt-sbw,100%)}
 #quote-modal .qt-lmeta .qt-lk{margin:0!important;order:0;flex:0 0 100%}
-#quote-modal .qt-lmeta .qs-exp{margin-left:auto}
+#quote-modal .qt-lmeta .qs-exp{margin-left:4px}
+#quote-modal .qt-lmeta .qs-sp{display:none}   /* V271.7: Expand stays with the chips — the right side of the line has the cost and gross hints */
 #quote-modal .qt-lmeta .qs-sp{flex:1}
 #quote-modal .qt-sbw{position:relative;z-index:1;width:var(--qt-sbw,100%);max-width:none}
 #quote-modal .qt-table .qt-sbody{min-height:34px!important;background:#fff!important;border-color:#e6ebf1!important}
@@ -209,3 +210,7 @@
 .bc-scb{font-weight:400;margin-top:2px}
 .bc-scp{color:#64748b;font-size:.92em}
 .bc-annref{font-size:.9em;font-weight:600;color:#1d5f9f;margin-top:2px}
+
+/* V271.7: a line that follows the default category — small and quiet */
+#quote-modal .qt-lmeta .qt-wcat.is-def{border-color:transparent;background:transparent;color:#64748b;font-weight:500;padding:0 4px}
+#quote-modal .qt-lmeta .qt-wcat.is-def:hover{border-color:#d5dde7;background:#fff;color:#173a5e}
