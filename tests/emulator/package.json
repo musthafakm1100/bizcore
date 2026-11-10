@@ -5,7 +5,7 @@
   "description": "Firebase Emulator tests for BizCore V260 security rules, transactions and migration. Runs on your PC (needs Java 11+ and internet for the first emulator download).",
   "scripts": {
     "pretest": "npm --prefix ../../tools/dn-migration install --no-audit --no-fund",
-    "test": "firebase emulators:exec --only firestore --project demo-bizcore \"node --test --test-concurrency=1 rules-and-service.test.mjs invoices.test.mjs numbering.test.mjs migration-admin.test.mjs receipts.test.mjs accounts.test.mjs ledger.test.mjs purchases.test.mjs data-safety.test.mjs\""
+    "test": "firebase emulators:exec --only firestore --project demo-bizcore \"node --test --test-concurrency=1 rules-and-service.test.mjs invoices.test.mjs numbering.test.mjs migration-admin.test.mjs receipts.test.mjs accounts.test.mjs ledger.test.mjs purchases.test.mjs data-safety.test.mjs pricing-versions.test.mjs estimates.test.mjs job-costs.test.mjs running-totals.test.mjs users.test.mjs roles.test.mjs rights.test.mjs masters.test.mjs scope-v2716.test.mjs\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "3.0.4",

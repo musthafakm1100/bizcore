@@ -9,7 +9,7 @@
 <script src="js/doc-pages.js?v=270.59"></script>
 <script src="js/master-ui.js?v=270.56"></script>
 <script src="js/item-link.js?v=270.59"></script>
-<script src="js/quote-rich.js?v=270.61"></script>
+<script src="js/quote-rich.js?v=271.6"></script>
 <script src="js/quote-cost.js?v=270.59"></script>
 <title>BizCore — Downtown Trading Est.</title>
 <meta content="#ffffff" name="theme-color"/>
@@ -45,6 +45,7 @@
 <link href="css/pricing.css?v=270.22" rel="stylesheet"/>
 <link href="css/quotation.css?v=270.22" rel="stylesheet"/>
 <link href="css/quote-rich.css?v=270.61" rel="stylesheet"/>
+<link href="css/quote-scope.css?v=271.6" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <link href="css/users.css?v=270.43" rel="stylesheet"/>
 <link href="css/estimate.css?v=271.4-sorting" rel="stylesheet"/>
@@ -866,7 +867,7 @@ document.addEventListener('error', function(e) {
 <div class="page" id="page-warehouses"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-building-warehouse"></i></div><h2>Warehouses</h2><p>Maintain warehouse locations and prepare the system for location-based stock tracking.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
 <div class="page" id="page-categories"><div class="module-placeholder"><div class="module-placeholder-inner"><div class="module-placeholder-icon"><i class="ti ti-category"></i></div><h2>Product Categories</h2><p>Organize products into categories for faster searching, reporting, and inventory control.</p><span class="module-tag"><i class="ti ti-tools"></i>Module foundation ready</span></div></div></div>
 <!-- SETUP PAGE -->
-<div class="page" id="page-masters"><div class="setup-shell masters-shell"><aside aria-label="Masters navigation" class="setup-nav masters-nav" id="masters-nav"><div class="setup-nav-head"><div class="setup-nav-title"><i class="ti ti-database"></i><span class="masters-nav-heading-text">Master Data</span></div><button type="button" class="masters-nav-toggle" id="masters-nav-toggle" aria-controls="masters-nav" aria-expanded="true" aria-label="Collapse Master Data navigation" title="Collapse Master Data navigation"><i class="ti ti-chevron-left" aria-hidden="true"></i></button><div class="setup-nav-subtitle">Operational business records and reusable data</div></div><div class="setup-nav-group"><div class="setup-nav-group-title">Business Data</div><button class="setup-tab masters-tab" id="mtab-customers" onclick="switchMastersTab('customers')"><i class="ti ti-users"></i><span class="tab-copy"><span class="tab-title">Customers</span></span></button><button class="setup-tab masters-tab" id="mtab-suppliers" onclick="switchMastersTab('suppliers')"><i class="ti ti-building-store"></i><span class="tab-copy"><span class="tab-title">Suppliers</span></span></button><button class="setup-tab masters-tab" id="mtab-products" onclick="switchMastersTab('products')"><i class="ti ti-package"></i><span class="tab-copy"><span class="tab-title">Products</span></span></button><button class="setup-tab masters-tab" id="mtab-employees" onclick="switchMastersTab('employees')"><i class="ti ti-users-group"></i><span class="tab-copy"><span class="tab-title">Employees</span></span></button><button class="setup-tab masters-tab" id="mtab-units" onclick="switchMastersTab('units')"><i class="ti ti-ruler-measure"></i><span class="tab-copy"><span class="tab-title">Units of Measure</span></span></button><button class="setup-tab masters-tab" id="mtab-categories" onclick="switchMastersTab('categories')"><i class="ti ti-category"></i><span class="tab-copy"><span class="tab-title">Categories</span></span></button></div></aside><div class="setup-workspace masters-workspace"><div class="masters-tab-content" id="masters-tab-customers">
+<div class="page" id="page-masters"><div class="setup-shell masters-shell"><aside aria-label="Masters navigation" class="setup-nav masters-nav" id="masters-nav"><div class="setup-nav-head"><div class="setup-nav-title"><i class="ti ti-database"></i><span class="masters-nav-heading-text">Master Data</span></div><button type="button" class="masters-nav-toggle" id="masters-nav-toggle" aria-controls="masters-nav" aria-expanded="true" aria-label="Collapse Master Data navigation" title="Collapse Master Data navigation"><i class="ti ti-chevron-left" aria-hidden="true"></i></button><div class="setup-nav-subtitle">Operational business records and reusable data</div></div><div class="setup-nav-group"><div class="setup-nav-group-title">Business Data</div><button class="setup-tab masters-tab" id="mtab-customers" onclick="switchMastersTab('customers')"><i class="ti ti-users"></i><span class="tab-copy"><span class="tab-title">Customers</span></span></button><button class="setup-tab masters-tab" id="mtab-suppliers" onclick="switchMastersTab('suppliers')"><i class="ti ti-building-store"></i><span class="tab-copy"><span class="tab-title">Suppliers</span></span></button><button class="setup-tab masters-tab" id="mtab-products" onclick="switchMastersTab('products')"><i class="ti ti-package"></i><span class="tab-copy"><span class="tab-title">Products</span></span></button><button class="setup-tab masters-tab" id="mtab-services" onclick="switchMastersTab('services')"><i class="ti ti-tool"></i><span class="tab-copy"><span class="tab-title">Services</span></span></button><button class="setup-tab masters-tab" id="mtab-employees" onclick="switchMastersTab('employees')"><i class="ti ti-users-group"></i><span class="tab-copy"><span class="tab-title">Employees</span></span></button><button class="setup-tab masters-tab" id="mtab-units" onclick="switchMastersTab('units')"><i class="ti ti-ruler-measure"></i><span class="tab-copy"><span class="tab-title">Units of Measure</span></span></button><button class="setup-tab masters-tab" id="mtab-categories" onclick="switchMastersTab('categories')"><i class="ti ti-category"></i><span class="tab-copy"><span class="tab-title">Categories</span></span></button></div><div class="setup-nav-group" id="masters-grp-proposal"><div class="setup-nav-group-title">Proposal Text</div><button class="setup-tab masters-tab" id="mtab-textblocks" onclick="switchMastersTab('textblocks')"><i class="ti ti-file-text"></i><span class="tab-copy"><span class="tab-title">Text Blocks</span></span></button></div></aside><div class="setup-workspace masters-workspace"><div class="masters-tab-content" id="masters-tab-customers">
 <div class="card bc-master-customer-card">
 <div class="card-header page-command-header bc-master-directory-heading"><h3>Customer directory</h3></div>
 <div class="bc-master-customer-toolbar page-control-bar" role="toolbar" aria-label="Customer directory tools">
@@ -915,7 +916,7 @@ document.addEventListener('error', function(e) {
 </div><div class="masters-tab-content bc-master-register-standard" data-bc-register-standard="1" id="masters-tab-products">
 <div class="card">
 <div class="card-header page-command-header bc-master-directory-heading">
-<h3><i class="ti ti-package" style="margin-right:6px"></i>Product database</h3>
+<h3 id="prod-reg-title"><i class="ti ti-package" style="margin-right:6px"></i>Product database</h3>
 
 </div>
 <div class="card-body bc-master-register-toolbar" style="padding:14px 16px 0">
@@ -928,11 +929,11 @@ document.addEventListener('error', function(e) {
 <label class="bc-master-sort-label" for="master-sort-products">Sort by</label>
 <select aria-label="Sort products" class="bc-master-sort" id="master-sort-products" onchange="bcMasterSortChanged('products',renderProducts)"><option value="name-asc">Product name A–Z</option><option value="name-desc">Product name Z–A</option><option value="code-asc">Item code ↑</option><option value="code-desc">Item code ↓</option><option value="type-asc">Type A–Z</option><option value="category-asc">Category A–Z</option><option value="price-desc">Price high–low</option><option value="price-asc">Price low–high</option></select>
 
-<div class="bc-master-toolbar-actions"><button aria-label="Import Excel" class="btn btn-secondary btn-sm bc-master-icon-action" onclick="openImportModal('products')" title="Import products from Excel"><i class="ti ti-table-import"></i></button><button aria-label="Delete selected" class="btn btn-danger btn-sm master-bulk-delete bc-master-icon-action" disabled="" id="products-delete-selected" onclick="deleteSelectedMasterRecords('products')" title="Delete selected"><i class="ti ti-trash"></i><span id="products-selected-count"></span></button><button class="btn btn-primary btn-sm page-primary-command bc-master-create" onclick="openAddProduct()"><i class="ti ti-plus"></i>Add product</button></div></div>
+<div class="bc-master-toolbar-actions"><button aria-label="Import Excel" class="btn btn-secondary btn-sm bc-master-icon-action" onclick="openImportModal('products')" title="Import products from Excel"><i class="ti ti-table-import"></i></button><button aria-label="Delete selected" class="btn btn-danger btn-sm master-bulk-delete bc-master-icon-action" disabled="" id="products-delete-selected" onclick="deleteSelectedMasterRecords('products')" title="Delete selected"><i class="ti ti-trash"></i><span id="products-selected-count"></span></button><button class="btn btn-primary btn-sm page-primary-command bc-master-create" id="prod-add-btn" onclick="openAddProduct(window._prodView==='service'?'service':'goods')"><i class="ti ti-plus"></i><span id="prod-add-lbl">Add product</span></button></div></div>
 <div class="list-table-scroll bc-master-register-table-scroll">
 <table>
 <thead><tr>
-<th class="master-select-col"><input aria-label="Select all products on this page" class="master-row-check" id="products-select-all" onclick="event.stopPropagation();toggleMasterPageSelection('products',this.checked)" onkeydown="event.stopPropagation()" type="checkbox"/></th><th style="width:52px">Image</th><th class="sortable-register-th" data-sort-key="code" data-sort-screen="products" onclick="setRegisterSort('products','code',renderProducts)">Item code</th><th class="sortable-register-th" data-sort-key="type" data-sort-screen="products" onclick="setRegisterSort('products','type',renderProducts)">Type</th><th class="sortable-register-th" data-sort-key="name" data-sort-screen="products" onclick="setRegisterSort('products','name',renderProducts)">Product name</th><th class="sortable-register-th" data-sort-key="brand" data-sort-screen="products" onclick="setRegisterSort('products','brand',renderProducts)">Brand</th><th class="sortable-register-th" data-sort-key="model" data-sort-screen="products" onclick="setRegisterSort('products','model',renderProducts)">Model no.</th><th class="sortable-register-th" data-sort-key="category" data-sort-screen="products" onclick="setRegisterSort('products','category',renderProducts)">Category</th><th class="sortable-register-th" data-sort-key="uom" data-sort-screen="products" onclick="setRegisterSort('products','uom',renderProducts)">UOM</th><th class="sortable-register-th right" data-sort-key="price" data-sort-screen="products" onclick="setRegisterSort('products','price',renderProducts)">Default price</th><th class="sortable-register-th" data-sort-key="specs" data-sort-screen="products" onclick="setRegisterSort('products','specs',renderProducts)">Specs</th>
+<th class="master-select-col"><input aria-label="Select all products on this page" class="master-row-check" id="products-select-all" onclick="event.stopPropagation();toggleMasterPageSelection('products',this.checked)" onkeydown="event.stopPropagation()" type="checkbox"/></th><th style="width:52px">Image</th><th class="sortable-register-th" data-sort-key="code" data-sort-screen="products" onclick="setRegisterSort('products','code',renderProducts)">Item code</th><th class="sortable-register-th" data-sort-key="type" data-sort-screen="products" onclick="setRegisterSort('products','type',renderProducts)">Type</th><th class="sortable-register-th" data-sort-key="name" data-sort-screen="products" onclick="setRegisterSort('products','name',renderProducts)" id="prod-th-name">Product name</th><th class="sortable-register-th" data-sort-key="brand" data-sort-screen="products" onclick="setRegisterSort('products','brand',renderProducts)">Brand</th><th class="sortable-register-th" data-sort-key="model" data-sort-screen="products" onclick="setRegisterSort('products','model',renderProducts)">Model no.</th><th class="sortable-register-th" data-sort-key="category" data-sort-screen="products" onclick="setRegisterSort('products','category',renderProducts)">Category</th><th class="sortable-register-th" data-sort-key="uom" data-sort-screen="products" onclick="setRegisterSort('products','uom',renderProducts)">UOM</th><th class="sortable-register-th right" data-sort-key="price" data-sort-screen="products" onclick="setRegisterSort('products','price',renderProducts)" id="prod-th-price">Default price</th><th class="sortable-register-th" data-sort-key="specs" data-sort-screen="products" onclick="setRegisterSort('products','specs',renderProducts)" id="prod-th-specs">Specs</th>
 </tr></thead>
 <tbody id="products-tbody"></tbody>
 </table>
@@ -1039,7 +1040,7 @@ document.addEventListener('error', function(e) {
 </div>
 <div class="bc-master-register-table-scroll" style="overflow-x:auto"><table class="uom-table cm-table"><thead id="uom-thead"></thead><tbody id="uom-tbody"></tbody></table></div>
 </div>
-</div><div class="masters-tab-content bc-master-register-standard" data-bc-register-standard="1" id="masters-tab-categories">
+</div><div class="masters-tab-content bc-master-register-standard" data-bc-register-standard="1" id="masters-tab-textblocks"><div id="tb-host" class="tb-host"></div></div><div class="masters-tab-content bc-master-register-standard" data-bc-register-standard="1" id="masters-tab-categories">
 <!-- V270.4.12 (mockup CU_1): categories for goods and for services -->
 <div class="card uom-master-card cat-master-card">
 <div class="card-header page-command-header bc-master-directory-heading">
@@ -1397,8 +1398,12 @@ document.addEventListener('error', function(e) {
 <div class="setup-page-head admin-master-width"><div><h2><i class="ti ti-file-invoice" style="margin-right:7px"></i>Quotation Print</h2><p>Control presentation choices shared by quotation print/PDF templates.</p></div></div>
 <div class="pricing-settings-grid admin-master-width">
 <section class="pricing-setting-card"><div class="pricing-setting-card-head"><h3><i class="ti ti-note" style="margin-right:6px"></i>Line Item Note Style</h3><p>Choose how customer-facing line notes appear inside the Description cell.</p></div><div class="pricing-setting-card-body">
-<div class="form-group"><label>Note presentation</label><select id="qprint-line-note-style" onchange="markQuotationPrintDirty()"><option value="highlight">Soft Highlight</option><option value="blueAccent">Blue Accent</option><option value="minimal">Minimal</option><option value="badge">Note Badge</option></select></div>
+<div class="form-group"><label>Note presentation</label><select id="qprint-line-note-style" onchange="markQuotationPrintDirty()"><option value="highlight">Soft Highlight</option><option value="blueAccent">Blue Accent</option><option value="minimal">Minimal</option><option value="badge">Note Badge</option><option value="text">Plain Text (no label)</option></select></div>
 <div class="info-box" style="margin-top:10px"><i class="ti ti-info-circle"></i><div><strong>Global quotation print preference</strong><div style="font-size:11px;margin-top:3px">The note text remains part of each quotation line. This setting changes presentation only. This is the default for all quotation print/PDF templates, including Product, Contracting, bilingual and image-reference layouts. A quotation can choose its own style, and a single note line can too, in Quotation Entry (Items → Notes); that never changes this default. Quotations already sent keep the style they were sent with.</div></div></div>
+</div></section>
+<section class="pricing-setting-card"><div class="pricing-setting-card-head"><h3><i class="ti ti-file-stack" style="margin-right:6px"></i>Long Scope of Work</h3><p>Service and contracting quotations: where a long scope of work prints.</p></div><div class="pricing-setting-card-body">
+<div class="form-group"><label for="qprint-scope">Print the scope</label><select id="qprint-scope" onchange="markQuotationPrintDirty()"><option value="auto">Automatic — inline when short, Annexure A when long</option><option value="inline">Always inline — under each line</option><option value="annex">Always as Annexure A — after the quotation</option></select></div>
+<div class="info-box" style="margin-top:10px"><i class="ti ti-info-circle"></i><div><strong>The default for every print</strong><div style="font-size:11px;margin-top:3px">Automatic moves a line's scope to "Annexure A — Scope of Work" when it is longer than about 10 lines, so the price table stays on one page; the line then says "Detailed scope: Annexure A, item N". It can be changed at each print (Print / PDF window).</div></div></div>
 </div></section>
 <section class="pricing-setting-card"><div class="pricing-setting-card-head"><h3><i class="ti ti-eye" style="margin-right:6px"></i>Live Preview</h3><p>Preview the selected style before saving.</p></div><div class="pricing-setting-card-body"><div id="qprint-note-preview"></div></div></section>
 </div>
@@ -1785,6 +1790,7 @@ document.addEventListener('error', function(e) {
 <div id="specs-list" style="display:flex;flex-direction:column;gap:8px"></div>
 <button class="btn btn-secondary btn-sm" type="button" onclick="addSpecRow()" style="margin-top:8px"><i class="ti ti-plus"></i>Add spec</button>
 </section>
+<section class="pm-sec pm-svc-only" id="pm-stdscope-sec"><h4>Standard scope <small>— optional · copied into a quotation line when this service is linked, then edited there</small></h4><div class="pm-ss-bar"></div><div id="pm-stdscope" class="pm-ss-doc"></div><div class="pm-hint" id="pm-stdscope-st"></div></section>
 <section class="pm-sec"><h4>Notes <small>— optional, inside BizCore only</small></h4>
 <textarea id="pm-notes" placeholder="Any extra information about this product…"></textarea>
 </section>
@@ -1916,6 +1922,7 @@ document.addEventListener('error', function(e) {
 <div class="rq-fg rq-c6"><label for="rfq-site" id="rfq-site-lbl">Delivery location</label><input id="rfq-site" maxlength="200" placeholder="Site, building, city"/></div>
 <div class="rq-fg rq-c3"><label for="rfq-reqdate" id="rfq-reqdate-lbl">Required delivery</label><input id="rfq-reqdate" autocomplete="off"/></div>
 <div class="rq-fg rq-c3" id="rfq-duration-wrap"><label for="rfq-duration">Expected duration</label><input id="rfq-duration" maxlength="60" placeholder="e.g. 3 weeks"/></div>
+<div class="rq-fg rq-c4" id="rfq-wcat-wrap" hidden><label for="rfq-wcat">Work category <span class="rq-aux">· optional — the default on the quotation</span></label><select id="rfq-wcat"><option value="">Not decided yet</option></select></div>
 <div class="rq-fg rq-full"><label for="rfq-desc"><span id="rfq-desc-lbl">General requirements</span> <span class="rq-aux">· instructions, brands, standards, working hours…</span></label><textarea id="rfq-desc" rows="7" placeholder="General instructions, approved brands, standards, delivery conditions…"></textarea></div>
 </div>
 </div>
@@ -2375,9 +2382,9 @@ import { createPurchaseService } from './js/purchase-service.mjs?v=271.3';
 import * as JobCostCore from './js/job-cost-core.mjs?v=271.32';   // V271.3 Contracting actual cost
 import { createJobCostService } from './js/job-cost-service.mjs?v=271.33';
 import * as UserCore from './js/user-core.mjs?v=270.43';
-import { createUserService } from './js/user-service.mjs?v=271.32';
-import * as RoleCore from './js/role-core.mjs?v=271.5.40';
-import { createRoleService } from './js/role-service.mjs?v=271.32';
+import { createUserService } from './js/user-service.mjs?v=271.6';
+import * as RoleCore from './js/role-core.mjs?v=271.6';
+import { createRoleService } from './js/role-service.mjs?v=271.6';
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signOut, onAuthStateChanged, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile, updatePassword, sendPasswordResetEmail }
@@ -4596,7 +4603,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=271.5.41';
+      s.src = 'js/app.js?v=271.6';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4604,19 +4611,22 @@ onAuthStateChanged(auth, async user => {
         // V270.1: the Pricing screen (tabs, line menu, price references, phone cards)
         const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.24'; document.body.appendChild(pu);
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
-        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=271.2'; document.body.appendChild(qu);
+        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=271.6';
+        // V271.6: scope of work, work categories, text blocks, annexure print, job scope — after the Quotation Entry screen
+        qu.onload = () => { const qs = document.createElement('script'); qs.id = 'bizcore-quote-scope-script'; qs.src = 'js/quote-scope.js?v=271.6'; document.body.appendChild(qs); };
+        document.body.appendChild(qu);
         // V270.2.6: the RFQ entry screen (request type, product / service lines, requirements)
-        const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=271.5.41'; document.body.appendChild(rq);
+        const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=271.6'; document.body.appendChild(rq);
         // V271.1: Contracting Estimation (estimate window, Cost Build-up, Contracting Settings)
         const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.3'; document.body.appendChild(es);
         // V271.2: Contracting Jobs (Create Job, Jobs register, Job view)
-        const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.5.23'; document.body.appendChild(jb);
+        const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.6'; document.body.appendChild(jb);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=271.11'; document.body.appendChild(ds);
         // V270.4.1: Administration → Users, Roles & Permissions
         const us = document.createElement('script'); us.id = 'bizcore-users-script'; us.src = 'js/users.js?v=270.43'; document.body.appendChild(us);
         // V270.4.2: what the screens show for the role (sidebar, guarded actions)
-        const pm = document.createElement('script'); pm.id = 'bizcore-permissions-script'; pm.src = 'js/permissions-ui.js?v=271.5.40'; document.body.appendChild(pm); };
+        const pm = document.createElement('script'); pm.id = 'bizcore-permissions-script'; pm.src = 'js/permissions-ui.js?v=271.6'; document.body.appendChild(pm); };
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js

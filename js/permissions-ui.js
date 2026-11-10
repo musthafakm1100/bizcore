@@ -110,6 +110,9 @@
     ['customers', 'suppliers', 'products', 'employees'].forEach(t => {
       const b = document.getElementById('mtab-' + t); if (b) b.classList.toggle('bc-perm-hidden', !window.bcCan(t, 'v'));
     });
+    { const b = document.getElementById('mtab-services'); if (b) b.classList.toggle('bc-perm-hidden', !window.bcCan('products', 'v')); }   // V271.6: Services = the same Item Master
+    { const b = document.getElementById('mtab-textblocks'); if (b) b.classList.toggle('bc-perm-hidden', !window.bcCan('textBlocks', 'v')); }   // V271.6: Text Blocks
+    { const g = document.getElementById('masters-grp-proposal'); if (g) g.classList.toggle('bc-perm-hidden', !window.bcCan('textBlocks', 'v')); }
     applyNewButtons();
     applySetupTabs();
   }
@@ -143,6 +146,12 @@
     const orig = window.switchMastersTab;
     if (typeof orig !== 'function' || orig.__bcGuarded) return;
     const g = function (tab) {
+      const mod = tab === 'services' ? 'products' : tab === 'textblocks' ? 'textBlocks' : tab;   // V271.6
+      if (['services', 'textblocks'].includes(tab) && !window.bcCan(mod, 'v')) {
+        const first = ['customers', 'suppliers', 'products', 'employees'].find(t => window.bcCan(t, 'v'));
+        if (first) return orig.call(this, first);
+        return deny(mod, 'v');
+      }
       if (['customers', 'suppliers', 'products', 'employees'].includes(tab) && !window.bcCan(tab, 'v')) {
         const first = ['customers', 'suppliers', 'products', 'employees'].find(t => window.bcCan(t, 'v'));
         if (first && first !== tab) return orig.call(this, first);

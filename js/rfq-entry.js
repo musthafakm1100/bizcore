@@ -82,6 +82,7 @@
     const site = $('rfq-site'), dur = $('rfq-duration');
     if (site) site.value = (r && r.site) || '';
     if (dur) dur.value = (r && r.duration) || '';
+    fillWorkCats((r && r.workCategory) || '');   // V271.6
     setDate('rfq-reqdate', (r && r.requiredDate) || '');
     S.origReceived = (r && r.date) || '';
     const hint = $('rfq-due-hint'); if (hint) hint.textContent = `· +${respHours()} h`;
@@ -101,7 +102,17 @@
       rfqLines.push({ lineId: l.lineId, kind: k, sortOrder: ++order, productId: l.productId || '', code: String(l.code || '').trim(), desc: String(l.desc || '').trim(),
         qty: Number.isFinite(q) ? q : 0, uom: String(l.uom || '').trim() || KIND[k].uomDefault, remarks: String(l.remarks || '').trim() });
     }));
-    return { requestType: S.type, rfqLines, site: String($('rfq-site')?.value || '').trim(), requiredDate: getDate('rfq-reqdate'), duration: S.type === 'product' ? '' : String($('rfq-duration')?.value || '').trim() };
+    return { requestType: S.type, rfqLines, site: String($('rfq-site')?.value || '').trim(), requiredDate: getDate('rfq-reqdate'), duration: S.type === 'product' ? '' : String($('rfq-duration')?.value || '').trim(),
+      workCategory: S.type === 'contracting' ? String($('rfq-wcat')?.value || '') : '' };   // V271.6: optional, Contracting only
+  }
+  /** V271.6: the Work category list (the service categories of Master Data → Categories), keeping a value no longer listed. */
+  function fillWorkCats(cur) {
+    const sel = $('rfq-wcat'); if (!sel) return;
+    if (typeof loadCategoryMaster === 'function' && (typeof categoryMaster === 'undefined' || !categoryMaster.length)) { try { loadCategoryMaster(); } catch (e) {} }
+    const names = (typeof categoryMaster !== 'undefined' ? categoryMaster : []).filter(c => c.type === 'service' && c.active !== false).map(c => c.name).sort((a, b) => a.localeCompare(b));
+    if (cur && !names.includes(cur)) names.unshift(cur);
+    const e = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    sel.innerHTML = '<option value="">Not decided yet</option>' + names.map(n => `<option value="${e(n)}"${n === cur ? ' selected' : ''}>${e(n)}</option>`).join('');
   }
   /** First problem as { title, message, focus } or null. */
   function validate() {
@@ -141,7 +152,8 @@
     set('rfq-site-lbl', svcLike(t) ? 'Site / location' : t === 'mixed' ? 'Delivery / site location' : 'Delivery location');
     set('rfq-reqdate-lbl', svcLike(t) ? 'Required start' : t === 'mixed' ? 'Required by' : 'Required delivery');
     set('rfq-desc-lbl', svcLike(t) ? 'Scope of work' : t === 'mixed' ? 'Scope of work / general requirements' : 'General requirements');
-    const dw = $('rfq-duration-wrap'); if (dw) dw.hidden = !t || t === 'product';   // V271.5.41: also hidden until a type is chosen
+    const dw = $('rfq-duration-wrap'); if (dw) dw.hidden = !t || t === 'product';
+    const ww = $('rfq-wcat-wrap'); if (ww) ww.hidden = t !== 'contracting';   // V271.6   // V271.5.41: also hidden until a type is chosen
     const d = $('rfq-desc'); if (d) d.placeholder = t === 'product' ? 'General instructions, approved brands, standards, delivery conditions…' : 'Describe the work, site conditions, working hours, safety / permit needs…';
   }
   function setType(v) {

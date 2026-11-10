@@ -31,6 +31,7 @@ export const MODULES = Object.freeze([
   { id: 'suppliers', label: 'Suppliers', group: 'Master Data', acts: 'vcex', hint: 'Cancel = delete' },
   { id: 'products', label: 'Products', group: 'Master Data', acts: 'vcex', hint: 'Cancel = delete' },
   { id: 'employees', label: 'Employees', group: 'Master Data', acts: 'vcex', hint: 'Cancel = delete' },
+  { id: 'textBlocks', label: 'Text Blocks', group: 'Master Data', acts: 'vcex', hint: 'Proposal text library · Cancel = deactivate · inserting needs only Quotations' },   // V271.6
   { id: 'reports', label: 'Reports', group: 'Reports & Administration', acts: 'v' },
   { id: 'administration', label: 'Administration', group: 'Reports & Administration', acts: 've', hint: 'General settings; security settings stay with administrators' },
 ]);
@@ -78,7 +79,7 @@ export const BUILT_IN_ROLES = Object.freeze([
   { id: 'administrator', label: 'Administrator', locked: true, perms: build(Object.fromEntries(MODULES.map(m => [m.id, ALL]))), rights: ALL_RIGHTS() },
   { id: 'manager', label: 'Manager', perms: build(Object.fromEntries(MODULES.filter(m => m.id !== 'administration').map(m => [m.id, ALL]))) },
   { id: 'sales', label: 'Sales', perms: build({ rfq: ALL, pricing: VCE, quotation: ALL, salesOrder: VCE, deliveryNote: V, invoice: V,
-    stock: V, customers: VCE, suppliers: V, products: VCE, employees: V, reports: V }) },
+    stock: V, customers: VCE, suppliers: V, products: VCE, employees: V, textBlocks: VCE, reports: V }) },
   { id: 'purchasing', label: 'Purchasing', perms: build({ salesOrder: V, purchaseInvoice: VCE, supplierPayment: VCE, stock: 've',
     customers: V, suppliers: VCE, products: VCE, employees: V, reports: V }) },
   { id: 'accounts', label: 'Accounts', perms: build({ rfq: V, pricing: V, quotation: V, salesOrder: V, deliveryNote: V, invoice: ALL, receipt: ALL,
@@ -194,6 +195,7 @@ export const READ_MODULES = Object.freeze({
   suppliers: ['suppliers'],
   products: ['products'],
   employees: ['employees'],
+  textBlocks: ['textBlocks', 'quotation'],   // V271.6: inserting a block needs only Quotations
 });
 /** Collections whose records belong to someone (ownerUid) — "Own records only". */
 export const OWN_COLLECTIONS = Object.freeze({ rfqs: 'rfq', quotations: 'quotation', salesOrders: 'salesOrder' });
@@ -204,7 +206,7 @@ export const PAGE_MODULES = Object.freeze({
   deliverynotes: ['deliveryNote'], deliveries: ['deliveryNote'], customerinvoices: ['invoice'], receipts: ['receipt'],
   supplierrfqs: ['purchaseInvoice'], purchaseorders: ['purchaseInvoice'], purchaseinvoices: ['purchaseInvoice'],
   supplierpayments: ['supplierPayment'], stock: ['stock'], cashbank: ['cash'],
-  masters: ['customers', 'suppliers', 'products', 'employees'],
+  masters: ['customers', 'suppliers', 'products', 'employees', 'textBlocks'],
   customers: ['customers'], suppliers: ['suppliers'], products: ['products'], employees: ['employees'],
   analytics: ['reports'], setup: ['administration'],
 });

@@ -1313,8 +1313,8 @@ function restoreCurrencyDisplayDefaults(){document.getElementById('cdisp-line-un
 async function applyCurrencyDisplayChanges(){settings.currencyDisplay=collectCurrencyDisplaySettings();await saveSettings();currencyDisplayDraft={...settings.currencyDisplay};setCurrencyDisplayDirty(false);showToast('Currency display settings applied.','success');const open=document.getElementById('view-modal')?.classList.contains('open');if(open&&typeof currentViewQuotationId!=='undefined'&&currentViewQuotationId)viewQuotation(currentViewQuotationId,true);}
 
 
-const QUOTATION_LINE_NOTE_STYLES={highlight:'Soft Highlight',blueAccent:'Blue Accent',minimal:'Minimal',badge:'Note Badge'};
-function ensureQuotationPrintSettings(){const saved=settings.quotationPrint||{};settings.quotationPrint={lineNoteStyle:saved.lineNoteStyle||'highlight'};return settings.quotationPrint;}
+const QUOTATION_LINE_NOTE_STYLES={highlight:'Soft Highlight',blueAccent:'Blue Accent',minimal:'Minimal',badge:'Note Badge',text:'Plain Text'};   // V271.6: Plain Text — no "Note:" label (text blocks)
+function ensureQuotationPrintSettings(){const saved=settings.quotationPrint||{};settings.quotationPrint={lineNoteStyle:saved.lineNoteStyle||'highlight',scopePrint:['auto','inline','annex'].includes(saved.scopePrint)?saved.scopePrint:'auto'};return settings.quotationPrint;}   // V271.6: scopePrint
 function quotationLineNoteStyle(){const v=ensureQuotationPrintSettings().lineNoteStyle;return QUOTATION_LINE_NOTE_STYLES[v]?v:'highlight';}
 /* V270.2: a quotation may choose its own note style (q.noteStyle) and a note line its own (item.noteStyle); blank = the level
    above (line → quotation → the style frozen when it was marked Sent → Administration default). */
@@ -1323,16 +1323,17 @@ function quotationDocNoteStyle(q){return quotationNoteStyleKey(q?.noteStyle)||qu
 function quotationEffectiveNoteStyle(q,it){return quotationNoteStyleKey(it?.noteStyle)||quotationDocNoteStyle(q);}
 /* V270.4.14: a line's description / note as a document shows it — the formatting when there is some (js/quote-rich.js),
    else the text with its line breaks. */
-function bcLineDescHtml(it,empty='—'){ if(it&&it.descHtml&&window.BCRich) return BCRich.show(it.descHtml,it.desc); const t=String(it?.desc||''); return t?(t.includes('\n')?'<span class="bc-rtp">'+escapeHtml(t)+'</span>':escapeHtml(t)):empty; }
+function bcLineDescHtml(it,empty='—'){ if(it&&(it.scopeKey||it.scopePreview)&&window.BCScope) return BCScope.lineHtml(it,empty);   // V271.6: title + scope (inline or Annexure A)
+  if(it&&it.descHtml&&window.BCRich) return BCRich.show(it.descHtml,it.desc); const t=String(it?.desc||''); return t?(t.includes('\n')?'<span class="bc-rtp">'+escapeHtml(t)+'</span>':escapeHtml(t)):empty; }
 function bcNoteHtml(it){ return it&&it.textHtml&&window.BCRich?BCRich.show(it.textHtml,it.text):escapeHtml(String(it?.text||it?.desc||'')); }
 function bcRichPrintCss(){ return window.BCRich?BCRich.PRINT_CSS+'td .bc-rtx b *{font-weight:700!important}td .bc-rtx i,td .bc-rtx i *{font-style:italic!important}.items tr.bc-rt-row{break-inside:auto!important;page-break-inside:auto!important}':''; }
-function quotationPrintLineNoteHtml(text,styleKey,html){const safe=html&&window.BCRich?BCRich.show(html,text):(String(text||'').includes('\n')?'<span class="bc-rtp">'+escapeHtml(String(text||''))+'</span>':escapeHtml(String(text||'')));const style=quotationNoteStyleKey(styleKey)||quotationLineNoteStyle();if(style==='minimal')return `<div class="inline-note note-minimal"><b>Note:</b> ${safe}</div>`;if(style==='badge')return `<div class="inline-note note-badge"><span>NOTE</span><em>${safe}</em></div>`;if(style==='blueAccent')return `<div class="inline-note note-blue"><b>Note:</b> ${safe}</div>`;return `<div class="inline-note note-highlight"><b>Note:</b> ${safe}</div>`;}
-function renderQuotationPrintSettings(){const cfg=ensureQuotationPrintSettings(),sel=document.getElementById('qprint-line-note-style');if(sel)sel.value=cfg.lineNoteStyle;updateQuotationLineNotePreview();setQuotationPrintDirty(false);}
+function quotationPrintLineNoteHtml(text,styleKey,html){const safe=html&&window.BCRich?BCRich.show(html,text):(String(text||'').includes('\n')?'<span class="bc-rtp">'+escapeHtml(String(text||''))+'</span>':escapeHtml(String(text||'')));const style=quotationNoteStyleKey(styleKey)||quotationLineNoteStyle();if(style==='text')return `<div class="inline-note note-text">${safe}</div>`;if(style==='minimal')return `<div class="inline-note note-minimal"><b>Note:</b> ${safe}</div>`;if(style==='badge')return `<div class="inline-note note-badge"><span>NOTE</span><em>${safe}</em></div>`;if(style==='blueAccent')return `<div class="inline-note note-blue"><b>Note:</b> ${safe}</div>`;return `<div class="inline-note note-highlight"><b>Note:</b> ${safe}</div>`;}
+function renderQuotationPrintSettings(){const cfg=ensureQuotationPrintSettings(),sel=document.getElementById('qprint-line-note-style');if(sel)sel.value=cfg.lineNoteStyle;const sp=document.getElementById('qprint-scope');if(sp)sp.value=cfg.scopePrint;updateQuotationLineNotePreview();setQuotationPrintDirty(false);}
 function setQuotationPrintDirty(dirty){const st=document.getElementById('quotation-print-change-status'),btn=document.getElementById('quotation-print-apply-btn');if(st){st.textContent=dirty?'Unsaved changes':'No pending changes';st.style.color=dirty?'var(--orange-txt)':'var(--gray)';}if(btn)btn.disabled=!dirty;}
 function markQuotationPrintDirty(){setQuotationPrintDirty(true);updateQuotationLineNotePreview();}
 function updateQuotationLineNotePreview(){const host=document.getElementById('qprint-note-preview'),sel=document.getElementById('qprint-line-note-style');if(!host||!sel)return;const text='This is alternative product.';const style=sel.value;let note='';if(style==='minimal')note=`<div class="qnp minimal"><b>Note:</b> ${text}</div>`;else if(style==='badge')note=`<div class="qnp badge"><span>NOTE</span>${text}</div>`;else if(style==='blueAccent')note=`<div class="qnp blue"><b>Note:</b> ${text}</div>`;else note=`<div class="qnp highlight"><b>Note:</b> ${text}</div>`;host.innerHTML=`<div class="qnp-table"><div class="qnp-head"><span>SL</span><span>Description</span><span>Qty</span><span>UOM</span></div><div class="qnp-row"><span>001</span><span><strong>PENCIL SHARPENER</strong><small>TYPE: OFFICE TYPE | Color: Black Transparent</small>${note}</span><span>20</span><span>Pcs</span></div></div>`;}
-async function applyQuotationPrintSettings(){const sel=document.getElementById('qprint-line-note-style');settings.quotationPrint={lineNoteStyle:sel?.value||'highlight'};await saveSettings();setQuotationPrintDirty(false);showToast('Quotation print settings applied.','success');}
-function restoreQuotationPrintDefaults(){const sel=document.getElementById('qprint-line-note-style');if(sel)sel.value='highlight';markQuotationPrintDirty();showToast('Default quotation print style restored. Save Settings to apply.','info');}
+async function applyQuotationPrintSettings(){const sel=document.getElementById('qprint-line-note-style'),sp=document.getElementById('qprint-scope');settings.quotationPrint={lineNoteStyle:sel?.value||'highlight',scopePrint:sp?.value||'auto'};await saveSettings();setQuotationPrintDirty(false);showToast('Quotation print settings applied.','success');}
+function restoreQuotationPrintDefaults(){const sel=document.getElementById('qprint-line-note-style');if(sel)sel.value='highlight';const sp=document.getElementById('qprint-scope');if(sp)sp.value='auto';markQuotationPrintDirty();showToast('Default quotation print style restored. Save Settings to apply.','info');}
 
 function fmt(n) { return 'SAR '+formatNumber(n,2); }
 // Round to 2 decimals to eliminate floating-point subtraction artifacts (e.g. 49.999999994 -> 50, 9.000000002 -> 9)
@@ -2397,11 +2398,25 @@ function registerSortLabel(screen,key,label){
 }
 
 /* ── PRODUCT CRUD ── */
+/** V271.6: the register's look for the entry it was opened from — Products (goods) or Services. */
+function bcPaintProdView(){
+  const svc=window._prodView==='service', panel=document.getElementById('masters-tab-products');
+  if(panel){ panel.classList.toggle('prod-view-service',svc); panel.classList.toggle('prod-view-goods',!svc); }
+  const set=(id,html)=>{ const el=document.getElementById(id); if(el) el.innerHTML=html; };
+  set('prod-reg-title',svc?'<i class="ti ti-tool" style="margin-right:6px"></i>Service database':'<i class="ti ti-package" style="margin-right:6px"></i>Product database');
+  set('prod-add-lbl',svc?'Add service':'Add product');
+  const nm=document.getElementById('prod-th-name'); if(nm) nm.firstChild.nodeValue=svc?'Service name':'Product name';
+  const pr=document.getElementById('prod-th-price'); if(pr) pr.firstChild.nodeValue=svc?'Default rate':'Default price';
+  const sp=document.getElementById('prod-th-specs'); if(sp) sp.firstChild.nodeValue=svc?'Standard scope':'Specs';
+  const sf=document.getElementById('prod-search-filter'); if(sf) sf.placeholder=svc?'Search services…':'Search products, brand, model…';
+  const tf=document.getElementById('prod-type-filter'); if(tf){ tf.value=''; tf.hidden=true; }
+  const btn=document.getElementById('prod-add-btn'); if(btn) btn.title=svc?'Add a service item (SRV-…)':'Add a goods item (ITM-…)';
+}
 function renderProducts() {
   document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PROD_PER_PAGE)) el.value = String(PROD_PER_PAGE); });
   const search = (document.getElementById('prod-search-filter')?.value||'').toLowerCase();
   const cat    = document.getElementById('prod-cat-filter')?.value||'';
-  const ptype  = document.getElementById('prod-type-filter')?.value||'';   // V270.4.10
+  const ptype  = window._prodView==='service'?'service':window._prodView==='goods'?'goods':(document.getElementById('prod-type-filter')?.value||'');   // V270.4.10 · V271.6: Products / Services entry
   let list = products.filter(p => {
     if (cat && p.category !== cat) return false;
     if (ptype && (p.type === 'service' ? 'service' : 'goods') !== ptype) return false;
@@ -2432,9 +2447,9 @@ function renderProducts() {
       <td>${p.category||'—'}</td>
       <td>${p.uom}</td>
       <td class="right" style="font-weight:600">${p.price>0?fmt(p.price):'—'}</td>
-      <td style="font-size:11px;color:var(--gray);max-width:180px">${specStr||'—'}</td>
+      <td style="font-size:11px;color:var(--gray);max-width:180px">${ptype==='service'?(p.stdScope?'Yes':'—'):(specStr||'—')}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="11"><div class="empty-state"><i class="ti ti-package-off"></i><strong>No products found</strong><p>Add products to the database to use them in quotations.</p></div></td></tr>`;
+  }).join('') : (ptype==='service'?`<tr><td colspan="11"><div class="empty-state"><i class="ti ti-tool"></i><strong>No services found</strong><p>Add service items (e.g. AC maintenance, Manpower – technician / day) to link them on quotation lines.</p></div></td></tr>`:`<tr><td colspan="11"><div class="empty-state"><i class="ti ti-package-off"></i><strong>No products found</strong><p>Add products to the database to use them in quotations.</p></div></td></tr>`);
 
   const pp = document.getElementById('prod-pagination');
   if (pp) pp.innerHTML = buildPaginationHTML(prodPage, pages, 'goProdPage');
@@ -2724,6 +2739,15 @@ function pmFillCategories(type, keep){
 }
 function loadCustomCategoriesIntoForm() { pmFillCategories(typeof pmCurrentType==='function'?pmCurrentType():'goods'); }
 
+/** V271.6: the service's Standard scope editor (stored as text block svc_{id}, read only when the form opens) */
+function pmStdScopeInit(p){
+  const ed=document.getElementById('pm-stdscope'), st=document.getElementById('pm-stdscope-st'); if(!ed||!window.BCRich) return;
+  const bar=document.querySelector('#prod-modal .pm-ss-bar'); if(bar&&!bar.classList.contains('bc-rtbar')) BCRich.wireBar(bar);
+  BCRich.make(ed,{html:'',placeholder:'e.g. What a standard visit includes, what is excluded…'}); ed.dataset.orig=''; ed.dataset.pid=p?String(p.id):'';
+  if(st) st.textContent='';
+  if(p&&p.stdScope&&window.BCScope){ if(st) st.textContent='Loading the standard scope…'; ed.setAttribute('contenteditable','false');
+    BCScope.stdScopeOf(p).then(h=>{ if(ed.dataset.pid!==String(p.id)) return; ed.innerHTML=h?BCRich.clean(h):''; ed.dataset.orig=ed.innerHTML; ed.setAttribute('contenteditable','true'); if(st) st.textContent=h?'':'The standard scope could not be loaded — try again later before changing it.'; if(!h) ed.setAttribute('contenteditable','false'); }); }
+}
 function openAddProduct(type) {
   editingProdId = null;
   const delBtn=document.getElementById('prod-edit-delete-btn'); if(delBtn){delBtn.style.display='none';delBtn.removeAttribute('data-pid');}
@@ -2738,6 +2762,7 @@ function openAddProduct(type) {
   loadCustomCategoriesIntoForm();
   addSpecRow(); addSpecRow();
   pmSetType(type === 'service' ? 'service' : 'goods', false);   // V270.4.10
+  pmStdScopeInit(null);   // V271.6
   pmUomCheck();
   openModalWithSize('prod-modal');
   setTimeout(() => document.getElementById('pm-name')?.focus(), 60);
@@ -2853,6 +2878,7 @@ function openEditProduct(id) {
   pmFillCategories(p.type === 'service' ? 'service' : 'goods', p.category || '');   // V270.4.10/12: the item's category is kept even when not in the list
   pmSetType(p.type === 'service' ? 'service' : 'goods', !!p.code);   // V270.4.10: fixed once the code is given
   refreshProductUomSelect(p.type === 'service' ? 'service' : 'goods', p.uom || 'Pcs');   // V270.4.12: the item's own unit kept
+  pmStdScopeInit(p);   // V271.6
   pmUomCheck();
   openModalWithSize('prod-modal');
 }
@@ -3059,8 +3085,8 @@ function qtLinesFollowTemplate(type){
   [...document.querySelectorAll('#items-tbody tr[data-line-type="item"]')].forEach(tr=>{
     if(tr.dataset.rowKind===want) return;
     const it=(window.qtDebug&&qtDebug.rowItem)?qtDebug.rowItem(tr):{desc:qtFieldVal(tr,'desc'),qty:parseBizNumber(tr.querySelector('[data-quote-qty]')?.value),uom:tr.querySelector('select')?.value||'',up:parseBizNumber(tr.querySelector('[data-quote-price]')?.value),prodId:tr.dataset.prodId||''};
-    if(want==='scope'){ if(it.specs) it.desc=[it.desc,it.specs].filter(Boolean).join('\n'); delete it.code; delete it.brand; delete it.model; delete it.specs; }
-    else { delete it.descHtml; delete it.freeScope; }
+    if(want==='scope'){ if(it.specs&&it.scopeHtml==null){ if(window.BCRich) it.scopeHtml=BCRich.plainToHtml(String(it.specs)); else it.desc=[it.desc,it.specs].filter(Boolean).join('\n'); } delete it.descHtml; delete it.code; delete it.brand; delete it.model; delete it.specs; }
+    else { delete it.descHtml; delete it.freeScope; if(it.scopeHtml&&window.BCRich&&!it.specs) it.specs=BCRich.toText(it.scopeHtml).replace(/\n+/g,' | ').slice(0,300); delete it.scopeHtml; delete it.workCat; }   // V271.6
     it.rowKind=want; it.type=type; it.lineKey=tr.dataset.lineKey;
     const nr=addItemRow(it); if(nr){ tr.parentNode.insertBefore(nr,tr); tr.remove(); }
   });
@@ -3768,6 +3794,11 @@ async function saveProduct() {
     imagePath: svc ? null : (imgArea._imagePath || null)
   };
   const isNew = !editingProdId;
+  // V271.6: a service's standard scope (its own record, textBlocks/svc_{id}); the product keeps only a flag
+  const _ssEd = document.getElementById('pm-stdscope'), _ssHtml = svc && _ssEd && window.BCRich && _ssEd.isContentEditable ? (BCRich.toText(_ssEd.innerHTML).trim() ? BCRich.clean(_ssEd.innerHTML) : '') : null;
+  const _ssChanged = _ssHtml !== null && _ssHtml !== (_ssEd.dataset.orig ? BCRich.clean(_ssEd.dataset.orig) : '');
+  if (_ssHtml !== null) { if (_ssHtml) p.stdScope = true; else delete p.stdScope; }
+  if (_ssHtml && _ssHtml.length > 30000) { hideBusyOverlay('prod-modal'); showToast('The standard scope is too long — keep it under 30 thousand characters.','error'); return; }
   if (window.BCMasterUI) { hideBusyOverlay('prod-modal'); const chk = await BCMasterUI.beforeSave('products', prevProd, p); if (!chk.ok) return; BCMasterUI.addHistory(p, chk.log); showBusyOverlay('prod-modal', 'Saving product…'); }
   if (editingProdId) { const i=products.findIndex(x=>x.id===editingProdId); if(i>-1) products[i]=p; }
   else products.unshift(p);
@@ -3777,6 +3808,7 @@ async function saveProduct() {
     return;
   }
   if (prevProd && prevProd.imagePath && prevProd.imagePath !== p.imagePath && window.FB) window.FB.deleteFile(prevProd.imagePath);   // the old picture, once the new one is saved
+  if (_ssChanged && window.BCScope && !(await BCScope.saveStdScope(p, _ssHtml))) showToast('The service is saved, but its standard scope was not — open it and save again.','warning');   // V271.6
   imgArea._savedImagePath = p.imagePath || null;
   clearDirty(); closeModal('prod-modal');
   document.getElementById('prod-modal').style.zIndex = '';
@@ -5084,20 +5116,23 @@ function showPage(page, el) {
 
 
 function switchMastersTab(tab){
-  const valid=['customers','suppliers','products','employees','units','categories'];
+  const valid=['customers','suppliers','products','services','employees','units','categories','textblocks'];
   if(!valid.includes(tab)) tab='customers';
   document.querySelectorAll('.masters-tab-content').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.masters-tab').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-selected','false');x.tabIndex=-1;});
-  const panel=document.getElementById('masters-tab-'+tab);
+  // V271.6: Products and Services are two entries of the same register (one Item Master, the type preset)
+  if(tab==='products'||tab==='services') window._prodView=tab==='services'?'service':'goods';
+  const panel=document.getElementById('masters-tab-'+(tab==='services'?'products':tab));
   const button=document.getElementById('mtab-'+tab);
   if(panel) panel.classList.add('active');
   if(button){button.classList.add('active');button.setAttribute('aria-selected','true');button.tabIndex=0;}
-  const labels={customers:'Customers',suppliers:'Suppliers',products:'Products',employees:'Employees',units:'Units of Measure',categories:'Categories'};
+  const labels={customers:'Customers',suppliers:'Suppliers',products:'Products',services:'Services',employees:'Employees',units:'Units of Measure',categories:'Categories',textblocks:'Text Blocks'};
   const title=document.getElementById('page-title'); if(title) title.textContent=labels[tab]||'Masters';
   if(tab==='categories'){loadCategoryMaster();renderCategoryMaster();}
   if(tab==='customers'){customerPage=1;renderCustomers();}
   if(tab==='suppliers'){supplierPage=1;renderSuppliers();}
-  if(tab==='products'){prodPage=1;renderProducts();populateCategoryFilter();}
+  if(tab==='products'||tab==='services'){prodPage=1;bcPaintProdView();renderProducts();populateCategoryFilter();}
+  if(tab==='textblocks'&&window.BCScope&&BCScope.renderBlocksTab) BCScope.renderBlocksTab();
   if(tab==='employees'){employeePage=1;renderEmployees();}
   if(tab==='units') renderUomMaster();
 }
@@ -5545,6 +5580,8 @@ function openNewQuotation(templateType) {
 function editQuotation(id, skipVatCheck=false) {
   setQuotationPricingContext(null);
   const q=quotations.find(x=>x.id===id); if(!q) return;
+  // V271.6: the scope text (body record) is read first — without it a save would lose the scopes
+  if(window.BCScope&&BCScope.needsBody(q)){ BCScope.loadBody(q).then(ok=>{ if(ok) editQuotation(id,skipVatCheck); else BCScope.loadFailed(q); }); return; }
   if((q.status||'Draft')!=='Draft'){showToast('This quotation is '+q.status+' and is locked. Create a revision to make changes.','error');return;}
   const activeTax=activeTaxSettings();
   const savedVat=getQuoteVatPercent(q);
@@ -5679,14 +5716,13 @@ function addItemRow(item={}) {
       +`<td class="qt-dc"><textarea data-f="desc" rows="1" data-max-lines="3" class="qt-desc quote-line-product-search" placeholder="Search or type the item…" autocomplete="off" onfocus="handleQuoteLineDescriptionFocus(this)" oninput="qtAutoGrow(this);handleQuoteLineDescriptionInput(this)" onkeydown="handleQuoteLineDescriptionKeydown(event,this)" onblur="setTimeout(closeProdSearch,200)" aria-label="Description">${e(item.desc)}</textarea><input data-f="specs" class="qt-specs" placeholder="Specifications (e.g. Size: A4 | Weight: 80gsm)" value="${e(item.specs)}" aria-label="Specifications"><button type="button" class="qt-meta" tabindex="-1" onclick="qtEditLine(this.closest('tr'))" title="Item code, brand and model"></button></td>`
       +qtyCell+costCell+priceCell+discCells+tailCells;
   } else {
+    // V271.6: a scope line = a short title (Sales Order / DN / Invoice show only this) + its scope of work (formatted, any
+    // length, full width under the line; stored in the quotation's body record) + its work category (js/quote-scope.js)
     tr.innerHTML = noCell
-      +`<td class="qt-sc"><div data-f="desc" class="qt-scope" aria-label="Scope of work" oninput="calcTotals()"></div></td>`
+      +`<td class="qt-sc"><input data-f="desc" class="qt-title" maxlength="200" placeholder="Line title — e.g. Gypsum partitions, supply &amp; install" aria-label="Line title" oninput="calcTotals()"><div class="qt-lmeta"></div><div class="qt-sbw"><div data-f="scope" class="qt-scope qt-sbody" aria-label="Scope of work"></div><button type="button" class="qt-smore" hidden></button></div></td>`
       +qtyCell+costCell+priceCell+discCells+tailCells;
-    // V270.4.14 (RT_3): the scope text is a formatted editor (bold, colours, lists…) — .value gives the plain text
-    const ed=tr.querySelector('.qt-scope');
-    const scopeText=!item.descHtml&&item.specs?[item.desc,item.specs].filter(Boolean).join('\n'):(item.desc||'');   // V270.4.14.1: a product line shown as a service line keeps its specifications
-    if(window.BCRich) BCRich.make(ed,{html:item.descHtml||'',text:scopeText,placeholder:'Describe the job or scope of work — the customer\'s wording…'});
-    else { ed.outerHTML=`<textarea data-f="desc" rows="2" data-max-lines="8" class="qt-scope" oninput="qtAutoGrow(this)" aria-label="Scope of work">${e(item.desc)}</textarea>`; }
+    if(window.BCScope) BCScope.rowInit(tr,item);
+    else { const t=tr.querySelector('[data-f="desc"]'); if(t) t.value=item.desc||''; }
   }
   document.getElementById('items-tbody').appendChild(tr);
   tr.querySelectorAll('textarea').forEach(qtAutoGrow);
@@ -5714,7 +5750,7 @@ function isUntouchedQuoteItemRow(tr){
       return value==='' || value==='1' || value==='1.00';
     }
     return (control.value||'').trim()==='';
-  }) && !tr.dataset.prodId;
+  }) && !tr.dataset.prodId && !(tr.querySelector('[data-f="scope"]')?.textContent||'').trim();   // V271.6: scope text typed
 }
 function replaceInitialBlankQuoteRowIfNeeded(){
   const tbody=document.getElementById('items-tbody');
@@ -6022,7 +6058,7 @@ function qtRefreshLinkMarks(){
     const desc=(tr.querySelector('[data-f="desc"]')?.value||'').trim();
     let mk=cell.querySelector('.qt-lk');
     if(!desc&&!tr.dataset.prodId&&tr.dataset.freeScope!=='1'){ if(mk) mk.remove(); return; }
-    if(!mk){ mk=document.createElement('div'); mk.className='qt-lk'; cell.appendChild(mk); }
+    if(!mk){ mk=document.createElement('div'); mk.className='qt-lk'; const meta=cell.querySelector('.qt-lmeta'); if(meta) meta.insertBefore(mk,meta.firstChild); else cell.appendChild(mk); }   // V271.6: in the line's meta row
     if(tr.dataset.rowKind==='scope'&&tr.dataset.freeScope==='1'){
       if(mk.dataset.k==='scope') return; mk.dataset.k='scope'; mk.className='qt-lk is-scope';
       mk.innerHTML=`<span class="qt-lk-dot"></span>Scope line · free text, not linked <button type="button" class="qt-lk-btn" title="Link this line to a service item instead">Link item…</button>`;
@@ -6052,6 +6088,7 @@ async function qtLinkLine(tr){
 function qtApplyLinkChoice(tr,L){
   if(L._scope){ tr.dataset.freeScope='1'; tr.dataset.prodId=''; markDirty('quote-modal'); qtRefreshLinkMarks(); return; }   // V270.4.14
   if(L._choice) tr.dataset.freeScope='';
+  if(L._choice&&window.BCScope){ const p=products.find(x=>x.id===L._choice); if(p) setTimeout(()=>BCScope.afterLink(tr,p),0); }   // V271.6: category + standard scope
   if(L._choice&&tr.dataset.rowKind==='scope'){   // V270.4.14: the service item's unit (the unit box follows the Item / Service Master)
     const p=products.find(x=>x.id===L._choice), sel=tr.querySelector('select');
     if(p&&p.uom&&sel){ if(![...sel.options].some(o=>o.value===p.uom)){ const o=document.createElement('option'); o.value=o.textContent=p.uom; sel.appendChild(o); } sel.value=p.uom; sel.dataset.masterUom=p.uom; }
@@ -6127,6 +6164,7 @@ async function saveQuotation(mode='save', opts={}) {
     if(rows[i].dataset.discErr){ const f=rows[i].querySelector(rows[i].dataset.discBy==='pct'?'[data-quote-dpct]':'[data-quote-damt]'); showToast('Line '+(i+1)+' — discount: '+rows[i].dataset.discErr,'error'); if(typeof qtRevealRow==='function') qtRevealRow(rows[i]); f?.focus(); return; }
   }
   if(window._qtTotals?.discBad){ const f=document.getElementById('f-discount'); showToast('Quotation discount: '+(f?.title||'check the amount'),'error'); f?.focus(); return; }
+  if(window.BCScope){ const sp=BCScope.validate(); if(sp){ showToast(sp.msg,'error'); if(sp.tr&&typeof qtRevealRow==='function') qtRevealRow(sp.tr); try{ sp.el?.focus?.(); }catch(_){} return; } }   // V271.6: work categories, scope length
   if(window._pendingEstimate&&typeof window.bcEstQuoteValidate==='function'&&!window.bcEstQuoteValidate()) return;   // V271.2: lines still match the estimate
   // Capture pendingRFQId immediately before any async operations
   const capturedRFQId = document._pendingRFQId || null;
@@ -6216,7 +6254,7 @@ async function saveQuotation(mode='save', opts={}) {
     showToast('Offline — quotation saved with a provisional number and will be renumbered when online','warning');
   }
 
-  const items=[];
+  const items=[], _scopes={};   // V271.6: scope texts → the quotation's body record
   document.querySelectorAll('#items-tbody tr').forEach(tr=>{
     if(tr.dataset.lineType==='heading'||tr.dataset.lineType==='note'){
       const text=(tr.querySelector('.quote-special-text')?.value||'').trim();
@@ -6246,7 +6284,8 @@ async function saveQuotation(mode='save', opts={}) {
       if(tr.dataset.pricingSell) line.pricingSell=Number(tr.dataset.pricingSell);
       if(tr.dataset.pricingBuy) line.pricingBuy=Number(tr.dataset.pricingBuy);
       // V270.4.14: formatted scope text, scope line on purpose, internal cost of the line (own lines; Pricing's stays pricingBuy)
-      if(isScope&&window.BCRich){ const dh=BCRich.htmlOf(qtField(tr,'desc')); if(dh) line.descHtml=dh; }
+      if(isScope&&window.BCScope) BCScope.lineFromRow(tr,line,_scopes);   // V271.6: title + scope (body record) + work category
+      else if(isScope&&window.BCRich){ const dh=BCRich.htmlOf(qtField(tr,'desc')); if(dh) line.descHtml=dh; }
       if(isScope&&tr.dataset.freeScope==='1') line.freeScope=true;
       if(tr.dataset.estItem) line.estItemId=tr.dataset.estItem;   // V271.2
       if(!tr.dataset.pricingBuy&&Number(tr.dataset.estCost)>0) line.estCost=Number(tr.dataset.estCost);
@@ -6281,6 +6320,7 @@ async function saveQuotation(mode='save', opts={}) {
     vatSource: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.vatSource||'Document Snapshot') : 'Tax Master Snapshot',
     ...(window._pendingEstimate&&typeof window.bcEstQuoteBlock==='function'?{estimate:window.bcEstQuoteBlock()}:{}),   // V271.2: Contracting estimate (print style, section amounts)
     ...(prevQ&&prevQ.jobId?{jobId:prevQ.jobId,jobNo:prevQ.jobNo||''}:{}),
+    ...(window.BCScope?BCScope.quoteFields(_scopes,prevQ):{}),   // V271.6: default work category, body record, RFQ scope used
     items, custId:selectedCustId, ...quotationItemKeysField(items),   // V270.1.3: itemKeys for Selling Price History
     rfqId: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.rfqId||null) : (capturedRFQId||null),
     pricingVersion: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.pricingVersion||1) : (document._pendingPricingVersion||1),
@@ -6359,7 +6399,7 @@ async function saveQuotation(mode='save', opts={}) {
   // the final state in one round trip per collection (run together,
   // not one after another) instead of saving after each intermediate step.
   // V271.3.1: the quotation first; the RFQ is marked Quoted only once the quotation is in Firebase (this RFQ only)
-  const _qSaved = await saveQuotations();
+  const _qSaved = window.BCScope ? await BCScope.persist(q,_scopes,prevQ) : await saveQuotations();   // V271.6: with its body record
   if (_qSaved !== false && _rfqNeedsSave) {
     if (!(await saveRFQs([_linkedRfq].filter(Boolean)))) showToast('The quotation is saved, but its RFQ was not updated — open the RFQ and save it again. ' + rfqSaveFailedMessage(), 'warning', 'RFQ not updated');
     renderRFQPage();
@@ -6449,6 +6489,7 @@ function toggleQuotationViewSection(btn){
 }
 let currentViewQuotationId=null;
 function viewQuotation(id, skipVatCheck=false) {
+  { const q0=quotations.find(x=>x.id===id); if(q0&&window.BCScope&&BCScope.needsBody(q0)){ BCScope.loadBody(q0).then(ok=>{ if(!ok) BCScope.loadFailed(q0); BCScope._loaded.add(q0.id); viewQuotation(id,skipVatCheck); }); return; } }   // V271.6: scope text
   // Register/detail view is template-neutral. Bilingual rendering is applied only when
   // the Arabic / English print template is selected. Keeping this flag local prevents
   // print-template variables from breaking quotation opening from the register.
@@ -6713,6 +6754,7 @@ function renderStatusBar(q, selectedStatus, pending) {
 
 function createQuotationRevision(id){
   const q=quotations.find(x=>x.id===id);if(!q)return;
+  if(window.BCScope&&BCScope.needsBody(q)){ BCScope.loadBody(q).then(ok=>{ if(ok) createQuotationRevision(id); else BCScope.loadFailed(q); }); return; }   // V271.6
   closeModal('view-modal');
 
   editingId=null;
@@ -6776,7 +6818,7 @@ function createQuotationRevision(id){
   currentQuoteType=savedType==='contracting'?'contracting':'product';
   setQuoteType(currentQuoteType,{locked:true});
   document.getElementById('items-tbody').innerHTML='';
-  (q.items||[]).forEach(it=>addItemRow(JSON.parse(JSON.stringify(it))));
+  (q.items||[]).forEach(it=>addItemRow(window.BCScope?BCScope.copyItem(it):JSON.parse(JSON.stringify(it))));   // V271.6: the scope travels as text (new keys on save)
   if(!q.items||!q.items.length)addItemRow();
   setQuotationPricingContext(qtPricingContextOf(q));
   calcTotals();
@@ -6825,7 +6867,13 @@ async function duplicateQuotation(id) {
     created:new Date().toISOString(),
     updated:new Date().toISOString()};
   delete copy.estimate; delete copy.jobId; delete copy.jobNo; (copy.items||[]).forEach(it=>{ if(it) delete it.estItemId; });
-  quotations.unshift(copy); saveQuotations(); renderAll();
+  delete copy._rev; delete copy._savedBy; delete copy._savedAt; delete copy.rfqScopeUsed;
+  if(window.BCScope&&q.scopeBody){   // V271.6: the copy gets its own body record (new keys)
+    if(!(await BCScope.loadBody(q))){ BCScope.loadFailed(q); return; }
+    const sc=BCScope.rekeyItems(copy.items); quotations.unshift(copy);
+    if(!(await BCScope.persist(copy,sc,null))){ quotations=quotations.filter(x=>x!==copy); showToast('The copy was not saved — please try again.','error'); return; }
+  } else { quotations.unshift(copy); saveQuotations(); }
+  renderAll();
   if (numResult.isProvisional) {
     showToast('Duplicated as '+newQno+' (offline — will get final number once reconnected)','error');
   } else {
@@ -9144,6 +9192,7 @@ async function saveRFQ() {
     site: rfqEntry.site ?? previousRFQ?.site ?? '',
     requiredDate: rfqEntry.requiredDate ?? previousRFQ?.requiredDate ?? '',
     duration: rfqEntry.duration ?? previousRFQ?.duration ?? '',
+    workCategory: rfqEntry.workCategory ?? previousRFQ?.workCategory ?? '',   // V271.6
     status: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.status : 'New',
     attachment: rfqAttachment,
     pricingItems: editingRFQId ? rfqs.find(x=>x.id===editingRFQId)?.pricingItems||[] : [],
@@ -9247,7 +9296,7 @@ function viewRFQ(id) {
   const isContracting=r.requestType==='contracting';   // V271.1: priced in Estimation, not Pricing
   const estIdx=isContracting&&Array.isArray(r.estimateIndex)?r.estimateIndex:[];
   const estCur=estIdx.find(e=>Number(e.version)===Number(r.currentEstimateVersion))||estIdx[estIdx.length-1]||null;
-  const kv=[['Contact',`<b>${E(r.contact||'—')}</b>`],['Request type',`<b>${typeLabel}</b>`],['Received',`<b>${fmtDate(r.date)||'—'}</b>${r.channel?`<small>via ${E(r.channel)}</small>`:''}`],
+  const kv=[['Contact',`<b>${E(r.contact||'—')}</b>`],['Request type',`<b>${typeLabel}</b>${r.workCategory?`<small>${E(r.workCategory)}</small>`:''}`],['Received',`<b>${fmtDate(r.date)||'—'}</b>${r.channel?`<small>via ${E(r.channel)}</small>`:''}`],
     ['Response due',`<b class="${overdue?'rv-over':''}">${r.due?fmtDate(r.due):'—'}</b>${dueNote?`<small>${dueNote}</small>`:''}`],['Assigned to',`<b>${E(r.assigned||'—')}</b>`],['Entered',`<b>${enteredDate}</b>${enteredSub?`<small>${enteredSub}</small>`:''}`]];
   // documents for the progress line and activity
   const qIds=new Set([...(Array.isArray(r.quotationIds)?r.quotationIds:[]),r.quotationId,...quotations.filter(q=>q.rfqId===r.id).map(q=>q.id)].filter(Boolean));
@@ -13503,6 +13552,7 @@ function bcRaiseModal(id){
 }
 async function openTemplatePicker(qid) {
   if (!(await ensureFinalQuotationNumber(qid))) return;
+  { const q0=quotations.find(x=>x.id===qid); if(q0&&window.BCScope&&BCScope.needsBody(q0)&&!(await BCScope.loadBody(q0))){ BCScope.loadFailed(q0); return; } }   // V271.6: scope text before printing
   _printQID = qid;
   const qForTpl = quotations.find(x=>x.id===qid);
   const typeDefault = qForTpl && qForTpl.quoteType === 'contracting' ? 'servicequote' : 'erpbox';
@@ -13529,7 +13579,7 @@ async function printWithSelectedTemplate() {
   try { localStorage.setItem('dtq_settings', JSON.stringify(settings)); } catch(e){}
   closeModal('template-picker-modal');
   const sig=document.getElementById('qout-signature'), stamp=document.getElementById('qout-stamp');
-  if(sig)sig.checked=false;if(stamp)stamp.checked=false; refreshQuotationOutputOptions(); (bcRaiseModal('quotation-output-modal'),openModalWithSize('quotation-output-modal'));
+  if(sig)sig.checked=false;if(stamp)stamp.checked=false; refreshQuotationOutputOptions(); if(window.BCScope) BCScope.paintPrintOption(quotations.find(x=>x.id===_printQID)); (bcRaiseModal('quotation-output-modal'),openModalWithSize('quotation-output-modal'));
 }
 function refreshQuotationOutputOptions(){
   const sig=document.getElementById('qout-signature'),stamp=document.getElementById('qout-stamp');
@@ -13560,7 +13610,10 @@ function logQuotationOutput(){try{const q=quotations.find(x=>x.id===_printQID);c
 function generateQuotationOutput(){
   { const qq = quotations.find(x => x.id === _printQID); if (qq && isProvisionalNumber(qq.qno)) { closeModal('quotation-output-modal'); ensureFinalQuotationNumber(_printQID); return; } }
   _quotationOutputOptions={signature:!!document.getElementById('qout-signature')?.checked,stamp:!!document.getElementById('qout-stamp')?.checked};
+  const _scopeMode=window.BCScope?BCScope.chosenPrintMode():'';   // V271.6: long scope inline / Annexure A
   closeModal('quotation-output-modal'); logQuotationOutput(); const tpl=_pendingQuotationTemplate||'erpbox';
+  if(window.BCScope) BCScope.printBegin(quotations.find(x=>x.id===_printQID),tpl==='professional'?'inline':_scopeMode);
+  try {
   if      (tpl === 'professional') printQuotation(_printQID);
   else if (tpl === 'classic')      printQuotationClassic(_printQID);
   else if (tpl === 'modern')       printQuotationModern(_printQID);
@@ -13575,6 +13628,7 @@ function generateQuotationOutput(){
   else if (tpl === 'imagereflarge')printQuotationProductA4(_printQID,'image-large');
   else if (tpl === 'imagerefattach')printQuotationProductA4(_printQID,'image-attachment');
   else if (tpl === 'bilingual')    printQuotationArabicEnglish(_printQID);
+  } finally { if(window.BCScope) BCScope.printEnd(); }
 }
 
 /* ── Shared helper: builds common data for all templates ── */
@@ -13611,6 +13665,7 @@ function _tplOpen(html) {
   const lifecycle='<scr'+'ipt>(function(){var t='+JSON.stringify(printTitle)+';function setTitle(){try{document.title=t}catch(e){}}setTitle();window.addEventListener("beforeprint",setTitle);window.addEventListener("afterprint",function(){try{if(window.opener&&!window.opener.closed){window.opener.focus();}}catch(e){}setTimeout(function(){try{window.close();}catch(e){}},120);});})();<'+'/script>';
   html=html.replace(/<\/body>/i,lifecycle+'</body>');
   if(window.BCRich) html=html.replace(/<\/head>/i,'<style>'+bcRichPrintCss()+'</style></head>');   // V270.4.14: formatted descriptions / notes
+  if(window.BCScope) html=BCScope.injectAnnex(html);   // V271.6: Annexure A — Scope of Work (long scopes)
   // V270.4.8: A4 pages with the footer at the bottom of every page (js/doc-pages.js)
   if(window.BCPages){const cfg=/<table class="pw"/.test(html)?BCPages.SERVICE_QUOTE:/<article class="sheet/.test(html)?BCPages.ERP_QUOTE:null;if(cfg)html=BCPages.apply(html,cfg);}
   w.document.open();

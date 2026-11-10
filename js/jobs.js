@@ -190,7 +190,10 @@ ${KINDS.map(([k, l, c]) => row(l, b[k], c)).join('')}${row('Overheads', b.overhe
         contractValue: value, vatRate: (typeof getQuoteVatPercent === 'function' ? getQuoteVatPercent(q) : 15),
         budget: { material: num(b.material), manpower: num(b.manpower), subcontract: num(b.subcontract), other: num(b.other), overhead: num(b.overhead), contingency: num(b.contingency), totalCost: num(b.totalCost) },
         plannedProfit: r2(value - num(b.totalCost)), created: now, createdBy: who(), updated: now };
-      const saved = window.FB ? await window.FB.fbSaveRecordWith('jobs', job) : true;
+      // V271.6: the accepted scope goes with the job, frozen (jobs/{id}/scope/main) — written in the same commit
+      let extras = [];
+      if (window.BCScope) { if (BCScope.needsBody(q) && !(await BCScope.loadBody(q))) { BCScope.loadFailed(q); return; } extras = [{ path: ['jobs', String(job.id).replace(/\//g, '_'), 'scope', 'main'], data: BCScope.jobScopeDoc(q, job) }]; }
+      const saved = window.FB ? await window.FB.fbSaveRecordWith('jobs', job, extras) : true;
       if (!saved) { toast(typeof rfqSaveFailedMessage === 'function' ? rfqSaveFailedMessage() : 'The job was not saved — please try again.', 'error', 'Job not saved'); return; }
       jobs.unshift(job);
       q.jobId = job.id; q.jobNo = jobNo; q.updated = now;
@@ -326,7 +329,7 @@ ${rows.length ? `<tr class="jb-tot"><td colspan="5">Total${V.type ? ' — ' + es
     const b = j.budget || {}, x = V.bva, see = canSeeCost();
     const nCosts = V.rows ? V.rows.length : 0;
     const nSubs = V.costs ? (V.costs.expenses || []).length : 0;
-    $('jv-tabs').innerHTML = [['overview', 'Overview'], ['eva', 'Estimate vs Actual'], ['costs', `Costs${V.costs ? ' (' + nCosts + ')' : ''}`], ['subs', `Submissions${V.costs ? ' (' + nSubs + ')' : ''}`], ['activity', 'Activity']]
+    $('jv-tabs').innerHTML = [['overview', 'Overview'], ...(window.BCScope ? [['scope', 'Scope']] : []), ['eva', 'Estimate vs Actual'], ['costs', `Costs${V.costs ? ' (' + nCosts + ')' : ''}`], ['subs', `Submissions${V.costs ? ' (' + nSubs + ')' : ''}`], ['activity', 'Activity']]
       .map(([k, t]) => `<button type="button" role="tab" class="jv-tab${V.tab === k ? ' on' : ''}" aria-selected="${V.tab === k}" data-tab="${k}">${t}</button>`).join('');
     const actual = x ? x.actualTotal : null, direct = num(b.material) + num(b.manpower) + num(b.subcontract) + num(b.other);
     const cards = `<div class="jv-cards">
@@ -349,8 +352,10 @@ ${j.notes ? `<div class="jv-box"><h4>Notes</h4><p class="jv-note">${esc(j.notes)
       main = `<div class="jv-two"><div>${evaHtml(j)}</div><div class="jv-side">${progressBox(j, x)}<div class="jv-box"><h4>Activity</h4>${V.costs ? activityHtml(j, 6) : '<p class="jv-pnote">Loading…</p>'}</div></div></div>`;
     } else if (V.tab === 'costs') main = costsHtml();
     else if (V.tab === 'subs') main = subsHtml();
+    else if (V.tab === 'scope') main = '<div id="jv-scope"></div>';   // V271.6: the accepted scope (frozen copy)
     else main = `<div class="jv-box">${V.costs ? activityHtml(j, 0) : '<p class="jv-pnote">Loading…</p>'}</div>`;
-    $('jv-body').innerHTML = cards + main;
+    $('jv-body').innerHTML = (V.tab === 'scope' ? '' : cards) + main;
+    if (V.tab === 'scope' && window.BCScope) BCScope.renderJobScope($('jv-scope'), j);
     const canE = canEditJob(), canJE = canExpense() && !/^(closed|cancelled)$/i.test(String(j.status || ''));
     $('jv-ft').innerHTML = `<button type="button" class="btn btn-secondary" onclick="closeModal('job-view-modal')">Close</button><span class="jb-sp"></span>`
       + (j.rfqId ? `<button type="button" class="btn btn-secondary" data-rid="${esc(j.rfqId)}" onclick="closeModal('job-view-modal');bcOpenEstimate(this.dataset.rid,{version:${Number(j.estimateVersion) || 1}})"><i class="ti ti-calculator"></i>Estimate</button>` : '')

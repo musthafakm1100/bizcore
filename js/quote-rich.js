@@ -21,7 +21,7 @@
   const SIZES = [['sm', 'Small'], ['', 'Normal'], ['lg', 'Large'], ['h', 'Heading']];
   const HL = '#fef08a';
   const OL_TYPES = [['1', '1. 2. 3.'], ['a', 'a. b. c.'], ['A', 'A. B. C.'], ['i', 'i. ii. iii.'], ['I', 'I. II. III.']];
-  const MAX_HTML = 20000;
+  const MAX_HTML = 90000;   // V271.6: long scope of work (30,000 characters of text per line, checked on save)
   const escT = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
   /* ───────── cleaning: any HTML (typed, pasted from Word, stored) → the allowed set ───────── */
