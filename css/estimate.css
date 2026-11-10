@@ -535,9 +535,33 @@
 #estimate-modal table.es-tbl{min-width:1100px}
 #estimate-modal .es-tbl col.c-no{width:46px}#estimate-modal .es-tbl col.c-unit{width:64px}#estimate-modal .es-tbl col.c-qty{width:68px}
 #estimate-modal .es-tbl col.c-amt{width:84px}#estimate-modal .es-tbl col.c-tot{width:96px}#estimate-modal .es-tbl col.c-rate{width:86px}#estimate-modal .es-tbl col.c-sell{width:122px}
-/* narrower screens: the Cost / Unit column folds away (its figure is also in the line's tooltip and the Cost Build-up).
-   The cells stay in place (display:none would shift the next cells into its column) — width 0, nothing shown. */
-@media (max-width:1500px){ #estimate-modal table.es-tbl{min-width:1010px} #estimate-modal .es-tbl col.c-cu{width:0} #estimate-modal .es-tbl .es-cu{padding:0!important;border-left:0;font-size:0!important;visibility:hidden;overflow:hidden;white-space:nowrap} #estimate-modal{--es-side:280px} }
+/* V271.7 fit: the window takes the screen's width; Cost / Unit folds away when the table itself is short of room (set by
+   estimate.js from the grid's width — es-fold-cu); the cells stay in place (display:none would shift the next cells). */
+#estimate-modal .modal.es-win{width:calc(100vw - 36px)!important}
+#estimate-modal table.es-tbl{min-width:1140px}
+#estimate-modal.es-fold-cu table.es-tbl{min-width:1000px}
+#estimate-modal.es-fold-cu .es-tbl col.c-cu{width:0}
+#estimate-modal.es-fold-cu .es-tbl .es-cu{padding:0!important;border-left:0;font-size:0!important;visibility:hidden;overflow:hidden;white-space:nowrap}
+@media (max-width:1600px){ #estimate-modal{--es-side:280px} }
+/* small laptops (up to 1365 px): the summary panel folds into a strip above the table and opens over it */
+#estimate-modal .es-mini{display:none}
+#estimate-modal .es-sidex{display:none}
+@media (min-width:901px) and (max-width:1365px){
+  #estimate-modal .es-work{grid-template-columns:minmax(0,1fr);position:relative}
+  #estimate-modal .es-side{position:absolute;top:0;right:0;bottom:0;width:300px;z-index:12;box-shadow:-14px 0 32px rgba(15,23,42,.18);transform:translateX(105%);transition:transform .18s ease;visibility:hidden}
+  #estimate-modal.es-side-open .es-side{transform:none;visibility:visible}
+  #estimate-modal .es-mini{display:flex}
+  #estimate-modal .es-sidex{display:flex}
+}
+#estimate-modal .es-mini{align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 8px;padding:7px 12px;border:1px solid var(--es-line);border-radius:9px;background:#f7f9fc;font-size:12.5px;color:#475569}
+#estimate-modal .es-mini b{color:var(--es-ink);font-weight:600;font-variant-numeric:tabular-nums}
+#estimate-modal .es-mini .es-mini-sell{background:var(--es-navy);color:#fff;border-radius:6px;padding:3px 9px}
+#estimate-modal .es-mini .es-mini-sell b{color:#fff}
+#estimate-modal .es-mini .es-mini-wn{color:#b45309}
+#estimate-modal .es-sidex{justify-content:space-between;align-items:center;margin:-4px 0 8px}
+#estimate-modal .es-sidex b{font-size:13px;color:var(--es-navy)}
+#estimate-modal .es-sidex button{border:0;background:transparent;font-size:16px;color:#64748b;cursor:pointer;padding:2px 6px;border-radius:6px}
+#estimate-modal .es-sidex button:hover{background:#eef2f6}
 #estimate-modal .es-tbl td.es-qc{padding:6px 3px}
 #estimate-modal .es-in.es-qin{border:1px dashed #cdd6e1;background:#fbfcfd;height:28px;font-size:12.5px}
 #estimate-modal .es-in.es-qin:focus{border-style:solid;border-color:#2e75b6;background:#fff}

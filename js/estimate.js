@@ -243,6 +243,7 @@
 </div>
 <div class="es-work">
 <div class="es-main">
+<div class="es-mini" id="es-mini"></div>
 <div class="es-tabs" role="tablist" id="es-tabs"></div>
 <section class="es-panel on" data-panel="items"><div class="es-rfqbn" id="es-rfqbn" hidden></div><div class="es-gt" id="es-grid"></div><div class="es-hint">Cost cells: type a figure directly, or click it (F2) for the Cost Build-up · Sell / Unit or Sell Amount: type either to fix the price (🔒) — the other items follow the Markup %</div></section>
 <section class="es-panel" data-panel="manpower"><div class="es-list" id="es-manpower"></div><div class="es-hint">All manpower in this estimate — hired and own staff. Click a line to open its item.</div></section>
@@ -292,6 +293,11 @@
       if (e.target.dataset.dd === 'unit' && E && !E.ro) { const it = findItem(tr.dataset.iid)?.it; if (it) unitDD(e.target, false, u => { it.unit = u; e.target.value = u; changed(); }); }
     });
     $('es-side').addEventListener('input', onSideInput);
+    // V271.7 fit: the summary strip (small laptops) opens / closes the panel; the grid folds Cost / Unit when short of room
+    $('es-mini').addEventListener('click', e => { if (e.target.closest('[data-act="side-open"]')) { $('estimate-modal').classList.add('es-side-open'); setTimeout(() => $('es-side').querySelector('input:not(:disabled),button')?.focus({ preventScroll: true }), 30); } });
+    $('es-side').addEventListener('click', e => { if (e.target.closest('[data-act="side-close"]')) $('estimate-modal').classList.remove('es-side-open'); });
+    m.addEventListener('mousedown', e => { if (m.classList.contains('es-side-open') && !e.target.closest('#es-side') && !e.target.closest('#es-mini')) m.classList.remove('es-side-open'); });
+    if (window.ResizeObserver) new ResizeObserver(() => fitGrid()).observe($('es-grid'));
     $('es-side').addEventListener('click', e => { const b = e.target.closest('[data-act="use-round"]'); if (b && !E.ro) { E.est.roundTo = b.dataset.v; renderSide(); changed(); } });
     ['es-manpower', 'es-subcontract'].forEach(id => $(id).addEventListener('click', e => { const tr = e.target.closest('tr[data-iid]'); if (tr) openBuild(tr.dataset.iid); }));
     const bu = $('es-bu');
@@ -422,7 +428,7 @@
   function itemRowHtml(s, it, x) {
     const quick = !builtUp(it), editable = !E.ro;
     const costCell = k => {
-      if (quick && editable) { const q = quickOf(it, k); return `<td class="es-qc"><input class="es-in es-num es-qin${q ? ' is-typed' : ''}" data-f="q-${k}" value="${q ? esc(fq(num(q.rate))) : ''}" placeholder="0.00" inputmode="decimal" aria-label="${KIND[k].label} cost of ${x.code}"></td>`; }
+      if (quick && editable) { const q = quickOf(it, k); return `<td class="es-qc"><input class="es-in es-num es-qin${q ? ' is-typed' : ''}" data-f="q-${k}" value="${q ? esc(fmt(num(q.rate))) : ''}" placeholder="0.00" inputmode="decimal" aria-label="${KIND[k].label} cost of ${x.code}"></td>`; }
       return `<td class="es-r es-val es-cost${x.cost[k] ? '' : ' es-m'}" data-act="build" data-c="${k}" title="Open the Cost Build-up">${x.cost[k] ? `<span class="es-bl">${fmt(x.cost[k])}</span>` : '—'}</td>`;
     };
     const ownCat = it.workCat && it.workCat !== (s.workCat || '');
@@ -462,6 +468,7 @@ ${KINDS.map(({ k }) => costCell(k)).join('')}
 <tbody>${body}</tbody>
 <tfoot>${footHtml(c)}</tfoot></table>
 <datalist id="es-units">${UNITS.map(u => `<option value="${esc(u)}"></option>`).join('')}</datalist>`;
+    fitGrid();
     $('es-grid').querySelectorAll('textarea.es-in').forEach(grow);
     mountScopes();
   }
@@ -474,6 +481,8 @@ ${KINDS.map(({ k }) => costCell(k)).join('')}
       const bar = ed.closest('.es-scbox').querySelector('.es-scbar'); if (bar && R()) R().wireBar(bar);
     });
   }
+  /** V271.7 fit: Cost / Unit folds away when the grid is narrower than the full table needs */
+  function fitGrid() { const g = $('es-grid'), m = $('estimate-modal'); if (!g || !m || !g.clientWidth) return; m.classList.toggle('es-fold-cu', g.clientWidth < 1140); }
   function grow(t) { t.style.height = 'auto'; t.style.height = Math.max(30, t.scrollHeight + 2) + 'px'; }
   function refreshNumbers() {   // after a change that does not change the rows: figures only (keeps the caret where it is)
     const c = calc(E.est), byId = new Map(c.flat.map(x => [x.id, x])), act = document.activeElement;
@@ -525,7 +534,9 @@ ${KINDS.map(({ k }) => costCell(k)).join('')}
       if (up > 0 && up !== num(E.est.roundTo) && up !== base) chips.push(`<button type="button" class="es-chip" data-act="use-round" data-v="${up}">Round up to ${fmt(up)}</button>`);
     }
     const diff = r2(c.offer - c.sell);
-    $('es-side').innerHTML = `
+    const mini = $('es-mini');
+    if (mini) mini.innerHTML = `<span class="es-mini-sell">Selling Price <b>${fmt(c.sell)}</b></span><span>Quoted <b>${fmt(c.offer)}</b></span><span>Total Cost <b>${fmt(c.totalCost)}</b></span><span>Margin · Markup <b>${c.costedOffer > 0 && c.totalCost > 0 ? fq(r2(c.marginPct)) + ' % · ' + fq(r2(c.markupPct)) + ' %' : '—'}</b></span>${c.pricedNoCost ? `<span class="es-mini-wn">${c.pricedNoCost} priced without cost</span>` : ''}<span class="es-sp" style="flex:1"></span><button type="button" class="es-lnk" data-act="side-open">Summary &amp; markup ▸</button>`;
+    $('es-side').innerHTML = `<div class="es-sidex"><b>Summary</b><button type="button" data-act="side-close" aria-label="Close the summary">✕</button></div>
 <div class="es-grp"><h4>Direct Cost By Type</h4>
 <div class="es-bar2">${KINDS.map(({ k, color }) => `<i style="width:${c.direct > 0 ? (c.by[k] / D * 100).toFixed(2) : 0}%;background:${color}"></i>`).join('')}</div>
 ${KINDS.map(({ k, label, color }) => `<div class="es-kv"><span><i class="es-d" style="background:${color}"></i>${label}${k === 'manpower' ? (c.by.manpowerOwn > 0 ? '' : ' (Hired)') : ''}</span><b>${fmt(c.by[k])}</b></div>${k === 'manpower' && c.by.manpowerOwn > 0 ? `<div class="es-kv es-kv2"><span>hired ${fmt(r2(c.by.manpower - c.by.manpowerOwn))} · own staff ${fmt(c.by.manpowerOwn)}</span></div>` : ''}`).join('')}
@@ -635,7 +646,7 @@ ${c.pricedNoCost ? `<div class="es-st es-wn">${c.pricedNoCost} item${c.pricedNoC
     const el = e.target; if (!E || E.ro || !el.dataset) return;
     const f = el.dataset.f;
     if ((f === 'sellAmt' || f === 'sellRate') && String(el.value).trim() !== '') setTimeout(() => { if (E && document.activeElement !== el) refreshNumbers(); }, 0);
-    if (f && f.startsWith('q-') && String(el.value).trim() !== '' && num(el.value) > 0) el.value = fq(num(el.value));
+    if (f && f.startsWith('q-') && String(el.value).trim() !== '' && num(el.value) > 0) el.value = fmt(num(el.value));
   }
   function onGridClick(e) {
     const b = e.target.closest('[data-act]'); if (!b) return;
@@ -1414,6 +1425,7 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     if (e.key === 'Escape') {
       if (dd) { e.preventDefault(); e.stopImmediatePropagation(); closeDD(); return; }
       if (CP) { e.preventDefault(); e.stopImmediatePropagation(); closeCopy(); return; }
+      if (m.classList.contains('es-side-open')) { e.preventDefault(); e.stopImmediatePropagation(); m.classList.remove('es-side-open'); return; }
       if (menu) { e.preventDefault(); e.stopImmediatePropagation(); closeMenu(); return; }
       e.preventDefault(); e.stopImmediatePropagation();
       if (E.bu) closeBuild(); else requestClose(false);
