@@ -184,3 +184,39 @@ test('V271.2 quotation from the estimate (both print styles, locked prices) and 
     assert.deepEqual(boss.__errors, [], 'no page errors');
   } finally { await h.close(); }
 });
+
+test('V271.6 Estimation → Open Quotation → Edit → Close → Close: the Estimation comes back loaded and can be closed', { timeout: 200000 }, async () => {
+  const h = await startHarness({ appDir, playwright, executablePath: process.env.CHROMIUM_PATH });
+  try {
+    h.fs.load(DATA);
+    const p = await h.newUser({ uid: 'u-boss', email: 'boss@x', name: 'Musthafa KM' }); await h.open(p);
+    await p.waitForFunction(() => typeof window.bcOpenEstimate === 'function' && typeof viewRFQ === 'function');
+    await p.addStyleTag({ content: '#toast{pointer-events:none!important}' });
+    const openNow = () => p.evaluate(() => [...document.querySelectorAll('.modal-overlay.open')].map(m => m.id));
+    // the estimate is quoted (Converted)
+    await p.evaluate(() => bcOpenEstimate('r1')); await p.waitForFunction(() => BCEst.state()?.version === 1 && !document.getElementById('es-quote').hidden);
+    await p.click('#es-quote'); await p.waitForSelector('#quote-modal.open'); await sleep(400);
+    const saving = p.evaluate(() => saveQuotation('save')); await p.waitForSelector('#app-confirm-overlay'); await p.click('#confirm-ok'); await saving; await sleep(600);
+    await p.evaluate(() => document.querySelectorAll('.modal-overlay.open').forEach(m => closeModal(m.id))); await sleep(300);
+    // RFQ → Estimation (view only) → Open Quotation → Edit → Close → Close
+    await p.evaluate(() => { showPage('rfq'); viewRFQ('r1'); }); await sleep(400);
+    await p.evaluate(() => bcOpenEstimate('r1', { fromRfqView: true })); await p.waitForFunction(() => BCEst.state()?.status === 'Converted');
+    assert.equal(await p.textContent('#es-quote'), 'Open Quotation');
+    await p.click('#es-quote'); await p.waitForSelector('#view-modal.open'); await sleep(300);
+    assert.equal(await p.evaluate(() => BCEst.state()), null, 'the estimate screen was closed');
+    await p.click('#view-footer button:has-text("Edit")'); await p.waitForSelector('#quote-modal.open'); await sleep(400);
+    await p.click('#qt-back-btn'); await sleep(600);
+    assert.deepEqual(await openNow(), ['view-modal']);
+    await p.click('#view-footer button:has-text("Close")'); await sleep(800);
+    assert.deepEqual(await openNow(), ['estimate-modal']);
+    assert.equal(await p.evaluate(() => BCEst.state()?.status), 'Converted', 'the estimate is loaded again');
+    assert.equal(await p.textContent('#es-quote'), 'Open Quotation');
+    await p.click('#es-close2'); await sleep(500);
+    assert.deepEqual(await openNow(), [], 'Close works');
+    // ✕ works the same way
+    await p.evaluate(() => bcOpenEstimate('r1')); await p.waitForSelector('#estimate-modal.open');
+    await p.click('#es-close'); await sleep(400);
+    assert.deepEqual(await openNow(), []);
+    assert.deepEqual(p.__errors, []);
+  } finally { await h.close(); }
+});

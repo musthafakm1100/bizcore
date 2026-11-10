@@ -285,19 +285,31 @@
     }
     ensureModal();
     if (opts.fromRfqView && typeof closeModal === 'function') closeModal('rfq-view-modal');
+    lastShown = { rfqId: r.id, version: n };
     E = { rfqId: r.id, version: n, status, isNew, ro: status !== 'Saved' && status !== 'New' || !canEdit(), est, base: JSON.stringify(est), tab: 'items', sel: null, bu: null };
     if (!E.isNew) E.base = JSON.stringify(est);
     renderAll();
-    if (typeof openModalWithSize === 'function') openModalWithSize('estimate-modal'); else $('estimate-modal').classList.add('open');
+    // V271.6: opts.reshow — the screen is already shown again by "Back" (app.js smartModalBack); keep its Back history
+    if (opts.reshow) $('estimate-modal').classList.add('open');
+    else if (typeof openModalWithSize === 'function') openModalWithSize('estimate-modal'); else $('estimate-modal').classList.add('open');
     requestAnimationFrame(() => $('es-grid').querySelectorAll('textarea.es-in').forEach(grow));
     if (isNew && (r.rfqLines || []).some(l => l && String(l.desc || '').trim())) toast(`${allItems().length} item${allItems().length === 1 ? '' : 's'} taken from the RFQ — build up their costs and save the estimate`, 'success', 'Estimation started');
     setTimeout(() => { const f = $('es-grid').querySelector('textarea:not(:disabled),input:not(:disabled)'); if (f && isNew) f.focus({ preventScroll: true }); }, 60);
     return true;
   }
+  /* V271.6: the estimate last shown. "Open Quotation" closes this screen and clears E; when the user comes back to it
+     with Back (Quotation view → Close), app.js shows the window again and calls reshow(), which loads that estimate
+     again — before, the window came back empty and its Close / ✕ did nothing. */
+  let lastShown = null;
+  async function reshow() {
+    const m = $('estimate-modal');
+    if (E || !m) return;
+    if (!lastShown || !(await open(lastShown.rfqId, { version: lastShown.version, reshow: true }))) closeWin();
+  }
   function closeWin() { closeDD(); closeMenu(); if (typeof closeModal === 'function') closeModal('estimate-modal'); else $('estimate-modal').classList.remove('open'); }
   function leave(back) { const id = E && E.rfqId; closeWin(); E = null; if (back && id && typeof viewRFQ === 'function') viewRFQ(id); }
   function requestClose(back) {
-    if (!E) return;
+    if (!E) { closeWin(); return; }   // V271.6: never a screen that cannot be closed
     if (E.bu) { closeBuild(); }
     if (!dirty()) { leave(back); return; }
     const where = back ? 'Going back to the RFQ' : 'Closing';
@@ -1110,5 +1122,5 @@ ${CS.expenseCategories.map((x, i) => `<tr><td><input data-ec="${i}" data-f="name
 
   /* ══ public ══ */
   window.bcOpenEstimate = (rfqId, opts) => open(rfqId, opts || {});
-  window.BCEst = { UNITS, calc, itemCost, lineAmt, distribute, settings, summaryOf, marginState, open, save: () => save(), state: () => E, cache, DEFAULTS };
+  window.BCEst = { UNITS, calc, itemCost, lineAmt, distribute, settings, summaryOf, marginState, open, save: () => save(), state: () => E, cache, DEFAULTS, reshow };
 })();

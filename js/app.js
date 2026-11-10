@@ -5921,7 +5921,7 @@ function smartModalBack(currentId) {
   // V266.3: leaving a locked screen with "Back" releases its lock too (as Close / Cancel do)
   try{ if(typeof _activeLock!=='undefined'&&_activeLock&&_activeLock.modalId===currentId) releaseLock(); }catch(e){}
   const previous=document.getElementById(entry.from);
-  if(previous){previous.classList.add('open');setModalSize(entry.from,modalSizes[entry.from]||'normal');ensureSmartBackButton(entry.from);if(entry.from==='so-view-modal')refreshOpenSalesOrderView();}
+  if(previous){previous.classList.add('open');setModalSize(entry.from,modalSizes[entry.from]||'normal');ensureSmartBackButton(entry.from);if(entry.from==='so-view-modal')refreshOpenSalesOrderView();if(entry.from==='estimate-modal'&&window.BCEst&&typeof BCEst.reshow==='function')BCEst.reshow();}   // V271.6: the Estimation is loaded again (it was shown empty and could not be closed)
   else updateFullscreenShellState();
 }
 
