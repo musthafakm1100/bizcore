@@ -226,10 +226,10 @@ test('V271.7 fixes: Units master in the lists, Material list opens on demand, + 
     /* Cost Build-up: + Material does not pop the list; the Units master in the unit list (goods first); + Add to the Item Master */
     await p.click('#es-grid tr.es-it >> nth=0 >> td.es-tot'); await p.waitForSelector('#es-bu:not([hidden])');
     await p.click('#es-bu [data-act="show-k"][data-k="material"]'); await sleep(200);
-    assert.equal(await p.locator('.es-dd').count(), 0, 'no list until typing, ↓ or a click');
+    assert.equal(await p.locator('.es-dd').count(), 0, 'no list until typing, Alt+↓ or a click');
     const mat = '#es-bu .es-grpbox[data-k="material"] tr[data-lid]';
     assert.equal(await p.inputValue(`${mat} [data-f="unit"]`), '', 'a free-text material starts with no unit');
-    await p.press(`${mat} [data-f="desc"]`, 'ArrowDown'); await p.waitForSelector('.es-dd button'); await p.keyboard.press('Escape');
+    await p.press(`${mat} [data-f="desc"]`, 'Alt+ArrowDown'); await p.waitForSelector('.es-dd button'); await p.keyboard.press('Escape');
     await p.click(`${mat} [data-f="unit"]`); await p.waitForSelector('.es-dd button');
     const ul = await p.$$eval('.es-dd > *', els => els.map(e => e.textContent.replace(' ✓', '').trim()));
     assert.equal(ul[0], 'Goods units'); assert.ok(ul.includes('Drum') && ul.includes('LS'), ul.join(','));
@@ -242,6 +242,71 @@ test('V271.7 fixes: Units master in the lists, Material list opens on demand, + 
     const l = await p.evaluate(() => BCEst.state().est.sections[0].items[0].build.material[0]);
     const np = await p.evaluate(() => products.find(x => x.name === 'White enamel paint'));
     assert.equal(np.type, 'goods'); assert.equal(l.productId, np.id); assert.equal(l.desc, 'White enamel paint');
+    assert.deepEqual(p.__errors, []);
+  } finally { await h.close(); }
+});
+
+test('V271.7.2: window width cap, subtotal / total rows, ↑ / ↓ in the same column', { timeout: 300000 }, async () => {
+  const h = await startHarness({ appDir, playwright, executablePath: process.env.CHROMIUM_PATH });
+  try {
+    h.fs.load(DATA);
+    const p = await h.newUser({ uid: 'u-boss', email: 'boss@x', name: 'Musthafa KM' }); await h.open(p);
+    await p.waitForFunction(() => typeof window.bcOpenEstimate === 'function');
+    await p.addStyleTag({ content: '#toast{pointer-events:none!important}' });
+    await p.setViewportSize({ width: 2400, height: 1100 });
+    await p.evaluate(() => bcOpenEstimate('r1')); await p.waitForFunction(() => BCEst.state()?.version === 1);
+    await p.waitForSelector('#es-grid tr.es-it >> nth=1');
+
+    /* big monitor: 1680 px, centred; the Quotation window is the same size */
+    const box = await p.locator('#estimate-modal .es-win').boundingBox();
+    assert.equal(Math.round(box.width), 1680); assert.ok(Math.abs(box.x - (2400 - 1680) / 2) < 3, 'centred: ' + box.x);
+    const qw = await p.evaluate(() => { const m = document.getElementById('quote-modal'); m.classList.add('open'); const w = m.querySelector('.qt-win').getBoundingClientRect().width; m.classList.remove('open'); return w; });
+    assert.equal(Math.round(qw), 1680);
+
+    /* subtotal and total rows: Total Cost and Sell Amount bold navy; total row light blue */
+    await p.fill('#es-grid tr.es-it >> nth=0 >> [data-f="q-material"]', '1000'); await p.keyboard.press('Tab');
+    const st = await p.evaluate(() => {
+      const css = el => { const c = getComputedStyle(el); return { color: c.color, weight: c.fontWeight, bg: c.backgroundColor }; };
+      const sub = document.querySelectorAll('#es-grid tr.es-sub[data-subof] td.es-key'), foot = document.querySelectorAll('#es-grid tfoot td.es-key');
+      return { n: sub.length, f: foot.length, sub: css(sub[0]), foot: css(foot[0]), footBg: css(document.querySelector('#es-grid tfoot td')).bg };
+    });
+    assert.equal(st.n, 2); assert.equal(st.f, 2);
+    assert.equal(st.sub.color, 'rgb(23, 58, 94)'); assert.equal(st.sub.weight, '800');
+    assert.equal(st.foot.color, 'rgb(23, 58, 94)'); assert.equal(st.foot.weight, '800'); assert.equal(st.footBg, 'rgb(238, 244, 251)');
+
+    /* grid: ↑ / ↓ go to the same column of the item above / below */
+    const row = i => `#es-grid tr.es-it >> nth=${i}`;
+    const at = () => p.evaluate(() => { const a = document.activeElement, tr = a.closest('tr.es-it'); return tr ? [...document.querySelectorAll('#es-grid tr.es-it')].indexOf(tr) + ':' + a.dataset.f : 'none'; });
+    await p.focus(`${row(0)} >> [data-f="qty"]`); await p.keyboard.press('ArrowDown');
+    assert.equal(await at(), '1:qty');
+    await p.keyboard.press('ArrowDown'); assert.equal(await at(), '1:qty', 'last item: stays');
+    await p.keyboard.press('ArrowUp'); assert.equal(await at(), '0:qty');
+    await p.focus(`${row(1)} >> [data-f="sellAmt"]`); await p.keyboard.press('ArrowUp'); assert.equal(await at(), '0:sellAmt');
+    // a multi-line description: the arrows move inside it until its first / last line
+    await p.fill(`${row(0)} >> [data-f="desc"]`, 'Line one\nLine two');
+    await p.evaluate(() => { const t = document.querySelector('#es-grid tr.es-it [data-f="desc"]'); t.focus(); t.setSelectionRange(0, 0); });
+    await p.keyboard.press('ArrowDown'); assert.equal(await at(), '0:desc', 'moves to the second line first');
+    await p.evaluate(() => { const t = document.activeElement; t.setSelectionRange(t.value.length, t.value.length); });
+    await p.keyboard.press('ArrowDown'); assert.equal(await at(), '1:desc');
+    // the Unit list that opens on entering the field doesn't take the arrows; Alt+↓ goes into it
+    await p.focus(`${row(0)} >> [data-f="unit"]`); await p.waitForSelector('.es-dd button');
+    await p.keyboard.press('ArrowDown'); assert.equal(await at(), '1:unit');
+    await p.waitForSelector('.es-dd button'); await p.keyboard.press('Alt+ArrowDown');
+    assert.equal(await at(), '1:unit'); assert.equal(await p.locator('.es-dd button.on').count(), 1, 'Alt+↓ highlights the first unit');
+    await p.keyboard.press('Escape');
+
+    /* Cost Build-up: same, within the lines of one cost type */
+    await p.click(`${row(1)} >> td.es-tot`); await p.waitForSelector('#es-bu:not([hidden])');
+    await p.click('#es-bu [data-act="show-k"][data-k="material"]');
+    await p.click('#es-bu .es-grpbox[data-k="material"] [data-act="add-line"]'); await sleep(150);
+    const mat = '#es-bu .es-grpbox[data-k="material"] tr[data-lid]';
+    assert.ok(await p.locator(mat).count() >= 2);
+    const bat = () => p.evaluate(() => { const a = document.activeElement, tr = a.closest('tr[data-lid]'); return tr ? [...tr.closest('.es-grpbox').querySelectorAll('tr[data-lid]')].indexOf(tr) + ':' + a.dataset.f : 'none'; });
+    await p.focus(`${mat} >> nth=0 >> [data-f="rate"]`); await p.keyboard.press('ArrowDown'); assert.equal(await bat(), '1:rate');
+    await p.keyboard.press('ArrowUp'); assert.equal(await bat(), '0:rate');
+    await p.focus(`${mat} >> nth=0 >> [data-f="desc"]`); await p.keyboard.press('ArrowDown');
+    assert.equal(await bat(), '1:desc'); assert.equal(await p.locator('.es-dd').count(), 0, '↓ moves, no list');
+    await p.keyboard.press('Alt+ArrowDown'); await p.waitForSelector('.es-dd button'); await p.keyboard.press('Escape');
     assert.deepEqual(p.__errors, []);
   } finally { await h.close(); }
 });

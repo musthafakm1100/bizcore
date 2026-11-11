@@ -245,7 +245,7 @@
 <div class="es-main">
 <div class="es-mini" id="es-mini"></div>
 <div class="es-tabs" role="tablist" id="es-tabs"></div>
-<section class="es-panel on" data-panel="items"><div class="es-rfqbn" id="es-rfqbn" hidden></div><div class="es-gt" id="es-grid"></div><div class="es-hint">Cost cells: type a figure directly, or click it (F2) for the Cost Build-up · Sell / Unit or Sell Amount: type either to fix the price (🔒) — the other items follow the Markup %</div></section>
+<section class="es-panel on" data-panel="items"><div class="es-rfqbn" id="es-rfqbn" hidden></div><div class="es-gt" id="es-grid"></div><div class="es-hint">Cost cells: type a figure directly, or click it (F2) for the Cost Build-up · Sell / Unit or Sell Amount: type either to fix the price (🔒) — the other items follow the Markup % · ↑ ↓ move up / down in the same column</div></section>
 <section class="es-panel" data-panel="manpower"><div class="es-list" id="es-manpower"></div><div class="es-hint">All manpower in this estimate — hired and own staff. Click a line to open its item.</div></section>
 <section class="es-panel" data-panel="subcontract"><div class="es-list" id="es-subcontract"></div><div class="es-hint">All subcontract work in this estimate. Click a line to open its item.</div></section>
 <section class="es-panel" data-panel="notes"><div class="es-notehead"><span>Internal notes — never printed on the quotation</span><span id="es-note-count">0 / 2000</span></div><textarea class="es-ta" id="es-notes" maxlength="2000" placeholder="Assumptions, exclusions, site visit notes, supplier remarks…"></textarea></section>
@@ -290,7 +290,7 @@
     grid.addEventListener('focusin', e => {
       if (dd && e.target !== dd.input) closeDD();
       const tr = e.target.closest('tr[data-iid]'); if (!tr) return; select(tr.dataset.iid);
-      if (e.target.dataset.dd === 'unit' && E && !E.ro) { const it = findItem(tr.dataset.iid)?.it; if (it) unitDD(e.target, false, u => { it.unit = u; e.target.value = u; changed(); }, 'service'); }
+      if (e.target.dataset.dd === 'unit' && E && !E.ro) { const it = findItem(tr.dataset.iid)?.it; if (it) { unitDD(e.target, false, u => { it.unit = u; e.target.value = u; changed(); }, 'service'); if (dd) dd.passive = true; } }
     });
     $('es-side').addEventListener('input', onSideInput);
     $('es-side').addEventListener('change', e => { const f = e.target.dataset && e.target.dataset.f; if (f && E && !E.ro) setTimeout(() => { if (E && document.activeElement !== e.target) renderSide(); }, 0); });   // tidy the figures when the field is left
@@ -313,7 +313,7 @@
       if (el.id === 'es-copy') { copySearch(el); return; }
       if (el.dataset.dd === 'product' || el.dataset.dd === 'supplier') return;   // V271.7: these open on a click, typing or ↓ — not when the cursor is just put there
       const tr = el.closest('tr[data-lid]'), k = el.closest('.es-grpbox')?.dataset.k; if (!tr || !k) return;
-      const l = findItem(E.bu)?.it.build[k].find(y => y.id === tr.dataset.lid); if (l) openDDFor(el, k, l);
+      const l = findItem(E.bu)?.it.build[k].find(y => y.id === tr.dataset.lid); if (l) { openDDFor(el, k, l); if (dd) dd.passive = true; }
     });
     bu.addEventListener('mousedown', e => {
       const el = e.target; if (!E || E.ro || !el.dataset || !(el.dataset.dd === 'product' || el.dataset.dd === 'supplier')) return;
@@ -455,8 +455,8 @@ ${KINDS.map(({ k }) => costCell(k)).join('')}
 <td><button type="button" class="es-kbtn" data-act="item-menu" title="Line actions" aria-label="Item ${x.code} actions">⋮</button></td></tr>`
       + (scopeOpen ? `<tr class="es-scrow" data-iid="${it.id}" data-sid="${s.id}"><td></td><td colspan="11"><div class="es-scbox"><div class="es-schd"><b>Scope of work</b>${it.scopeSrc === 'rfq' ? '<span class="es-tag t-src">From RFQ requirements</span>' : ''}<span class="es-sp" style="flex:1"></span>${E.ro ? '' : '<div class="es-scbar"></div><button type="button" class="es-lnk es-sm" data-act="scope-close" title="Remove the scope of this item">Remove</button>'}</div><div class="es-scdoc" data-scope="${it.id}"></div></div></td><td></td></tr>` : '');
   }
-  const subRowHtml = sc => `<tr class="es-sub" data-subof="${sc.id}"><td></td><td colspan="3">Section ${sc.code} subtotal</td>${KINDS.map(({ k }) => `<td class="es-r es-val${sc.totals[k] ? '' : ' es-m'}">${sc.totals[k] ? fmt(sc.totals[k]) : '—'}</td>`).join('')}<td class="es-r">${fmt(sc.totals.total)}</td><td class="es-cu"></td><td></td><td class="es-r">${fmt(sc.sell)}</td><td></td></tr>`;
-  const footHtml = c => `<tr><td></td><td colspan="3">Direct Cost · ${c.itemCount} Item${c.itemCount === 1 ? '' : 's'}</td>${KINDS.map(({ k }) => `<td class="es-r">${fmt(c.by[k])}</td>`).join('')}<td class="es-r">${fmt(c.direct)}</td><td class="es-cu"></td><td></td><td class="es-r">${fmt(c.sell)}</td><td></td></tr>`;
+  const subRowHtml = sc => `<tr class="es-sub" data-subof="${sc.id}"><td></td><td colspan="3">Section ${sc.code} subtotal</td>${KINDS.map(({ k }) => `<td class="es-r es-val${sc.totals[k] ? '' : ' es-m'}">${sc.totals[k] ? fmt(sc.totals[k]) : '—'}</td>`).join('')}<td class="es-r es-key">${fmt(sc.totals.total)}</td><td class="es-cu"></td><td></td><td class="es-r es-key">${fmt(sc.sell)}</td><td></td></tr>`;
+  const footHtml = c => `<tr><td></td><td colspan="3">Direct Cost · ${c.itemCount} Item${c.itemCount === 1 ? '' : 's'}</td>${KINDS.map(({ k }) => `<td class="es-r">${fmt(c.by[k])}</td>`).join('')}<td class="es-r es-key">${fmt(c.direct)}</td><td class="es-cu"></td><td></td><td class="es-r es-key">${fmt(c.sell)}</td><td></td></tr>`;
   function renderGrid() {
     const c = calc(E.est), byId = new Map(c.flat.map(x => [x.id, x]));
     let body = '';
@@ -675,7 +675,9 @@ ${c.pricedNoCost ? `<div class="es-st es-wn">${c.pricedNoCost} item${c.pricedNoC
     if (act === 'add-section') { addSection(); }
   }
   function onGridKey(e) {
-    if (dd && e.target === dd.input && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key)) { ddKey(e); return; }
+    if (dd && e.target === dd.input && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key) && ddKey(e) !== false) return;
+    if (!dd && e.key === 'ArrowDown' && e.altKey && e.target.dataset.dd === 'unit' && !E.ro) { const r = e.target.closest('tr[data-iid]'), it = r && findItem(r.dataset.iid)?.it; if (it) { e.preventDefault(); unitDD(e.target, false, u => { it.unit = u; e.target.value = u; changed(); }, 'service'); } return; }
+    if (vMove(e, 'tr.es-it[data-iid]', () => $('es-grid'))) return;
     const tr = e.target.closest('tr[data-iid]');
     if (e.key === 'F2' && tr) { e.preventDefault(); openBuild(tr.dataset.iid); return; }
     if (e.key === 'Enter' && e.target.dataset.f === 'qty' && tr && !E.ro) {   // Enter on Qty: next item, or a new one at the end of the section
@@ -1024,9 +1026,10 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     if (act === 'toggle-own' && tr) { const l = hit.it.build.manpower.find(y => y.id === tr.dataset.lid); if (l) { if (l.own) delete l.own; else { l.own = true; l.supplierId = ''; l.supplierName = ''; } const lr = labourRate(l.trade, !!l.own); if (lr > 0) l.rate = lr; renderBuild(); changed(); } }
   }
   function onBuKey(e) {
-    if (dd && e.target === dd.input && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key)) { ddKey(e); return; }
+    if (dd && e.target === dd.input && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key) && ddKey(e) !== false) return;
     const el = e.target;
-    if (!dd && e.key === 'ArrowDown' && !E.ro && el.dataset && (el.dataset.dd === 'product' || el.dataset.dd === 'supplier')) {   // V271.7: ↓ opens the list
+    if (vMove(e, 'tr[data-lid]', r => r.closest('.es-grpbox'))) return;
+    if (!dd && e.key === 'ArrowDown' && e.altKey && !E.ro && el.dataset && (el.dataset.dd === 'product' || el.dataset.dd === 'supplier' || el.dataset.dd === 'unit')) {   // V271.7.2: Alt+↓ opens the list (↓ moves down)
       const tr = el.closest('tr[data-lid]'), k = el.closest('.es-grpbox')?.dataset.k, l = tr && k ? findItem(E.bu)?.it.build[k].find(y => y.id === tr.dataset.lid) : null;
       if (l) { e.preventDefault(); openDDFor(el, k, l); } return;
     }
@@ -1119,12 +1122,34 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     dd = { el, input, items, onPick, at: -1 };
   }
   function ddKey(e) {
+    if (dd.passive && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { if (!e.altKey) return false; dd.passive = false; }   // V271.7.2: arrows move rows; Alt+↓ enters the list
     const btns = [...dd.el.querySelectorAll('button[data-i]')];
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeDD(); return; }
     if (e.key === 'Enter') { if (dd.at >= 0 && btns[dd.at]) { e.preventDefault(); btns[dd.at].click(); } else closeDD(); return; }
     e.preventDefault(); if (!btns.length) return;
     dd.at = (dd.at + (e.key === 'ArrowDown' ? 1 : -1) + btns.length) % btns.length;
     btns.forEach((b, i) => b.classList.toggle('on', i === dd.at)); btns[dd.at].scrollIntoView({ block: 'nearest' });
+  }
+  /* V271.7.2: ↑ / ↓ move to the same column in the row above / below (items in the grid; lines of the same cost type in the
+     Cost Build-up). A list opened by just entering the field doesn't take the arrows; one opened by typing or Alt+↓ does. */
+  function vMove(e, rowSel, scopeOf) {
+    if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
+    const el = e.target, f = el.dataset && el.dataset.f; if (!f) return false;
+    const tr = el.closest(rowSel), box = tr && scopeOf(tr); if (!box) return false;
+    if (el.tagName === 'TEXTAREA') {   // inside a multi-line description: only from its first / last line
+      const v = el.value || '';
+      if (e.key === 'ArrowUp' ? v.slice(0, el.selectionStart).includes('\n') : v.slice(el.selectionEnd).includes('\n')) return false;
+    }
+    const rows = [...box.querySelectorAll(rowSel)]; let i = rows.indexOf(tr);
+    const step = e.key === 'ArrowDown' ? 1 : -1;
+    for (i += step; i >= 0 && i < rows.length; i += step) {
+      const t = [...rows[i].querySelectorAll(`[data-f="${f}"]`)].find(x => !x.disabled && x.offsetParent !== null);
+      if (!t) continue;
+      e.preventDefault(); closeDD(); t.focus(); t.scrollIntoView({ block: 'nearest' });
+      if (t.tagName === 'INPUT' && !t.readOnly) { try { t.select(); } catch (_) {} }
+      return true;
+    }
+    e.preventDefault(); return true;   // first / last row: stay put
   }
   /* Copy From: items of this estimate and of the current version of other Contracting RFQs (read when first searched). */
   let others = null;

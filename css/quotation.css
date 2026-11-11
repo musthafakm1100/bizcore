@@ -9,7 +9,7 @@
    ═══════════════════════════════════════════════════════════════ */
 #quote-modal{--qt-line:#dfe5ec;--qt-line2:#edf1f5;--qt-muted:#64748b;--qt-ink:#1f2937;--qt-soft:#f7f9fc;--qt-focus:var(--blue-mid,#2e75b6);--qt-navy:var(--blue,#173a5e);--qt-side:284px}
 #quote-modal.modal-overlay{padding:18px!important;background:rgba(15,23,42,.45)}
-#quote-modal.qt-overlay.modal-overlay > .modal.qt-win{width:min(1320px,calc(100vw - 36px))!important;max-width:none!important;height:calc(100vh - 36px)!important;height:calc(100dvh - 36px)!important;max-height:none!important;border-radius:12px!important;border:0!important;box-shadow:0 20px 50px rgba(15,23,42,.3)!important;display:flex;flex-direction:column;overflow:hidden;font-size:13px;color:var(--qt-ink);background:#fff;position:relative;margin:0 auto!important}
+#quote-modal.qt-overlay.modal-overlay > .modal.qt-win{width:min(1680px,calc(100vw - 36px))!important;max-width:none!important;height:calc(100vh - 36px)!important;height:calc(100dvh - 36px)!important;max-height:none!important;border-radius:12px!important;border:0!important;box-shadow:0 20px 50px rgba(15,23,42,.3)!important;display:flex;flex-direction:column;overflow:hidden;font-size:13px;color:var(--qt-ink);background:#fff;position:relative;margin:0 auto!important}
 #quote-modal .qt-win *{box-sizing:border-box}
 #quote-modal .qt-win :is(input,select,textarea,button){font-family:inherit}
 #quote-modal [hidden]{display:none!important}

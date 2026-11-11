@@ -678,3 +678,13 @@
 /* V271.7 fixes */
 .es-dd .es-ddadd{color:#1d5f9f;font-weight:600}
 #estimate-modal .es-side .es-pct input.is-bad,#estimate-modal .es-round input.is-bad{border-color:#f59e0b!important;background:#fffbeb!important;color:#b45309}
+
+/* V271.7.2 — on a big monitor the window stops at 1680 px, centred (the Quotation window matches it) */
+#estimate-modal .modal.es-win{width:min(1680px,calc(100vw - 36px))!important;margin:0 auto!important}
+@media (max-width:760px){ #estimate-modal .modal.es-win{width:100vw!important} }
+/* V271.7.2 — subtotal and total rows stand out (board 18, option C): a line above each subtotal, Total Cost and Sell Amount
+   bold navy; the total row light blue with a navy line above */
+#estimate-modal .es-tbl tr.es-sub[data-subof] td{background:#fff;color:#334155!important;font-weight:600!important;box-shadow:inset 0 1px 0 #9fb3c8}
+#estimate-modal .es-tbl tr.es-sub[data-subof] td.es-key{color:#173a5e!important;font-weight:800!important}
+#estimate-modal .es-tbl tfoot td{background:#eef4fb;color:#173a5e!important;font-weight:700!important;font-size:13px!important;border-top:0;box-shadow:inset 0 2px 0 #173a5e}
+#estimate-modal .es-tbl tfoot td.es-key{font-size:14px!important;font-weight:800!important}
