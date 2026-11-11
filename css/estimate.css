@@ -688,3 +688,5 @@
 #estimate-modal .es-tbl tr.es-sub[data-subof] td.es-key{color:#173a5e!important;font-weight:800!important}
 #estimate-modal .es-tbl tfoot td{background:#eef4fb;color:#173a5e!important;font-weight:700!important;font-size:13px!important;border-top:0;box-shadow:inset 0 2px 0 #173a5e}
 #estimate-modal .es-tbl tfoot td.es-key{font-size:14px!important;font-weight:800!important}
+/* V271.7.5: Update Draft (same number) */
+#estimate-modal #es-quote.es-upd{background:#15803d;border-color:#15803d;color:#fff}

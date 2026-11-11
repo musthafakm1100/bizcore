@@ -5717,7 +5717,7 @@ function qtPricingContextOf(q){
 function qtDiscPctText(p){ const n=Number(p)||0; return n?n.toFixed(2):''; }
 function qtMoneyText(n){ const v=Number(n)||0; return v?v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):''; }
 function addItemRow(item={}) {
-  if(item.lineType==='heading'||item.lineType==='note'){ return addSpecialQuoteRow(item.lineType,item.text||item.desc||'',{noteStyle:item.noteStyle||'',focus:false,html:item.textHtml||'',hScope:item.hScope||'',group:item.grouped?{qty:item.gQty,unit:item.gUnit,rates:item.gRates!==false}:null}); }
+  if(item.lineType==='heading'||item.lineType==='note'){ return addSpecialQuoteRow(item.lineType,item.text||item.desc||'',{noteStyle:item.noteStyle||'',focus:false,html:item.textHtml||'',hScope:item.hScope||'',estSec:!!item.estSec,group:item.grouped?{qty:item.gQty,unit:item.gUnit,rates:item.gRates!==false}:null}); }
   const n = document.querySelectorAll('#items-tbody tr:not(.quote-special-row)').length+1;
   const tr = document.createElement('tr');
   tr.dataset.lineType='item';
@@ -5816,6 +5816,7 @@ function addSpecialQuoteRow(type='note', text='', opts={}){
     const hEd=window.BCRich?`<div class="quote-special-text qt-htext" aria-label="Heading text" oninput="markDirty('quote-modal')"></div>`:input;
     const sEd=window.BCRich?`<div class="qt-hsw"><div class="qt-hscope" data-f="hscope" aria-label="Scope of work under the heading" oninput="markDirty('quote-modal')"></div></div>`:'';
     tr.innerHTML=`<td class="qt-no"><span class="qt-grip" title="Drag to reorder" aria-hidden="true">⋮⋮</span></td><td colspan="${span}"><div class="qt-hwrap qt-hwrap2"><span class="qt-badge">Heading</span><div class="qt-hline">${hEd}<button type="button" class="qt-gchip" onclick="qtHeadGroupMenu(this)" hidden></button><span class="qt-hsum" hidden></span></div></div>${sEd}</td><td class="qt-mc"><button type="button" class="pr-menu-btn qt-menu-btn" onclick="qtRowMenu(this)" aria-label="Line menu" title="Line menu">⋮</button></td>`;
+    if(opts.estSec) tr.dataset.estSec='1';   // V271.7.5: a section heading made by the estimate (replaced when a draft is updated from a newer version)
     if(opts.group){ tr.dataset.grouped='1'; tr.dataset.gQty=String(Number(opts.group.qty)>0?Number(opts.group.qty):1); tr.dataset.gUnit=String(opts.group.unit||'Lot'); tr.dataset.gRates=opts.group.rates===false?'0':'1'; }
   } else {
     tr.dataset.noteStyle=quotationNoteStyleKey(opts.noteStyle)||'';
@@ -6309,6 +6310,7 @@ async function saveQuotation(mode='save', opts={}) {
       if(text){ const line={lineType:tr.dataset.lineType,text}; const ns=tr.dataset.lineType==='note'?quotationNoteStyleKey(tr.dataset.noteStyle):''; if(ns) line.noteStyle=ns;
         const th=window.BCRich?BCRich.htmlOf(tr.querySelector('.quote-special-text')):''; if(th) line.textHtml=th;   // V270.4.14: the note's formatting
         if(tr.dataset.lineType==='heading'){ const hs=bcHeadScopeOf(tr); if(hs) line.hScope=hs;   // V271.7.3: the heading's own scope + grouped print
+          if(tr.dataset.estSec==='1') line.estSec=true;
           if(tr.dataset.grouped==='1'){ line.grouped=true; line.gQty=Number(tr.dataset.gQty)>0?Number(tr.dataset.gQty):1; line.gUnit=String(tr.dataset.gUnit||'Lot').slice(0,20); if(tr.dataset.gRates==='0') line.gRates=false; } }
         items.push(line); }   // V270.2: a note's own style
       return;
@@ -6443,6 +6445,11 @@ async function saveQuotation(mode='save', opts={}) {
     }
     var _pendingBack={rfq:document._pendingRFQId,pv:document._pendingPricingVersion,rev:document._pendingQuotationRevision};   // V271.3.1: restored if the save fails
     document._pendingRFQId = null; document._pendingPricingVersion=null; document._pendingQuotationRevision=null;
+  }
+  // V271.7.5 (board 23): a Draft updated from a newer estimate version — that version becomes Converted, the earlier one Superseded
+  if (capturedEditingId && window._pendingEstimate && window._pendingEstimate.updateOf===q.id && typeof window.bcEstMarkConverted==='function') {
+    const rfq = rfqs.find(x=>String(x.id)===String(window._pendingEstimate.rfqId));
+    if (rfq) { window.bcEstMarkConverted(rfq,q); _linkedRfq=rfq; _rfqNeedsSave=true; }
   }
 
   // Every mutation above is in-memory only up to this point — persist
@@ -13630,7 +13637,9 @@ async function printWithSelectedTemplate() {
   try { localStorage.setItem('dtq_settings', JSON.stringify(settings)); } catch(e){}
   closeModal('template-picker-modal');
   const sig=document.getElementById('qout-signature'), stamp=document.getElementById('qout-stamp');
-  if(sig)sig.checked=false;if(stamp)stamp.checked=false; refreshQuotationOutputOptions(); if(window.BCScope) BCScope.paintPrintOption(quotations.find(x=>x.id===_printQID)); (bcRaiseModal('quotation-output-modal'),openModalWithSize('quotation-output-modal'));
+  if(sig)sig.checked=false;if(stamp)stamp.checked=false; refreshQuotationOutputOptions(); if(window.BCScope) BCScope.paintPrintOption(quotations.find(x=>x.id===_printQID));
+  { const dn=document.getElementById('qout-draft'), qq=quotations.find(x=>x.id===_printQID); if(dn) dn.hidden=!(qq&&(qq.status||'Draft')==='Draft'&&(typeof bcCan!=='function'||bcCan('quotation','e'))); }   // V271.7.5: a reminder to mark it Sent
+  (bcRaiseModal('quotation-output-modal'),openModalWithSize('quotation-output-modal'));
 }
 function refreshQuotationOutputOptions(){
   const sig=document.getElementById('qout-signature'),stamp=document.getElementById('qout-stamp');
@@ -13658,6 +13667,12 @@ function quotationAuthorizationHtml(){
   return `<div class="digital-auth" style="width:${authW}px;height:${authH}px">${sig}${stamp}</div>${who?`<div class="digital-signer">${who}</div>`:''}`;
 }
 function logQuotationOutput(){try{const q=quotations.find(x=>x.id===_printQID);const key='dtq_quotation_output_audit';const a=JSON.parse(localStorage.getItem(key)||'[]');a.push({quotationId:_printQID,quotationNo:q?.qno||'',template:_pendingQuotationTemplate,signature:!!_quotationOutputOptions.signature,stamp:!!_quotationOutputOptions.stamp,generatedAt:new Date().toISOString()});localStorage.setItem(key,JSON.stringify(a.slice(-500)));}catch(e){}}
+/** V271.7.5 (board 23): "Mark Sent & Print" — the quotation becomes Sent (the usual checks), then prints */
+async function qoutMarkSentAndPrint(){
+  const id=_printQID, q=quotations.find(x=>x.id===id); if(!q) return;
+  if((q.status||'Draft')==='Draft') await commitStatus(id,'Sent');
+  if(quotations.find(x=>x.id===id)?.status==='Sent') generateQuotationOutput();
+}
 function generateQuotationOutput(){
   { const qq = quotations.find(x => x.id === _printQID); if (qq && isProvisionalNumber(qq.qno)) { closeModal('quotation-output-modal'); ensureFinalQuotationNumber(_printQID); return; } }
   _quotationOutputOptions={signature:!!document.getElementById('qout-signature')?.checked,stamp:!!document.getElementById('qout-stamp')?.checked};

@@ -609,7 +609,13 @@ ${c.pricedNoCost ? `<div class="es-st es-wn">${c.pricedNoCost} item${c.pricedNoC
     const qb = $('es-quote'), entry = r && idxOf(r).find(e => Number(e.version) === Number(E.version));
     const canQ = typeof window.bcCan !== 'function' || window.bcCan('quotation', 'c');
     if (E.status === 'Converted' && entry && entry.quotationId) { qb.hidden = false; qb.disabled = false; qb.textContent = 'Open Quotation'; qb.dataset.qid = entry.quotationId; }
-    else if (!E.ro && canQ) { qb.hidden = false; delete qb.dataset.qid; qb.textContent = dirty() ? 'Save & Create Quotation' : 'Create Quotation'; }
+    else if (!E.ro && canQ) {   // V271.7.5 (board 23): a Draft quotation is updated (same number); a Sent one gets a revision
+      qb.hidden = false; delete qb.dataset.qid; const dq = r && draftOf(r), sv = dirty() ? 'Save & ' : '';
+      let lbl = 'Create Quotation';
+      if (dq) lbl = '⟳ Update Draft ' + dq.qno;
+      else if (r && r.quotationId && typeof nextQuotationRevisionNo === 'function') { const inf = nextQuotationRevisionNo(r); if (inf && inf.baseQno) lbl = 'Create Revision ' + inf.baseQno + '-R' + inf.revisionNo; }
+      qb.textContent = sv + lbl; qb.classList.toggle('es-upd', !!dq);
+    }
     else qb.hidden = true;
     $('es-more').hidden = !(r && idxOf(r).length);
     const chk = $('es-chk');
@@ -1364,7 +1370,7 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     const lines = [];
     let k = 0;
     est.sections.forEach((s, si) => {
-      lines.push({ lineType: 'heading', text: (s.title || 'Section ' + c.secs[si].code) });
+      lines.push({ lineType: 'heading', text: (s.title || 'Section ' + c.secs[si].code), estSec: true });
       (s.items || []).forEach(it => {
         const share = shares[k], x = c.flat[k]; k++;
         const qty = num(it.qty) || 1, up = ceil2(share / qty), resid = r2(qty * up - share);
@@ -1388,8 +1394,52 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
       sections: c.secs.map(s => ({ code: s.code, title: s.title || '', amount: s.offer })),
       workCategory: (est.sections.find(s => s.workCat) || {}).workCat || (allItems().find(it => it.workCat) || {}).workCat || '',
       rfqScopeUsed: allItems().some(it => it.scopeSrc === 'rfq' && plain(it.scopeHtml)) };
+    const dq = draftOf(r);
+    if (dq) { askUpdateDraft(dq, r, ctx, lines, c); return; }
     closeWin(); E = null;
     fillQuotation(r, ctx, lines, est);
+  }
+  /* ── V271.7.5 (board 23): while the RFQ's latest quotation is still a Draft made from an estimate, a new estimate
+     version updates that draft — same number, no revision. Once it is Sent, a new version makes a revision (as before). ── */
+  function draftOf(r) {
+    const id = r && r.quotationId; if (!id) return null;
+    const q = (typeof quotations !== 'undefined' ? quotations : []).find(x => x.id === id);
+    return q && (q.status || 'Draft') === 'Draft' && q.estimate && String(q.estimate.rfqId) === String(r.id) && !q.supersededBy ? q : null;
+  }
+  function askUpdateDraft(q, r, ctx, lines, c) {
+    const prevV = Number(q.estimate.version) || 0, before = typeof calcQuote === 'function' ? calcQuote(q).sub : 0;
+    const go = () => { closeWin(); E = null; updateDraft(q, r, ctx, lines, prevV); };
+    if (typeof showConfirm !== 'function') { go(); return; }
+    showConfirm({ icon: '⟳', title: 'Update draft quotation ' + q.qno + '?',
+      message: "It hasn't been sent to the customer, so it keeps its number — no revision.",
+      details: { Lines: 'replaced by Estimation V' + ctx.version + ' (' + c.itemCount + ' item' + (c.itemCount === 1 ? '' : 's') + ')', Kept: 'header, terms, your notes', Total: fmt(before) + ' → ' + fmt(c.offer) },
+      confirmText: 'Update Draft', cancelText: 'Cancel', confirmClass: 'btn-primary', onConfirm: go, onCancel: () => {} });
+  }
+  async function updateDraft(q, r, ctx, lines, prevV) {
+    if (window.BCScope && BCScope.needsBody(q)) { const ok = await BCScope.loadBody(q); if (!ok) { BCScope.loadFailed(q); return; } }
+    if (typeof editQuotation !== 'function') return;
+    await editQuotation(q.id, true);   // async: the document lock first
+    if (typeof editingId === 'undefined' || editingId !== q.id) return;   // not opened (locked by someone else)
+    const tb = $('items-tbody'); if (!tb) return;
+    const secTitles = new Set(((q.estimate && q.estimate.sections) || []).map(s => String(s.title || ('Section ' + s.code)).trim()));
+    const fromEst = tr => (tr.dataset.lineType === 'item' && !!tr.dataset.estItem)
+      || (tr.dataset.lineType === 'heading' && (tr.dataset.estSec === '1' || secTitles.has(String(tr.querySelector('.quote-special-text')?.value || '').trim())));
+    const old = [...tb.children].filter(fromEst), anchor = old[0] || null;
+    window._pendingEstimate = Object.assign(ctx, { updateOf: q.id, prevVersion: prevV });
+    const had = new Set(tb.children);
+    lines.forEach(l => addItemRow(l));
+    const added = [...tb.children].filter(x => !had.has(x));
+    if (anchor) added.forEach(a => tb.insertBefore(a, anchor));
+    old.forEach(tr => tr.remove());
+    if (typeof renumberQuoteItemRows === 'function') renumberQuoteItemRows();
+    const ins = $('f-internal-notes'); if (ins) ins.value = (ins.value.trim() ? ins.value.replace(/\s+$/, '') + '\n' : '') + 'Updated from Estimation V' + ctx.version + (prevV ? ' (was V' + prevV + ')' : '') + ' — ' + today();
+    if (typeof setQuotationPricingContext === 'function') setQuotationPricingContext({ rfqNo: r.rfqNo, pricingRef: ctx.ref, cost: ctx.budget.totalCost, sell: ctx.offer, version: ctx.version });
+    estQuoteSetup();
+    if (typeof calcTotals === 'function') calcTotals();
+    if (typeof qtAfterRowsChange === 'function') qtAfterRowsChange();
+    if ($('modal-title')) $('modal-title').textContent = 'Edit — ' + q.qno + ' · updated from Estimation V' + ctx.version;
+    if (typeof markDirty === 'function') markDirty('quote-modal');
+    toast('Lines replaced by Estimation V' + ctx.version + ' — check and save the quotation.', 'info');
   }
   function fillQuotation(r, ctx, lines, est) {
     const set = (id, v) => { const el = $(id); if (el) el.value = v; };
@@ -1457,7 +1507,7 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     };
     lockEstLines();
   }
-  function estQuoteBlock() { const c = window._pendingEstimate; return c ? clone(c) : null; }
+  function estQuoteBlock() { const c = window._pendingEstimate; if (!c) return null; const b = clone(c); delete b.updateOf; delete b.prevVersion; return b; }
   /** Before saving: the estimate lines must still be all there with their amounts (they make the lump sum). */
   function estQuoteValidate() {
     const ctx = window._pendingEstimate; if (!ctx) return true;
@@ -1484,6 +1534,11 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     e.status = 'Converted'; e.quotationId = q.id; e.updated = now;
     const ck = rfq.id + '#' + n; if (cache.has(ck)) { cache.get(ck).status = 'Converted'; cache.get(ck).quotationId = q.id; }
     if (wasSaved && window.FB && window.FB.fbMergeFields) window.FB.fbMergeFields('rfqs/' + rfq.id + '/estimates', 'v' + n, { status: 'Converted', updated: now, quotationId: q.id });
+    // V271.7.5: a draft updated from a newer version — the version it was made from before is replaced
+    (rfq.estimateIndex || []).filter(x => Number(x.version) !== n && x.status === 'Converted' && x.quotationId === q.id).forEach(x => {
+      x.status = 'Superseded'; x.updated = now; const k2 = rfq.id + '#' + x.version; if (cache.has(k2)) cache.get(k2).status = 'Superseded';
+      if (window.FB && window.FB.fbMergeFields) window.FB.fbMergeFields('rfqs/' + rfq.id + '/estimates', 'v' + x.version, { status: 'Superseded', updated: now });
+    });
   }
   window.bcEstQuoteSetup = estQuoteSetup;
   window.bcEstQuoteBlock = estQuoteBlock;

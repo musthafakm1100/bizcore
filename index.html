@@ -43,12 +43,12 @@
 <link href="css/so-view.css?v=269.72" rel="stylesheet"/>
 <link href="css/bc-date.css?v=270.1" rel="stylesheet"/>
 <link href="css/pricing.css?v=270.22" rel="stylesheet"/>
-<link href="css/quotation.css?v=271.7.4" rel="stylesheet"/>
+<link href="css/quotation.css?v=271.7.5" rel="stylesheet"/>
 <link href="css/quote-rich.css?v=271.7.4" rel="stylesheet"/>
 <link href="css/quote-scope.css?v=271.7" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
 <link href="css/users.css?v=270.43" rel="stylesheet"/>
-<link href="css/estimate.css?v=271.7.2" rel="stylesheet"/>
+<link href="css/estimate.css?v=271.7.5" rel="stylesheet"/>
 <link href="css/sidebar-compact.css?v=271.5.9" rel="stylesheet"/>
 <link href="css/desktop-register-clean.css?v=271.5.13" rel="stylesheet"/>
 <script src="js/ui-standard.js?v=269.1" defer></script>
@@ -2326,6 +2326,7 @@ document.addEventListener('error', function(e) {
 <label class="qout-option" id="qout-signature-card"><input type="checkbox" id="qout-signature" onchange="refreshQuotationOutputOptions()"><span class="qout-option-check"><i class="ti ti-check"></i></span><span class="qout-option-icon qout-sign-icon"><i class="ti ti-signature"></i></span><span class="qout-option-copy"><strong>Authorized Signature</strong><small id="qout-signature-status"></small></span></label>
 <label class="qout-option" id="qout-stamp-card"><input type="checkbox" id="qout-stamp" onchange="refreshQuotationOutputOptions()"><span class="qout-option-check"><i class="ti ti-check"></i></span><span class="qout-option-icon qout-stamp-icon"><i class="ti ti-rosette-discount-check"></i></span><span class="qout-option-copy"><strong>Company Stamp</strong><small id="qout-stamp-status"></small></span></label>
 </div>
+<div class="qout-draft" id="qout-draft" hidden><b>Sending this to the customer?</b><p>Mark it Sent so that later price changes become a revision (R1). While it's a Draft, a new estimate version updates it under the same number.</p><div class="qout-draft-b"><button type="button" class="btn btn-success btn-sm" id="qout-sent-print" onclick="qoutMarkSentAndPrint()"><i class="ti ti-send"></i>Mark Sent &amp; Print</button><button type="button" class="btn btn-secondary btn-sm" onclick="generateQuotationOutput()">Print as Draft</button></div></div>
 <div class="qout-note"><span class="qout-note-icon"><i class="ti ti-shield-lock"></i></span><div><strong>Output only</strong><p>Both options default to Off for every print. Your choices apply only to this generated copy and are logged locally for audit reference.</p></div></div>
 </div>
 <div class="modal-footer qout-footer"><div class="qout-footer-hint"><i class="ti ti-info-circle"></i> Select either option, both, or generate an unsigned copy.</div><div class="qout-actions"><button class="btn btn-secondary" onclick="closeModal('quotation-output-modal')">Cancel</button><button class="btn btn-primary" id="qout-generate" onclick="generateQuotationOutput()"><i class="ti ti-printer"></i>Generate PDF / Print</button></div></div>
@@ -4603,7 +4604,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=271.7.4';
+      s.src = 'js/app.js?v=271.7.5';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4618,7 +4619,7 @@ onAuthStateChanged(auth, async user => {
         // V270.2.6: the RFQ entry screen (request type, product / service lines, requirements)
         const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=271.7.1'; document.body.appendChild(rq);
         // V271.1: Contracting Estimation (estimate window, Cost Build-up, Contracting Settings)
-        const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.7.3'; document.body.appendChild(es);
+        const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.7.5'; document.body.appendChild(es);
         // V271.2: Contracting Jobs (Create Job, Jobs register, Job view)
         const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.6'; document.body.appendChild(jb);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
