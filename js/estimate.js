@@ -44,7 +44,7 @@
   ];
   const KIND = Object.fromEntries(KINDS.map(x => [x.k, x]));
   const UNITS = ['LS', 'Lot', 'm²', 'm', 'm³', 'Nos', 'Pcs', 'Set', 'Kg', 'Ltr', 'Roll', 'Box', 'Day', 'Hour', 'Week', 'Month', 'Trip', 'Visit'];
-  const STYLES = { lumpsum: 'Lump Sum Only', sections: 'With Section Totals' };
+  const STYLES = { lumpsum: 'Lump Sum Only', sections: 'With Section Totals', grouped: 'Section Total with Item Rates' };
 
   /* ══ Contracting Settings (Administration) ══ */
   const SKEY = 'bizcoreContractingSettings';
@@ -239,7 +239,7 @@
 <div class="es-f"><label for="es-site">Project / Site</label><input id="es-site" maxlength="200" placeholder="Project name, building, floor…"></div>
 <div class="es-f"><label for="es-duration">Est. Duration</label><input id="es-duration" maxlength="40" placeholder="e.g. 21 days"></div>
 <div class="es-f"><label for="es-date">Estimate Date</label><input id="es-date" autocomplete="off"></div>
-<div class="es-f"><label for="es-style">Quotation Style</label><select id="es-style"><option value="lumpsum">Lump Sum Only</option><option value="sections">With Section Totals</option></select></div>
+<div class="es-f"><label for="es-style">Quotation Style</label><select id="es-style"><option value="lumpsum">Lump Sum Only</option><option value="sections">With Section Totals</option><option value="grouped">Section Total with Item Rates</option></select></div>
 </div>
 <div class="es-work">
 <div class="es-main">
@@ -1382,7 +1382,7 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
       });
     });
     const ctx = { rfqId: String(r.id), rfqNo: r.rfqNo || '', version: n, ref: 'EST-' + String(r.rfqNo || '').replace(/^RFQ-?/i, '') + '-V' + n,
-      style: est.quoteStyle === 'sections' ? 'sections' : 'lumpsum', showQty: true, offer: c.offer, itemCount: c.itemCount,
+      style: STYLES[est.quoteStyle] ? est.quoteStyle : 'lumpsum', showQty: true, offer: c.offer, itemCount: c.itemCount,
       budget: { material: c.by.material, manpower: c.by.manpower, subcontract: c.by.subcontract, other: c.by.other, overhead: c.overhead, contingency: c.contingency, totalCost: c.totalCost },
       plannedProfit: c.profit, site: est.site || '', duration: est.duration || '',
       sections: c.secs.map(s => ({ code: s.code, title: s.title || '', amount: s.offer })),
@@ -1445,12 +1445,13 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     card.hidden = false;
     card.innerHTML = `<div class="qt-est-h">Contracting · <b>Estimation V${esc(ctx.version)}</b>${ctx.rfqNo ? ' · ' + esc(ctx.rfqNo) : ''}</div>
 <div class="qt-est-l">Print Style</div>
-<label class="qt-est-o"><input type="radio" name="qt-est-style" value="lumpsum"${ctx.style !== 'sections' ? ' checked' : ''}><span><b>Lump Sum Only</b><small>Sections with their scope · one total</small></span></label>
+<label class="qt-est-o"><input type="radio" name="qt-est-style" value="lumpsum"${!STYLES[ctx.style] || ctx.style === 'lumpsum' ? ' checked' : ''}><span><b>Lump Sum Only</b><small>Sections with their scope · one total</small></span></label>
 <label class="qt-est-o"><input type="radio" name="qt-est-style" value="sections"${ctx.style === 'sections' ? ' checked' : ''}><span><b>With Section Totals</b><small>Each section shows its amount · total</small></span></label>
+<label class="qt-est-o"><input type="radio" name="qt-est-style" value="grouped"${ctx.style === 'grouped' ? ' checked' : ''}><span><b>Section Total with Item Rates</b><small>The section line carries its total · items show qty, unit and rate</small></span></label>
 <label class="qt-est-c"><input type="checkbox" id="qt-est-qty"${ctx.showQty !== false ? ' checked' : ''}> Show Qty / Unit on print</label>
 <div class="qt-est-n">Lump sum ${fmt(ctx.offer)} from the estimate. Qty, rates and line discounts are locked — only the quotation discount can be given. To change the price, make a new estimate version.<br>Rates are rounded up to the halala; the few halalas shown as line discounts keep every line exactly at its share of the lump sum (they are not printed).</div>`;
     card.onchange = e => {
-      if (e.target.name === 'qt-est-style') ctx.style = e.target.value === 'sections' ? 'sections' : 'lumpsum';
+      if (e.target.name === 'qt-est-style') ctx.style = STYLES[e.target.value] ? e.target.value : 'lumpsum';
       if (e.target.id === 'qt-est-qty') ctx.showQty = e.target.checked;
       if (typeof markDirty === 'function') markDirty('quote-modal');
     };

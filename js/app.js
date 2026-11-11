@@ -1323,10 +1323,37 @@ function quotationDocNoteStyle(q){return quotationNoteStyleKey(q?.noteStyle)||qu
 function quotationEffectiveNoteStyle(q,it){return quotationNoteStyleKey(it?.noteStyle)||quotationDocNoteStyle(q);}
 /* V270.4.14: a line's description / note as a document shows it — the formatting when there is some (js/quote-rich.js),
    else the text with its line breaks. */
-function bcLineDescHtml(it,empty='—'){ if(it&&(it.scopeKey||it.scopePreview)&&window.BCScope) return BCScope.lineHtml(it,empty);   // V271.6: title + scope (inline or Annexure A)
+function bcLineDescHtml(it,empty='—'){ if(it&&it._hd) return bcHeadHtml(it._src);   // V271.7.3
+  if(it&&(it.scopeKey||it.scopePreview)&&window.BCScope) return BCScope.lineHtml(it,empty);   // V271.6: title + scope (inline or Annexure A)
   if(it&&it.descHtml&&window.BCRich) return BCRich.show(it.descHtml,it.desc); const t=String(it?.desc||''); return t?(t.includes('\n')?'<span class="bc-rtp">'+escapeHtml(t)+'</span>':escapeHtml(t)):empty; }
+/* V271.7.3 (boards 19–20) — headings on View / Print / PDF. A heading prints inside the Description column (title, bold
+   navy unless formatted otherwise, then its own scope); the other columns stay empty with their lines. A "grouped" heading
+   prints with Qty / Unit (1 Lot) and the sum of its lines; those lines show Qty, Unit and Unit Price, no number or amount.
+   bcPrintItems(q) gives every template the same rows: headings become description-only rows, the totals don't change. */
+function bcHeadScopeOf(tr){ const sc=tr&&tr.querySelector('.qt-hscope'); if(!sc||!window.BCRich) return ''; const t=String(sc.value||'').trim(); if(!t) return ''; return BCRich.htmlOf(sc)||BCRich.plainToHtml(t); }
+function bcHeadHtml(it){ const R=window.BCRich; const t=it.textHtml&&R?R.show(it.textHtml,it.text):'<span class="bc-rtp">'+escapeHtml(String(it.text||it.desc||''))+'</span>';
+  return '<div class="bc-qht">'+t+'</div>'+(it.hScope&&R?'<div class="bc-qhs">'+R.show(it.hScope,'')+'</div>':''); }
+function bcPrintItems(q){
+  const items=(q&&q.items)||[], all=!!(q&&q.estimate&&q.estimate.style==='grouped'), out=[]; let g=null;
+  for(let i=0;i<items.length;i++){ const it=items[i];
+    if(it.lineType==='heading'){
+      const on=all||!!it.grouped; let sum=0;
+      if(on) for(let j=i+1;j<items.length&&items[j].lineType!=='heading';j++){ const x=items[j]; if(!x.lineType||x.lineType==='item') sum+=quoteLineNet(x); }
+      g=on?{rates:all||it.gRates!==false}:null;
+      out.push({lineType:'item',type:'service',_hd:true,_src:it,_grp:on,_amt:qtR2(sum),desc:String(it.text||it.desc||''),qty:on?(Number(it.gQty)>0?Number(it.gQty):1):'',uom:on?String(it.gUnit||'Lot'):'',up:'',_noSl:!on,_noUp:true,_noAmt:!on});
+      continue; }
+    if(it.lineType==='note'){ out.push(it); continue; }
+    out.push(g?Object.assign({},it,{_noSl:true,_noAmt:true,_noUp:!g.rates,_ingrp:true}):it);
+  }
+  return out;
+}
+function bcPvNo(it,n,pad){ return it&&it._noSl?'':String(n).padStart(pad,'0'); }
+function bcPvUp(it,fmt){ return it&&it._noUp?'':fmt(it.up); }
+function bcPvAmt(it,fmt){ return it&&it._noAmt?'':fmt(it._hd?it._amt:quoteLineNet(it)); }
+function bcPvT(it){ return it._noAmt?null:(it._hd?it._amt:(parseFloat(it.qty)||0)*(parseFloat(it.up)||0)); }
+function bcPvF(v){ return v==null||!Number.isFinite(v)?'':Number(v).toLocaleString('en',{minimumFractionDigits:2}); }
 function bcNoteHtml(it){ return it&&it.textHtml&&window.BCRich?BCRich.show(it.textHtml,it.text):escapeHtml(String(it?.text||it?.desc||'')); }
-function bcRichPrintCss(){ return window.BCRich?BCRich.PRINT_CSS+'td .bc-rtx b *{font-weight:700!important}td .bc-rtx i,td .bc-rtx i *{font-style:italic!important}.items tr.bc-rt-row{break-inside:auto!important;page-break-inside:auto!important}':''; }
+function bcRichPrintCss(){ return window.BCRich?BCRich.PRINT_CSS+'.bc-qht,td .bc-qht,td .bc-qht *{color:#1F4E79!important;font-weight:700!important}.bc-qht{font-size:1.06em}.bc-qhs,td .bc-qhs{margin-top:4px;font-weight:400}td .bc-qhs .bc-rtx:not(b){font-weight:400}'+'td .bc-rtx b *{font-weight:700!important}td .bc-rtx i,td .bc-rtx i *{font-style:italic!important}.items tr.bc-rt-row{break-inside:auto!important;page-break-inside:auto!important}':''; }
 function quotationPrintLineNoteHtml(text,styleKey,html){const safe=html&&window.BCRich?BCRich.show(html,text):(String(text||'').includes('\n')?'<span class="bc-rtp">'+escapeHtml(String(text||''))+'</span>':escapeHtml(String(text||'')));const style=quotationNoteStyleKey(styleKey)||quotationLineNoteStyle();if(style==='text')return `<div class="inline-note note-text">${safe}</div>`;if(style==='minimal')return `<div class="inline-note note-minimal"><b>Note:</b> ${safe}</div>`;if(style==='badge')return `<div class="inline-note note-badge"><span>NOTE</span><em>${safe}</em></div>`;if(style==='blueAccent')return `<div class="inline-note note-blue"><b>Note:</b> ${safe}</div>`;return `<div class="inline-note note-highlight"><b>Note:</b> ${safe}</div>`;}
 function renderQuotationPrintSettings(){const cfg=ensureQuotationPrintSettings(),sel=document.getElementById('qprint-line-note-style');if(sel)sel.value=cfg.lineNoteStyle;const sp=document.getElementById('qprint-scope');if(sp)sp.value=cfg.scopePrint;updateQuotationLineNotePreview();setQuotationPrintDirty(false);}
 function setQuotationPrintDirty(dirty){const st=document.getElementById('quotation-print-change-status'),btn=document.getElementById('quotation-print-apply-btn');if(st){st.textContent=dirty?'Unsaved changes':'No pending changes';st.style.color=dirty?'var(--orange-txt)':'var(--gray)';}if(btn)btn.disabled=!dirty;}
@@ -5690,7 +5717,7 @@ function qtPricingContextOf(q){
 function qtDiscPctText(p){ const n=Number(p)||0; return n?n.toFixed(2):''; }
 function qtMoneyText(n){ const v=Number(n)||0; return v?v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):''; }
 function addItemRow(item={}) {
-  if(item.lineType==='heading'||item.lineType==='note'){ return addSpecialQuoteRow(item.lineType,item.text||item.desc||'',{noteStyle:item.noteStyle||'',focus:false,html:item.textHtml||''}); }
+  if(item.lineType==='heading'||item.lineType==='note'){ return addSpecialQuoteRow(item.lineType,item.text||item.desc||'',{noteStyle:item.noteStyle||'',focus:false,html:item.textHtml||'',hScope:item.hScope||'',group:item.grouped?{qty:item.gQty,unit:item.gUnit,rates:item.gRates!==false}:null}); }
   const n = document.querySelectorAll('#items-tbody tr:not(.quote-special-row)').length+1;
   const tr = document.createElement('tr');
   tr.dataset.lineType='item';
@@ -5784,14 +5811,21 @@ function addSpecialQuoteRow(type='note', text='', opts={}){
   const placeholder=type==='heading'?'e.g. Option 1 – Supply only':'e.g. Installation price is not included.';
   const input=`<input class="quote-special-text" value="${escapeHtml(text)}" placeholder="${placeholder}" onkeydown="handleSpecialQuoteRowKey(event,this)" oninput="markDirty('quote-modal')" aria-label="${type==='heading'?'Heading':'Note'} text">`;
   if(type==='heading'){
-    tr.innerHTML=`<td class="qt-no"><span class="qt-grip" title="Drag to reorder" aria-hidden="true">⋮⋮</span></td><td colspan="${span}"><div class="qt-hwrap"><span class="qt-badge">Heading</span>${input}</div></td><td class="qt-mc"><button type="button" class="pr-menu-btn qt-menu-btn" onclick="qtRowMenu(this)" aria-label="Line menu" title="Line menu">⋮</button></td>`;
+    // V271.7.3 (board 20): the title and an optional scope of work, both formatted with the Format bar;
+    // (board 19) optionally "grouped" — on print the heading carries 1 Lot + the sum of its lines
+    const hEd=window.BCRich?`<div class="quote-special-text qt-htext" aria-label="Heading text" oninput="markDirty('quote-modal')"></div>`:input;
+    const sEd=window.BCRich?`<div class="qt-hsw"><div class="qt-hscope" data-f="hscope" aria-label="Scope of work under the heading" oninput="markDirty('quote-modal')"></div></div>`:'';
+    tr.innerHTML=`<td class="qt-no"><span class="qt-grip" title="Drag to reorder" aria-hidden="true">⋮⋮</span></td><td colspan="${span}"><div class="qt-hwrap"><span class="qt-badge">Heading</span>${hEd}<button type="button" class="qt-gchip" onclick="qtHeadGroupMenu(this)" hidden></button><span class="qt-hsum" hidden></span></div>${sEd}</td><td class="qt-mc"><button type="button" class="pr-menu-btn qt-menu-btn" onclick="qtRowMenu(this)" aria-label="Line menu" title="Line menu">⋮</button></td>`;
+    if(opts.group){ tr.dataset.grouped='1'; tr.dataset.gQty=String(Number(opts.group.qty)>0?Number(opts.group.qty):1); tr.dataset.gUnit=String(opts.group.unit||'Lot'); tr.dataset.gRates=opts.group.rates===false?'0':'1'; }
   } else {
     tr.dataset.noteStyle=quotationNoteStyleKey(opts.noteStyle)||'';
     const noteEd=window.BCRich?`<div class="quote-special-text" aria-label="Note text" oninput="markDirty('quote-modal')"></div>`:input;   // V270.4.14: formatted note
     tr.innerHTML=`<td class="qt-no"><span class="qt-grip" title="Drag to reorder" aria-hidden="true">⋮⋮</span></td><td colspan="${span}"><div class="qt-nline"><div class="qt-note"><b class="qt-note-b">NOTE</b><b class="qt-note-l">Note:</b>${noteEd}</div><button type="button" class="qt-schip" onclick="qtNoteStyleMenu(this)" aria-label="Note style"></button></div></td><td class="qt-mc"><button type="button" class="pr-menu-btn qt-menu-btn" onclick="qtRowMenu(this)" aria-label="Line menu" title="Line menu">⋮</button></td>`;
   }
-  const nEd=type==='note'&&window.BCRich?tr.querySelector('div.quote-special-text'):null;
+  const nEd=window.BCRich?tr.querySelector('div.quote-special-text'):null;
   if(nEd) BCRich.make(nEd,{html:opts.html||'',text,placeholder});
+  const hsEd=window.BCRich?tr.querySelector('.qt-hscope'):null;
+  if(hsEd) BCRich.make(hsEd,{html:opts.hScope||'',placeholder:'Scope of work under the heading (optional) — printed under the title'});
   tbody.appendChild(tr); renumberQuoteItemRows(); calcTotals();
   if(typeof qtPaintNotes==='function') qtPaintNotes();
   if(opts.focus!==false) tr.querySelector('.quote-special-text')?.focus();   // V270.2.1: at once — a key typed straight after the click must go into the new line, not press the button again
@@ -6161,6 +6195,7 @@ async function saveQuotation(mode='save', opts={}) {
     if(rows[i].dataset.lineType==='heading'||rows[i].dataset.lineType==='note'){
       const text=(rows[i].querySelector('.quote-special-text')?.value||'').trim();
       if(!text){showToast('Enter text for '+rows[i].dataset.lineType+' row '+(i+1),'error');rows[i].querySelector('.quote-special-text')?.focus();return;}
+      if(rows[i].dataset.lineType==='heading'&&bcHeadScopeOf(rows[i]).length>8000){showToast('Row '+(i+1)+' — the heading\'s scope is too long. Keep it to about a page, or put the details in the lines\' scope.','error');rows[i].querySelector('.qt-hscope')?.focus();return;}   // V271.7.3
       continue;
     }
     const qtyEl=rows[i].querySelector('[data-quote-qty]'), priceEl=rows[i].querySelector('[data-quote-price]');
@@ -6272,6 +6307,8 @@ async function saveQuotation(mode='save', opts={}) {
       const text=(tr.querySelector('.quote-special-text')?.value||'').trim();
       if(text){ const line={lineType:tr.dataset.lineType,text}; const ns=tr.dataset.lineType==='note'?quotationNoteStyleKey(tr.dataset.noteStyle):''; if(ns) line.noteStyle=ns;
         const th=window.BCRich?BCRich.htmlOf(tr.querySelector('.quote-special-text')):''; if(th) line.textHtml=th;   // V270.4.14: the note's formatting
+        if(tr.dataset.lineType==='heading'){ const hs=bcHeadScopeOf(tr); if(hs) line.hScope=hs;   // V271.7.3: the heading's own scope + grouped print
+          if(tr.dataset.grouped==='1'){ line.grouped=true; line.gQty=Number(tr.dataset.gQty)>0?Number(tr.dataset.gQty):1; line.gUnit=String(tr.dataset.gUnit||'Lot').slice(0,20); if(tr.dataset.gRates==='0') line.gRates=false; } }
         items.push(line); }   // V270.2: a note's own style
       return;
     }
@@ -6520,20 +6557,20 @@ function viewQuotation(id, skipVatCheck=false) {
   renderStatusBar(q,status);
 
   let itemNo=0;
-  const quoteItems=q.items||[], itemRows=[];
+  const quoteItems=bcPrintItems(q), itemRows=[];   // V271.7.3
   // V270.2: a Disc. column only when a line has a discount; notes in their saved style (line → quotation → Administration)
   const qvDisc=quoteHasLineDiscounts(q), qvCols=qvDisc?7:6;
   for(let idx=0; idx<quoteItems.length; idx++){
     const it=quoteItems[idx];
     if(it.lineType==='heading'){ itemRows.push('<tr class="qv-heading"><td colspan="'+qvCols+'">'+escapeHtml(it.text||it.desc||'')+'</td></tr>'); continue; }
     if(it.lineType==='note'){ itemRows.push('<tr class="qv-note"><td></td><td colspan="'+(qvCols-1)+'">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it),it.textHtml)+'</td></tr>'); continue; }
-    itemNo++;
+    if(!it._noSl) itemNo++;
     const total=quoteLineNet(it), service=it.type==='service';
     const title=bcLineDescHtml(it);   // V270.4.14
     const sub=[!service&&it.specs?escapeHtml(it.specs):'',!service&&[it.brand,it.model].filter(Boolean).length?escapeHtml([it.brand,it.model].filter(Boolean).join(' / ')):''].filter(Boolean).join(' · ');
     const next=quoteItems[idx+1], inlineNote=(next&&next.lineType==='note')?String(next.text||next.desc||'').trim():'';
     if(inlineNote) idx++;
-    itemRows.push('<tr class="qv-item"><td class="center">'+String(itemNo).padStart(3,'0')+'</td><td><div class="qv-desc-title">'+title+'</div>'+(sub?'<div class="qv-desc-sub">'+sub+'</div>':'')+(inlineNote?quotationPrintLineNoteHtml(inlineNote,quotationEffectiveNoteStyle(q,next),next.textHtml):'')+'</td><td class="center">'+escapeHtml(String(it.qty??''))+'</td><td class="center">'+escapeHtml(it.uom||'')+'</td><td class="num">'+qvLineUnitMoney(it.up)+'</td>'+(qvDisc?'<td class="num qv-disc">'+quoteLineDiscCellHtml(it,qvLineAmountMoney)+'</td>':'')+'<td class="num"><strong>'+qvLineAmountMoney(total)+'</strong></td></tr>');
+    itemRows.push('<tr class="qv-item"><td class="center">'+bcPvNo(it,itemNo,3)+'</td><td><div class="qv-desc-title">'+title+'</div>'+(sub?'<div class="qv-desc-sub">'+sub+'</div>':'')+(inlineNote?quotationPrintLineNoteHtml(inlineNote,quotationEffectiveNoteStyle(q,next),next.textHtml):'')+'</td><td class="center">'+escapeHtml(String(it.qty??''))+'</td><td class="center">'+escapeHtml(it.uom||'')+'</td><td class="num">'+bcPvUp(it,qvLineUnitMoney)+'</td>'+(qvDisc?'<td class="num qv-disc">'+quoteLineDiscCellHtml(it,qvLineAmountMoney)+'</td>':'')+'<td class="num"><strong>'+bcPvAmt(it,qvLineAmountMoney)+'</strong></td></tr>');
   }
   const items=itemRows.join('')||'<tr><td colspan="'+qvCols+'" style="padding:20px;text-align:center;color:#64748b">No line items</td></tr>';
 
@@ -7379,21 +7416,22 @@ function printQuotation(id) {
   const footerLine1 = buildPrintFooterAddress(settings);
   const footerLine2 = buildPrintFooterInfo(settings);
 
-  const itemRows = (q.items||[]).map(function(it,i) {
+  let _pvN=0;   // V271.7.3: headings / grouped lines (bcPrintItems)
+  const itemRows = bcPrintItems(q).map(function(it,i) { const _no=it.lineType==='note'?'':bcPvNo(it,it._noSl?_pvN:++_pvN,2);
     if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
     if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+bcNoteHtml(it)+'</td></tr>';
-    const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
+    const t=bcPvT(it);
     const s2=[it.brand,it.model].filter(Boolean).join(' \u00b7 ');
     return '<tr>'
-      +'<td class="num">'+String(i+1).padStart(2,'0')+'</td>'
-      +'<td><div>'+(it.desc||'')+'</div>'
+      +'<td class="num">'+_no+'</td>'
+      +'<td><div>'+(it._hd?bcHeadHtml(it._src):(it.desc||''))+'</div>'
       +(s2?'<div class="dsub">'+s2+'</div>':'')
       +(it.specs?'<div class="dsub">'+it.specs+'</div>':'')
       +'</td>'
-      +'<td class="r">'+it.qty+'</td>'
+      +'<td class="r">'+(it.qty??'')+'</td>'
       +'<td class="c">'+(it.uom||'')+'</td>'
-      +'<td class="r">'+Number(it.up).toLocaleString('en',{minimumFractionDigits:2})+'</td>'
-      +'<td class="r">'+t.toLocaleString('en',{minimumFractionDigits:2})+'</td>'
+      +'<td class="r">'+bcPvF(it._noUp?null:Number(it.up))+'</td>'
+      +'<td class="r">'+bcPvF(t)+'</td>'
       +'</tr>';
   }).join('');
 
@@ -7520,7 +7558,7 @@ function printQuotation(id) {
 +'</body></html>';
 
   const w = window.open('', '_blank', 'width=880,height=1020');
-  w.document.write(html);
+  w.document.write(window.BCRich?html.replace(/<\/head>/i,'<style>'+bcRichPrintCss()+'</style></head>'):html);   // V271.7.3: headings / formatted text
   w.document.close();
 }
 
@@ -13709,7 +13747,7 @@ function printQuotationProductA4(id, imageVariant){
   const qRevision=Number(q.revision||q.rev||0);
   const logoHtml=settings.logo?'<img class="q-logo" src="'+settings.logo+'" alt="'+escapeHtml(co)+'">':'<div class="q-logo-fallback">DT</div>';
   let itemNo=0;
-  const quoteItems=q.items||[];
+  const quoteItems=bcPrintItems(q);   // V271.7.3
   const rowParts=[];
   // V270.2: Disc. column only when a line is discounted; notes in their saved style; line amounts after the discount
   const hasDisc=quoteHasLineDiscounts(q), cols=6+(hasDisc?1:0)+(imageMode?1:0);
@@ -13717,14 +13755,14 @@ function printQuotationProductA4(id, imageVariant){
     const it=quoteItems[idx];
     if(it.lineType==='heading'){ rowParts.push('<tr class="heading"><td colspan="'+cols+'">'+escapeHtml(it.text||it.desc||'')+'</td></tr>'); continue; }
     if(it.lineType==='note'){ rowParts.push('<tr class="note standalone-note'+(it.textHtml?' bc-rt-row':'')+'"><td></td><td colspan="'+(cols-1)+'">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it),it.textHtml)+'</td></tr>'); continue; }
-    itemNo++;
+    if(!it._noSl) itemNo++;
     const total=quoteLineNet(it), service=it.type==='service';
     const sub=[!service&&it.specs?escapeHtml(it.specs):'',!service&&[it.brand,it.model].filter(Boolean).length?escapeHtml([it.brand,it.model].filter(Boolean).join(' / ')):''].filter(Boolean).join(' · ');
     const next=quoteItems[idx+1];
     const inlineNote=(next&&next.lineType==='note')?String(next.text||next.desc||'').trim():'';
     if(inlineNote) idx++;
     const imageCell=imageMode?'<td class="imgcell">'+(productImage(it)?'<img src="'+productImage(it)+'" alt="">':'<div class="imgph">No image</div>')+'</td>':'';
-    rowParts.push('<tr'+(it.descHtml||(inlineNote&&next.textHtml)?' class="bc-rt-row"':'')+'><td class="c">'+String(itemNo).padStart(3,'0')+'</td>'+imageCell+'<td><div class="desc">'+bcLineDescHtml(it)+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+(inlineNote?quotationPrintLineNoteHtml(inlineNote,quotationEffectiveNoteStyle(q,next),next.textHtml):'')+'</td><td class="c">'+escapeHtml(String(it.qty??''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+qvLineUnitMoney(it.up)+'</td>'+(hasDisc?'<td class="r disc">'+quoteLineDiscCellHtml(it,qvLineAmountMoney)+'</td>':'')+'<td class="r">'+qvLineAmountMoney(total)+'</td></tr>');
+    rowParts.push('<tr'+(it.descHtml||(inlineNote&&next.textHtml)?' class="bc-rt-row"':'')+'><td class="c">'+bcPvNo(it,itemNo,3)+'</td>'+imageCell+'<td><div class="desc">'+bcLineDescHtml(it)+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+(inlineNote?quotationPrintLineNoteHtml(inlineNote,quotationEffectiveNoteStyle(q,next),next.textHtml):'')+'</td><td class="c">'+escapeHtml(String(it.qty??''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+bcPvUp(it,qvLineUnitMoney)+'</td>'+(hasDisc?'<td class="r disc">'+quoteLineDiscCellHtml(it,qvLineAmountMoney)+'</td>':'')+'<td class="r">'+bcPvAmt(it,qvLineAmountMoney)+'</td></tr>');
   }
   const rows=rowParts.join('')||'<tr><td colspan="'+cols+'" class="empty">No line items</td></tr>';
   const notes=String(q.notes||'').trim();
@@ -13778,20 +13816,21 @@ function printQuotationInfoLayout(id, layout) {
   const logoHtml = settings.logo
     ? '<img src="'+settings.logo+'" alt="'+co+'" style="height:48px;width:auto;max-width:210px;object-fit:contain">'
     : '<div style="font-size:17px;font-weight:900;color:#1F4E79">'+co+'</div>';
-  const rows=(q.items||[]).map(function(it,i){
+  let _pvN=0;   // V271.7.3: headings / grouped lines (bcPrintItems)
+  const rows=bcPrintItems(q).map(function(it,i){ const _no=it.lineType==='note'?'':bcPvNo(it,it._noSl?_pvN:++_pvN,2);
     if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
     if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+bcNoteHtml(it)+'</td></tr>';
-    const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
+    const t=bcPvT(it);
     const subline=[it.brand,it.model].filter(Boolean).join(' · ');
     return '<tr>'
-      +'<td class="num">'+String(i+1).padStart(2,'0')+'</td>'
-      +'<td><div>'+(it.desc||'')+'</div>'
+      +'<td class="num">'+_no+'</td>'
+      +'<td><div>'+(it._hd?bcHeadHtml(it._src):(it.desc||''))+'</div>'
       +(subline?'<div class="dsub">'+subline+'</div>':'')
       +(it.specs?'<div class="dsub">'+it.specs+'</div>':'')+'</td>'
-      +'<td class="c">'+it.qty+'</td>'
+      +'<td class="c">'+(it.qty??'')+'</td>'
       +'<td class="c">'+(it.uom||'')+'</td>'
-      +'<td class="r">'+pdfLineUnitMoney(it.up)+'</td>'
-      +'<td class="r">'+pdfLineAmountMoney(t)+'</td></tr>';
+      +'<td class="r">'+bcPvUp(it,pdfLineUnitMoney)+'</td>'
+      +'<td class="r">'+(t==null?'':pdfLineAmountMoney(t))+'</td></tr>';
   }).join('');
   const infoRows = '<div class="info-row"><span>Quotation No.</span><b>'+q.qno+'</b></div>'
     +(q.ref?'<div class="info-row"><span>Client Ref</span><b>'+q.ref+'</b></div>':'')
@@ -13874,14 +13913,14 @@ function printQuotationErpVariant(id, variant) {
     );
     return (p && p.image) ? p.image : '';
   };
-  const hasDisc=quoteHasLineDiscounts(q);   // V270.2
+  const hasDisc=quoteHasLineDiscounts(q)&&!(variant==='contracting'&&q.estimate&&q.estimate.style==='grouped');   // V270.2 (V271.7.3: an estimate's halala adjustments are not printed)
   function buildVariantRows(mode){
-    let no=0; const out=[]; const items=q.items||[];
+    let no=0; const out=[]; const items=bcPrintItems(q);   // V271.7.3
     for(let i=0;i<items.length;i++){
       const it=items[i];
       if(it.lineType==='heading'){out.push('<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>');continue;}
       if(it.lineType==='note'){out.push('<tr'+(it.textHtml?' class="bc-rt-row"':'')+'><td></td><td colspan="98">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it),it.textHtml)+'</td></tr>');continue;}
-      no++;
+      if(!it._noSl) no++;
       const next=items[i+1], inlineNote=(next&&next.lineType==='note')?String(next.text||next.desc||'').trim():'';
       if(inlineNote)i++;
       const t=quoteLineNet(it);   // V270.2: after the line discount
@@ -13891,9 +13930,9 @@ function printQuotationErpVariant(id, variant) {
       const rtRow=it.descHtml||(inlineNote&&next.textHtml)?' class="bc-rt-row"':'';   // V270.4.14: a long formatted line may continue on the next page
       if(mode==='image'){
         const img=productImage(it);
-        out.push('<tr'+rtRow+'><td class="num">'+String(no).padStart(2,'0')+'</td><td class="imgcell">'+(img?'<img src="'+img+'">':'<div class="imgph">No image</div>')+'</td><td><div>'+bcLineDescHtml(it,'')+'</div>'+(subline?'<div class="dsub">'+escapeHtml(subline)+'</div>':'')+note+'</td><td class="c">'+escapeHtml(String(it.qty||''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+pdfLineUnitMoney(it.up)+'</td>'+dcell+'<td class="r">'+pdfLineAmountMoney(t)+'</td></tr>');
+        out.push('<tr'+rtRow+'><td class="num">'+bcPvNo(it,no,2)+'</td><td class="imgcell">'+(img?'<img src="'+img+'">':'<div class="imgph">No image</div>')+'</td><td><div>'+bcLineDescHtml(it,'')+'</div>'+(subline?'<div class="dsub">'+escapeHtml(subline)+'</div>':'')+note+'</td><td class="c">'+escapeHtml(String(it.qty||''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+bcPvUp(it,pdfLineUnitMoney)+'</td>'+dcell+'<td class="r">'+bcPvAmt(it,pdfLineAmountMoney)+'</td></tr>');
       }else{
-        out.push('<tr'+rtRow+'><td class="num">'+String(no).padStart(2,'0')+'</td><td><div>'+bcLineDescHtml(it,'')+'</div>'+(subline?'<div class="dsub">'+escapeHtml(subline)+'</div>':'')+note+'</td><td class="c">'+escapeHtml(String(it.qty||''))+'</td><td class="c">'+escapeHtml(it.uom||(mode==='service'?'Service':''))+'</td><td class="r">'+pdfLineUnitMoney(it.up)+'</td>'+dcell+'<td class="r">'+pdfLineAmountMoney(t)+'</td></tr>');
+        out.push('<tr'+rtRow+'><td class="num">'+bcPvNo(it,no,2)+'</td><td><div>'+bcLineDescHtml(it,'')+'</div>'+(subline?'<div class="dsub">'+escapeHtml(subline)+'</div>':'')+note+'</td><td class="c">'+escapeHtml(String(it.qty||''))+'</td><td class="c">'+escapeHtml(it.uom||(mode==='service'&&!it._hd?'Service':''))+'</td><td class="r">'+bcPvUp(it,pdfLineUnitMoney)+'</td>'+dcell+'<td class="r">'+bcPvAmt(it,pdfLineAmountMoney)+'</td></tr>');
       }
     }
     return out.join('');
@@ -13932,7 +13971,7 @@ function printQuotationErpVariant(id, variant) {
   const tableHead = (isImage && !isImageAttachment) ? headImage : headNormal;   // V271.2: an estimate quotation uses estHead (below)
   let tableRows = (isImage && !isImageAttachment) ? imageRows : (isContracting ? serviceRows : normalRows);
   // V271.2 (CQ_2): a Contracting quotation from an estimate prints Lump Sum Only (no line prices) or With Section Totals
-  const est = isContracting && q.estimate ? q.estimate : null;
+  const est = isContracting && q.estimate && q.estimate.style !== 'grouped' ? q.estimate : null;   // V271.7.3: "grouped" prints the normal rows (bcPrintItems)
   let estHead = '';
   if (est) {
     const showQ = est.showQty !== false, bySec = est.style === 'sections', cols = 2 + (showQ ? 2 : 0) + (bySec ? 1 : 0);
@@ -13941,7 +13980,7 @@ function printQuotationErpVariant(id, variant) {
     const out = []; let sec = -1, sum = 0, title = '', n = 0;
     const flush = () => { if (bySec && sec >= 0) out.push('<tr class="est-st"><td></td><td colspan="' + (cols - 2) + '" style="font-weight:700!important">Total — ' + (title ? escapeHtml(title) : 'Section ' + letter(sec)) + '</td><td class="r" style="font-weight:700!important">' + pdfLineAmountMoney(sum) + '</td></tr>'); };
     (q.items || []).forEach(it => {
-      if (it.lineType === 'heading') { flush(); sec++; sum = 0; n = 0; title = it.text || it.desc || ''; out.push('<tr><td style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800">' + letter(sec) + '</td><td colspan="' + (cols - 1) + '" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800">' + escapeHtml(title) + '</td></tr>'); return; }
+      if (it.lineType === 'heading') { flush(); sec++; sum = 0; n = 0; title = it.text || it.desc || ''; out.push('<tr' + (it.hScope ? ' class="bc-rt-row"' : '') + '><td class="num" style="color:#1F4E79!important;font-weight:700!important">' + letter(sec) + '</td><td colspan="' + (cols - 1) + '">' + bcHeadHtml(it) + '</td></tr>'); return; }   // V271.7.3: inside the description, no band
       if (it.lineType === 'note') { out.push('<tr' + (it.textHtml ? ' class="bc-rt-row"' : '') + '><td></td><td colspan="' + (cols - 1) + '">' + quotationPrintLineNoteHtml(it.text || it.desc || '', quotationEffectiveNoteStyle(q, it), it.textHtml) + '</td></tr>'); return; }
       n++; sum += quoteLineNet(it);
       out.push('<tr' + (it.descHtml ? ' class="bc-rt-row"' : '') + '><td class="num">' + (sec >= 0 ? letter(sec) : '') + n + '</td><td><div>' + bcLineDescHtml(it, '') + '</div></td>' + (showQ ? '<td class="c">' + escapeHtml(it.uom || '') + '</td><td class="r">' + escapeHtml(String(it.qty == null ? '' : it.qty)) + '</td>' : '') + (bySec ? '<td></td>' : '') + '</tr>');
@@ -13987,17 +14026,18 @@ function printQuotationErpVariant(id, variant) {
 function printQuotationClassic(id) {
   const d=_tplData(id); if(!d) return;
   const {q,sub,disc,bvat,vat,net,vu,co,f1,f2,headerInfo}=d;
-  const rows=(q.items||[]).map(function(it,i){
+  let _pvN=0;   // V271.7.3: headings / grouped lines (bcPrintItems)
+  const rows=bcPrintItems(q).map(function(it,i){ const _no=it.lineType==='note'?'':bcPvNo(it,it._noSl?_pvN:++_pvN,2);
     if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
     if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+bcNoteHtml(it)+'</td></tr>';
-    const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
+    const t=bcPvT(it);
     return '<tr style="border-bottom:1px solid #e0e0e0;'+(i%2===0?'background:#fafafa':'')+'">'
-      +'<td style="padding:6px 8px;font-size:10.5px;text-align:center;color:#888">'+String(i+1).padStart(2,'0')+'</td>'
+      +'<td style="padding:6px 8px;font-size:10.5px;text-align:center;color:#888">'+_no+'</td>'
       +'<td style="padding:6px 8px;font-size:10.5px">'+bcLineDescHtml(it,'')+(it.brand?'<br><span style="font-size:9px;color:#666">'+it.brand+'</span>':'')+'</td>'
-      +'<td style="padding:6px 8px;text-align:center;font-size:10.5px">'+it.qty+'</td>'
+      +'<td style="padding:6px 8px;text-align:center;font-size:10.5px">'+(it.qty??'')+'</td>'
       +'<td style="padding:6px 8px;text-align:center;font-size:10px;color:#555">'+(it.uom||'')+'</td>'
-      +'<td style="padding:6px 8px;text-align:right;font-size:10.5px">'+Number(it.up).toLocaleString('en',{minimumFractionDigits:2})+'</td>'
-      +'<td style="padding:6px 8px;text-align:right;font-size:10.5px">'+t.toLocaleString('en',{minimumFractionDigits:2})+'</td></tr>';
+      +'<td style="padding:6px 8px;text-align:right;font-size:10.5px">'+bcPvF(it._noUp?null:Number(it.up))+'</td>'
+      +'<td style="padding:6px 8px;text-align:right;font-size:10.5px">'+bcPvF(t)+'</td></tr>';
   }).join('');
   const html='<!DOCTYPE html><html><head><title>'+q.qno+'</title><meta charset="UTF-8"><style>'
 +'*{box-sizing:border-box;margin:0;padding:0}'
@@ -14070,17 +14110,18 @@ function printQuotationClassic(id) {
 function printQuotationModern(id) {
   const d=_tplData(id); if(!d) return;
   const {q,sub,disc,bvat,vat,net,vu,co,f1,f2,headerInfo}=d;
-  const rows=(q.items||[]).map(function(it,i){
+  let _pvN=0;   // V271.7.3: headings / grouped lines (bcPrintItems)
+  const rows=bcPrintItems(q).map(function(it,i){ const _no=it.lineType==='note'?'':bcPvNo(it,it._noSl?_pvN:++_pvN,2);
     if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
     if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+bcNoteHtml(it)+'</td></tr>';
-    const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
+    const t=bcPvT(it);
     return '<tr style="'+(i%2===0?'background:#F0F7FF':'background:#fff')+'">'
-      +'<td style="padding:7px 10px;font-size:10px;color:#888;border-bottom:1px solid #e8f0fb;text-align:center">'+String(i+1).padStart(2,'0')+'</td>'
+      +'<td style="padding:7px 10px;font-size:10px;color:#888;border-bottom:1px solid #e8f0fb;text-align:center">'+_no+'</td>'
       +'<td style="padding:7px 10px;font-size:10.5px;border-bottom:1px solid #e8f0fb">'+bcLineDescHtml(it,'')+(it.brand?'<br><span style="font-size:9px;color:#888">'+it.brand+'</span>':'')+'</td>'
-      +'<td style="padding:7px 10px;text-align:center;font-size:10.5px;border-bottom:1px solid #e8f0fb">'+it.qty+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;font-size:10.5px;border-bottom:1px solid #e8f0fb">'+(it.qty??'')+'</td>'
       +'<td style="padding:7px 10px;text-align:center;font-size:10px;color:#666;border-bottom:1px solid #e8f0fb">'+(it.uom||'')+'</td>'
-      +'<td style="padding:7px 10px;text-align:right;font-size:10.5px;border-bottom:1px solid #e8f0fb">'+Number(it.up).toLocaleString('en',{minimumFractionDigits:2})+'</td>'
-      +'<td style="padding:7px 10px;text-align:right;font-size:10.5px;font-weight:600;border-bottom:1px solid #e8f0fb">'+t.toLocaleString('en',{minimumFractionDigits:2})+'</td></tr>';
+      +'<td style="padding:7px 10px;text-align:right;font-size:10.5px;border-bottom:1px solid #e8f0fb">'+bcPvF(it._noUp?null:Number(it.up))+'</td>'
+      +'<td style="padding:7px 10px;text-align:right;font-size:10.5px;font-weight:600;border-bottom:1px solid #e8f0fb">'+bcPvF(t)+'</td></tr>';
   }).join('');
   const infoCell=function(k,v){return '<div><div style="font-size:8px;text-transform:uppercase;letter-spacing:.8px;color:#0B539D;font-weight:700">'+k+'</div><div style="font-size:10px;font-weight:600">'+v+'</div></div>';};
   const html='<!DOCTYPE html><html><head><title>'+q.qno+'</title><meta charset="UTF-8"><style>'
@@ -14154,20 +14195,21 @@ function printQuotationModern(id) {
 function printQuotationExecutive(id) {
   const d=_tplData(id); if(!d) return;
   const {q,sub,disc,bvat,vat,net,vu,co,f1,f2,headerInfo}=d;
-  const rows=(q.items||[]).map(function(it,i){
+  let _pvN=0;   // V271.7.3: headings / grouped lines (bcPrintItems)
+  const rows=bcPrintItems(q).map(function(it,i){ const _no=it.lineType==='note'?'':bcPvNo(it,it._noSl?_pvN:++_pvN,2);
     if(it.lineType==='heading') return '<tr><td colspan="99" style="padding:7px 8px;background:#EEF4FB;color:#1F4E79;font-weight:800;border-top:1px solid #CBD5E1;border-bottom:1px solid #CBD5E1">'+escapeHtml(it.text||it.desc||'')+'</td></tr>';
     if(it.lineType==='note') return '<tr><td></td><td colspan="98" style="padding:6px 8px;background:#FFFBEA;color:#475569;font-style:italic;border-top:1px solid #EADFAE;border-bottom:1px solid #EADFAE">Note: '+bcNoteHtml(it)+'</td></tr>';
-    const t=(parseFloat(it.qty)||0)*(parseFloat(it.up)||0);
+    const t=bcPvT(it);
     const subline=[it.brand,it.model].filter(Boolean).join(' \u00b7 ');
     return '<tr>'
-      +'<td style="padding:9px 8px;text-align:center;color:#94A3B8;border-bottom:1px solid #E8EEF5;font-size:10px">'+String(i+1).padStart(2,'0')+'</td>'
+      +'<td style="padding:9px 8px;text-align:center;color:#94A3B8;border-bottom:1px solid #E8EEF5;font-size:10px">'+_no+'</td>'
       +'<td style="padding:9px 8px;border-bottom:1px solid #E8EEF5;font-size:10.5px;line-height:1.35"><div style="font-weight:600;color:#1E293B">'+bcLineDescHtml(it,'')+'</div>'
       +(subline?'<div style="font-size:9px;color:#64748B;margin-top:2px">'+subline+'</div>':'')
       +(it.specs?'<div style="font-size:9px;color:#64748B;margin-top:2px">'+it.specs+'</div>':'')+'</td>'
-      +'<td style="padding:9px 8px;text-align:center;border-bottom:1px solid #E8EEF5;font-size:10.5px">'+it.qty+'</td>'
+      +'<td style="padding:9px 8px;text-align:center;border-bottom:1px solid #E8EEF5;font-size:10.5px">'+(it.qty??'')+'</td>'
       +'<td style="padding:9px 8px;text-align:center;border-bottom:1px solid #E8EEF5;font-size:10px;color:#64748B">'+(it.uom||'')+'</td>'
-      +'<td style="padding:9px 8px;text-align:right;border-bottom:1px solid #E8EEF5;font-size:10.5px">'+Number(it.up).toLocaleString('en',{minimumFractionDigits:2})+'</td>'
-      +'<td style="padding:9px 8px;text-align:right;border-bottom:1px solid #E8EEF5;font-size:10.5px;font-weight:700;color:#1F4E79">'+t.toLocaleString('en',{minimumFractionDigits:2})+'</td></tr>';
+      +'<td style="padding:9px 8px;text-align:right;border-bottom:1px solid #E8EEF5;font-size:10.5px">'+bcPvF(it._noUp?null:Number(it.up))+'</td>'
+      +'<td style="padding:9px 8px;text-align:right;border-bottom:1px solid #E8EEF5;font-size:10.5px;font-weight:700;color:#1F4E79">'+bcPvF(t)+'</td></tr>';
   }).join('');
   const meta=function(k,v){return '<div style="padding:8px 10px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px"><div style="font-size:8px;color:#64748B;text-transform:uppercase;letter-spacing:.9px;font-weight:700">'+k+'</div><div style="font-size:10.5px;color:#1F4E79;font-weight:800;margin-top:2px">'+v+'</div></div>';};
   const tot=function(k,v,bold){return '<div style="display:flex;justify-content:space-between;padding:6px 12px;border-bottom:1px solid #E2E8F0;font-size:10.5px"><span style="color:#64748B">'+k+'</span><span style="font-weight:'+(bold?'800':'600')+';color:#1E293B">'+v+'</span></div>';};

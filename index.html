@@ -43,7 +43,7 @@
 <link href="css/so-view.css?v=269.72" rel="stylesheet"/>
 <link href="css/bc-date.css?v=270.1" rel="stylesheet"/>
 <link href="css/pricing.css?v=270.22" rel="stylesheet"/>
-<link href="css/quotation.css?v=271.7.2" rel="stylesheet"/>
+<link href="css/quotation.css?v=271.7.3" rel="stylesheet"/>
 <link href="css/quote-rich.css?v=270.61" rel="stylesheet"/>
 <link href="css/quote-scope.css?v=271.7" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
@@ -4603,7 +4603,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=271.7.1';
+      s.src = 'js/app.js?v=271.7.3';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4611,14 +4611,14 @@ onAuthStateChanged(auth, async user => {
         // V270.1: the Pricing screen (tabs, line menu, price references, phone cards)
         const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.24'; document.body.appendChild(pu);
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
-        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=271.6';
+        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=271.7.3';
         // V271.6: scope of work, work categories, text blocks, annexure print, job scope — after the Quotation Entry screen
-        qu.onload = () => { const qs = document.createElement('script'); qs.id = 'bizcore-quote-scope-script'; qs.src = 'js/quote-scope.js?v=271.7'; document.body.appendChild(qs); };
+        qu.onload = () => { const qs = document.createElement('script'); qs.id = 'bizcore-quote-scope-script'; qs.src = 'js/quote-scope.js?v=271.7.3'; document.body.appendChild(qs); };
         document.body.appendChild(qu);
         // V270.2.6: the RFQ entry screen (request type, product / service lines, requirements)
         const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=271.7.1'; document.body.appendChild(rq);
         // V271.1: Contracting Estimation (estimate window, Cost Build-up, Contracting Settings)
-        const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.7.2'; document.body.appendChild(es);
+        const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.7.3'; document.body.appendChild(es);
         // V271.2: Contracting Jobs (Create Job, Jobs register, Job view)
         const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.6'; document.body.appendChild(jb);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)

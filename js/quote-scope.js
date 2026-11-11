@@ -552,7 +552,8 @@
     const t = picker.target || 'heading';
     const sel = selectedRow();
     const r = (k, l, dis) => `<label class="qs-rad${dis ? ' is-dis' : ''}"><input type="radio" name="qs-tgt" value="${k}"${t === k && !dis ? ' checked' : ''}${dis ? ' disabled' : ''}> ${l}</label>`;
-    return `<fieldset class="qs-tgts"><legend>Insert as</legend>${r('heading', 'New heading + note' + (section && HEADS[section] ? ' — "' + esc(HEADS[section]) + '"' : ''))}${r('under', 'Note under the selected line', !sel)}${r('remarks', 'Add to the Remarks tab')}</fieldset>`;
+    const selHead = !!(sel && sel.dataset.lineType === 'heading' && sel.querySelector('.qt-hscope'));   // V271.7.3
+    return `<fieldset class="qs-tgts"><legend>Insert as</legend>${r('heading', 'New heading — text as its scope' + (section && HEADS[section] ? ' ("' + esc(HEADS[section]) + '")' : ''))}${r('hscope', 'Scope of the selected heading', !selHead)}${r('under', 'Note under the selected line', !sel)}${r('remarks', 'Add to the Remarks tab')}</fieldset>`;
   }
   function prevTargetsHtml() {
     if (picker.opts.target === 'cursor') return '<span class="qs-pk-note">The chosen lines\' text is inserted where the cursor is.</span>';
@@ -612,10 +613,19 @@
       const sel = selectedRow();
       const anchor = tgt === 'under' && sel ? sel : null;
       let after = anchor;
-      if (tgt === 'heading') {
-        const h = addSpecialQuoteRow('heading', HEADS[bl.section] || bl.title, { focus: false });
-        if (h && sel && sel.parentNode === tb) { tb.insertBefore(h, sel.nextSibling); }
-        after = h;
+      // V271.7.3: a new heading takes the text as its own scope; or the text goes into the selected heading's scope
+      if (tgt === 'heading' || tgt === 'hscope') {
+        let h = tgt === 'hscope' && sel && sel.dataset.lineType === 'heading' ? sel : null;
+        if (h) {
+          const ed = h.querySelector('.qt-hscope');
+          if (ed) { ed.innerHTML = (plain(ed.innerHTML) ? ed.innerHTML + '<div><br></div>' : '') + html; ed.classList.remove('bc-rt-empty'); ed.dispatchEvent(new Event('input', { bubbles: true })); }
+        } else {
+          h = addSpecialQuoteRow('heading', HEADS[bl.section] || bl.title, { focus: false, hScope: html });
+          if (h && sel && sel.parentNode === tb) { tb.insertBefore(h, sel.nextSibling); }
+        }
+        if (h) { h.dataset.blockId = bl.id; h.scrollIntoView({ block: 'nearest' }); }
+        toastMsg('"' + bl.title + '" inserted — edit it freely', 'success', 'Text inserted');
+        bumpUse(bl); afterInsert(); return;
       }
       const n = addSpecialQuoteRow('note', '', { focus: false, html, noteStyle: 'text' });
       if (n && after && after.parentNode === tb) tb.insertBefore(n, after.nextSibling);
@@ -629,7 +639,7 @@
     const o = picker.opts, idx = [...picker.picked].sort((a, b) => a - b), items = q.items || [];
     const pieces = idx.map(i => items[i]).filter(Boolean);
     if (o.target === 'cursor' && o.onCursor) {
-      const html = pieces.map(it => isSpecial(it) ? `<div><b>${esc(it.text || it.desc || '')}</b></div>` + (it.textHtml && R() ? R().clean(it.textHtml) : '') : `<div><b>${esc(it.desc || '')}</b></div>` + (scopeOf(it) || (it.descHtml && R() ? R().clean(it.descHtml) : ''))).join('');
+      const html = pieces.map(it => isSpecial(it) ? `<div><b>${esc(it.text || it.desc || '')}</b></div>` + (it.hScope && R() ? R().clean(it.hScope) : '') : `<div><b>${esc(it.desc || '')}</b></div>` + (scopeOf(it) || (it.descHtml && R() ? R().clean(it.descHtml) : ''))).join('');
       closePicker(); o.onCursor(html); return;
     }
     const tgt = (picker.ov.querySelector('input[name="qs-ptgt"]:checked') || {}).value || 'scope';
@@ -638,7 +648,7 @@
     if (tgt === 'scope') {
       if (!sel || sel.dataset.rowKind !== 'scope') { toastMsg('Click in a scope line first, then insert.', 'warning'); return; }
       const ed = sel.querySelector('[data-f="scope"]');
-      const html = pieces.map(it => isSpecial(it) ? (it.textHtml && R() ? R().clean(it.textHtml) : (R() ? R().plainToHtml(it.text || '') : '')) : (scopeOf(it) || (it.descHtml && R() ? R().clean(it.descHtml) : '') || (R() ? R().plainToHtml(it.desc || '') : ''))).join('<div><br></div>');
+      const html = pieces.map(it => isSpecial(it) ? (it.textHtml && R() ? R().clean(it.textHtml) : (R() ? R().plainToHtml(it.text || '') : '')) + (it.hScope && R() ? R().clean(it.hScope) : '') : (scopeOf(it) || (it.descHtml && R() ? R().clean(it.descHtml) : '') || (R() ? R().plainToHtml(it.desc || '') : ''))).join('<div><br></div>');
       ed.innerHTML = (plain(ed.innerHTML) ? ed.innerHTML + '<div><br></div>' : '') + html;
       ed.dispatchEvent(new Event('input', { bubbles: true }));
       if (!sel.dataset.scopeSrc) { sel.dataset.scopeSrc = 'prev:' + (q.qno || ''); paintTags(sel); }
@@ -646,7 +656,7 @@
     } else {
       pieces.forEach(it => {
         let tr;
-        if (it.lineType === 'heading' || it.lineType === 'note') tr = addSpecialQuoteRow(it.lineType, it.text || it.desc || '', { focus: false, html: it.textHtml || '', noteStyle: it.noteStyle || '' });
+        if (it.lineType === 'heading' || it.lineType === 'note') tr = addSpecialQuoteRow(it.lineType, it.text || it.desc || '', { focus: false, html: it.textHtml || '', noteStyle: it.noteStyle || '', hScope: it.hScope || '', group: it.grouped ? { qty: it.gQty, unit: it.gUnit, rates: it.gRates !== false } : null });
         else {
           const c = copyItem(it); delete c.up; delete c.discAmt; delete c.discPct; delete c.discBy; delete c.pricingSell; delete c.pricingBuy; delete c.estCost; delete c.estItemId; delete c.prodId;
           c.rowKind = 'scope'; c.freeScope = true; c.scopeSrc = 'prev:' + (q.qno || ''); c.scopeEdited = false;

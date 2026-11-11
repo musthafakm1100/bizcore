@@ -132,12 +132,12 @@ test('V271.6 Services quotation: categories, RFQ starting scope, full editor, bl
     assert.match(await p.textContent('.qs-pick .qs-pk-list'), /Standard exclusions — interior works[\s\S]*used 4×/);
     assert.doesNotMatch(await p.textContent('.qs-pick .qs-pk-list'), /Standard scope —/, 'service standard scopes are not listed');
     await p.click('.qs-pick [data-p="b:tb-exc"]');
-    assert.match(await p.textContent('.qs-pick .qs-tgts'), /New heading \+ note — "Exclusions & Assumptions"[\s\S]*Note under the selected line[\s\S]*Add to the Remarks tab/);
+    assert.match(await p.textContent('.qs-pick .qs-tgts'), /New heading — text as its scope \("Exclusions & Assumptions"\)[\s\S]*Scope of the selected heading[\s\S]*Note under the selected line[\s\S]*Add to the Remarks tab/);
     await p.click('.qs-pick [data-p="insert"]'); await sleep(300);
-    const special = await p.$$eval('#items-tbody tr.quote-special-row', rs => rs.map(r => [r.dataset.lineType, r.querySelector('.quote-special-text').value, r.dataset.noteStyle || '', r.querySelector('.qt-note-l') ? getComputedStyle(r.querySelector('.qt-note-l')).display : '']));
-    assert.deepEqual(special[0].slice(0, 2), ['heading', 'Exclusions & Assumptions']);
-    assert.equal(special[1][0], 'note'); assert.match(special[1][1], /Painting finish/); assert.equal(special[1][2], 'text');
-    assert.equal(special[1][3], 'none', 'a plain text note shows no "Note:" label');
+    // V271.7.3: the block becomes the new heading's own scope (no separate note row)
+    const special = await p.$$eval('#items-tbody tr.quote-special-row', rs => rs.map(r => [r.dataset.lineType, r.querySelector('.quote-special-text').value, r.querySelector('.qt-hscope')?.value || '']));
+    assert.equal(special.length, 1);
+    assert.deepEqual(special[0].slice(0, 2), ['heading', 'Exclusions & Assumptions']); assert.match(special[0][2], /Painting finish[\s\S]*Floor protection/);
     await p.waitForFunction(() => true); await sleep(200);
     assert.equal(h.fs.peek('textBlocks/tb-exc').usedCount, 5);
     assert.equal(h.fs.peek('textBlocks/tb-exc').html, SEED['textBlocks/tb-exc'].html, 'the block itself is not changed');

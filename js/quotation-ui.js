@@ -338,12 +338,13 @@
       + mi('up', 'Move Up', { key: 'Alt+↑', disabled: i <= 0 }) + mi('down', 'Move Down', { key: 'Alt+↓', disabled: i >= rows.length - 1 })
       + (item && prod ? sep + mi('hist', 'Price History…', { key: 'F2', sub: 'Selling and buying prices of this item' }) : '')
       + (scope ? sep + mi('expand', 'Expand Scope Editor…', { sub: 'A large editor for a long scope of work' }) + mi('link', tr.dataset.prodId ? 'Change Linked Item…' : 'Link Item…', { sub: 'A service item (SRV) — price history, reports, unit' }) + mi('scope', (free ? '✓ ' : '') + 'Scope Line (Free Text)', { sub: free ? 'Click to make it a linked service line again' : 'Contracting work priced for this job only — not linked' }) : '')
+      + (tr.dataset.lineType === 'heading' ? sep + mi('group', 'Print Lines Grouped…', { sub: tr.dataset.grouped === '1' ? 'On — one total on the heading' : 'One total on the heading, rates on the lines' }) : '')
       + (tr.dataset.lineType === 'note' && window.BCScope ? sep + mi('block', 'Save as Text Block…', { sub: 'Reuse this text in other quotations' }) : '')
       + (hasDisc ? mi('nodisc', 'Clear Line Discount') : '')
       + sep + mi('del', 'Delete Line', { key: 'Ctrl+Del', cls: 'pr-mi-del' });
     openPop(btn, html, {
       width: 272, title: esc(lineLabel(tr)),
-      onClick: act => { closePop(); ({ expand: () => window.BCScope && BCScope.openEditor(tr), block: () => { const ed = tr.querySelector('.quote-special-text'); const h = ed && ed.isContentEditable && window.BCRich ? BCRich.clean(ed.innerHTML) : (window.BCRich ? BCRich.plainToHtml(ed?.value || '') : ''); window.BCScope && BCScope.saveAsBlock(h, {}); }, link: () => typeof qtLinkLine === 'function' && qtLinkLine(tr), scope: () => toggleScope(tr), edit: () => qtEditLine(tr), above: () => insertAbove(tr), dup: () => duplicate(tr), up: () => move(tr, -1), down: () => move(tr, 1), hist: () => priceHistory(tr), nodisc: () => clearDisc(tr), del: () => confirmDelete(tr) })[act]?.(); },
+      onClick: act => { closePop(); ({ expand: () => window.BCScope && BCScope.openEditor(tr), block: () => { const ed = tr.querySelector('.quote-special-text'); const h = ed && ed.isContentEditable && window.BCRich ? BCRich.clean(ed.innerHTML) : (window.BCRich ? BCRich.plainToHtml(ed?.value || '') : ''); window.BCScope && BCScope.saveAsBlock(h, {}); }, link: () => typeof qtLinkLine === 'function' && qtLinkLine(tr), group: () => qtHeadGroupMenu(tr.querySelector('.qt-gchip:not([hidden])') || tr.querySelector('.qt-menu-btn') || btn, tr), scope: () => toggleScope(tr), edit: () => qtEditLine(tr), above: () => insertAbove(tr), dup: () => duplicate(tr), up: () => move(tr, -1), down: () => move(tr, 1), hist: () => priceHistory(tr), nodisc: () => clearDisc(tr), del: () => confirmDelete(tr) })[act]?.(); },
     });
   }
   /** V270.4.14 (SQ_1): a Service quotation line becomes a scope line (contracting, free text, not linked) or back */
@@ -457,6 +458,7 @@
   /* ── after every calculation: tab count, totals bar, phone cards, the "To continue" line ── */
   function qtAfterCalc(t) {
     if (!t) return;
+    qtPaintHeadings();
     if ($('qt-n-items')) $('qt-n-items').textContent = t.items;
     const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
     set('qtb-sub', m2(t.gross)); set('qtb-disc', (t.lineDisc + t.disc) ? '−' + m2(t.lineDisc + t.disc) : '0.00'); set('qtb-vat', m2(t.vat)); set('qtb-net', m2(t.net));
@@ -622,13 +624,63 @@
     window.closeModal.__qt = true;
   }
 
+
+  /* ── V271.7.3 (board 19): a heading that groups its lines — on print the heading line carries Qty / Unit ("1 Lot") and
+     the sum of the lines under it (up to the next heading); those lines show Qty, Unit and Unit Price, no amount. ── */
+  function headLines(tr) { const out = []; for (let r = tr.nextElementSibling; r && r.dataset.lineType !== 'heading'; r = r.nextElementSibling) if (r.dataset.lineType === 'item') out.push(r); return out; }
+  function headSum(tr) {
+    return headLines(tr).reduce((a, r) => {
+      const q = parseBizNumber(r.querySelector('[data-quote-qty]')?.value), u = parseBizNumber(r.querySelector('[data-quote-price]')?.value);
+      const g = (Number(q) || 0) * (Number(u) || 0), dp = parseBizNumber(r.querySelector('[data-quote-dpct]')?.value), da = parseBizNumber(r.querySelector('[data-quote-damt]')?.value);
+      const d = r.dataset.discBy === 'amt' ? (Number(da) || 0) : g * (Number(dp) || 0) / 100;
+      return a + Math.max(0, g - Math.min(g, d));
+    }, 0);
+  }
+  function qtPaintHeadings() {
+    rowsAll().forEach(tr => {
+      if (tr.dataset.lineType !== 'heading') return;
+      const on = tr.dataset.grouped === '1', chip = tr.querySelector('.qt-gchip'), sum = tr.querySelector('.qt-hsum');
+      tr.classList.toggle('qt-hgrp', on);
+      if (chip) { chip.hidden = !on; if (on) chip.textContent = 'Σ Grouped · ' + (tr.dataset.gQty || 1) + ' ' + (tr.dataset.gUnit || 'Lot') + (tr.dataset.gRates === '0' ? ' · no rates' : '') + ' ▾'; }
+      if (sum) { sum.hidden = !on; if (on) sum.textContent = m2(headSum(tr)); }
+      let r = tr.nextElementSibling;
+      for (; r && r.dataset.lineType !== 'heading'; r = r.nextElementSibling) r.classList.toggle('qt-ingrp', on);
+    });
+    rowsAll().forEach((tr, i, a) => { if (tr.dataset.lineType !== 'heading') { let h = null; for (let j = i - 1; j >= 0; j--) if (a[j].dataset.lineType === 'heading') { h = a[j]; break; } if (!h || h.dataset.grouped !== '1') tr.classList.remove('qt-ingrp'); } });
+  }
+  function qtHeadGroupMenu(btn, trArg) {
+    const tr = trArg || btn.closest('tr'); if (!tr) return;
+    if (pop && pop.anchor === btn) { closePop(); return; }
+    const on = tr.dataset.grouped === '1', rates = tr.dataset.gRates !== '0';
+    const html = `<div class="qt-gpop"><div class="qt-gpop-t">Lines under this heading print</div>
+      <label class="qt-gopt${on ? '' : ' on'}"><input type="radio" name="qt-g" value="0"${on ? '' : ' checked'}><span><b>Each with its own total</b><small>As usual.</small></span></label>
+      <label class="qt-gopt${on ? ' on' : ''}"><input type="radio" name="qt-g" value="1"${on ? ' checked' : ''}><span><b>Grouped — one total on the heading</b><small>The lines show Qty, Unit and Unit Price; their sum prints on the heading line.</small></span></label>
+      <div class="qt-grow">Heading shows <input class="qt-gq" inputmode="decimal" value="${esc(tr.dataset.gQty || '1')}" aria-label="Heading quantity"> <input class="qt-gu" maxlength="20" value="${esc(tr.dataset.gUnit || 'Lot')}" aria-label="Heading unit"></div>
+      <label class="qt-grow"><input type="checkbox" class="qt-gr"${rates ? ' checked' : ''}> Print the unit prices of the lines</label>
+      <div class="qt-gnote">The heading's amount is the sum of its lines (up to the next heading) — calculated, not typed. Totals and VAT don't change.</div>
+      <div class="qt-gbtns"><button type="button" class="pr-btn pr-btn-p" data-act="done">Done</button></div></div>`;
+    const el = openPop(btn, html, { width: 330, title: 'Print lines grouped', onClick: act => { if (act === 'done') { apply(); closePop(); } } });
+    if (!el) return;
+    const apply = () => {
+      const g = el.querySelector('input[name="qt-g"]:checked')?.value === '1';
+      const qn = parseBizNumber(el.querySelector('.qt-gq').value), un = el.querySelector('.qt-gu').value.trim().slice(0, 20);
+      const before = [tr.dataset.grouped || '', tr.dataset.gQty || '', tr.dataset.gUnit || '', tr.dataset.gRates || ''].join('|');
+      if (g) { tr.dataset.grouped = '1'; tr.dataset.gQty = String(Number(qn) > 0 ? Number(qn) : 1); tr.dataset.gUnit = un || 'Lot'; tr.dataset.gRates = el.querySelector('.qt-gr').checked ? '1' : '0'; }
+      else { delete tr.dataset.grouped; }
+      el.querySelectorAll('.qt-gopt').forEach(o => o.classList.toggle('on', o.querySelector('input').checked));
+      if (before !== [tr.dataset.grouped || '', tr.dataset.gQty || '', tr.dataset.gUnit || '', tr.dataset.gRates || ''].join('|')) markChanged();
+      qtPaintHeadings();
+    };
+    el.addEventListener('change', apply); el.addEventListener('input', e => { if (e.target.matches('.qt-gq, .qt-gu')) apply(); });
+    el.addEventListener('keydown', e => { if (e.target.matches('input') && e.key !== 'Tab' && e.key !== 'Escape') e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); apply(); closePop(); } if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePop(); } }, true);
+  }
   function qtAfterRowsChange() { afterRows(); }
   function qtAfterTypeChange() { renderCardsSoon(); }
   window.qtRenderCardsSoon = renderCardsSoon;
 
   Object.assign(window, {
     qtOnOpen, qtAfterOpen, qtPaintHeader, qtOpenFlow, qtStatusMenu, qtFold, qtDetails, qtShowTab, qtPaintNotes, qtDocNoteStyleMenu, qtNoteStyleMenu,
-    qtAddLine, qtMoreMenu, qtRowMenu, qtAfterCalc, qtAfterRowsChange, qtAfterTypeChange, qtSide, qtFormatQuoteDisc, qtFooterMore, qtEditLine,
+    qtAddLine, qtMoreMenu, qtRowMenu, qtAfterCalc, qtPaintHeadings, qtHeadGroupMenu, qtAfterRowsChange, qtAfterTypeChange, qtSide, qtFormatQuoteDisc, qtFooterMore, qtEditLine,
     qtRequestClose, qtRequestBack,
     qtRevealRow: tr => { qtShowTab('items'); if (isPhone()) qtEditLine(tr); else tr.scrollIntoView({ block: 'nearest' }); },
     qtDebug: { rowItem, insertAbove, duplicate, move, confirmDelete, deleteLine, clearDisc, renderCards, isChanged: () => changed, setChanged: v => { changed = !!v; }, closePop, closeDialog, closeSheet, state: () => ({ pop: !!pop, dlg: !!dlg, sheet: !!sheet }) },
