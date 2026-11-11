@@ -93,7 +93,7 @@ test('V270.4.14 service quotation: formatted lines, SRV links, scope lines, Cost
 
     // 5. a formatted note line
     await p.evaluate(() => qtAddLine('note')); await sleep(150);
-    await p.keyboard.type('Work during office hours'); await p.keyboard.press('Shift+Home'); await p.click('#qt-rtbar [data-rt="hl"]');
+    await p.keyboard.type('Work during office hours'); await p.keyboard.press('Shift+Home'); await p.click('#qt-rtbar [data-rt="hl"]'); await p.click('.bc-rtpop [data-v="y"]');   // V271.7.4: highlight is a menu
 
     // 6. Mark as Sent: line 2 has no service link → reminder (Send anyway); line 2 has no cost → reminder (Enter cost first)
     let saving = p.evaluate(() => saveQuotation('sent')); saving.catch(() => {});
@@ -241,8 +241,9 @@ test('V270.4.14.2 Format bar: colour / size / highlight back and forth, typing i
     await selWord('days'); await pick('size', 'lg'); assert.match(await html(), /<span class="rt-z-lg">days<\/span>/);
     await selWord('days'); await pick('size', 'h'); assert.match(await html(), /<span class="rt-z-h">days<\/span>/);
     await selWord('days'); await pick('size', 'n'); assert.doesNotMatch(await html(), /rt-z-/);
-    await selWord('for'); await bar('hl'); assert.match(await html(), /<span class="rt-hl">for<\/span>/);
-    await selWord('for'); await bar('hl'); assert.doesNotMatch(await html(), /rt-hl/);
+    await selWord('for'); await pick('hl', 'y'); assert.match(await html(), /<span class="rt-hl">for<\/span>/);
+    await selWord('for'); await pick('hl', 'b'); assert.match(await html(), /<span class="rt-hl-b">for<\/span>/, 'V271.7.4: light blue');
+    await selWord('for'); await pick('hl', 'none'); assert.doesNotMatch(await html(), /rt-hl/);
     // bold on / off
     await selWord('days'); await bar('bold'); assert.match(await html(), /<b>days<\/b>/);
     await selWord('days'); await bar('bold'); assert.doesNotMatch(await html(), /<b>/);

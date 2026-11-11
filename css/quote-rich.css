@@ -101,3 +101,10 @@
 /* V270.4.14.2: while typing, a size / highlight chosen inside another one shows right at once (the line is tidied to one span per piece of text on leaving it) */
 .bc-rt .rt-z-sm .rt-z-n{font-size:1.1765em}.bc-rt .rt-z-sm .rt-z-lg{font-size:1.3882em}.bc-rt .rt-z-sm .rt-z-h{font-size:1.6235em}.bc-rt .rt-z-lg .rt-z-sm{font-size:0.7203em}.bc-rt .rt-z-lg .rt-z-n{font-size:0.8475em}.bc-rt .rt-z-lg .rt-z-h{font-size:1.1695em}.bc-rt .rt-z-h .rt-z-sm{font-size:0.6159em}.bc-rt .rt-z-h .rt-z-n{font-size:0.7246em}.bc-rt .rt-z-h .rt-z-lg{font-size:0.8551em}
 .bc-rt .rt-hl .rt-nohl{background:#fff}
+/* V271.7.3 — more text colours and highlight colours */
+.rt-c-b{color:#1D4ED8!important}.rt-c-t{color:#0F766E!important}.rt-c-o{color:#C2410C!important}.rt-c-m{color:#9F1239!important}
+.rt-hl-g{background:#dcfce7}.rt-hl-b{background:#dbeafe}.rt-hl-o{background:#ffedd5}.rt-hl-s{background:#e5e7eb}
+.bc-rt .rt-hl-g .rt-nohl,.bc-rt .rt-hl-b .rt-nohl,.bc-rt .rt-hl-o .rt-nohl,.bc-rt .rt-hl-s .rt-nohl{background:#fff}
+.bc-rtpop .rtp-sw{flex-wrap:wrap;max-width:250px}
+.bc-rtpop .rtp-sw button.on{outline:2px solid #2563eb;outline-offset:1px}
+.bc-rtpop .rtp-none{margin-top:3px;font-size:12.5px;color:#334155;border-top:1px solid #eef1f5!important;border-radius:0 0 5px 5px!important}

@@ -48,7 +48,25 @@ test('V271.7.3 headings: inside the description, formatted title + own scope, gr
     /* format the title (underline) with the Format bar; type the heading's scope */
     await p.click(`${hr} div.quote-special-text`); await p.keyboard.press('Control+A');
     await p.click('#qt-rtbar [data-rt="underline"]'); await sleep(100);
+    // V271.7.3 (board 21): 9 text colours; Black is kept in a heading (its default is navy)
+    await p.click('#qt-rtbar [data-rt="color"]'); await p.waitForSelector('.bc-rtpop .rtp-sw');
+    assert.equal(await p.locator('.bc-rtpop .rtp-sw button').count(), 9);
+    assert.equal(await p.locator('.bc-rtpop [data-v="d"]').count(), 1, 'Default (navy) offered in a heading');
+    await p.click('.bc-rtpop [data-v="k"]'); await sleep(100);
+    assert.match(await p.innerHTML(`${hr} div.quote-special-text`), /rt-c-k/);
+    assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('#items-tbody tr.qt-hrow div.quote-special-text .rt-c-k')).color), 'rgb(15, 23, 42)');
     await p.click(`${hr} .qt-hscope`); await p.keyboard.type('Scope of Work: supply and installation at four locations.');
+    // 5 highlight colours + No highlight: light green on the scope
+    await p.keyboard.press('Control+A'); await p.click('#qt-rtbar [data-rt="hl"]'); await p.waitForSelector('.bc-rtpop .rtp-sw');
+    assert.equal(await p.locator('.bc-rtpop .rtp-sw button').count(), 5); assert.equal(await p.locator('.bc-rtpop [data-v="none"]').count(), 1);
+    await p.click('.bc-rtpop [data-v="g"]'); await sleep(100);
+    assert.match(await p.innerHTML(`${hr} .qt-hscope`), /rt-hl-g/);
+    await p.keyboard.press('End');
+    // the title / scope start 12 px left of the lines' description; the badge on top
+    const ax = await p.evaluate(() => { const ht = document.querySelector('#items-tbody tr.qt-hrow'), d = document.querySelector('#items-tbody tr[data-line-type="item"] [data-f="desc"]'), t = ht.querySelector('div.quote-special-text'), b = ht.querySelector('.qt-badge');
+      const tx = e => { const c = getComputedStyle(e); return e.getBoundingClientRect().left + parseFloat(c.paddingLeft) + parseFloat(c.borderLeftWidth); };
+      return { gap: Math.round(tx(d) - tx(t)), badgeAbove: b.getBoundingClientRect().bottom <= t.getBoundingClientRect().top + 1 }; });
+    assert.equal(ax.gap, 12); assert.equal(ax.badgeAbove, true);
 
     /* Print Lines Grouped… from the heading menu */
     await p.click(`${hr} .qt-menu-btn`); await p.waitForSelector('.qt-pop [data-act="group"]');
@@ -75,7 +93,8 @@ test('V271.7.3 headings: inside the description, formatted title + own scope, gr
       await Promise.race([sv, p.waitForSelector('#app-confirm-overlay', { timeout: 8000 }).then(() => p.click('#confirm-ok')).catch(() => {})]); await sv; await sleep(1000); }
     const q = h.fs.peek('quotations/Q-H'), hd = q.items[0];
     assert.equal(hd.lineType, 'heading'); assert.equal(hd.text, 'Project: Installation of Automatic Shutter Doors (4 Locations)');
-    assert.match(hd.textHtml || '', /<u>|rt-u|underline/);
+    assert.match(hd.textHtml || '', /<u>|rt-u|underline/); assert.match(hd.textHtml, /rt-c-k/);
+    assert.match(hd.hScope, /rt-hl-g/);
     assert.match(hd.hScope, /four locations[\s\S]*shutter doors/);
     assert.equal(hd.grouped, true); assert.equal(hd.gQty, 1); assert.equal(hd.gUnit, 'Lot'); assert.equal(hd.gRates, undefined);
     await p.evaluate(() => document.querySelectorAll('.modal-overlay.open').forEach(m => closeModal(m.id))); await sleep(300);
@@ -101,7 +120,7 @@ test('V271.7.3 headings: inside the description, formatted title + own scope, gr
       assert.ok(hdr, 'heading row'); assert.equal(hdr[0], '001'); assert.match(hdr[1], /four locations/); assert.deepEqual(hdr.slice(2), ['1', 'Lot', '', '46,500.00']);
       const l1 = c.find(r => /512 × 510/.test(r[1])); assert.deepEqual([l1[0], l1[2], l1[3], l1[4], l1[5]], ['', '1', 'LS', '13,800.00', '']);
       const l2 = c.find(r => /450 × 500/.test(r[1])); assert.match(l2[1], /supply only/, 'the line note stays under its line'); assert.equal(l2[5], '');
-      assert.match(html, /class="bc-qht"/); assert.doesNotMatch(html, /<tr class="heading">/, 'no heading band'); }
+      assert.match(html, /class="bc-qht"><div class="bc-rtx">[\s\S]{0,80}rt-c-k/, 'the heading prints in black'); assert.match(html, /\.bc-rtx \.rt-hl-g\{background:#dcfce7/); assert.doesNotMatch(html, /<tr class="heading">/, 'no heading band'); }
     /* not grouped — Service Quotation: heading row without number or figures, lines 01–03 with amounts */
     { const html = await print('service', 'ungroup'); const c = await cells(html);
       const hdr = c.find(r => /Project: Installation/.test(r.join('|'))); assert.deepEqual([hdr[0], hdr[2], hdr[3], hdr[4], hdr[5]], ['', '', '', '', '']);

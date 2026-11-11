@@ -516,12 +516,15 @@
 
 /* V271.7.3 — headings (boards 19–20): the title and its own scope are formatted with the Format bar; a grouped heading
    shows its chip and the sum of its lines. A note under a Services line starts under the description (was 146 px in). */
-#quote-modal tr.qt-hrow .qt-hwrap{align-items:flex-start}
-#quote-modal tr.qt-hrow .qt-badge{margin-top:5px}
+/* V271.7.3 (board 21): the badge on top; title and scope start 12 px left of the lines' description */
+#quote-modal tr.qt-hrow .qt-hwrap.qt-hwrap2{display:block}
+#quote-modal tr.qt-hrow .qt-hwrap2 .qt-badge{display:inline-block;margin:0 0 3px var(--qt-hx,0px)}
+#quote-modal .qt-hline{display:flex;align-items:flex-start;gap:10px}
 #quote-modal tr.qt-hrow div.quote-special-text{flex:1;min-width:0;padding:4px 7px!important;font-size:13.5px!important;font-weight:700!important;color:var(--qt-navy)!important;border:1px solid transparent;border-radius:6px;min-height:20px}
 #quote-modal tr.qt-hrow div.quote-special-text:hover{border-color:#d5dde7}
 #quote-modal tr.qt-hrow div.quote-special-text:focus{border-color:#93b4dd;background:#fff;outline:none}
-#quote-modal .qt-hsw{margin:6px 0 2px 70px}
+#quote-modal .qt-hsw{margin:6px 0 2px var(--qt-hx,0px)}
+#quote-modal tr.qt-hrow .qt-hline div.quote-special-text{margin-left:var(--qt-hx,0px)}
 #quote-modal .qt-hscope{font-size:12.5px;line-height:1.5;padding:4px 7px;border:1px dashed #cfd8e3;border-radius:6px;background:#fff;min-height:20px;color:#334155}
 #quote-modal .qt-hscope.bc-rt-empty{border-color:#e2e8f0;background:transparent}
 #quote-modal .qt-hscope:focus{border-style:solid;border-color:#93b4dd;outline:none}

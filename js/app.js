@@ -5815,7 +5815,7 @@ function addSpecialQuoteRow(type='note', text='', opts={}){
     // (board 19) optionally "grouped" — on print the heading carries 1 Lot + the sum of its lines
     const hEd=window.BCRich?`<div class="quote-special-text qt-htext" aria-label="Heading text" oninput="markDirty('quote-modal')"></div>`:input;
     const sEd=window.BCRich?`<div class="qt-hsw"><div class="qt-hscope" data-f="hscope" aria-label="Scope of work under the heading" oninput="markDirty('quote-modal')"></div></div>`:'';
-    tr.innerHTML=`<td class="qt-no"><span class="qt-grip" title="Drag to reorder" aria-hidden="true">⋮⋮</span></td><td colspan="${span}"><div class="qt-hwrap"><span class="qt-badge">Heading</span>${hEd}<button type="button" class="qt-gchip" onclick="qtHeadGroupMenu(this)" hidden></button><span class="qt-hsum" hidden></span></div>${sEd}</td><td class="qt-mc"><button type="button" class="pr-menu-btn qt-menu-btn" onclick="qtRowMenu(this)" aria-label="Line menu" title="Line menu">⋮</button></td>`;
+    tr.innerHTML=`<td class="qt-no"><span class="qt-grip" title="Drag to reorder" aria-hidden="true">⋮⋮</span></td><td colspan="${span}"><div class="qt-hwrap qt-hwrap2"><span class="qt-badge">Heading</span><div class="qt-hline">${hEd}<button type="button" class="qt-gchip" onclick="qtHeadGroupMenu(this)" hidden></button><span class="qt-hsum" hidden></span></div></div>${sEd}</td><td class="qt-mc"><button type="button" class="pr-menu-btn qt-menu-btn" onclick="qtRowMenu(this)" aria-label="Line menu" title="Line menu">⋮</button></td>`;
     if(opts.group){ tr.dataset.grouped='1'; tr.dataset.gQty=String(Number(opts.group.qty)>0?Number(opts.group.qty):1); tr.dataset.gUnit=String(opts.group.unit||'Lot'); tr.dataset.gRates=opts.group.rates===false?'0':'1'; }
   } else {
     tr.dataset.noteStyle=quotationNoteStyleKey(opts.noteStyle)||'';
@@ -5824,6 +5824,7 @@ function addSpecialQuoteRow(type='note', text='', opts={}){
   }
   const nEd=window.BCRich?tr.querySelector('div.quote-special-text'):null;
   if(nEd) BCRich.make(nEd,{html:opts.html||'',text,placeholder});
+  if(nEd&&type==='heading') nEd.dataset.rtKeepK='1';   // V271.7.3: Black is a real choice in a heading (its default is navy)
   const hsEd=window.BCRich?tr.querySelector('.qt-hscope'):null;
   if(hsEd) BCRich.make(hsEd,{html:opts.hScope||'',placeholder:'Scope of work under the heading (optional) — printed under the title'});
   tbody.appendChild(tr); renumberQuoteItemRows(); calcTotals();

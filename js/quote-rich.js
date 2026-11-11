@@ -17,7 +17,11 @@
  */
 (function () {
   'use strict';
-  const COLORS = [['k', '#0f172a', 'Black'], ['n', '#1F4E79', 'Navy'], ['r', '#b91c1c', 'Red'], ['g', '#15803d', 'Green'], ['s', '#64748b', 'Grey']];
+  const COLORS = [['k', '#0f172a', 'Black'], ['n', '#1F4E79', 'Navy'], ['b', '#1D4ED8', 'Blue'], ['t', '#0F766E', 'Teal'], ['g', '#15803d', 'Green'], ['o', '#C2410C', 'Orange'], ['r', '#b91c1c', 'Red'], ['m', '#9F1239', 'Maroon'], ['s', '#64748b', 'Grey']];   // V271.7.3: + Blue, Teal, Orange, Maroon
+  // V271.7.3: highlight colours ('y' = the original yellow, stored as rt-hl; the others rt-hl-<key>)
+  const HLS = [['y', '#fef08a', 'Yellow'], ['g', '#dcfce7', 'Light green'], ['b', '#dbeafe', 'Light blue'], ['o', '#ffedd5', 'Light orange'], ['s', '#e5e7eb', 'Light grey']];
+  const hlCls = k => !k ? '' : (k === true || k === 'y') ? 'rt-hl' : 'rt-hl-' + k;
+  const hlOfCls = c => c === 'rt-hl' ? 'y' : (/^rt-hl-([gbos])$/.exec(c) || [])[1] || '';
   const SIZES = [['sm', 'Small'], ['', 'Normal'], ['lg', 'Large'], ['h', 'Heading']];
   const HL = '#fef08a';
   const OL_TYPES = [['1', '1. 2. 3.'], ['a', 'a. b. c.'], ['A', 'A. B. C.'], ['i', 'i. ii. iii.'], ['I', 'I. II. III.']];
@@ -42,6 +46,8 @@
     return best === 'k' ? '' : best;
   }
   function isHighlight(v) { const c = rgbOf(v); if (!c) return false; if (c[0] > 245 && c[1] > 245 && c[2] > 245) return false; return true; }
+  /** nearest of the highlight colours (pasted text) */
+  function hlKey(v) { const c = rgbOf(v); if (!c) return 'y'; let best = 'y', bd = Infinity; HLS.forEach(([k, hex]) => { const p = rgbOf(hex), d = (p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 + (p[2] - c[2]) ** 2; if (d < bd) { bd = d; best = k; } }); return best; }
   function sizeKeyPx(px) { if (!(px > 0)) return ''; return px < 12.5 ? 'sm' : px <= 15.5 ? '' : px <= 19.5 ? 'lg' : 'h'; }
   function sizeKeyCss(v) {
     v = String(v || '').trim().toLowerCase(); if (!v) return '';
@@ -64,13 +70,13 @@
     if (/underline/.test(st.textDecoration || st.textDecorationLine || '')) f.u = true;
     const col = t === 'FONT' ? el.getAttribute('color') : st.color; if (col) { const k = colorKey(col); f.c = k || 'k'; }
     if (t === 'SPAN' || t === 'FONT' || t === 'MARK') {
-      const bg = t === 'MARK' ? HL : (st.backgroundColor || st.background); if (bg && isHighlight(bg)) f.hl = true;
+      const bg = t === 'MARK' ? HL : (st.backgroundColor || st.background); if (bg && isHighlight(bg)) f.hl = hlKey(bg);
     }
     if (t === 'FONT' && el.getAttribute('size')) { const s = Number(el.getAttribute('size')); f.z = s <= 2 ? 'sm' : s === 3 ? '' : s === 4 ? 'lg' : 'h'; }
     else if (st.fontSize) f.z = sizeKeyCss(st.fontSize);
     if (/^H[1-3]$/.test(t)) f.z = 'h'; else if (/^H[4-6]$/.test(t)) f.z = 'lg';
     // our own classes (stored HTML)
-    (el.classList ? [...el.classList] : []).forEach(c => { let m; if ((m = c.match(/^rt-c-([nrgsk])$/))) { f.c = m[1]; f.own = true; } else if ((m = c.match(/^rt-z-(sm|lg|h|n)$/))) f.z = m[1]; else if (c === 'rt-hl') f.hl = true; else if (c === 'rt-nohl') f.nohl = true; });
+    (el.classList ? [...el.classList] : []).forEach(c => { let m; if ((m = c.match(/^rt-c-([nrgskobmt])$/))) { f.c = m[1]; f.own = true; } else if ((m = c.match(/^rt-z-(sm|lg|h|n)$/))) f.z = m[1]; else if (hlOfCls(c)) f.hl = hlOfCls(c); else if (c === 'rt-nohl') f.nohl = true; });
     return f;
   }
   function clean(html) {
@@ -106,7 +112,7 @@
         if (f.b) { open.push('<b>'); close.unshift('</b>'); }
         if (f.i) { open.push('<i>'); close.unshift('</i>'); }
         if (f.u) { open.push('<u>'); close.unshift('</u>'); }
-        const cls = [f.c && (f.c !== 'k' || f.own) ? 'rt-c-' + f.c : '', f.z ? 'rt-z-' + f.z : '', f.hl ? 'rt-hl' : f.nohl ? 'rt-nohl' : ''].filter(Boolean);   // k / n / nohl: our own "back to normal" inside another span
+        const cls = [f.c && (f.c !== 'k' || f.own) ? 'rt-c-' + f.c : '', f.z ? 'rt-z-' + f.z : '', f.hl ? hlCls(f.hl) : f.nohl ? 'rt-nohl' : ''].filter(Boolean);   // k / n / nohl: our own "back to normal" inside another span
         if (cls.length) { open.push(`<span class="${cls.join(' ')}">`); close.unshift('</span>'); }
         if (t === 'TABLE' || t === 'TBODY' || t === 'THEAD' || t === 'TFOOT') { walk(n, depth); return; }
         if (BLOCK.has(t)) { const ind = String(n.getAttribute && n.getAttribute('class') || '').match(/rt-ind-([123])/); out.push((ind ? `<div class="rt-ind-${ind[1]}">` : '<div>') + open.join('')); walk(n, depth); out.push(close.join('') + '</div>'); }
@@ -242,18 +248,21 @@
     const v = { c: '', z: '', hl: null };
     for (let n = node.parentNode; n && n !== ed; n = n.parentNode) {
       if (n.nodeType !== 1 || n.tagName !== 'SPAN') continue;
-      [...n.classList].forEach(c => { let m; if (!v.c && (m = c.match(GROUP_RE.c))) v.c = m[1]; else if (!v.z && (m = c.match(GROUP_RE.z))) v.z = m[1]; else if (v.hl === null && (c === 'rt-hl' || c === 'rt-nohl')) v.hl = c === 'rt-hl'; });
+      [...n.classList].forEach(c => { let m; if (!v.c && (m = c.match(GROUP_RE.c))) v.c = m[1]; else if (!v.z && (m = c.match(GROUP_RE.z))) v.z = m[1]; else if (v.hl === null && (hlOfCls(c) || c === 'rt-nohl')) v.hl = hlOfCls(c) || false; });
     }
     return v;
   }
-  const clsOf = v => [v.c && v.c !== 'k' ? 'rt-c-' + v.c : '', v.z && v.z !== 'n' ? 'rt-z-' + v.z : '', v.hl ? 'rt-hl' : ''].filter(Boolean).join(' ');
+  // V271.7.3: an editor with its own default colour (a quotation heading: navy) keeps Black as a real choice ('d' = back to its default)
+  const clsOf = (v, kk) => [v.c && v.c !== 'd' && (v.c !== 'k' || kk) ? 'rt-c-' + v.c : '', v.z && v.z !== 'n' ? 'rt-z-' + v.z : '', v.hl ? hlCls(v.hl) : ''].filter(Boolean).join(' ');
+  const keepK = ed => !!(ed && ed.dataset && ed.dataset.rtKeepK === '1');
   /** one span per piece of text, no nesting; empty / default spans gone; neighbours with the same look merged */
   function flatten(ed) {
     const p = document.activeElement === ed ? saveSel(ed) : null;
-    ed.querySelectorAll('font').forEach(f => { const fm = fmtOf(f), sp = document.createElement('span'); sp.className = [fm.c && fm.c !== 'k' ? 'rt-c-' + fm.c : '', fm.z ? 'rt-z-' + fm.z : ''].filter(Boolean).join(' '); while (f.firstChild) sp.appendChild(f.firstChild); f.replaceWith(sp); });
-    ed.querySelectorAll('span[style]').forEach(sp => { const fm = fmtOf(sp); if (fm.hl) sp.classList.add('rt-hl'); if (fm.c && fm.c !== 'k') sp.classList.add('rt-c-' + fm.c); if (fm.z) sp.classList.add('rt-z-' + fm.z); sp.removeAttribute('style'); });
+    const kk = keepK(ed);
+    ed.querySelectorAll('font').forEach(f => { const fm = fmtOf(f), sp = document.createElement('span'); sp.className = [fm.c && (fm.c !== 'k' || kk) ? 'rt-c-' + fm.c : '', fm.z ? 'rt-z-' + fm.z : ''].filter(Boolean).join(' '); while (f.firstChild) sp.appendChild(f.firstChild); f.replaceWith(sp); });
+    ed.querySelectorAll('span[style]').forEach(sp => { const fm = fmtOf(sp); if (fm.hl) sp.classList.add(hlCls(fm.hl)); if (fm.c && (fm.c !== 'k' || kk)) sp.classList.add('rt-c-' + fm.c); if (fm.z) sp.classList.add('rt-z-' + fm.z); sp.removeAttribute('style'); });
     ed.querySelectorAll('[style]').forEach(x => x.removeAttribute('style'));
-    const looks = textNodes(ed).map(t => [t, clsOf(effOf(t, ed))]);
+    const looks = textNodes(ed).map(t => [t, clsOf(effOf(t, ed), kk)]);
     [...ed.querySelectorAll('span')].forEach(sp => sp.replaceWith(...sp.childNodes));
     looks.forEach(([t, c]) => { if (!c || !ed.contains(t)) return; const sp = document.createElement('span'); sp.className = c; t.replaceWith(sp); sp.appendChild(t); });
     ed.querySelectorAll('span').forEach(sp => { let nx = sp.nextSibling; while (nx && nx.nodeType === 1 && nx.tagName === 'SPAN' && nx.className === sp.className) { while (nx.firstChild) sp.appendChild(nx.firstChild); const d = nx; nx = nx.nextSibling; d.remove(); } });
@@ -265,8 +274,8 @@
     if (!cur) return;
     if (document.activeElement !== cur) cur.focus();
     const r = sel(); if (!r) return;
-    const look = { c: group === 'c' ? v : '', z: group === 'z' ? v : '', hl: group === 'hl' ? !!v : null };
-    const cls = [look.c ? 'rt-c-' + look.c : '', look.z ? 'rt-z-' + look.z : '', look.hl === null ? '' : look.hl ? 'rt-hl' : 'rt-nohl'].filter(Boolean).join(' ');
+    const look = { c: group === 'c' ? v : '', z: group === 'z' ? v : '', hl: group === 'hl' ? (v || false) : null };
+    const cls = [look.c ? 'rt-c-' + look.c : '', look.z ? 'rt-z-' + look.z : '', look.hl === null ? '' : look.hl ? hlCls(look.hl) : 'rt-nohl'].filter(Boolean).join(' ');
     if (r.collapsed) {   // no words selected: what is typed next gets the look
       const sp = document.createElement('span'); sp.className = cls; sp.textContent = ZW;
       r.insertNode(sp); const nr = document.createRange(); nr.setStart(sp.firstChild, 1); nr.collapse(true);
@@ -373,7 +382,7 @@
   }
   function setColor(k) { applyInline('c', k || 'k'); }
   function setSize(z) { applyInline('z', z || 'n'); }
-  function toggleHighlight() { if (!cur) return; applyInline('hl', !stateOf().hl); }
+  function setHighlight(k) { if (!cur) return; applyInline('hl', k || false); }
   function olType(ty) {
     if (!cur) return;
     cur.focus();
@@ -386,10 +395,11 @@
     if (!cur) return;
     if (document.activeElement !== cur) cur.focus();
     const r = sel(); if (!r) return;
-    if (r.collapsed) { applyInline('c', 'k'); return; }
+    const dk = keepK(cur) ? 'd' : 'k';   // V271.7.3: a heading goes back to its own default colour
+    if (r.collapsed) { applyInline('c', dk); return; }
     try { document.execCommand('styleWithCSS', false, false); document.execCommand('removeFormat'); } catch (_) {}
     const p = saveSel(cur); restoreSel(cur, p);
-    applyInline('c', 'k'); restoreSel(cur, p); applyInline('z', 'n'); restoreSel(cur, p); applyInline('hl', false);
+    applyInline('c', dk); restoreSel(cur, p); applyInline('z', 'n'); restoreSel(cur, p); applyInline('hl', false);
   }
   function stateOf() {
     const st = { b: false, i: false, u: false, c: '', z: '', hl: false, ul: false, ol: false };
@@ -397,7 +407,7 @@
     try { st.b = document.queryCommandState('bold'); st.i = document.queryCommandState('italic'); st.u = document.queryCommandState('underline'); } catch (_) {}
     const s = window.getSelection(); let a = s && s.anchorNode; if (!a || !cur.contains(a)) return st;
     const t = a.nodeType === 3 ? a : (a.childNodes[Math.max(0, (s.anchorOffset || 0) - 1)] || a);
-    const v = effOf(t.nodeType === 3 ? t : (textNodes(t)[0] || t), cur); st.c = v.c === 'k' ? '' : v.c; st.z = v.z === 'n' ? '' : v.z; st.hl = !!v.hl;
+    const v = effOf(t.nodeType === 3 ? t : (textNodes(t)[0] || t), cur); st.c = (v.c === 'k' && !keepK(cur)) || v.c === 'd' ? '' : v.c; st.z = v.z === 'n' ? '' : v.z; st.hl = v.hl || false;
     for (let n = a; n && n !== cur; n = n.parentNode) { if (n.nodeType === 1 && n.tagName === 'UL' && !st.ol) st.ul = true; if (n.nodeType === 1 && n.tagName === 'OL' && !st.ul) st.ol = true; }
     return st;
   }
@@ -408,7 +418,7 @@
   function barHtml() {
     return `<span class="rtb-lbl">Format</span>
       <button type="button" class="rtb" data-rt="bold" title="Bold (Ctrl+B)" aria-label="Bold"><b>B</b></button><button type="button" class="rtb" data-rt="italic" title="Italic (Ctrl+I)" aria-label="Italic"><i>I</i></button><button type="button" class="rtb" data-rt="underline" title="Underline (Ctrl+U)" aria-label="Underline"><u>U</u></button><i class="rtb-sep"></i>
-      <button type="button" class="rtb rtb-dd" data-rt="size" title="Text size" aria-label="Text size">Size ▾</button><button type="button" class="rtb rtb-dd" data-rt="color" title="Text colour" aria-label="Text colour">${svgA('#0f172a')} ▾</button><button type="button" class="rtb" data-rt="hl" title="Highlight" aria-label="Highlight"><span class="rtb-hl">ab</span></button><i class="rtb-sep"></i>
+      <button type="button" class="rtb rtb-dd" data-rt="size" title="Text size" aria-label="Text size">Size ▾</button><button type="button" class="rtb rtb-dd" data-rt="color" title="Text colour" aria-label="Text colour">${svgA('#0f172a')} ▾</button><button type="button" class="rtb rtb-dd" data-rt="hl" title="Highlight" aria-label="Highlight"><span class="rtb-hl">ab</span> ▾</button><i class="rtb-sep"></i>
       <button type="button" class="rtb" data-rt="ul" title="Bullet list" aria-label="Bullet list">• List</button><button type="button" class="rtb rtb-dd" data-rt="ol" title="Numbered list" aria-label="Numbered list">1. List ▾</button><button type="button" class="rtb" data-rt="outdent" title="Outdent (Shift+Tab)" aria-label="Outdent">⇤</button><button type="button" class="rtb" data-rt="indent" title="Indent (Tab)" aria-label="Indent">⇥</button><i class="rtb-sep"></i>
       <button type="button" class="rtb" data-rt="clear" title="Clear formatting" aria-label="Clear formatting">T̸</button><span class="rtb-off">Click in a description or note to format</span>`;
   }
@@ -436,10 +446,10 @@
       if (a === 'bold' || a === 'italic' || a === 'underline') cmd(a);
       else if (a === 'indent' || a === 'outdent') indent(a === 'indent' ? 1 : -1);
       else if (a === 'ul') cmd('insertUnorderedList');
-      else if (a === 'hl') toggleHighlight();
+      else if (a === 'hl') { if (pop) { closePop(); return; } const s = stateOf(); openPop(b, `<div class="rtp-sw">${HLS.map(([k, hex, l]) => `<button type="button" data-v="${k}" title="${l}" aria-label="${l}" class="${s.hl === k ? 'on' : ''}" style="background:${hex}"></button>`).join('')}</div><button type="button" data-v="none" class="rtp-none">No highlight</button>`, v => setHighlight(v === 'none' ? false : v)); }
       else if (a === 'clear') clearFmt();
       else if (a === 'size') { if (pop) { closePop(); return; } const s = stateOf(); openPop(b, SIZES.map(([k, l]) => `<button type="button" data-v="${k || 'n'}" class="${s.z === k ? 'on' : ''}"><span class="rt-z-${k || 'n'}">${l}</span></button>`).join(''), v => setSize(v === 'n' ? '' : v)); }
-      else if (a === 'color') { if (pop) { closePop(); return; } openPop(b, `<div class="rtp-sw">${COLORS.map(([k, hex, l]) => `<button type="button" data-v="${k}" title="${l}" aria-label="${l}" style="background:${hex}"></button>`).join('')}</div>`, v => setColor(v === 'k' ? '' : v)); }
+      else if (a === 'color') { if (pop) { closePop(); return; } const kk = keepK(cur), s = stateOf(); openPop(b, `<div class="rtp-sw">${COLORS.map(([k, hex, l]) => `<button type="button" data-v="${k}" title="${l}${kk && k === 'n' ? ' (heading default)' : ''}" aria-label="${l}" class="${(s.c || (kk ? '' : 'k')) === k ? 'on' : ''}" style="background:${hex}"></button>`).join('')}</div>${kk ? '<button type="button" data-v="d" class="rtp-none">Default (navy)</button>' : ''}`, v => setColor(v === 'k' && !kk ? '' : v)); }
       else if (a === 'ol') { if (pop) { closePop(); return; } openPop(b, OL_TYPES.map(([k, l]) => `<button type="button" data-v="${k}">${l}</button>`).join(''), v => olType(v)); }
     });
     bars.add(bar); paintBar(bar);
@@ -453,19 +463,20 @@
     const s = stateOf();
     const set = (a, v) => { const b = bar.querySelector(`[data-rt="${a}"]`); if (b) b.classList.toggle('on', !!v); };
     set('bold', s.b); set('italic', s.i); set('underline', s.u); set('hl', s.hl); set('ul', s.ul); set('ol', s.ol);
-    const a = bar.querySelector('[data-rt="color"] .rtb-a'); if (a) a.style.setProperty('--rtc', s.c ? COLORS.find(c => c[0] === s.c)[1] : '#0f172a');
+    const a = bar.querySelector('[data-rt="color"] .rtb-a'); if (a) a.style.setProperty('--rtc', s.c && COLORS.find(c => c[0] === s.c) ? COLORS.find(c => c[0] === s.c)[1] : '#0f172a');
   }
   function paintBars() { bars.forEach(b => { if (!b.isConnected) { bars.delete(b); return; } paintBar(b); }); }
 
   /** Print windows: the classes the formatting uses (the quotation prints force black / normal weight on the lines). */
   const PRINT_CSS = '.bc-rtx{line-height:1.45}.bc-rtx div{min-height:1em}.bc-rtx ol,.bc-rtx ul{margin:2px 0 2px 0!important;padding-left:20px!important}.bc-rtx li{margin:1px 0}.bc-rtx ol ol{list-style-type:lower-alpha}.bc-rtx ol ol ol{list-style-type:lower-roman}.bc-rtx ul ul{list-style-type:circle}.bc-rtx ul ul ul{list-style-type:square}'
     + '.bc-rtx b,.bc-rtx strong,td .bc-rtx b{font-weight:700!important}.bc-rtx i{font-style:italic}.bc-rtx u{text-decoration:underline}'
-    + '.bc-rtx .rt-c-k,td .bc-rtx .rt-c-k,td .bc-rtx .rt-c-k *{color:#0f172a!important}.bc-rtx .rt-c-n,td .bc-rtx .rt-c-n,td .bc-rtx .rt-c-n *{color:#1F4E79!important}.bc-rtx .rt-c-r,td .bc-rtx .rt-c-r,td .bc-rtx .rt-c-r *{color:#b91c1c!important}.bc-rtx .rt-c-g,td .bc-rtx .rt-c-g,td .bc-rtx .rt-c-g *{color:#15803d!important}.bc-rtx .rt-c-s,td .bc-rtx .rt-c-s,td .bc-rtx .rt-c-s *{color:#64748b!important}'
+    + COLORS.map(([k, hex]) => `.bc-rtx .rt-c-${k},td .bc-rtx .rt-c-${k},td .bc-rtx .rt-c-${k} *{color:${hex}!important}`).join('')
+    + HLS.map(([k, hex]) => `.bc-rtx .${hlCls(k)}{background:${hex}!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}`).join('')
     + '.bc-rtx .rt-ind-1{margin-left:2em}.bc-rtx .rt-ind-2{margin-left:4em}.bc-rtx .rt-ind-3{margin-left:6em}.bc-rtx .rt-z-sm{font-size:.85em}.bc-rtx .rt-z-lg{font-size:1.18em}.bc-rtx .rt-z-h{font-size:1.38em}.bc-rtx .rt-hl{background:#fef08a!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.bc-rtp{white-space:pre-line}';
 
   // the quotation screen's Format bar (index.html #qt-rtbar)
   const wireMain = () => { const b = document.getElementById('qt-rtbar'); if (b && !b.classList.contains('bc-rtbar')) wireBar(b); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireMain); else wireMain();
 
-  window.BCRich = { clean, toText, hasFormat, plainToHtml, show, make, htmlOf, wireBar, paintBars, PRINT_CSS, COLORS, SIZES };
+  window.BCRich = { clean, toText, hasFormat, plainToHtml, show, make, htmlOf, wireBar, paintBars, PRINT_CSS, COLORS, SIZES, HLS };
 })();

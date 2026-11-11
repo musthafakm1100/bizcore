@@ -123,6 +123,7 @@
       if (typeof calcTotals === 'function') calcTotals();
       rowsAll().forEach(tr => tr.querySelectorAll('textarea').forEach(t => typeof qtAutoGrow === 'function' && qtAutoGrow(t)));
     } finally { painting = false; }
+    setTimeout(qtPaintHeadings, 60);   // V271.7.3: heading alignment once the window is shown
     changed = false;
     setTimeout(() => { rowsAll().forEach(tr => tr.querySelectorAll('textarea').forEach(t => typeof qtAutoGrow === 'function' && qtAutoGrow(t))); }, 60);
   }
@@ -636,7 +637,19 @@
       return a + Math.max(0, g - Math.min(g, d));
     }, 0);
   }
+  /** V271.7.3 (board 21): the heading's title and scope start 12 px left of the lines' description (measured — Products
+      lines have the item code first, Services lines don't) */
+  function alignHeadings() {
+    const tb = $('items-tbody'); if (!tb) return;
+    const ht = tb.querySelector('tr.qt-hrow'), d = tb.querySelector('tr[data-line-type="item"] [data-f="desc"]');
+    if (!ht || !d || !d.offsetParent || !ht.offsetParent) return;
+    const td = ht.children[1], cs = getComputedStyle(d), ts = getComputedStyle(td);
+    const x = d.getBoundingClientRect().left + parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth) - (td.getBoundingClientRect().left + parseFloat(ts.paddingLeft));
+    const hx = Math.round(x - 8 - 12) + 'px';   // 8 = the title box's own padding + border
+    if (tb.style.getPropertyValue('--qt-hx') !== hx) tb.style.setProperty('--qt-hx', hx);
+  }
   function qtPaintHeadings() {
+    requestAnimationFrame(alignHeadings);
     rowsAll().forEach(tr => {
       if (tr.dataset.lineType !== 'heading') return;
       const on = tr.dataset.grouped === '1', chip = tr.querySelector('.qt-gchip'), sum = tr.querySelector('.qt-hsum');
@@ -675,7 +688,7 @@
     el.addEventListener('keydown', e => { if (e.target.matches('input') && e.key !== 'Tab' && e.key !== 'Escape') e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); apply(); closePop(); } if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePop(); } }, true);
   }
   function qtAfterRowsChange() { afterRows(); }
-  function qtAfterTypeChange() { renderCardsSoon(); }
+  function qtAfterTypeChange() { renderCardsSoon(); qtPaintHeadings(); }
   window.qtRenderCardsSoon = renderCardsSoon;
 
   Object.assign(window, {
