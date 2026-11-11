@@ -186,7 +186,7 @@
   const allItems = () => E.est.sections.flatMap(s => s.items || []);
   const blankBuild = () => ({ material: [], manpower: [], subcontract: [], other: [] });
   const blankItem = (o = {}) => ({ id: newId('ei'), desc: '', unit: 'LS', qty: 1, build: blankBuild(), ...o });
-  const blankLine = (k, own) => ({ id: newId('el'), ...(k === 'manpower' ? { trade: '', supplierId: '', supplierName: '', men: 1, days: 1, rate: '', ...(own ? { own: true } : {}) } : k === 'material' ? { productId: '', desc: '', supplierId: '', supplierName: '', qty: 1, unit: 'Nos', rate: '' } : k === 'subcontract' ? { desc: '', supplierId: '', supplierName: '', qty: 1, unit: 'LS', rate: '' } : { desc: '', qty: 1, unit: 'Day', rate: '' }) });
+  const blankLine = (k, own) => ({ id: newId('el'), ...(k === 'manpower' ? { trade: '', supplierId: '', supplierName: '', men: 1, days: 1, rate: '', ...(own ? { own: true } : {}) } : k === 'material' ? { productId: '', desc: '', supplierId: '', supplierName: '', qty: 1, unit: '', rate: '' } : k === 'subcontract' ? { desc: '', supplierId: '', supplierName: '', qty: 1, unit: 'LS', rate: '' } : { desc: '', qty: 1, unit: 'Day', rate: '' }) });
 
   function fromRfq(r) {
     const cs = settings();
@@ -290,9 +290,10 @@
     grid.addEventListener('focusin', e => {
       if (dd && e.target !== dd.input) closeDD();
       const tr = e.target.closest('tr[data-iid]'); if (!tr) return; select(tr.dataset.iid);
-      if (e.target.dataset.dd === 'unit' && E && !E.ro) { const it = findItem(tr.dataset.iid)?.it; if (it) unitDD(e.target, false, u => { it.unit = u; e.target.value = u; changed(); }); }
+      if (e.target.dataset.dd === 'unit' && E && !E.ro) { const it = findItem(tr.dataset.iid)?.it; if (it) unitDD(e.target, false, u => { it.unit = u; e.target.value = u; changed(); }, 'service'); }
     });
     $('es-side').addEventListener('input', onSideInput);
+    $('es-side').addEventListener('change', e => { const f = e.target.dataset && e.target.dataset.f; if (f && E && !E.ro) setTimeout(() => { if (E && document.activeElement !== e.target) renderSide(); }, 0); });   // tidy the figures when the field is left
     // V271.7 fit: the summary strip (small laptops) opens / closes the panel; the grid folds Cost / Unit when short of room
     $('es-mini').addEventListener('click', e => { if (e.target.closest('[data-act="side-open"]')) { $('estimate-modal').classList.add('es-side-open'); setTimeout(() => $('es-side').querySelector('input:not(:disabled),button')?.focus({ preventScroll: true }), 30); } });
     $('es-side').addEventListener('click', e => { if (e.target.closest('[data-act="side-close"]')) $('estimate-modal').classList.remove('es-side-open'); });
@@ -310,8 +311,14 @@
       if (dd && e.target !== dd.input) closeDD();   // V271.2: a list never stays open when the cursor moves on (Tab or click)
       const el = e.target; if (!E || E.ro || !el.dataset || !el.dataset.dd) return;
       if (el.id === 'es-copy') { copySearch(el); return; }
+      if (el.dataset.dd === 'product' || el.dataset.dd === 'supplier') return;   // V271.7: these open on a click, typing or ↓ — not when the cursor is just put there
       const tr = el.closest('tr[data-lid]'), k = el.closest('.es-grpbox')?.dataset.k; if (!tr || !k) return;
       const l = findItem(E.bu)?.it.build[k].find(y => y.id === tr.dataset.lid); if (l) openDDFor(el, k, l);
+    });
+    bu.addEventListener('mousedown', e => {
+      const el = e.target; if (!E || E.ro || !el.dataset || !(el.dataset.dd === 'product' || el.dataset.dd === 'supplier')) return;
+      const tr = el.closest('tr[data-lid]'), k = el.closest('.es-grpbox')?.dataset.k; if (!tr || !k) return;
+      const l = findItem(E.bu)?.it.build[k].find(y => y.id === tr.dataset.lid); if (l) setTimeout(() => { if (document.activeElement === el && !(dd && dd.input === el)) openDDFor(el, k, l); }, 0);
     });
   }
 
@@ -527,7 +534,7 @@ ${KINDS.map(({ k }) => costCell(k)).join('')}
     const cs = settings(), ms = marginState(c), D = c.direct || 1;
     const step = num(cs.roundStep), base = c.sell;
     const down = step > 0 ? Math.floor(base / step) * step : 0, up = step > 0 ? Math.ceil(base / step) * step : 0;
-    const pctIn = (k, label, sub) => `<div class="es-kv"><span class="es-pct">${label} <input data-f="${k}" value="${esc(fq(E.est[k]))}" inputmode="decimal" aria-label="${label} %"${ro()}><small>%</small></span><b>${fmt(k === 'overheadPct' ? c.overhead : k === 'contingencyPct' ? c.contingency : c.markup)}</b></div>${sub ? `<div class="es-kv es-psubrow"><span>${sub}</span></div>` : ''}`;
+    const pctIn = (k, label, sub) => `<div class="es-kv"><span class="es-pct">${label} <input data-f="${k}"${sideBad(k, E.est[k]) ? ' class="is-bad"' : ''} value="${esc(fq(E.est[k]))}" inputmode="decimal" aria-label="${label} %"${ro()}><small>%</small></span><b>${fmt(k === 'overheadPct' ? c.overhead : k === 'contingencyPct' ? c.contingency : c.markup)}</b></div>${sub ? `<div class="es-kv es-psubrow"><span>${sub}</span></div>` : ''}`;
     const chips = [];
     if (!E.ro && step > 0) {
       if (down > 0 && down !== num(E.est.roundTo) && down !== base) chips.push(`<button type="button" class="es-chip" data-act="use-round" data-v="${down}">Round down to ${fmt(down)}</button>`);
@@ -590,6 +597,8 @@ ${c.pricedNoCost ? `<div class="es-st es-wn">${c.pricedNoCost} item${c.pricedNoC
     if (num(E.est.roundTo) < 0) out.push({ block: true, text: 'The lump sum cannot be negative' });
     if (c.uncosted) out.push({ block: false, text: `${c.uncosted} item${c.uncosted === 1 ? '' : 's'} without cost` });
     if (c.pricedNoCost) out.push({ block: false, text: `${c.pricedNoCost} item${c.pricedNoCost === 1 ? '' : 's'} priced by hand without cost` });
+    [['overheadPct', 'Overheads'], ['contingencyPct', 'Contingency'], ['markupPct', 'Markup']].forEach(([f, label]) => { if (sideBad(f, E.est[f])) out.push({ block: true, text: `${label} must be between 0 and ${PCT_MAX[f]} %` }); });
+    if (String(E.est.roundTo ?? '').trim() !== '' && sideBad('roundTo', E.est.roundTo)) out.push({ block: true, text: 'Round to must be a positive amount' });
     if (c.lockedCount && num(E.est.roundTo) > 0 && c.offer < c.lockedSum) out.push({ block: false, text: 'the lump sum is below the typed prices — they are reduced in proportion' });
     return out;
   }
@@ -626,7 +635,7 @@ ${c.pricedNoCost ? `<div class="es-st es-wn">${c.pricedNoCost} item${c.pricedNoC
     if (f === 'title') { const s = E.est.sections.find(x => x.id === el.closest('tr').dataset.sid); if (s) s.title = el.value; changed(); return; }
     const hit = findItem(el.closest('tr')?.dataset.iid); if (!hit) return;
     if (f === 'desc') { hit.it.desc = el.value; grow(el); }
-    else if (f === 'unit') { hit.it.unit = el.value; unitDD(el, true, u => { hit.it.unit = u; el.value = u; changed(); }); }
+    else if (f === 'unit') { hit.it.unit = el.value; unitDD(el, true, u => { hit.it.unit = u; el.value = u; changed(); }, 'service'); }
     else if (f === 'qty') { hit.it.qty = el.value; el.classList.toggle('is-bad', el.value !== '' && !(num(el.value) > 0)); refreshNumbers(); }
     else if (f.startsWith('q-')) {   // V271.7: a cost typed straight in the cell (no build-up)
       const k = f.slice(2); setQuick(hit.it, k, el.value);
@@ -782,12 +791,19 @@ ${c.pricedNoCost ? `<div class="es-st es-wn">${c.pricedNoCost} item${c.pricedNoC
   }
 
   /* ── side panel events ── */
+  /* V271.7: the limits of the panel's percentages (out of range: amber, and the estimate cannot be saved) */
+  const PCT_MAX = { overheadPct: 100, contingencyPct: 100, markupPct: 500 };
+  const sideBad = (f, v) => { if (String(v).trim() === '') return false; const n = num(v); return !Number.isFinite(n) || n < 0 || (PCT_MAX[f] != null && n > PCT_MAX[f]); };
   function onSideInput(e) {
-    if (!E || E.ro) return; const f = e.target.dataset.f; if (!f) return;
-    E.est[f] = e.target.value;
-    const pos = e.target.selectionStart;
-    renderSide(); renderGrid();   // the inputs of the side panel are rebuilt: the caret goes back where it was
-    const el = $('es-side').querySelector(`[data-f="${f}"]`); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch (_) {} }
+    if (!E || E.ro) return; const el = e.target, f = el.dataset.f; if (!f) return;
+    E.est[f] = el.value;
+    // V271.7: the field being typed in is kept as it is (value and cursor) — the other figures are refreshed around it.
+    // (Rebuilding it on every key put a "0" back and the cursor at the start, so 3 typed into an emptied field gave 30.)
+    const s0 = el.selectionStart, s1 = el.selectionEnd;
+    refreshNumbers();
+    const nu = $('es-side').querySelector(`[data-f="${f}"]`);
+    if (nu && nu !== el) { nu.replaceWith(el); el.focus({ preventScroll: true }); try { el.setSelectionRange(s0, s1); } catch (_) {} }
+    el.classList.toggle('is-bad', sideBad(f, el.value));
     changed();
   }
 
@@ -1009,6 +1025,11 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
   }
   function onBuKey(e) {
     if (dd && e.target === dd.input && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key)) { ddKey(e); return; }
+    const el = e.target;
+    if (!dd && e.key === 'ArrowDown' && !E.ro && el.dataset && (el.dataset.dd === 'product' || el.dataset.dd === 'supplier')) {   // V271.7: ↓ opens the list
+      const tr = el.closest('tr[data-lid]'), k = el.closest('.es-grpbox')?.dataset.k, l = tr && k ? findItem(E.bu)?.it.build[k].find(y => y.id === tr.dataset.lid) : null;
+      if (l) { e.preventDefault(); openDDFor(el, k, l); } return;
+    }
     if (e.key === 'Enter' && !E.ro && e.target.dataset.f === 'rate') {   // Enter on the rate: a new line of the same kind
       e.preventDefault(); const k = e.target.closest('.es-grpbox').dataset.k; $('es-bu').querySelector(`.es-grpbox[data-k="${k}"] [data-act="add-line"]`)?.click();
     }
@@ -1026,18 +1047,43 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     return rec && !rec.stale && Number(rec.unitCost) > 0 ? { price: Number(rec.unitCost), no: rec.piNo || '', date: rec.date || '' } : null;
   }
   /** V271.2: the unit list always shows every unit on entering the field (typing narrows it; the current one is marked). */
-  function unitDD(input, typed, onPick) {
+  /** V271.7: the units of Master Data → Units (active), the ones for this kind of line first — goods for material,
+      services for items, subcontract and equipment — then the rest; the usual contracting units (LS, Lot, m², …) are
+      offered too when the master does not have them. */
+  function unitGroups(kind) {
+    let m = [];
+    try { m = (typeof uomMaster !== 'undefined' && Array.isArray(uomMaster) ? uomMaster : []).filter(u => u && u.code && u.active !== false).map(u => ({ code: String(u.code), f: typeof uomUsedFor === 'function' ? uomUsedFor(u) : (u.usedFor || 'goods') })); } catch (_) {}
+    const have = new Set(m.map(u => low(u.code)));
+    const extra = UNITS.filter(u => !have.has(low(u)));
+    const mine = m.filter(u => u.f === kind || u.f === 'both').map(u => u.code), other = m.filter(u => !(u.f === kind || u.f === 'both')).map(u => u.code);
+    return kind === 'goods'
+      ? [['Goods units', mine], ['Other units', other], ['Contracting units', extra]]
+      : [[kind === 'service' ? 'Service units' : 'Units', mine], ['Contracting units', extra], ['Other units', other]];
+  }
+  function unitDD(input, typed, onPick, kind) {
     const q = typed ? low(input.value) : '', cur = low(input.value);
-    const list = UNITS.filter(u => !q || low(u).includes(q) || UNITS.every(x => !low(x).includes(q)));
-    showDD(input, list.map(u => ({ label: esc(u) + (low(u) === cur ? ' ✓' : ''), v: u })), onPick);
-    dd.el.style.minWidth = '0'; dd.el.style.width = Math.max(input.getBoundingClientRect().width, 120) + 'px';
+    const groups = unitGroups(kind || 'service').map(([h, list]) => [h, list.filter(u => !q || low(u).includes(q))]).filter(([, list]) => list.length);
+    const items = [];
+    groups.forEach(([h, list]) => { items.push({ h }); list.forEach(u => items.push({ label: esc(u) + (low(u) === cur ? ' ✓' : ''), v: u })); });
+    if (!items.length) items.push({ empty: 'Not in the Units master — kept as typed. Add it in Master Data → Units.' });
+    showDD(input, items, onPick);
+    dd.el.style.minWidth = '0'; dd.el.style.width = Math.max(input.getBoundingClientRect().width, 170) + 'px';
   }
   function openDDFor(input, k, l, typed) {
-    if (input.dataset.dd === 'unit') return unitDD(input, typed, u => { l.unit = u; input.value = u; changed(); });
+    if (input.dataset.dd === 'unit') return unitDD(input, typed, u => { l.unit = u; input.value = u; changed(); }, k === 'material' ? 'goods' : 'service');
     const q = low(input.value);
     if (input.dataset.dd === 'product') {
       const hits = PRODUCTS().filter(p => !p._deletedAt && (!q || low(p.name).includes(q) || low(p.code).includes(q))).slice(0, 30);
-      return showDD(input, hits.length ? hits.map(p => ({ label: esc(p.name || ''), sub: esc([p.code, p.uom].filter(Boolean).join(' · ')), v: p.id })) : [{ empty: q ? 'Not in the Item Master — kept as free text on this estimate.' : 'Type to search the Item Master.' }], v => {
+      const items = hits.length ? hits.map(p => ({ label: esc(p.name || ''), sub: esc([p.code, p.uom].filter(Boolean).join(' · ')), v: p.id })) : [{ empty: q ? 'Not in the Item Master — kept as free text on this estimate.' : 'Type to search the Item Master.' }];
+      // V271.7: a material not in the master can be added to it from here (the line is then linked); otherwise it stays free text
+      const typedName = String(input.value || '').trim();
+      if (typedName.length >= 2 && !hits.some(p => low(p.name) === low(typedName)) && typeof window.bcAddToMaster === 'function' && (typeof window.bcCan !== 'function' || window.bcCan('products', 'c')))
+        items.push({ label: `<span class="es-ddadd">+ Add “${esc(typedName)}” to the Item Master…</span>`, v: '__add' });
+      return showDD(input, items, v => {
+        if (v === '__add') {
+          window.bcAddToMaster('goods', typedName, l.unit, p => { if (!E || !p) return; l.productId = p.id; l.desc = p.name || typedName; if (p.uom) l.unit = p.uom; renderBuild(); changed(); toast(`${p.name || typedName} is in the Item Master now and linked to this line.`, 'success', 'Added'); });
+          return;
+        }
         const p = PRODUCTS().find(x => String(x.id) === String(v)); if (!p) return;
         l.productId = p.id; l.desc = p.name || ''; if (p.uom) l.unit = p.uom;
         const lp = lastPaid(p.id); if (lp && !(num(l.rate) > 0)) l.rate = lp.price;

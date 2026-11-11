@@ -177,3 +177,71 @@ test('V271.7 Estimation: typed cost & price, unit rates, scope & category, copy,
     assert.deepEqual(p.__errors, []);
   } finally { await h.close(); }
 });
+
+test('V271.7 fixes: Units master in the lists, Material list opens on demand, + Add to the master, panel percentages', { timeout: 300000 }, async () => {
+  const h = await startHarness({ appDir, playwright, executablePath: process.env.CHROMIUM_PATH });
+  try {
+    h.fs.load(DATA);
+    const p = await h.newUser({ uid: 'u-boss', email: 'boss@x', name: 'Musthafa KM' }); await h.open(p);
+    await p.waitForFunction(() => typeof window.bcOpenEstimate === 'function' && typeof openNewRFQ === 'function');
+    await p.addStyleTag({ content: '#toast{pointer-events:none!important}' });
+    // a unit only in Master Data → Units
+    await p.evaluate(() => { uomMaster.push({ id: 'uom-drum', code: 'Drum', name: 'Drum', decimals: 0, step: 1, active: true, usedFor: 'goods' }); });
+
+    /* RFQ (Contracting): the Unit list shows all units, not only the one in the field */
+    await p.evaluate(() => { showPage('rfq'); openNewRFQ(); }); await p.waitForSelector('#rfq-modal.open');
+    await p.click('#rfq-type-seg label[data-type="contracting"]');
+    await p.fill('#rfq-pane tr.rq-lr >> nth=0 >> [data-f="desc"]', 'Pipeline replacement work');
+    await p.click('#rfq-pane tr.rq-lr >> nth=0 >> [data-f="uom"]'); await p.waitForSelector('.rq-udd [data-u]');
+    const units = await p.$$eval('.rq-udd [data-u]', els => els.map(e => e.textContent.replace(' ✓', '').trim()));
+    assert.ok(units.length > 5 && units.includes('Lot') && units.includes('Job') && units.includes('Drum'), units.join(','));
+    assert.ok(units.indexOf('Lot') < units.indexOf('Drum'), 'service units first on a contracting line');
+    await p.click('.rq-udd [data-u]:has-text("Job")');
+    assert.equal(await p.inputValue('#rfq-pane tr.rq-lr >> nth=0 >> [data-f="uom"]'), 'Job');
+    // + Add to the Services master: the form opens with the typed text; saved → the line is linked
+    await p.fill('#rfq-pane tr.rq-lr >> nth=0 >> [data-f="desc"]', 'Pipeline replacement works'); await p.waitForSelector('.rq-dd [data-i="-2"]');
+    assert.match(await p.textContent('.rq-dd [data-i="-2"]'), /Add “Pipeline replacement works” to the Services master/);
+    await p.dispatchEvent('.rq-dd [data-i="-2"]', 'mousedown'); await p.waitForSelector('#prod-modal.open');
+    assert.equal(await p.inputValue('#pm-name'), 'Pipeline replacement works');
+    await p.evaluate(() => saveProduct()); await p.waitForFunction(() => !document.getElementById('prod-modal').classList.contains('open')); await sleep(300);
+    const svc = await p.evaluate(() => products.find(x => x.name === 'Pipeline replacement works'));
+    assert.equal(svc.type, 'service');
+    assert.match(await p.getAttribute('#rfq-pane tr.rq-lr >> nth=0 >> .rq-src', 'class'), /\bm\b/, 'the line is linked to the new service');
+    await p.evaluate(() => { document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open')); });
+
+    /* Estimation: the panel's percentages type normally; limits */
+    await p.evaluate(() => bcOpenEstimate('r1')); await p.waitForFunction(() => BCEst.state()?.version === 1);
+    const oh = '#es-side [data-f="overheadPct"]';
+    await p.waitForTimeout(300); await p.focus(oh); await p.keyboard.press('Control+A'); await p.keyboard.press('Backspace');
+    assert.equal(await p.inputValue(oh), '', 'an emptied field stays empty while typing');
+    await p.keyboard.type('3');
+    assert.equal(await p.inputValue(oh), '3');
+    assert.equal(Number((await p.evaluate(() => BCEst.state().est.overheadPct))), 3);
+    await p.keyboard.type('00');
+    assert.match(await p.getAttribute(oh, 'class'), /is-bad/, '300 % is out of range');
+    assert.match(await p.textContent('#es-chk'), /Overheads must be between 0 and 100 %/);
+    await p.keyboard.press('Backspace'); await p.keyboard.press('Backspace');
+    assert.doesNotMatch(String(await p.getAttribute(oh, 'class')), /is-bad/);
+
+    /* Cost Build-up: + Material does not pop the list; the Units master in the unit list (goods first); + Add to the Item Master */
+    await p.click('#es-grid tr.es-it >> nth=0 >> td.es-tot'); await p.waitForSelector('#es-bu:not([hidden])');
+    await p.click('#es-bu [data-act="show-k"][data-k="material"]'); await sleep(200);
+    assert.equal(await p.locator('.es-dd').count(), 0, 'no list until typing, ↓ or a click');
+    const mat = '#es-bu .es-grpbox[data-k="material"] tr[data-lid]';
+    assert.equal(await p.inputValue(`${mat} [data-f="unit"]`), '', 'a free-text material starts with no unit');
+    await p.press(`${mat} [data-f="desc"]`, 'ArrowDown'); await p.waitForSelector('.es-dd button'); await p.keyboard.press('Escape');
+    await p.click(`${mat} [data-f="unit"]`); await p.waitForSelector('.es-dd button');
+    const ul = await p.$$eval('.es-dd > *', els => els.map(e => e.textContent.replace(' ✓', '').trim()));
+    assert.equal(ul[0], 'Goods units'); assert.ok(ul.includes('Drum') && ul.includes('LS'), ul.join(','));
+    assert.ok(ul.indexOf('Drum') < ul.indexOf('LS'), 'goods units first for material');
+    await p.click('.es-dd button:has-text("Drum")');
+    await p.fill(`${mat} [data-f="desc"]`, 'White enamel paint'); await p.waitForSelector('.es-dd .es-ddadd');
+    await p.click('.es-dd button:has(.es-ddadd)'); await p.waitForSelector('#prod-modal.open');
+    assert.equal(await p.inputValue('#pm-name'), 'White enamel paint');
+    await p.evaluate(() => saveProduct()); await p.waitForFunction(() => !document.getElementById('prod-modal').classList.contains('open')); await sleep(300);
+    const l = await p.evaluate(() => BCEst.state().est.sections[0].items[0].build.material[0]);
+    const np = await p.evaluate(() => products.find(x => x.name === 'White enamel paint'));
+    assert.equal(np.type, 'goods'); assert.equal(l.productId, np.id); assert.equal(l.desc, 'White enamel paint');
+    assert.deepEqual(p.__errors, []);
+  } finally { await h.close(); }
+});

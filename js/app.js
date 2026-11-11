@@ -2748,6 +2748,18 @@ function pmStdScopeInit(p){
   if(p&&p.stdScope&&window.BCScope){ if(st) st.textContent='Loading the standard scope…'; ed.setAttribute('contenteditable','false');
     BCScope.stdScopeOf(p).then(h=>{ if(ed.dataset.pid!==String(p.id)) return; ed.innerHTML=h?BCRich.clean(h):''; ed.dataset.orig=ed.innerHTML; ed.setAttribute('contenteditable','true'); if(st) st.textContent=h?'':'The standard scope could not be loaded — try again later before changing it.'; if(!h) ed.setAttribute('contenteditable','false'); }); }
 }
+/** V271.7: "+ Add to the Item Master / Services master" from a free-text line (RFQ, Estimation): the item form opens with
+    the typed name (and unit); once saved, onSaved(product) links the line. Cancelling leaves the line as free text. */
+window.bcAddToMaster=function(type,name,uom,onSaved){
+  if(typeof openAddProduct!=='function') return;
+  window._bcLinkNewProduct=p=>{ window._bcLinkNewProduct=null; try{ if(onSaved) onSaved(p); }catch(e){ console.warn(e); } };
+  openAddProduct(type==='service'?'service':'goods');
+  const n=document.getElementById('pm-name'); if(n){ n.value=String(name||'').trim(); n.dispatchEvent(new Event('input',{bubbles:true})); }
+  const u=document.getElementById('pm-uom'); if(u&&uom&&[...u.options].some(o=>o.value===uom)) u.value=uom;
+  const pm=document.getElementById('prod-modal'); if(!pm) return;
+  const mo=new MutationObserver(()=>{ if(!pm.classList.contains('open')){ mo.disconnect(); setTimeout(()=>{ window._bcLinkNewProduct=null; },50); } });
+  mo.observe(pm,{attributes:true,attributeFilter:['class']});
+};
 function openAddProduct(type) {
   editingProdId = null;
   const delBtn=document.getElementById('prod-edit-delete-btn'); if(delBtn){delBtn.style.display='none';delBtn.removeAttribute('data-pid');}

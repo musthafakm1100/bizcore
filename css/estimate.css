@@ -675,3 +675,6 @@
 .es-cpl{font-size:12px;color:#475569}
 .es-cp .es-empty{padding:16px;color:#64748b;font-size:12.5px;text-align:center;border:1px dashed #cbd5e1;border-radius:10px}
 @media (max-width:760px){ .es-cpcols{flex-direction:column} .es-cplist{width:auto;max-height:40%;border-right:0;border-bottom:1px solid #eef1f5} }
+/* V271.7 fixes */
+.es-dd .es-ddadd{color:#1d5f9f;font-weight:600}
+#estimate-modal .es-side .es-pct input.is-bad,#estimate-modal .es-round input.is-bad{border-color:#f59e0b!important;background:#fffbeb!important;color:#b45309}

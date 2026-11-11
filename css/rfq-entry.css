@@ -222,3 +222,7 @@
 #rfq-modal .rq-c4{grid-column:span 4}
 #rfq-modal .rq-seg label{padding:0 6px;min-width:0;white-space:nowrap}
 @media (max-width:900px){ #rfq-modal .rq-c4{grid-column:span 6} }
+/* V271.7: the Unit list (Units master) and "+ Add to the master" */
+.rq-dd.rq-udd{width:auto;max-width:260px}
+.rq-udd .rq-ddi{padding:7px 12px}
+.rq-ddadd{color:#1d5f9f;font-weight:600}

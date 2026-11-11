@@ -204,17 +204,17 @@
 <td class="rq-sl">${i + 1}</td>
 <td class="rq-ds"><span class="rq-src ${src}" title="${src === 'm' ? 'From Item Master' + (l.code ? ' · ' + esc(l.code) : '') : src === 'f' ? 'Not in Item Master — kept on this RFQ only' : ''}"></span><input data-f="desc" value="${esc(l.desc)}" placeholder="${S.locked ? '' : esc(K.descPh)}" maxlength="500" autocomplete="off" aria-label="${esc(K.desc)}"${ro}></td>
 <td class="rq-q"><input data-f="qty" type="text" inputmode="decimal" value="${esc(l.qty)}" aria-label="Quantity"${ro}></td>
-<td class="rq-u"><input data-f="uom" value="${esc(l.uom)}" list="rfq-uoms-${kind}" maxlength="12" aria-label="${esc(K.uom)}"${ro}></td>
+<td class="rq-u"><input data-f="uom" value="${esc(l.uom)}" maxlength="12" autocomplete="off" aria-label="${esc(K.uom)}"${ro}></td>
 <td class="rq-r"><input data-f="remarks" value="${esc(l.remarks)}" placeholder="${S.locked ? '' : 'Optional'}" maxlength="300" aria-label="${esc(K.rem)}"${ro}></td>
 <td class="rq-x">${S.locked ? '' : `<button type="button" class="rq-mv" data-act="up" title="Move up" aria-label="Move up">↑</button><button type="button" class="rq-mv" data-act="down" title="Move down" aria-label="Move down">↓</button><button type="button" class="rq-del" data-act="del" title="Delete line" aria-label="Delete line">✕</button>`}</td></tr>`;
   }
   function renderLines(kind) {
     const host = $('rfq-panel-' + kind); if (!host) return;
-    const K = KIND[kind], rows = ofKind(kind), uoms = kind === 'service' ? SERVICE_UOMS : PRODUCT_UOMS;
+    const K = KIND[kind], rows = ofKind(kind);
     const foot = S.locked ? `<div class="rq-foot"><span class="rq-legend">${rows.length ? '' : 'No lines were entered on this RFQ.'}</span></div>`
       : `<div class="rq-foot"><button type="button" class="btn btn-secondary btn-sm" data-act="add">+ ${esc(K.add)}</button>${kind === 'product' ? '<button type="button" class="btn btn-sm rq-link" data-act="paste" title="Copy rows from Excel (description · qty · UOM) and paste">Paste from Excel</button>' : ''}<span class="rq-legend"><span><i class="rq-src m"></i>Item Master</span><span><i class="rq-src f"></i>Not in master (this RFQ only)</span><span>Enter on Qty adds the next line</span></span></div>`;
     host.innerHTML = `<table class="rq-lines" data-kind="${kind}"><thead><tr><th></th><th class="rq-sl">SL</th><th>${esc(K.desc)}</th><th class="rq-q">Qty</th><th>${esc(K.uom)}</th><th>${esc(K.rem)}</th><th></th></tr></thead>
-<tbody>${rows.map((l, i) => lineRow(l, i, kind)).join('')}</tbody></table>${foot}<datalist id="rfq-uoms-${kind}">${uoms.map(u => `<option value="${u}"></option>`).join('')}</datalist>`;
+<tbody>${rows.map((l, i) => lineRow(l, i, kind)).join('')}</tbody></table>${foot}`;   // V271.7: the Unit list is a dropdown from the Units master (unitDD), not a datalist
     host.classList.toggle('is-locked', S.locked);
   }
   function render() { renderLines('product'); renderLines('service'); refreshTabs(); }
@@ -262,7 +262,7 @@
 
   /* ── product / service search ── */
   let dd = null, ddLine = null, ddList = [], ddIdx = 0, ddInput = null;
-  function closeDD() { dd?.remove(); dd = null; ddLine = null; ddInput = null; }
+  function closeDD() { dd?.remove(); dd = null; ddLine = null; ddInput = null; if (udd && !(uddInput && document.activeElement === uddInput)) closeUDD(); }
   function openDD(input) {
     const l = lineOf(input); if (!l || S.locked) return;
     const q = input.value.trim().toLowerCase();
@@ -276,7 +276,12 @@
     ddIdx = -1; ddLine = l; ddInput = input;
     if (!dd) { dd = document.createElement('div'); dd.className = 'rq-dd'; dd.setAttribute('role', 'listbox'); document.body.appendChild(dd); dd.addEventListener('mousedown', e => { e.preventDefault(); const it = e.target.closest('[data-i]'); if (it) choose(Number(it.dataset.i)); }); }
     // V270.2.8: the first choice keeps the typed text (Enter); ↓ moves to the Item Master matches
-    dd.innerHTML = `<div class="rq-ddi rq-ddfree on" data-i="-1" role="option">Keep “${esc(input.value.trim())}” as typed <small>· not in Item Master</small></div>`
+    // V271.7: "+ Add to the Services master / Item Master" — for a line that will come again (the line is then linked)
+    const svcLine = l.kind === 'service' || S.type === 'contracting';
+    const canAdd = typeof window.bcAddToMaster === 'function' && (typeof window.bcCan !== 'function' || window.bcCan('products', 'c'))
+      && !ddList.some(p => String(p.name || '').trim().toLowerCase() === input.value.trim().toLowerCase());
+    dd.innerHTML = `<div class="rq-ddi rq-ddfree on" data-i="-1" role="option">Keep “${esc(input.value.trim())}” as typed <small>· not in ${svcLine ? 'the master — this RFQ only' : 'Item Master'}</small></div>`
+      + (canAdd ? `<div class="rq-ddi rq-ddadd" data-i="-2" role="option">+ Add “${esc(input.value.trim())}” to the ${svcLine ? 'Services master' : 'Item Master'}…</div>` : '')
       + (ddList.length ? '<div class="rq-ddh">Item Master</div>' : '')
       + ddList.map((p, i) => `<div class="rq-ddi" data-i="${i}" role="option"><span class="rq-ddn">${esc(p.name || '')}${p.brand ? ` <small>· ${esc(p.brand)}</small>` : ''}</span><small>${esc(p.uom || '')}</small></div>`).join('');
     const r = input.getBoundingClientRect();
@@ -287,6 +292,16 @@
   function highlight() { if (!dd) return; [...dd.querySelectorAll('[data-i]')].forEach(el => { const on = Number(el.dataset.i) === ddIdx; el.classList.toggle('on', on); if (on) el.scrollIntoView({ block: 'nearest' }); }); }
   function choose(i) {
     const l = ddLine, input = ddInput; if (!l) return;
+    if (i === -2) {   // V271.7: add the typed text to the master, then link the line
+      const name = String(input?.value || '').trim(), svc = l.kind === 'service' || S.type === 'contracting';
+      closeDD();
+      window.bcAddToMaster(svc ? 'service' : 'goods', name, l.uom, p => {
+        if (!p) return;
+        Object.assign(l, { productId: String(p.id || ''), code: p.code || '', desc: p.name || name, uom: p.uom || l.uom || KIND[l.kind].uomDefault });
+        renderLines(l.kind); refreshTabs(); dirty();
+      });
+      return;
+    }
     if (i >= 0 && ddList[i]) {
       const p = ddList[i];
       Object.assign(l, { productId: String(p.id || ''), code: p.code || '', desc: p.name || '', uom: p.uom || l.uom || KIND[l.kind].uomDefault });
@@ -297,6 +312,41 @@
     const q = document.querySelector(`#rfq-pane tr[data-line="${l.lineId}"] [data-f="qty"]`); q?.focus(); q?.select?.();
   }
 
+  /* ── V271.7: the Unit list — all active units of Master Data → Units; the ones for this kind of line first ── */
+  let udd = null, uddInput = null, uddItems = [], uddIdx = -1;
+  function closeUDD() { udd?.remove(); udd = null; uddInput = null; uddItems = []; uddIdx = -1; }
+  function unitGroups(kind) {
+    let m = [];
+    try { m = (typeof uomMaster !== 'undefined' && Array.isArray(uomMaster) ? uomMaster : []).filter(u => u && u.code && u.active !== false).map(u => ({ code: String(u.code), f: typeof uomUsedFor === 'function' ? uomUsedFor(u) : (u.usedFor || 'goods') })); } catch (_) {}
+    const have = new Set(m.map(u => u.code.toLowerCase()));
+    const base = kind === 'service' ? SERVICE_UOMS : PRODUCT_UOMS;
+    const extra = base.filter(u => !have.has(u.toLowerCase()));
+    const mine = m.filter(u => u.f === kind || u.f === 'both').map(u => u.code), other = m.filter(u => !(u.f === kind || u.f === 'both')).map(u => u.code);
+    return [[kind === 'service' ? 'Service units' : 'Goods units', mine.concat(extra)], ['Other units', other]];
+  }
+  function openUDD(input, typed) {
+    const l = lineOf(input); if (!l || S.locked) return;
+    const kind = l.kind === 'service' || S.type === 'contracting' ? 'service' : 'goods';
+    const q = typed ? input.value.trim().toLowerCase() : '', cur = input.value.trim().toLowerCase();
+    const groups = unitGroups(kind).map(([h, list]) => [h, list.filter(u => !q || u.toLowerCase().includes(q))]).filter(([, list]) => list.length);
+    uddItems = []; let html = '';
+    groups.forEach(([h, list]) => { html += `<div class="rq-ddh">${esc(h)}</div>`; list.forEach(u => { html += `<div class="rq-ddi" data-u="${uddItems.length}" role="option">${esc(u)}${u.toLowerCase() === cur ? ' ✓' : ''}</div>`; uddItems.push(u); }); });
+    if (!uddItems.length) html = '<div class="rq-ddh" style="text-transform:none">Not in the Units master — kept as typed</div>';
+    if (!udd) { udd = document.createElement('div'); udd.className = 'rq-dd rq-udd'; udd.setAttribute('role', 'listbox'); document.body.appendChild(udd);
+      udd.addEventListener('mousedown', e => { e.preventDefault(); const it = e.target.closest('[data-u]'); if (it) pickUnit(Number(it.dataset.u)); }); }
+    uddInput = input; uddIdx = -1; udd.innerHTML = html;
+    const r = input.getBoundingClientRect();
+    udd.style.minWidth = Math.max(r.width, 160) + 'px'; udd.style.width = 'auto';
+    udd.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 200)) + 'px';
+    const below = window.innerHeight - r.bottom > 260;
+    udd.style.top = below ? (r.bottom + 2) + 'px' : ''; udd.style.bottom = below ? '' : (window.innerHeight - r.top + 2) + 'px';
+  }
+  function pickUnit(i) {
+    const input = uddInput, u = uddItems[i]; if (!input || u == null) return;
+    const l = lineOf(input); if (l) l.uom = u; input.value = u; closeUDD(); dirty();
+    const next = input.closest('tr')?.querySelector('[data-f="remarks"]'); next?.focus();
+  }
+
   /* ── events (delegated, once) ── */
   function bind() {
     const pane = $('rfq-pane'); if (!pane || pane.dataset.rqBound) return; pane.dataset.rqBound = '1';
@@ -304,6 +354,7 @@
       const f = e.target.dataset && e.target.dataset.f; if (!f) { if (e.target.closest('#rfq-panel-reqs')) refreshTabs(); return; }
       const l = lineOf(e.target); if (!l || S.locked) return;
       l[f] = e.target.value;
+      if (f === 'uom') openUDD(e.target, true);   // V271.7
       if (f === 'desc') {
         // V270.2.8: the description is also the Item Master search. A line taken from the master keeps its link while
         // its description is edited; clearing the description removes the link (then typing searches again).
@@ -312,15 +363,25 @@
       }
       if (f === 'desc') { const src = e.target.closest('tr').querySelector('.rq-src'); if (src) { src.className = 'rq-src ' + (l.productId ? 'm' : (filled(l) ? 'f' : '')); } refreshTabs(); }
     });
+    pane.addEventListener('focusin', e => { if (e.target.dataset && e.target.dataset.f === 'uom' && !S.locked) openUDD(e.target, false); else if (udd && e.target !== uddInput) closeUDD(); });   // V271.7
     pane.addEventListener('focusout', e => {
+      if (e.target.dataset && e.target.dataset.f === 'uom') { const el = e.target; setTimeout(() => { if (uddInput === el && document.activeElement !== el) closeUDD(); }, 120); }
       if (e.target.dataset && e.target.dataset.f === 'desc') { const el = e.target; setTimeout(() => { if (ddInput === el && document.activeElement !== el) closeDD(); }, 120); }
     });
     pane.addEventListener('keydown', e => {
       const t = e.target, f = t.dataset && t.dataset.f, l = f ? lineOf(t) : null;
+      if (f === 'uom' && udd && uddInput === t) {   // V271.7: ↑ ↓ Enter Esc in the Unit list
+        const n = uddItems.length, mark = () => [...udd.querySelectorAll('[data-u]')].forEach(el => { const on = Number(el.dataset.u) === uddIdx; el.classList.toggle('on', on); if (on) el.scrollIntoView({ block: 'nearest' }); });
+        if (e.key === 'ArrowDown' && n) { e.preventDefault(); uddIdx = Math.min(n - 1, uddIdx + 1); mark(); return; }
+        if (e.key === 'ArrowUp' && n) { e.preventDefault(); uddIdx = Math.max(0, uddIdx - 1); mark(); return; }
+        if (e.key === 'Enter' && uddIdx >= 0) { e.preventDefault(); pickUnit(uddIdx); return; }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeUDD(); return; }
+        if (e.key === 'Tab') closeUDD();
+      }
       if (f === 'desc' && dd) {
         const n = ddList.length;
         if (e.key === 'ArrowDown') { e.preventDefault(); ddIdx = Math.min(n - 1, ddIdx + 1); highlight(); return; }
-        if (e.key === 'ArrowUp') { e.preventDefault(); ddIdx = Math.max(-1, ddIdx - 1); highlight(); return; }
+        if (e.key === 'ArrowUp') { e.preventDefault(); ddIdx = Math.max(dd.querySelector('[data-i="-2"]') ? -2 : -1, ddIdx - 1); highlight(); return; }
         if (e.key === 'Enter') { e.preventDefault(); choose(ddIdx); return; }
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeDD(); return; }
       }
