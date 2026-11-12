@@ -420,6 +420,66 @@ const THEMES = {
 const THEME_ALIASES = { darkblue: 'blue', dark: 'slate' };
 const themeKey = name => (THEMES[name] ? name : THEME_ALIASES[name] || 'blue');
 
+/* V271.8.3: the theme colours are worked out here (OKLCH maths) and written as plain #hex values, instead of
+   CSS relative colours "oklch(from …)" — some browsers lost the hue of the light tints there (navy tints showed pink).
+   Corporate Navy (0 / 1 / 0) writes nothing: the original colours in css/theme.css are used exactly. */
+const BC_THEME_STYLE_ID = 'bc-theme-colours';
+let bcThemeHexCache = null;
+function bcThemeHexList() {
+  if (bcThemeHexCache && bcThemeHexCache.length) return bcThemeHexCache;
+  const out = [];
+  for (const sh of Array.from(document.styleSheets || [])) {
+    if (!/\/theme\.css/.test(sh.href || '')) continue;
+    let rules; try { rules = sh.cssRules; } catch (e) { continue; }
+    for (const rule of Array.from(rules || [])) {
+      if (!rule.style) continue;
+      for (let i = 0; i < rule.style.length; i++) { const m = /^--c-([0-9a-f]{6})$/i.exec(rule.style[i]); if (m) out.push(m[1].toLowerCase()); }
+    }
+  }
+  bcThemeHexCache = Array.from(new Set(out));
+  return bcThemeHexCache;
+}
+function bcHexToOklch(hex) {
+  const lin = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const r = lin(parseInt(hex.slice(0, 2), 16)), g = lin(parseInt(hex.slice(2, 4), 16)), b = lin(parseInt(hex.slice(4, 6), 16));
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  const L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+  const A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+  const B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+  return [L, Math.hypot(A, B), (Math.atan2(B, A) * 180 / Math.PI + 360) % 360];
+}
+function bcOklchToRgb(L, C, H) {
+  const hr = H * Math.PI / 180, A = C * Math.cos(hr), B = C * Math.sin(hr);
+  const l = Math.pow(L + 0.3963377774 * A + 0.2158037573 * B, 3);
+  const m = Math.pow(L - 0.1055613458 * A - 0.0638541728 * B, 3);
+  const s = Math.pow(L - 0.0894841775 * A - 1.2914855480 * B, 3);
+  return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+          -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+          -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s];
+}
+function bcThemeHex(hex, t) {
+  const [L0, C0, H0] = bcHexToOklch(hex);
+  const L = Math.min(1, L0 + t.l * (1 - L0)), H = ((H0 + t.h) % 360 + 360) % 360;
+  const C = C0 * t.c;   // outside the screen's colours → each channel clipped, as the browser did
+  const enc = v => { v = Math.max(0, Math.min(1, v)); v = v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055; return Math.round(v * 255).toString(16).padStart(2, '0'); };
+  return '#' + bcOklchToRgb(L, C, H).map(enc).join('');
+}
+function bcPaintThemeColours(t) {
+  let el = document.getElementById(BC_THEME_STYLE_ID);
+  if (!t || (t.h === 0 && t.c === 1 && t.l === 0)) { if (el) el.remove(); return; }   // Corporate Navy = the original colours
+  const list = bcThemeHexList();
+  if (!list.length) {   // css/theme.css not loaded yet — paint once it is
+    if (!bcPaintThemeColours._wait) { bcPaintThemeColours._wait = true; window.addEventListener('load', () => { bcPaintThemeColours._wait = false; applyTheme(document.documentElement.dataset.theme || 'blue'); }, { once: true }); }
+    return;
+  }
+  const css = ':root{' + list.map(h => '--c-' + h + ':' + bcThemeHex(h, t) + ';').join('') + '}';
+  if (!el) { el = document.createElement('style'); el.id = BC_THEME_STYLE_ID; }
+  el.textContent = css;
+  document.head.appendChild(el);   // last in <head>, after css/theme.css
+}
+
 function applyTheme(name, opts = {}) {
   const key = themeKey(name), t = THEMES[key];
   const r = document.documentElement.style;
@@ -427,6 +487,7 @@ function applyTheme(name, opts = {}) {
   r.setProperty('--th-c', String(t.c));
   r.setProperty('--th-l', String(t.l));
   document.documentElement.dataset.theme = key;
+  bcPaintThemeColours(t);   // V271.8.3: colours worked out here, not by the browser
   // Keep the selector and colour preview in sync
   const selector = document.getElementById('theme-select');
   if (selector) selector.value = key;
