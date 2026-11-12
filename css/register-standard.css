@@ -940,17 +940,18 @@ html body #page-rfq .rfq-main-workspace .rfq-monitor-expand.module-monitor-rail.
 /* V271.5.38 — RFQ has one extra filter (Type) compared with the other registers; keep the toolbar
    on one line at laptop/tablet widths by giving Type a narrower base/shrink and bringing the main
    button's icon-only breakpoint forward specifically on this page. */
-#page-rfq .bc-filterbar-right>.bc-filter-type{flex:0 1 112px!important;width:auto!important;min-width:76px!important}
+#page-rfq .bc-filterbar-right>.bc-filter-type,#page-costing .bc-filterbar-right>.bc-filter-type{flex:0 1 112px!important;width:auto!important;min-width:76px!important}
 @container bcbar (max-width: 1150px){
-  #page-rfq .bc-filterbar-right>.bc-filter-new{width:34px!important;padding:0!important}
-  #page-rfq .bc-filterbar-right>.bc-filter-new span{display:none!important}
-  #page-rfq .bc-filterbar-right>.bc-filter-new i{margin:0!important}
+  #page-rfq .bc-filterbar-right>.bc-filter-new,#page-costing .bc-filterbar-right>.bc-filter-new{width:34px!important;padding:0!important}
+  #page-rfq .bc-filterbar-right>.bc-filter-new span,#page-costing .bc-filterbar-right>.bc-filter-new span{display:none!important}
+  #page-rfq .bc-filterbar-right>.bc-filter-new i,#page-costing .bc-filterbar-right>.bc-filter-new i{margin:0!important}
 }
 @container bcbar (max-width: 1080px){
   /* Fixed (not shrink-distributed) widths at this width — deterministic total so the line never overflows. */
-  #page-rfq .bc-filterbar-left .bc-filter-count{display:none!important}
-  #page-rfq .bc-filterbar-right>.bc-filter-customer{flex:0 0 120px!important;width:120px!important;min-width:120px!important}
-  #page-rfq .bc-filterbar-right>.bc-filter-type{flex:0 0 80px!important;width:80px!important;min-width:80px!important}
-  #page-rfq .bc-filterbar-right>.bc-filter-status{flex:0 0 104px!important;width:104px!important;min-width:104px!important}
-  #page-rfq .bc-filterbar-right>.bc-filter-search{flex:0 0 165px!important;width:165px!important;min-width:165px!important}
+  #page-rfq .bc-filterbar-left .bc-filter-count,#page-costing .bc-filterbar-left .bc-filter-count{display:none!important}
+  #page-rfq .bc-filterbar-right>.bc-filter-customer,#page-costing .bc-filterbar-right>.bc-filter-customer{flex:0 0 120px!important;width:120px!important;min-width:120px!important}
+  #page-rfq .bc-filterbar-right>.bc-filter-type,#page-costing .bc-filterbar-right>.bc-filter-type{flex:0 0 80px!important;width:80px!important;min-width:80px!important}
+  #page-rfq .bc-filterbar-right>.bc-filter-status,#page-costing .bc-filterbar-right>.bc-filter-status{flex:0 0 104px!important;width:104px!important;min-width:104px!important}
+  #page-rfq .bc-filterbar-right>.bc-filter-search,#page-costing .bc-filterbar-right>.bc-filter-search{flex:0 0 165px!important;width:165px!important;min-width:165px!important}
+  #page-costing .bc-filterbar-right>.bc-filter-search{flex:0 0 145px!important;width:145px!important;min-width:145px!important}   /* V271.9: Pricing also has Excel + Start Pricing */
 }

@@ -211,25 +211,26 @@
   function applyFold(on) { const w = win(); if (w) w.classList.toggle('qt-folded', !!on); paintFold(); }
   function qtFold(on) { applyFold(on); try { localStorage.setItem('bc_qt_fold', on ? '1' : '0'); } catch (_) {} if (!on) setTimeout(() => $('f-cust-search')?.focus({ preventScroll: true }), 30); }
   const selText = id => { const s = $(id); return s && s.value && s.value !== '__add__' ? (s.options[s.selectedIndex]?.text || s.value).replace(/\s*★$/, '') : ''; };
+  const isSvc = () => typeof currentQuoteType !== 'undefined' && currentQuoteType === 'contracting';   // V271.9
   function paintFold() {
     const host = $('qt-band-fold'); if (!host) return;
     const ch = (lbl, val, cls = '') => val ? `<span class="qt-chip ${cls}">${lbl ? `<span>${lbl}</span>` : ''}${esc(val)}</span>` : '';
     const days = $('f-validity')?.value || '', vt = $('quote-validity-inline')?.textContent || '';
     host.innerHTML = ch('', $('f-company')?.value || $('f-cust-search')?.value || 'No customer yet', 'qt-chip-c')
       + ch('Contact', $('f-contact')?.value.trim()) + ch('Ref', $('f-ref')?.value.trim()) + ch('Date', $('f-date')?.value.trim())
-      + ch('Valid', days ? days + ' ' + vt : '') + ch('Delivery', selText('f-delivery')) + ch('Payment', selText('f-payment'))
+      + ch('Valid', days ? days + ' ' + vt : '') + (isSvc() ? ch('Completion', selText('f-completion')) + ch('Mobilization', selText('f-mobilization')) : ch('Delivery', selText('f-delivery'))) + ch('Payment', selText('f-payment'))
       + '<span class="qt-sp"></span><button type="button" class="qt-unfold" onclick="qtFold(false)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>Edit Details</button>';
   }
   function paintDetCard() {
     const b = $('qt-detcard'); if (!b) return;
     const cust = $('f-company')?.value || $('f-cust-search')?.value || '';
     const l2 = [$('f-contact')?.value.trim(), $('f-ref')?.value.trim() ? 'Ref ' + $('f-ref').value.trim() : ''].filter(Boolean).join(' · ');
-    const l3 = [$('f-date')?.value.trim(), $('f-validity')?.value ? 'Valid ' + $('f-validity').value + ' days' : '', selText('f-delivery'), selText('f-payment')].filter(Boolean).join(' · ');
+    const l3 = [$('f-date')?.value.trim(), $('f-validity')?.value ? 'Valid ' + $('f-validity').value + ' days' : '', ...(isSvc() ? [selText('f-completion'), selText('f-mobilization')] : [selText('f-delivery')]), selText('f-payment')].filter(Boolean).join(' · ');
     b.innerHTML = `<span class="qt-dc-t"><b>${esc(cust || 'Choose a customer')}</b>${l2 ? `<span>${esc(l2)}</span>` : ''}${l3 ? `<span>${esc(l3)}</span>` : ''}</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>`;
     b.classList.toggle('qt-dc-empty', !cust);
   }
   function qtDetails(on) { const w = win(); if (!w) return; w.classList.toggle('qt-det-open', !!on); if (!on) { qtPaintHeader(); renderPreview(); } else setTimeout(() => $('f-cust-search')?.focus({ preventScroll: true }), 60); }
-  ['f-contact', 'f-ref', 'f-validity', 'f-delivery', 'f-payment', 'f-project'].forEach(id => document.addEventListener('change', e => { if (e.target && e.target.id === id) { paintFold(); paintDetCard(); renderPreview(); qtPaintHeader(); } }, true));
+  ['f-contact', 'f-ref', 'f-validity', 'f-delivery', 'f-payment', 'f-project', 'f-completion', 'f-mobilization'].forEach(id => document.addEventListener('change', e => { if (e.target && e.target.id === id) { paintFold(); paintDetCard(); renderPreview(); qtPaintHeader(); } }, true));
 
   /* ── tabs, dots, counters, "How It Prints" ── */
   function qtShowTab(name, quiet) {
@@ -253,8 +254,8 @@
     const host = $('qt-print-prev'); if (!host) return;
     const notes = $('f-notes')?.value.trim() || '', cond = ($('f-additional-conditions')?.value || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
     const days = parseInt($('f-validity')?.value, 10) || 0, vt = ($('quote-validity-inline')?.textContent || '').split('·')[1]?.trim() || '';
-    const del = selText('f-delivery'), pay = selText('f-payment');
-    const li = [days ? `<li>This quotation is valid for ${days} day${days === 1 ? '' : 's'} from the date of issue${vt ? ' (until ' + esc(vt) + ')' : ''}.</li>` : '', del ? `<li>Delivery terms: ${esc(del)}</li>` : '', pay ? `<li>Payment terms: ${esc(pay)}</li>` : '', ...cond.map(c => `<li class="qt-new">${esc(c)}</li>`)].join('');
+    const del = isSvc() ? '' : selText('f-delivery'), pay = selText('f-payment'), cmp = isSvc() ? selText('f-completion') : '', mob = isSvc() ? selText('f-mobilization') : '';   // V271.9
+    const li = [days ? `<li>This quotation is valid for ${days} day${days === 1 ? '' : 's'} from the date of issue${vt ? ' (until ' + esc(vt) + ')' : ''}.</li>` : '', del ? `<li>Delivery terms: ${esc(del)}</li>` : '', cmp ? `<li>Completion period: ${esc(cmp)}</li>` : '', mob ? `<li>Mobilization: ${esc(mob)}</li>` : '', pay ? `<li>Payment terms: ${esc(pay)}</li>` : '', ...cond.map(c => `<li class="qt-new">${esc(c)}</li>`)].join('');
     host.innerHTML = `<h5>Terms &amp; Conditions</h5><ol>${li || '<li>Terms are as stated in this quotation.</li>'}</ol>` + (notes ? `<h5>Notes</h5><p>${esc(notes)}</p>` : '') + (cond.length ? '<div class="qt-prev-k">Additional conditions are highlighted here only.</div>' : '');
   }
   document.addEventListener('input', e => { if (!e.target) return; if (['f-notes', 'f-additional-conditions', 'f-internal-notes'].includes(e.target.id)) { paintDots(); renderPreview(); } if (['f-ref', 'f-contact', 'f-validity'].includes(e.target.id)) { paintFold(); paintDetCard(); if (e.target.id !== 'f-contact') qtPaintHeader(); } }, true);

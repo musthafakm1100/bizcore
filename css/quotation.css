@@ -56,6 +56,8 @@
 #quote-modal .qt-band-full{display:flex;flex-direction:column;gap:10px}
 #quote-modal .qt-r1{display:grid;grid-template-columns:minmax(240px,320px) minmax(170px,220px) minmax(150px,190px) minmax(0,1fr);gap:12px;align-items:start}
 #quote-modal .qt-r2{display:grid;grid-template-columns:150px 150px 170px minmax(0,1fr) minmax(0,1fr) auto;gap:12px;align-items:end}
+/* V271.9: a Service quotation shows Completion Period + Mobilization instead of Delivery Terms */
+#quote-modal .qt-r2.qt-svc-terms{grid-template-columns:150px 150px 170px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) auto}
 #quote-modal .qt-f{display:flex;flex-direction:column;gap:4px;min-width:0;position:relative}
 #quote-modal .qt-lb{display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:15px}
 #quote-modal .qt-lb label,#quote-modal .qt-f>label{font-size:11px!important;color:var(--qt-muted)!important;margin:0!important;font-weight:400!important;text-transform:none!important;letter-spacing:0!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -300,6 +302,7 @@
   #quote-modal .qt-bk-int[data-state="loss"]{border-color:#fecaca;background:#fef2f2;color:#b42318}
   #quote-modal .qt-r1{grid-template-columns:minmax(200px,270px) minmax(150px,190px) minmax(130px,160px) minmax(0,1fr);gap:10px}
   #quote-modal .qt-r2{grid-template-columns:128px 140px 160px minmax(0,1fr) minmax(0,1fr) auto;gap:10px}
+  #quote-modal .qt-r2.qt-svc-terms{grid-template-columns:120px 132px 150px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) auto}
   #quote-modal .qt-flow .qt-fc:not(.qt-fc-cur){max-width:120px;overflow:hidden;text-overflow:ellipsis}
   #quote-modal .qt-rm{grid-template-columns:minmax(0,1fr) 300px}
 }
@@ -322,6 +325,7 @@
   #quote-modal .qt-r1>.qt-f{grid-column:span 3}
   #quote-modal .qt-r2>.qt-f{grid-column:span 2}
   #quote-modal .qt-r2>.quote-term-field{grid-column:span 3}
+  #quote-modal .qt-r2.qt-svc-terms>.quote-term-field{grid-column:span 2}
   #quote-modal .qt-r2>.qt-fold{grid-column:span 6;justify-self:end}
   #quote-modal .qt-band :is(input:not([type=hidden]),select){height:38px!important}
   #quote-modal .qt-tb{padding:11px 10px}

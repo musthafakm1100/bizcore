@@ -29,7 +29,7 @@
 <link href="css/numbering-controls.css?v=271.4-sorting" rel="stylesheet"/>
 <link href="css/rfq-entry.css?v=271.7.1" rel="stylesheet"/>
 <link href="css/invoicing.css?v=270.50" rel="stylesheet"/>
-<link href="css/register-standard.css?v=271.5.38" rel="stylesheet"/>
+<link href="css/register-standard.css?v=271.9" rel="stylesheet"/>
 <link href="css/doc-view.css?v=266.5" rel="stylesheet"/>
 <link href="css/delivery-compact.css?v=266.5" rel="stylesheet"/>
 <link href="css/receipts.css?v=266.5" rel="stylesheet"/>
@@ -43,7 +43,7 @@
 <link href="css/so-view.css?v=269.72" rel="stylesheet"/>
 <link href="css/bc-date.css?v=270.1" rel="stylesheet"/>
 <link href="css/pricing.css?v=270.22" rel="stylesheet"/>
-<link href="css/quotation.css?v=271.7.5" rel="stylesheet"/>
+<link href="css/quotation.css?v=271.9" rel="stylesheet"/>
 <link href="css/quote-rich.css?v=271.7.4" rel="stylesheet"/>
 <link href="css/quote-scope.css?v=271.7" rel="stylesheet"/>
 <link href="css/safe-area.css?v=269.2" rel="stylesheet"/>
@@ -397,6 +397,7 @@ document.addEventListener('error', function(e) {
 <div class="bc-filterbar-left"><select id="pricing-sort" class="bc-filter bc-filter-sort" onchange="bcRegisterDropdownChanged('pricing',renderPricingDocuments)" aria-label="Sort pricing documents"><option value="created-desc">Recently Created</option><option value="updated-desc">Newest first</option><option value="updated-asc">Oldest first</option><option value="selling-desc">Highest selling</option><option value="customer-asc">Customer A–Z</option><option value="no-desc">Pricing Number ↓</option><option value="no-asc">Pricing Number ↑</option></select><span id="pricing-register-count" class="so-toolbar-count bc-filter-count"></span></div>
 <div class="pricing-toolbar-actions bc-filterbar-right">
 <select id="pricing-customer-filter" class="bc-filter bc-filter-customer" onchange="pricingDocPage=1;renderPricingDocuments()" aria-label="Filter pricing by customer"><option value="">All customers</option></select>
+<select id="pricing-type-filter" class="bc-filter bc-filter-type" onchange="pricingDocPage=1;renderPricingDocuments()" aria-label="Filter by type"><option value="">All types</option><option value="pricing">Pricing</option><option value="estimate">Estimation</option></select>
 <select id="pricing-status-filter" class="bc-filter bc-filter-status" onchange="filterPricingDocuments(this.value||'all',document.getElementById(this.value==='Saved'?'pricing-doc-f-saved':this.value==='Converted'?'pricing-doc-f-converted':'pricing-doc-f-all'))" aria-label="Filter pricing by status"><option value="">All statuses</option><option value="Saved">Saved Drafts</option><option value="Converted">Converted to Quotation</option></select>
 <div class="bc-date" data-bc-date="pricing" data-bc-date-title="Pricing updated date"></div>
       <input id="pricing-doc-search" class="bc-filter bc-filter-search" type="text" oninput="pricingDocPage=1;renderPricingDocuments()" placeholder="Search pricing no., RFQ, customer or quotation…" aria-label="Search pricing documents"/>
@@ -1214,6 +1215,8 @@ document.addEventListener('error', function(e) {
 <div class="setup-card default-setting-card"><h4><i class="ti ti-file-settings"></i>General Defaults</h4><p>Standard timing values for new documents and the week used by date filters.</p><div class="default-fields"><div class="form-group"><label>Default quotation validity</label><div class="field-with-suffix"><input id="s-validity" min="1" type="number" value="7"/><span>Days</span></div></div><div class="form-group"><label>RFQ response due</label><div class="field-with-suffix"><input id="s-rfqhours" min="1" type="number" value="48"/><span>Hours</span></div></div><div class="form-group"><label>RFQ backdate allowed</label><div class="field-with-suffix"><input id="s-rfqbackdays" min="0" max="365" type="number" value="30"/><span>Days</span></div><div style="font-size:11.5px;color:var(--gray);margin-top:4px">How far back the RFQ “Date received” may go. Future dates are never allowed.</div></div><div class="form-group"><label for="s-weekstart">Week starts on</label><select id="s-weekstart"><option value="sunday">Sunday</option><option value="monday">Monday</option></select><div style="font-size:11.5px;color:var(--gray);margin-top:4px">Used by the "This Week" date filter on every register.</div></div></div></div>
 <div class="setup-card default-setting-card"><h4><i class="ti ti-truck"></i>Delivery Terms</h4><p>Click a term to make it the default for new documents.</p><div id="setup-delivery-list" class="default-term-list"></div><div class="default-term-add"><input id="setup-delivery-new" onkeydown="if(event.key==='Enter') addSetupTerm('delivery')" placeholder="Add delivery term…"/><button class="btn btn-secondary btn-sm" onclick="addSetupTerm('delivery')"><i class="ti ti-plus"></i>Add</button></div></div>
 <div class="setup-card default-setting-card"><h4><i class="ti ti-credit-card"></i>Payment Terms</h4><p>Click a term to make it the default for new documents.</p><div id="setup-payment-list" class="default-term-list"></div><div class="default-term-add"><input id="setup-payment-new" onkeydown="if(event.key==='Enter') addSetupTerm('payment')" placeholder="Add payment term…"/><button class="btn btn-secondary btn-sm" onclick="addSetupTerm('payment')"><i class="ti ti-plus"></i>Add</button></div></div>
+<div class="setup-card default-setting-card"><h4><i class="ti ti-calendar-time"></i>Completion Period</h4><p>Service / contracting quotations. Click a term to make it the default.</p><div id="setup-completion-list" class="default-term-list"></div><div class="default-term-add"><input id="setup-completion-new" onkeydown="if(event.key==='Enter') addSetupTerm('completion')" placeholder="Add completion period…"/><button class="btn btn-secondary btn-sm" onclick="addSetupTerm('completion')"><i class="ti ti-plus"></i>Add</button></div></div>
+<div class="setup-card default-setting-card"><h4><i class="ti ti-truck-loading"></i>Mobilization</h4><p>Service / contracting quotations. Click a term to make it the default.</p><div id="setup-mobilization-list" class="default-term-list"></div><div class="default-term-add"><input id="setup-mobilization-new" onkeydown="if(event.key==='Enter') addSetupTerm('mobilization')" placeholder="Add mobilization term…"/><button class="btn btn-secondary btn-sm" onclick="addSetupTerm('mobilization')"><i class="ti ti-plus"></i>Add</button></div></div>
 </div>
 <div class="numbering-rule-note defaults-master-note"><i class="ti ti-link"></i><div><strong>Master-driven settings</strong><span>VAT, currency and other controlled values should continue to come from their respective masters rather than being duplicated on this page.</span></div></div>
 </section>
@@ -1507,7 +1510,9 @@ document.addEventListener('error', function(e) {
 <div class="qt-f"><div class="qt-lb"><label for="f-qno">Quotation No.</label></div><input id="f-qno" readonly="" class="qt-ro"/></div>
 <div class="qt-f"><div class="qt-lb"><label for="f-date">Date <b class="qt-req">*</b></label></div><input id="f-date" autocomplete="off"/></div>
 <div class="qt-f"><div class="qt-lb"><label for="f-validity">Validity</label></div><div class="qt-wrap qt-valwrap"><input id="f-validity" min="1" inputmode="numeric" oninput="updateValidUntil()" type="number" value="7"/><span class="qt-sfx" id="quote-validity-inline">days</span></div></div>
-<div class="qt-f quote-term-field"><div class="qt-lb"><label for="f-delivery">Delivery Terms</label></div><div class="terms-wrap"><select class="terms-select" id="f-delivery" onchange="onTermsChange('delivery')"></select></div><div class="terms-add-inline" id="f-delivery-add"><input id="f-delivery-new" onkeydown="if(event.key==='Enter'){saveNewTerm('delivery');event.preventDefault()}" placeholder="New delivery term…"/><button class="btn btn-primary btn-sm" onclick="saveNewTerm('delivery')"><i class="ti ti-check"></i>Add</button><button class="btn btn-secondary btn-sm" onclick="cancelNewTerm('delivery')">Cancel</button></div></div>
+<div class="qt-f quote-term-field" id="f-delivery-field"><div class="qt-lb"><label for="f-delivery">Delivery Terms</label></div><div class="terms-wrap"><select class="terms-select" id="f-delivery" onchange="onTermsChange('delivery')"></select></div><div class="terms-add-inline" id="f-delivery-add"><input id="f-delivery-new" onkeydown="if(event.key==='Enter'){saveNewTerm('delivery');event.preventDefault()}" placeholder="New delivery term…"/><button class="btn btn-primary btn-sm" onclick="saveNewTerm('delivery')"><i class="ti ti-check"></i>Add</button><button class="btn btn-secondary btn-sm" onclick="cancelNewTerm('delivery')">Cancel</button></div></div>
+<div class="qt-f quote-term-field qt-svc-term" id="f-completion-field" style="display:none"><div class="qt-lb"><label for="f-completion">Completion Period</label></div><div class="terms-wrap"><select class="terms-select" id="f-completion" onchange="onTermsChange('completion')"></select></div><div class="terms-add-inline" id="f-completion-add"><input id="f-completion-new" onkeydown="if(event.key==='Enter'){saveNewTerm('completion');event.preventDefault()}" placeholder="New completion period…"/><button class="btn btn-primary btn-sm" onclick="saveNewTerm('completion')"><i class="ti ti-check"></i>Add</button><button class="btn btn-secondary btn-sm" onclick="cancelNewTerm('completion')">Cancel</button></div></div>
+<div class="qt-f quote-term-field qt-svc-term" id="f-mobilization-field" style="display:none"><div class="qt-lb"><label for="f-mobilization">Mobilization</label></div><div class="terms-wrap"><select class="terms-select" id="f-mobilization" onchange="onTermsChange('mobilization')"></select></div><div class="terms-add-inline" id="f-mobilization-add"><input id="f-mobilization-new" onkeydown="if(event.key==='Enter'){saveNewTerm('mobilization');event.preventDefault()}" placeholder="New mobilization term…"/><button class="btn btn-primary btn-sm" onclick="saveNewTerm('mobilization')"><i class="ti ti-check"></i>Add</button><button class="btn btn-secondary btn-sm" onclick="cancelNewTerm('mobilization')">Cancel</button></div></div>
 <div class="qt-f quote-term-field"><div class="qt-lb"><label for="f-payment">Payment Terms</label></div><div class="terms-wrap"><select class="terms-select" id="f-payment" onchange="onTermsChange('payment')"></select></div><div class="terms-add-inline" id="f-payment-add"><input id="f-payment-new" onkeydown="if(event.key==='Enter'){saveNewTerm('payment');event.preventDefault()}" placeholder="New payment term…"/><button class="btn btn-primary btn-sm" onclick="saveNewTerm('payment')"><i class="ti ti-check"></i>Add</button><button class="btn btn-secondary btn-sm" onclick="cancelNewTerm('payment')">Cancel</button></div></div>
 <button type="button" class="qt-fold" onclick="qtFold(true)" title="Fold the details into one line (keeps more lines in view)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>Fold</button>
 </div>
@@ -4569,7 +4574,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=271.8.3';
+      s.src = 'js/app.js?v=271.9';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4577,14 +4582,14 @@ onAuthStateChanged(auth, async user => {
         // V270.1: the Pricing screen (tabs, line menu, price references, phone cards)
         const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.24'; document.body.appendChild(pu);
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
-        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=271.8.2';
+        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=271.9';
         // V271.6: scope of work, work categories, text blocks, annexure print, job scope — after the Quotation Entry screen
         qu.onload = () => { const qs = document.createElement('script'); qs.id = 'bizcore-quote-scope-script'; qs.src = 'js/quote-scope.js?v=271.7.3'; document.body.appendChild(qs); };
         document.body.appendChild(qu);
         // V270.2.6: the RFQ entry screen (request type, product / service lines, requirements)
         const rq = document.createElement('script'); rq.id = 'bizcore-rfq-entry-script'; rq.src = 'js/rfq-entry.js?v=271.7.1'; document.body.appendChild(rq);
         // V271.1: Contracting Estimation (estimate window, Cost Build-up, Contracting Settings)
-        const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.7.5'; document.body.appendChild(es);
+        const es = document.createElement('script'); es.id = 'bizcore-estimate-script'; es.src = 'js/estimate.js?v=271.9'; document.body.appendChild(es);
         // V271.2: Contracting Jobs (Create Job, Jobs register, Job view)
         const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.6'; document.body.appendChild(jb);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)

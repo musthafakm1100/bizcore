@@ -1453,7 +1453,7 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     set('f-status', 'Draft');
     let ps = {}; try { ps = activePricingSettings(); } catch (_) {}
     set('f-validity', Math.max(1, Number(ps.validity) || 7)); set('f-notes', ''); set('f-discount', ''); set('f-internal-notes', ''); set('f-additional-conditions', '');
-    if (typeof populateTermsSelect === 'function') { populateTermsSelect('delivery'); populateTermsSelect('payment'); }
+    if (typeof populateTermsSelect === 'function') { populateTermsSelect('delivery'); populateTermsSelect('payment'); if (typeof bcTermsReset === 'function') bcTermsReset(); }
     try { currentQuoteVatRate = Number(activeTaxSettings().rate) || 0; currentQuoteNoteStyle = ''; currentQuoteType = 'contracting'; } catch (_) {}
     setQuoteType('contracting', { locked: true });
     $('items-tbody').innerHTML = '';

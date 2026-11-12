@@ -2005,10 +2005,29 @@ function getDefaultTerm(list) {
 }
 
 /* ── TERMS DROPDOWN IN QUOTATION FORM ── */
+/* V271.9: four term lists — Delivery / Payment (their own Firebase collections) and, for Service / contracting
+   quotations, Completion Period / Mobilization (kept in the settings document, so no new collection or rule). */
+const BC_SVC_TERM_DEFAULTS={
+  completion:['2 weeks from site handover','3 weeks from site handover','4 weeks from site handover','As per agreed schedule'],
+  mobilization:['1 week from confirmed PO','Immediately upon confirmed PO','2 weeks from confirmed PO','Upon advance payment']
+};
+function bcTermList(type){
+  if(type==='delivery') return deliveryTerms;
+  if(type==='payment') return paymentTerms;
+  const key=type+'Terms';
+  if(!Array.isArray(settings[key])||!settings[key].length) settings[key]=(BC_SVC_TERM_DEFAULTS[type]||[]).map((text,i)=>({id:type.slice(0,2)+i,text,isDefault:i===0}));
+  return settings[key];
+}
+function bcTermSetList(type,list){
+  if(type==='delivery') deliveryTerms=list; else if(type==='payment') paymentTerms=list; else settings[type+'Terms']=list;
+}
+async function bcTermSave(type){
+  if(type==='delivery'||type==='payment') return saveTerms();
+  return saveSettings();
+}
 function populateTermsSelect(type) {
-  const list  = type === 'delivery' ? deliveryTerms : paymentTerms;
-  const selId = type === 'delivery' ? 'f-delivery' : 'f-payment';
-  const sel   = document.getElementById(selId);
+  const list  = bcTermList(type);
+  const sel   = document.getElementById('f-'+type);
   if (!sel) return;
   const cur = sel.value;
   sel.innerHTML =
@@ -2022,56 +2041,66 @@ function populateTermsSelect(type) {
 }
 
 function onTermsChange(type) {
-  const selId = type === 'delivery' ? 'f-delivery' : 'f-payment';
-  const addId = type === 'delivery' ? 'f-delivery-add' : 'f-payment-add';
-  const newId = type === 'delivery' ? 'f-delivery-new' : 'f-payment-new';
-  const sel   = document.getElementById(selId);
+  const sel   = document.getElementById('f-'+type);
   if (sel.value === '__add__') {
-    document.getElementById(addId).classList.add('open');
-    setTimeout(() => document.getElementById(newId).focus(), 50);
+    document.getElementById('f-'+type+'-add').classList.add('open');
+    setTimeout(() => document.getElementById('f-'+type+'-new').focus(), 50);
   } else {
-    document.getElementById(addId).classList.remove('open');
+    document.getElementById('f-'+type+'-add').classList.remove('open');
   }
 }
 
 async function saveNewTerm(type) {
-  const newId = type === 'delivery' ? 'f-delivery-new' : 'f-payment-new';
-  const addId = type === 'delivery' ? 'f-delivery-add' : 'f-payment-add';
-  const val   = document.getElementById(newId).value.trim();
+  const val   = document.getElementById('f-'+type+'-new').value.trim();
   if (!val) return;
-  const list  = type === 'delivery' ? deliveryTerms : paymentTerms;
+  const list  = bcTermList(type);
   // Avoid duplicates
   if (!list.some(t => t.text.toLowerCase() === val.toLowerCase())) {
     list.push({id: 't'+Date.now().toString(36), text: val, isDefault: false});
-    if (type === 'delivery') deliveryTerms = list;
-    else paymentTerms = list;
-    await saveTerms();
+    bcTermSetList(type,list);
+    await bcTermSave(type);
   }
-  document.getElementById(newId).value = '';
-  document.getElementById(addId).classList.remove('open');
+  document.getElementById('f-'+type+'-new').value = '';
+  document.getElementById('f-'+type+'-add').classList.remove('open');
   populateTermsSelect(type);
   // Select the new term
-  const selId = type === 'delivery' ? 'f-delivery' : 'f-payment';
-  document.getElementById(selId).value = val;
+  document.getElementById('f-'+type).value = val;
   renderSetupTermsList(type);
   showToast('Term added','success');
 }
 
 function cancelNewTerm(type) {
-  const addId = type === 'delivery' ? 'f-delivery-add' : 'f-payment-add';
-  const newId = type === 'delivery' ? 'f-delivery-new' : 'f-payment-new';
-  const selId = type === 'delivery' ? 'f-delivery' : 'f-payment';
-  document.getElementById(addId).classList.remove('open');
-  document.getElementById(newId).value = '';
+  document.getElementById('f-'+type+'-add').classList.remove('open');
+  document.getElementById('f-'+type+'-new').value = '';
   // Restore previous valid selection
-  const list = type === 'delivery' ? deliveryTerms : paymentTerms;
-  const def  = getDefaultTerm(list);
-  document.getElementById(selId).value = def;
+  document.getElementById('f-'+type).value = getDefaultTerm(bcTermList(type));
+}
+/** V271.9: a Service / contracting quotation shows Completion Period + Mobilization instead of Delivery Terms. */
+function bcTermsFollowType(type){
+  const svc=type==='contracting';
+  const show=(id,on)=>{const e=document.getElementById(id);if(e)e.style.display=on?'':'none';};
+  show('f-delivery-field',!svc); show('f-completion-field',svc); show('f-mobilization-field',svc);
+  document.querySelector('#quote-modal .qt-r2')?.classList.toggle('qt-svc-terms',svc);
+  if(svc){ ['completion','mobilization'].forEach(t=>{ const sel=document.getElementById('f-'+t); if(sel&&!sel.options.length) populateTermsSelect(t); }); }
+}
+/** V271.9: fill a term dropdown with a quotation's saved value (kept as an option when it is no longer in the list). */
+function bcTermsFill(type,savedVal){
+  populateTermsSelect(type);
+  const sel=document.getElementById('f-'+type); if(!sel) return;
+  if(savedVal&&!bcTermList(type).some(t=>t.text===savedVal)){
+    const opt=document.createElement('option'); opt.value=savedVal; opt.textContent=savedVal; sel.insertBefore(opt,sel.firstChild);
+  }
+  if(savedVal) sel.value=savedVal;
+}
+function bcTermsReset(){ ['completion','mobilization'].forEach(t=>{ const sel=document.getElementById('f-'+t); if(sel) sel.innerHTML=''; populateTermsSelect(t); }); }   // V271.9: a new quotation starts with the defaults
+function bcTermValue(type){
+  const v=document.getElementById('f-'+type)?.value||'';
+  return v==='__add__'?getDefaultTerm(bcTermList(type)):v;
 }
 
 /* ── TERMS LISTS IN SETUP ── */
 function renderSetupTermsList(type) {
-  const list    = type === 'delivery' ? deliveryTerms : paymentTerms;
+  const list    = bcTermList(type);
   const listId  = `setup-${type}-list`;
   const el      = document.getElementById(listId);
   if (!el) return;
@@ -2088,10 +2117,11 @@ async function addSetupTerm(type) {
   const inputId = `setup-${type}-new`;
   const val     = document.getElementById(inputId).value.trim();
   if (!val) return;
-  const list    = type === 'delivery' ? deliveryTerms : paymentTerms;
+  const list    = bcTermList(type);
   if (!list.some(t => t.text.toLowerCase() === val.toLowerCase())) {
     list.push({id:'t'+Date.now().toString(36), text:val, isDefault:false});
-    await saveTerms();
+    bcTermSetList(type,list);
+    await bcTermSave(type);
     populateTermsSelect(type);
   }
   document.getElementById(inputId).value = '';
@@ -2100,19 +2130,18 @@ async function addSetupTerm(type) {
 }
 
 async function setDefaultTerm(type, id) {
-  const list = type === 'delivery' ? deliveryTerms : paymentTerms;
+  const list = bcTermList(type);
   list.forEach(t => t.isDefault = (t.id === id));
-  await saveTerms();
+  await bcTermSave(type);
   renderSetupTermsList(type);
   populateTermsSelect(type);
   showToast('Default term updated','success');
 }
 
 async function deleteTerm(type, id) {
-  if (window.FB && window.FB.fbMarkDeleted) window.FB.fbMarkDeleted(type === 'delivery' ? 'deliveryTerms' : 'paymentTerms', id);   // V269.5: deleted on purpose
-  if (type === 'delivery') deliveryTerms = deliveryTerms.filter(t=>t.id!==id);
-  else paymentTerms = paymentTerms.filter(t=>t.id!==id);
-  await saveTerms();
+  if (type==='delivery'||type==='payment') { if (window.FB && window.FB.fbMarkDeleted) window.FB.fbMarkDeleted(type === 'delivery' ? 'deliveryTerms' : 'paymentTerms', id); }   // V269.5: deleted on purpose
+  bcTermSetList(type, bcTermList(type).filter(t=>t.id!==id));
+  await bcTermSave(type);
   renderSetupTermsList(type);
   populateTermsSelect(type);
 }
@@ -3175,6 +3204,7 @@ function setQuoteType(type, options={}) {
     if(tfoot) tfoot.innerHTML = `<tr class="qt-totrow"><td></td><td id="qt-tot-label">Total · 0 Lines</td><td></td><td class="qt-kc"></td><td></td><td></td><td class="qt-r" id="qt-tot-disc"></td><td class="qt-r" id="qt-tot-net">0.00</td><td></td></tr>`;
   }
   qtLinesFollowTemplate(type);   // V270.4.14.1: the lines always match the columns of the template
+  bcTermsFollowType(type);   // V271.9: Completion Period + Mobilization on a Service quotation
   if(typeof qtAfterTypeChange==='function') qtAfterTypeChange(type);
   if(window.BCQuoteCost) BCQuoteCost.apply();   // V270.4.14
 }
@@ -3709,7 +3739,7 @@ function switchSetupTab(tab) {
   if (tab === 'billing' && typeof renderBillingSettings === 'function') renderBillingSettings();
   if (tab === 'billing' && typeof renderReceiptSettings === 'function') renderReceiptSettings();
   if (tab === 'locks' && typeof startLocksScreen === 'function') startLocksScreen();
-  if (tab === 'defaults') { renderSetupTermsList('delivery'); renderSetupTermsList('payment'); renderDocumentNumbering(); }
+  if (tab === 'defaults') { renderSetupTermsList('delivery'); renderSetupTermsList('payment'); renderSetupTermsList('completion'); renderSetupTermsList('mobilization'); renderDocumentNumbering(); }
   if (tab === 'payment-accounts' && typeof renderPaymentAccounts === 'function') renderPaymentAccounts();
   if (tab === 'users' && typeof renderUsersScreen === 'function') renderUsersScreen();   // V270.4.1 (custodian logins included)
   if (tab === 'roles' && typeof renderRolesScreen === 'function') renderRolesScreen();   // V270.4.1
@@ -4824,7 +4854,16 @@ function getPricingDocuments(){
       const cost=material+extras;
       const profit=selling-cost;
       const marginPct=selling>0?(profit/selling)*100:0;
-      docs.push({rfq:r,version,status,rawStatus:v.status||'Saved',updated:v.updated||v.created||r.date||'',cost,selling,profit,marginPct,quote,versionData:v,pricingNo:'PRC-'+String(r.rfqNo||r.id).replace(/[^A-Za-z0-9-]/g,'')+'-V'+version});
+      docs.push({rfq:r,version,status,rawStatus:v.status||'Saved',updated:v.updated||v.created||r.date||'',cost,selling,profit,marginPct,quote,versionData:v,kind:'pricing',pricingNo:'PRC-'+String(r.rfqNo||r.id).replace(/[^A-Za-z0-9-]/g,'')+'-V'+version});
+    });
+    // V271.9: Contracting estimates are listed with the pricing documents (Type filter: Pricing / Estimation)
+    (Array.isArray(r.estimateIndex)?r.estimateIndex:[]).forEach(e=>{
+      const version=Number(e.version)||1;
+      const status=e.status==='Converted'?'Converted':(e.status==='Superseded'?'Superseded':'Saved');
+      const quote=e.quotationId?quotations.find(q=>q.id===e.quotationId||q.qno===e.quotationId):null;
+      const cost=Number(e.totalCost)||0, selling=Number(e.offerPrice)||Number(e.sellTotal)||0, profit=selling-cost;
+      docs.push({rfq:r,version,status,rawStatus:e.status||'Saved',updated:e.updated||e.created||r.date||'',cost,selling,profit,marginPct:selling>0?(profit/selling)*100:0,quote,versionData:e,kind:'estimate',
+        pricingNo:'EST-'+String(r.rfqNo||r.id).replace(/^RFQ-?/i,'').replace(/[^A-Za-z0-9-]/g,'')+'-V'+version});
     });
   });
   return docs.sort((a,b)=>String(b.updated).localeCompare(String(a.updated))||b.version-a.version);
@@ -4958,7 +4997,7 @@ function filterPricingDocuments(filter,btn){
 }
 function clearAllPricingFilters(){
   pricingDocumentFilter='all';
-  ['pricing-customer-filter','pricing-status-filter'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  ['pricing-customer-filter','pricing-status-filter','pricing-type-filter'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   {const e=document.getElementById('pricing-sort');if(e)e.value='updated-desc';}
   pricingDateFilter={preset:'all',from:'',to:''};
   const search=document.getElementById('pricing-doc-search');if(search)search.value='';
@@ -4968,8 +5007,9 @@ function clearAllPricingFilters(){
   document.getElementById('pricing-doc-f-all')?.classList.add('active');
   updatePricingDateFilterUI();closePricingDateMenu();renderPricingDocuments();
 }
-async function openPricingDocument(rfqId,version){
+async function openPricingDocument(rfqId,version,kind){
   const r=rfqs.find(x=>x.id===rfqId);if(!r)return;
+  if(kind==='estimate'){if(typeof bcOpenEstimate==='function')bcOpenEstimate(rfqId,{version:Number(version)});return;}   // V271.9
   if(Number(version)===Number(r.currentPricingVersion||1)){openPricingSheet(rfqId);return;}
   const v=await pvLoadWithMessage(r,version);if(!v)return;   // V269: an older version is read when it is opened
   // shown read-only; the RFQ keeps its current version (Revise pricing from this view starts from the version shown)
@@ -5003,7 +5043,8 @@ function renderPricingDocuments(){
   const tbody=document.getElementById('pricing-doc-tbody');if(!tbody)return;
   const allDocs=getPricingDocuments();
   const pCust=document.getElementById('pricing-customer-filter')?.value||'';
-  const all=pCust?allDocs.filter(d=>d.rfq.company===pCust):allDocs;   // V265: customer filter (monitor counts follow it)
+  const pType=document.getElementById('pricing-type-filter')?.value||'';   // V271.9: Pricing / Estimation
+  const all=allDocs.filter(d=>(!pCust||d.rfq.company===pCust)&&(!pType||d.kind===pType));   // V265: customer filter (monitor counts follow it)
   const saved=all.filter(d=>d.status==='Saved'), converted=all.filter(d=>d.status==='Converted');
   const set=(id,val)=>{const e=document.getElementById(id);if(e)e.textContent=val};
   set('pricing-doc-k-total',all.length);set('pricing-doc-k-saved',saved.length);set('pricing-doc-k-converted',converted.length);updatePricingOverviewTint();
@@ -5029,11 +5070,11 @@ function renderPricingDocuments(){
   const pricingDocPages = Math.ceil(sortedRows.length / PRICING_DOC_PER_PAGE) || 1;
   if (pricingDocPage > pricingDocPages) pricingDocPage = 1;
   const pageRows = sortedRows.slice((pricingDocPage-1)*PRICING_DOC_PER_PAGE, pricingDocPage*PRICING_DOC_PER_PAGE);
-  tbody.innerHTML=pageRows.length?pageRows.map(d=>`<tr class="pricing-doc-row" onclick="openPricingDocument('${d.rfq.id}',${d.version})" title="Open ${esc(d.pricingNo)}" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPricingDocument('${d.rfq.id}',${d.version})}">
+  tbody.innerHTML=pageRows.length?pageRows.map(d=>`<tr class="pricing-doc-row" onclick="openPricingDocument('${d.rfq.id}',${d.version},'${d.kind}')" title="Open ${esc(d.pricingNo)}" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPricingDocument('${d.rfq.id}',${d.version},'${d.kind}')}">
     <td class="pricing-doc-no">${esc(d.pricingNo)}</td>
     <td class="pricing-doc-customer" title="${esc(d.rfq.company||'—')}">${esc(d.rfq.company||'—')}</td><td class="pricing-doc-muted center">V${d.version}</td><td class="pricing-doc-muted">${fmtDate(String(d.updated).slice(0,10))}</td>
     <td class="right">${pricingDocMoney(d.cost)}</td><td class="right">${pricingDocMoney(d.selling)}</td><td class="right pricing-doc-profit ${d.profit<0?'is-negative':''}">${pricingDocMoney(d.profit)}</td><td class="right pricing-doc-margin ${d.marginPct<0?'is-negative':''}">${pricingDocMargin(d.marginPct)}</td>
-    <td class="center"><span class="status ${d.status==='Converted'?'status-won':'status-draft'}">${d.status}</span></td>
+    <td class="center"><span class="status ${d.status==='Converted'?'status-won':d.status==='Superseded'?'status-cancelled':'status-draft'}">${d.status}</span></td>
     <td>${d.quote?`<button class="pricing-doc-link" onclick="event.stopPropagation();openPricingLinkedQuotation('${d.quote.id}')">${esc(d.quote.qno)}</button>`:'—'}</td>
   </tr>`).join(''):`<tr><td colspan="10"><div class="empty-state"><i class="ti ti-calculator"></i><h3>No pricing documents found</h3><p>Pricing documents appear here after a pricing sheet is saved.</p></div></td></tr>`;
   document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PRICING_DOC_PER_PAGE)) el.value = String(PRICING_DOC_PER_PAGE); });
@@ -5047,7 +5088,8 @@ function renderPricingDocuments(){
    optional, relational line-items worksheet. */
 function getPricingRegisterExportRows(){
   const search=(document.getElementById('pricing-doc-search')?.value||'').trim().toLowerCase();
-  const rows=getPricingDocuments().filter(d=>(pricingDocumentFilter==='all'||d.status===pricingDocumentFilter)&&pricingMatchesDateFilter(d)&&(!search||[d.pricingNo,d.rfq.rfqNo,d.rfq.company,d.rfq.ref,d.quote?.qno].some(x=>String(x||'').toLowerCase().includes(search))));
+  const pType=document.getElementById('pricing-type-filter')?.value||'', pCust=document.getElementById('pricing-customer-filter')?.value||'';
+  const rows=getPricingDocuments().filter(d=>(!pType||d.kind===pType)&&(!pCust||d.rfq.company===pCust)&&(pricingDocumentFilter==='all'||d.status===pricingDocumentFilter)&&pricingMatchesDateFilter(d)&&(!search||[d.pricingNo,d.rfq.rfqNo,d.rfq.company,d.rfq.ref,d.quote?.qno].some(x=>String(x||'').toLowerCase().includes(search))));
   return sortRegisterRows(rows,'pricing',{created:d=>bcRegisterCreated(d),no:d=>d.pricingNo,customer:d=>d.rfq.company,version:d=>d.version,updated:d=>d.updated,cost:d=>d.cost,selling:d=>d.selling,profit:d=>d.profit,margin:d=>d.marginPct,status:d=>d.status,quotation:d=>d.quote?.qno||''});
 }
 function pricingExportFilterSummary(){
@@ -5093,6 +5135,7 @@ function openPricingExcelExportDialog(){
 function buildPricingLineItemRows(rows){
   const output=[];
   rows.forEach(d=>{
+    if(d.kind==='estimate')return;   // V271.9: estimates have no pricing lines
     const v=pvFull(d.rfq,d.version)||{};   // V269: loaded by exportPricingRegisterExcel first
     (v.pricingItems||[]).slice().sort((a,b)=>(Number(a.sortOrder)||0)-(Number(b.sortOrder)||0)).forEach((it,index)=>{
       const qty=Number(it.qty)||0,buy=Number(it.buy)||0,sell=Number(it.sell)||0;
@@ -5107,7 +5150,7 @@ async function exportPricingRegisterExcel(includeLines=false,prefetchedRows=null
   const rows=prefetchedRows||getPricingRegisterExportRows();
   if(!rows.length){showToast('No pricing documents match the current filters. Nothing to export.','warning');return;}
   if(includeLines){   // V269: older versions' lines are read first (one read each)
-    const need=rows.filter(d=>!pvFull(d.rfq,d.version));
+    const need=rows.filter(d=>d.kind!=='estimate'&&!pvFull(d.rfq,d.version));
     if(need.length){
       showToast('Loading '+need.length+' pricing version'+(need.length===1?'':'s')+'…','info');
       const res=await Promise.allSettled(need.map(d=>pvLoad(d.rfq,d.version)));
@@ -5165,7 +5208,7 @@ function showPage(page, el) {
   const titles={masters:'Master Data',dashboard:'Dashboard',rfq:'RFQs',costing:'Pricing',quotations:'Quotations',customers:'Customers',suppliers:'Suppliers',products:'Products',analytics:'Reports',setup:'Administration',salesorders:'Sales Orders',jobs:'Jobs',deliverynotes:'Delivery Notes',customerinvoices:'Invoices',supplierrfqs:'Supplier RFQs',purchaseorders:'Purchase Orders',purchaseinvoices:'Purchase Invoices',supplierpayments:'Supplier Payments',stock:'Stock',warehouses:'Warehouses',categories:'Categories',units:'Units',employees:'Employees'};
   document.getElementById('page-title').textContent=titles[page]||page;
   if(targetPage==='masters'){switchMastersTab(requestedMasterTab||'customers');}
-  if(page==='setup'){applySettings();loadAccessSetup();switchSetupTab('branding');renderSetupTermsList('delivery');renderSetupTermsList('payment');}
+  if(page==='setup'){applySettings();loadAccessSetup();switchSetupTab('branding');renderSetupTermsList('delivery');renderSetupTermsList('payment');renderSetupTermsList('completion');renderSetupTermsList('mobilization');}
   if(page==='rfq'){renderRFQPage();setTimeout(()=>{const btn=document.getElementById('rfq-f-all');filterRFQ('all',btn);},0);}
   if(page==='costing'){pricingDocumentFilter='all';renderPricingDocuments();}
   if(page==='quotations'){currentPage=1;renderTable();}
@@ -5628,6 +5671,7 @@ function openNewQuotation(templateType) {
   document.getElementById('f-validity').value=settings.validity||7;
   populateTermsSelect('delivery');
   populateTermsSelect('payment');
+  bcTermsReset();
   document.getElementById('f-notes').value='';
   document.getElementById('f-internal-notes').value='';
   document.getElementById('f-additional-conditions').value='';
@@ -5713,6 +5757,7 @@ function editQuotation(id, skipVatCheck=false) {
     }
     if (savedVal) document.getElementById(selId).value = savedVal;
   });
+  bcTermsFill('completion',q.completion||''); bcTermsFill('mobilization',q.mobilization||'');   // V271.9
   document.getElementById('f-notes').value=q.notes||'';
   document.getElementById('f-internal-notes').value=q.internalNotes||'';
   document.getElementById('f-additional-conditions').value=q.additionalConditions||'';
@@ -6387,6 +6432,7 @@ async function saveQuotation(mode='save', opts={}) {
     status:document.getElementById('f-status').value,
     validity:parseInt(document.getElementById('f-validity').value)||7,
     delivery:(()=>{const v=document.getElementById('f-delivery').value; return v==='__add__'?getDefaultTerm(deliveryTerms):v;})(),
+    ...(currentQuoteType==='contracting'?{completion:bcTermValue('completion'),mobilization:bcTermValue('mobilization')}:{}),   // V271.9: Service quotation terms
     payment:(()=>{const v=document.getElementById('f-payment').value; return v==='__add__'?getDefaultTerm(paymentTerms):v;})(),
     notes:document.getElementById('f-notes').value,
     internalNotes:document.getElementById('f-internal-notes').value,
@@ -6622,12 +6668,16 @@ function viewQuotation(id, skipVatCheck=false) {
   if(hasCost) margin=pricingPercent(pricingCost,costSell).toFixed(1)+'%';
   const grossProfit=hasCost?(costSell-pricingCost):null;
   const notes=String(q.notes||'').trim();
+  const qvSvc=q.quoteType==='contracting'&&!bilingualMode, qvCompletion=String(q.completion||q.delivery||'').trim();   // V271.9: Service quotation terms
   const additionalConditions=quotationAdditionalConditionItems(q);
   const validityDays=parseInt(q.validity,10)||0;
   const termsItems=[
     validityDays?'<li>'+(bilingualMode?'مدة صلاحية هذا العرض '+validityDays+' يوم'+(validityDays===1?'':'اً')+' من تاريخ الإصدار. / ':'')+'This quotation is valid for '+validityDays+' day'+(validityDays===1?'':'s')+' from the date of issue.</li>':'',
-    q.delivery?'<li>'+(bilingualMode?'شروط التسليم / ':'Delivery terms: ')+escapeHtml(q.delivery)+'</li>':'',
+    !qvSvc&&q.delivery?'<li>'+(bilingualMode?'شروط التسليم / ':'Delivery terms: ')+escapeHtml(q.delivery)+'</li>':'',
+    qvSvc&&qvCompletion?'<li>Completion period: '+escapeHtml(qvCompletion)+'</li>':'',
+    qvSvc&&q.mobilization?'<li>Mobilization: '+escapeHtml(q.mobilization)+'</li>':'',
     q.payment?'<li>'+(bilingualMode?'شروط الدفع / ':'Payment terms: ')+escapeHtml(q.payment)+'</li>':'',
+    qvSvc?'<li>Work outside the above scope will be quoted separately.</li>':'',
     additionalConditions
   ].filter(Boolean).join('');
   const termsHtml=termsItems||'<li>Terms are as stated in this quotation.</li>';
@@ -6673,16 +6723,14 @@ function viewQuotation(id, skipVatCheck=false) {
               <div class="qdoc-titlebox-a4"><h1>QUOTATION</h1><div><small>${bilingualMode?'Quotation No. / <span class="ar">رقم العرض</span>':'Quotation No.'}</small><strong>${escapeHtml(q.qno)}</strong></div><div class="qdoc-titlebox-grid"><div><small>${bilingualMode?'Date / <span class="ar">التاريخ</span>':'Date'}</small><strong>${fmtDate(q.date)}</strong></div><div><small>${bilingualMode?'Valid Until / <span class="ar">صالح حتى</span>':'Valid Until'}</small><strong>${fmtDate(vu)}</strong></div></div>${qRevision?`<div><small>Revision</small><strong>R${qRevision}</strong></div>`:''}</div>
             </div>
           </header>
-          <div class="qdoc-subtitle-a4">COMMERCIAL OFFER</div>
+          <div class="qdoc-subtitle-a4">${qvSvc?'PROPOSAL FOR WORKS':'COMMERCIAL OFFER'}</div>
           <section class="qdoc-party-row-a4">
             <div class="qdoc-box-a4"><h3>QUOTATION TO</h3><div class="content"><strong>${escapeHtml(q.company||'—')}</strong>${custAddr1?`<p>${escapeHtml(custAddr1)}</p>`:''}${custAddr2?`<p>${escapeHtml(custAddr2)}</p>`:''}${custCountry?`<p>${escapeHtml(custCountry)}</p>`:''}${cust?.vat?`<p>VAT No. ${escapeHtml(cust.vat)}</p>`:''}${q.contact?`<p>Attn: ${escapeHtml(q.contact)}</p>`:''}</div></div>
             <div class="qdoc-box-a4"><h3>REFERENCE / PROJECT</h3><div class="content"><strong>${escapeHtml(q.ref||'—')}</strong>${q.project?`<p>${escapeHtml(q.project)}</p>`:''}${lRFQ?`<p>RFQ: ${escapeHtml(lRFQ.rfqNo||'—')}</p>`:''}</div></div>
           </section>
           <section class="qdoc-ref-a4">
             <div><small>${bilingualMode?'PAYMENT TERMS / <span class="ar">شروط الدفع</span>':'PAYMENT TERMS'}</small><strong>${escapeHtml(q.payment||'—')}</strong></div>
-            <div><small>${bilingualMode?'DELIVERY TERMS / <span class="ar">شروط التسليم</span>':'DELIVERY TERMS'}</small><strong>${escapeHtml(q.delivery||'—')}</strong></div>
-            <div><small>${bilingualMode?'VAT / <span class="ar">الضريبة</span>':'VAT'}</small><strong>${savedVat}%</strong></div>
-            <div><small>${bilingualMode?'CURRENCY / <span class="ar">العملة</span>':'CURRENCY'}</small><strong>${escapeHtml(settings.currency||settings.baseCurrency||'SAR')}</strong></div>
+            ${qvSvc?'<div><small>COMPLETION PERIOD</small><strong>'+escapeHtml(qvCompletion||'—')+'</strong></div><div><small>MOBILIZATION</small><strong>'+escapeHtml(q.mobilization||'—')+'</strong></div><div><small>VAT / CURRENCY</small><strong>'+savedVat+'% · '+escapeHtml(settings.currency||settings.baseCurrency||'SAR')+'</strong></div>':'<div><small>'+(bilingualMode?'DELIVERY TERMS / <span class="ar">شروط التسليم</span>':'DELIVERY TERMS')+'</small><strong>'+escapeHtml(q.delivery||'—')+'</strong></div><div><small>'+(bilingualMode?'VAT / <span class="ar">الضريبة</span>':'VAT')+'</small><strong>'+savedVat+'%</strong></div><div><small>'+(bilingualMode?'CURRENCY / <span class="ar">العملة</span>':'CURRENCY')+'</small><strong>'+escapeHtml(settings.currency||settings.baseCurrency||'SAR')+'</strong></div>'}
           </section>
           <section class="qdoc-items"><table><thead><tr><th class="center">SL</th><th>${bilingualMode?'Description / <span class="ar">البيان</span>':'Description'}</th><th class="center">Qty</th><th class="center">UOM</th><th class="num">Unit Price</th>${qvDisc?'<th class="num">Disc.</th>':''}<th class="num">Amount</th></tr></thead><tbody>${items}</tbody></table></section>
           <section class="qdoc-bottom">
@@ -6895,6 +6943,7 @@ function createQuotationRevision(id){
     }
     if(savedVal)document.getElementById(selId).value=savedVal;
   });
+  bcTermsFill('completion',q.completion||''); bcTermsFill('mobilization',q.mobilization||'');   // V271.9
 
   document.getElementById('f-notes').value=q.notes||'';
   document.getElementById('f-internal-notes').value=q.internalNotes||'';
@@ -10873,6 +10922,7 @@ async function convertToQuotation() {
   document.getElementById('f-notes').value = '';   // V270.2.4: Customer Remarks start blank — the RFQ Description / Requirements is not copied
   populateTermsSelect('delivery');
   populateTermsSelect('payment');
+  bcTermsReset();
   document.getElementById('f-discount').value='';
   document.getElementById('f-internal-notes').value='';
   document.getElementById('f-additional-conditions').value='';
@@ -13530,7 +13580,7 @@ let _printQID = null;
 
 const TEMPLATES = [
   { id:'erpbox',       name:'Product', category:'standard', desc:'Standard product quotation with item details. Suitable for most quotations.', badge:'Recommended' },
-  { id:'servicequote', name:'Service', category:'standard', desc:'Service quotation layout: scope of work, qty, unit, rate (V270.4.14: formatted descriptions).' },
+  { id:'servicequote', name:'Service', category:'standard', desc:'Service / contracting quotation on the Product layout: scope of work, completion period and mobilization.' },
   { id:'erpbilingual', name:'Arabic / English', category:'bilingual', desc:'Bilingual quotation layout with English and Arabic labels.' },
   { id:'imageref',     name:'Item Image – Thumbnail', category:'image', desc:'Product quotation with compact thumbnail images.' },
   { id:'imagerefmed',  name:'Item Image – Medium', category:'image', desc:'Product quotation with medium-sized images.' },
@@ -13547,7 +13597,7 @@ const TPL_PREVIEWS = {
   premiumcard: `<div style="padding:7px 8px;background:#fff"><div style="font-size:8px;font-weight:800;color:#1F4E79">CUSTOMER</div><div style="font-size:7px;color:#334155;margin:2px 0 5px">Customer Name · Attention: Name</div><div style="text-align:center;font-size:8px;letter-spacing:1px;color:#64748B;font-weight:800;margin-bottom:3px">QUOTATION</div><div style="border:1px solid #CBD5E1;border-radius:5px;padding:5px;background:#F8FAFC;font-size:6px"><div><b>Quotation No.</b> &nbsp; Q-2606-001</div><div><b>Client Ref</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; RFQ-001</div><div><b>Date</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 27-Jun</div><div><b>Valid Until</b> &nbsp;&nbsp; 27-Jul</div></div><div style="margin-top:5px;background:#1F4E79;height:12px;border-radius:2px"></div></div>`,
   executiveinfo: `<div style="padding:7px 8px;background:#fff"><div style="border-top:2px solid #1F4E79;border-bottom:1px solid #CBD5E1;padding:4px 0;text-align:center;font-size:9px;font-weight:900;color:#1F4E79">QUOTATION</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:5px"><div style="border:1px solid #E2E8F0;border-radius:4px;padding:4px;min-height:36px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div><div style="font-size:6px;color:#64748B">Attention: Name</div></div><div style="border:1px solid #E2E8F0;border-radius:4px;padding:4px;min-height:36px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div><div style="font-size:6px"><b>Client Ref</b> RFQ-001</div><div style="font-size:6px"><b>Date</b> 27-Jun</div></div></div><div style="margin-top:5px;background:#F8FAFC;border:1px solid #E2E8F0;height:10px"></div></div>`,
   erpbilingual: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">QUOTATION / عرض سعر</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER / العميل</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div><div style="font-size:6px;color:#64748B">Attention / عناية</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION / بيانات العرض</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div><div style="font-size:6px"><b>Client Ref</b> RFQ-001</div><div style="font-size:6px"><b>Date</b> 27-Jun</div></div></div><div style="margin-top:5px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"># DESCRIPTION / البيان QTY / الكمية AMOUNT / المبلغ</div></div>`,
-  servicequote: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">SERVICE QUOTATION</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div><div style="font-size:6px"><b>Project</b> Site service</div></div></div><div style="margin-top:5px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"># SCOPE OF WORK QTY RATE AMOUNT</div></div>`,
+  servicequote: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">PROPOSAL FOR WORKS</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div><div style="font-size:6px"><b>Project</b> Site service</div></div></div><div style="margin-top:5px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"># SCOPE OF WORK QTY RATE AMOUNT</div></div>`,
   imageref: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">QUOTATION WITH IMAGE REF</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div></div></div><div style="margin-top:5px;display:grid;grid-template-columns:18px 32px 1fr 40px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"><span>#</span><span>IMAGE</span><span>DESCRIPTION</span><span>AMOUNT</span></div></div>`,
   imagerefmed: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">IMAGE REF – MEDIUM</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div></div></div><div style="margin-top:5px;display:grid;grid-template-columns:18px 44px 1fr 34px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"><span>#</span><span>4×3 cm</span><span>DESCRIPTION</span><span>AMOUNT</span></div><div style="margin-top:3px;display:grid;grid-template-columns:18px 44px 1fr 34px;font-size:5px"><span>01</span><span style="height:22px;border:1px solid #CBD5E1;background:#F8FAFC"></span><span>Product description</span><span>SAR</span></div></div>`,
   imagereflarge: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">IMAGE REF – LARGE</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div></div></div><div style="margin-top:5px;display:grid;grid-template-columns:18px 62px 1fr 32px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"><span>#</span><span>6×5 cm</span><span>DESCRIPTION</span><span>AMOUNT</span></div><div style="margin-top:3px;display:grid;grid-template-columns:18px 62px 1fr 32px;font-size:5px"><span>01</span><span style="height:32px;border:1px solid #CBD5E1;background:#F8FAFC"></span><span>Equipment description</span><span>SAR</span></div></div>`,
@@ -13719,7 +13769,7 @@ function generateQuotationOutput(){
   else if (tpl === 'premiumcard')  printQuotationInfoLayout(_printQID,'premiumcard');
   else if (tpl === 'executiveinfo')printQuotationInfoLayout(_printQID,'executiveinfo');
   else if (tpl === 'erpbilingual') printQuotationArabicEnglish(_printQID);
-  else if (tpl === 'servicequote') printQuotationErpVariant(_printQID,'contracting');
+  else if (tpl === 'servicequote') printQuotationProductA4(_printQID,'service');   // V271.9: the Product layout (CQ_1–CQ_3)
   else if (tpl === 'imageref')     printQuotationProductA4(_printQID,'image');
   else if (tpl === 'imagerefmed')  printQuotationProductA4(_printQID,'image-medium');
   else if (tpl === 'imagereflarge')printQuotationProductA4(_printQID,'image-large');
@@ -13775,6 +13825,7 @@ function _tplOpen(html) {
 /* v164 — Pilot Product quotation print/PDF: approved A4 display design */
 function printQuotationProductA4(id, imageVariant){
   const q=quotations.find(x=>x.id===id); if(!q) return;
+  const serviceMode=imageVariant==='service';   // V271.9: the Service / Contracting quotation on the Product layout (CQ_1–CQ_3)
   const bilingualMode=imageVariant==='bilingual';
   const imageAttachmentMode=imageVariant==='image-attachment';
   const imageMode=['image','image-medium','image-large'].includes(imageVariant);
@@ -13811,14 +13862,43 @@ function printQuotationProductA4(id, imageVariant){
     const imageCell=imageMode?'<td class="imgcell">'+(productImage(it)?'<img src="'+productImage(it)+'" alt="">':'<div class="imgph">No image</div>')+'</td>':'';
     rowParts.push('<tr'+(it.descHtml||(inlineNote&&next.textHtml)?' class="bc-rt-row"':'')+'><td class="c">'+bcPvNo(it,itemNo,3)+'</td>'+imageCell+'<td><div class="desc">'+bcLineDescHtml(it)+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+(inlineNote?quotationPrintLineNoteHtml(inlineNote,quotationEffectiveNoteStyle(q,next),next.textHtml):'')+'</td><td class="c">'+escapeHtml(String(it.qty??''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td><td class="r">'+bcPvUp(it,qvLineUnitMoney)+'</td>'+(hasDisc?'<td class="r disc">'+quoteLineDiscCellHtml(it,qvLineAmountMoney)+'</td>':'')+'<td class="r">'+bcPvAmt(it,qvLineAmountMoney)+'</td></tr>');
   }
-  const rows=rowParts.join('')||'<tr><td colspan="'+cols+'" class="empty">No line items</td></tr>';
+  let rows=rowParts.join('')||'<tr><td colspan="'+cols+'" class="empty">No line items</td></tr>';
+  // V271.9: a quotation from an estimate prints its sections A, B… with numbered lines in its print style
+  const svcEst=serviceMode&&q.estimate?q.estimate:null;
+  let svcHead='', svcSubLabel='';
+  if(svcEst){
+    const style=svcEst.style==='sections'||svcEst.style==='grouped'?svcEst.style:'lumpsum';
+    const showQ=svcEst.showQty!==false||style==='grouped', rates=style==='grouped', amt=style!=='lumpsum';
+    const ecols=2+(showQ?2:0)+(rates?1:0)+(amt?1:0);
+    const letter=i=>{let t='',n=i;do{t=String.fromCharCode(65+n%26)+t;n=Math.floor(n/26)-1;}while(n>=0);return t;};
+    svcHead='<th class="c" style="width:34px">SL</th><th>Scope of Work</th>'+(showQ?'<th class="c" style="width:48px">Qty</th><th class="c" style="width:48px">UOM</th>':'')+(rates?'<th class="r" style="width:76px">Unit Price</th>':'')+(amt?'<th class="r" style="width:88px">Amount</th>':'');
+    const items=q.items||[], secSum=[]; let k=-1;
+    items.forEach(it=>{ if(it.lineType==='heading'){k++;secSum[k]=0;} else if(it.lineType!=='note'){ if(k<0){k=0;secSum[0]=0;} secSum[k]+=quoteLineNet(it);} });
+    const out=[]; let sec=-1, n=0, title='';
+    const flush=()=>{ if(style==='grouped'&&sec>=0) out.push('<tr class="sec-total"><td></td><td colspan="'+(ecols-2)+'" class="r">Total — '+(title?escapeHtml(title):'Section '+letter(sec))+'</td><td class="r">'+qvLineAmountMoney(secSum[sec]||0)+'</td></tr>'); };
+    items.forEach(it=>{
+      if(it.lineType==='heading'){ flush(); sec++; n=0; title=String(it.text||it.desc||'');
+        out.push('<tr class="sec'+(it.hScope?' bc-rt-row':'')+'"><td class="c">'+letter(sec)+'</td><td colspan="'+(ecols-1-(style==='sections'?1:0))+'"><div class="desc">'+bcHeadHtml(it)+'</div></td>'+(style==='sections'?'<td class="r">'+qvLineAmountMoney(secSum[sec]||0)+'</td>':'')+'</tr>'); return; }
+      if(it.lineType==='note'){ out.push('<tr class="note standalone-note'+(it.textHtml?' bc-rt-row':'')+'"><td></td><td colspan="'+(ecols-1)+'">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it),it.textHtml)+'</td></tr>'); return; }
+      if(sec<0) sec=0;
+      n++;
+      out.push('<tr'+(it.descHtml||it.scopeKey||it.scopePreview?' class="bc-rt-row"':'')+'><td class="c">'+letter(sec)+n+'</td><td><div class="desc">'+bcLineDescHtml(it)+'</div></td>'+(showQ?'<td class="c">'+escapeHtml(String(it.qty??''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td>':'')+(rates?'<td class="r">'+qvLineUnitMoney(it.up)+'</td>':'')+(amt?'<td class="r"></td>':'')+'</tr>');
+    });
+    flush();
+    rows=out.join('')||rows;
+    if(style==='lumpsum') svcSubLabel='Lump Sum Price';
+  }
+  const completion=String(q.completion||(serviceMode?q.delivery:'')||'').trim(), mobilization=String(q.mobilization||'').trim();   // V271.9
   const notes=String(q.notes||'').trim();
   const additionalConditions=quotationAdditionalConditionItems(q);
   const validityDays=parseInt(q.validity,10)||0;
   const termsItems=[
     validityDays?'<li>'+(bilingualMode?'مدة صلاحية هذا العرض '+validityDays+' يوم'+(validityDays===1?'':'اً')+' من تاريخ الإصدار. / ':'')+'This quotation is valid for '+validityDays+' day'+(validityDays===1?'':'s')+' from the date of issue.</li>':'',
-    q.delivery?'<li>'+(bilingualMode?'شروط التسليم / ':'Delivery terms: ')+escapeHtml(q.delivery)+'</li>':'',
+    !serviceMode&&q.delivery?'<li>'+(bilingualMode?'شروط التسليم / ':'Delivery terms: ')+escapeHtml(q.delivery)+'</li>':'',
+    serviceMode&&completion?'<li>Completion period: '+escapeHtml(completion)+'</li>':'',
+    serviceMode&&mobilization?'<li>Mobilization: '+escapeHtml(mobilization)+'</li>':'',
     q.payment?'<li>'+(bilingualMode?'شروط الدفع / ':'Payment terms: ')+escapeHtml(q.payment)+'</li>':'',
+    serviceMode?'<li>Work outside the above scope will be quoted separately.</li>':'',
     additionalConditions
   ].filter(Boolean).join('');
   const termsHtml=termsItems||'<li>Terms are as stated in this quotation.</li>';
@@ -13831,6 +13911,7 @@ function printQuotationProductA4(id, imageVariant){
     return '<section class="attach-card"><div class="attach-item-no">ITEM '+String(attachmentNo).padStart(2,'0')+'</div><div class="attach-grid"><div class="attach-image">'+(img?'<img src="'+img+'" alt="">':'<div class="attach-ph">No image</div>')+'</div><div class="attach-copy"><h3>'+escapeHtml(it.desc||'—')+'</h3>'+(details?'<p>'+escapeHtml(details)+'</p>':'')+'<div class="attach-meta"><span><b>Qty:</b> '+escapeHtml(String(it.qty??''))+'</span><span><b>UOM:</b> '+escapeHtml(it.uom||'—')+'</span></div></div></div></section>';
   }).join(''):'';
   const attachmentHtml=imageAttachmentMode?'<article class="attachment-sheet"><header class="attachment-head"><div>'+logoHtml+'</div><div><h1>ITEM IMAGE ATTACHMENTS</h1><p>Quotation '+escapeHtml(q.qno)+'</p></div></header><div class="attachment-list">'+(attachmentCards||'<div class="attach-empty">No product images available.</div>')+'</div></article>':'';
+  const productHead='<th class="c">'+(bilingualMode?'SL<br><span class="ar">م</span>':'SL')+'</th>'+(imageMode?'<th class="c" style="width:'+imageCfg.col+'">Image Ref</th>':'')+'<th>'+(serviceMode?'Scope of Work':'Description')+'</th><th class="c">'+(bilingualMode?'Qty<br><span class="ar">الكمية</span>':'Qty')+'</th><th class="c">'+(bilingualMode?'UOM<br><span class="ar">الوحدة</span>':'UOM')+'</th><th class="r">'+(bilingualMode?'Unit Price<br><span class="ar">سعر الوحدة</span>':'Unit Price')+'</th>'+(hasDisc?'<th class="r">'+(bilingualMode?'Disc.<br><span class="ar">الخصم</span>':'Disc.')+'</th>':'')+'<th class="r">'+(bilingualMode?'Amount<br><span class="ar">المبلغ</span>':'Amount')+'</th>';   // V271.9: the table head (a Service quotation from an estimate uses svcHead)
   const html=`<!DOCTYPE html><html><head><title>${escapeHtml(q.qno)}</title><meta charset="UTF-8"><style>
 *{box-sizing:border-box}html,body{margin:0;padding:0}body{font-family:Arial,Tahoma,sans-serif;color:#17324d;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:10px}
 @page{size:A4 portrait;margin:10mm 11mm 18mm 11mm}
@@ -13838,7 +13919,7 @@ function printQuotationProductA4(id, imageVariant){
 .sheet{width:210mm;min-height:297mm;margin:0 auto;padding:12mm 11mm 10mm;background:#fff;display:flex;flex-direction:column}
 .header{display:grid;grid-template-columns:1.22fr .95fr 1.05fr;gap:8px;align-items:start;padding-bottom:10px;border-bottom:2px solid #174b7a}.q-logo{max-width:260px;max-height:78px;width:auto;height:auto;object-fit:contain}.q-logo-fallback{width:78px;height:78px;border:1px solid #cbd8e5;display:flex;align-items:center;justify-content:center;font-size:23px;font-weight:800;color:#174b7a}.company{font-size:9.5px;line-height:1.5;color:#50657a;border-left:1px solid #cbd8e5;padding-left:10px;min-height:58px}.titlebox{border:1px solid #b9cce0}.titlebox h1{margin:0;padding:8px 10px;font-size:19px;letter-spacing:.35px;color:#174b7a;background:#f7fafc}.titlebox>div{padding:7px 10px;border-top:1px solid #d7e1eb}.titlebox small{display:block;text-transform:uppercase;font-weight:800;color:#5f7489;font-size:8px;margin-bottom:2px}.titlebox strong{font-size:11px}.titlegrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.subtitle{margin:5px 0 10px;text-align:right;font-size:8px;letter-spacing:3px;color:#64788c}
 .party{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}.box{border:1px solid #cbd8e5}.box h3{margin:0;background:#f3f7fa;padding:6px 9px;font-size:9px;text-transform:uppercase;color:#174b7a;border-bottom:1px solid #cbd8e5}.box .content{padding:8px 9px;min-height:67px;line-height:1.45}.box .content strong{display:block;font-size:11.5px;margin-bottom:2px}.box p{font-size:9.5px;color:#50657a;margin:2px 0}.refs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:9px 0}.refs>div{border:1px solid #cbd8e5;background:#f3f7fa;padding:7px 8px;min-height:43px}.refs small{display:block;font-size:7.5px;font-weight:800;text-transform:uppercase;color:#5e7488;margin-bottom:4px}.refs strong{font-size:9.5px}
-.items{width:100%;border-collapse:collapse;border-bottom:1px solid #cbd8e5}.items thead{display:table-header-group}.items tr{break-inside:avoid;page-break-inside:avoid}.items th{background:#174b7a;color:#fff;padding:6px 5px;border:1px solid #174b7a;font-size:8px;text-align:left}.items td{padding:6px 5px;border:1px solid #d6e0e9;font-size:9px;color:#263f56;vertical-align:top}.items tbody tr:last-child td{border-bottom:1px solid #cbd8e5}.items .c{text-align:center}.items .r{text-align:right;white-space:nowrap}.items .imgcell{width:${imageCfg.col};text-align:center;vertical-align:middle;padding:4px}.items .imgcell img{display:block;max-width:${imageCfg.w};max-height:${imageCfg.h};width:auto;height:auto;object-fit:contain;margin:0 auto}.items .imgph{width:100%;min-height:${imageCfg.h};display:flex;align-items:center;justify-content:center;border:1px dashed #cbd8e5;background:#f8fafc;color:#94a3b8;font-size:7.5px}.desc{font-size:9.5px}.sub{font-size:8.5px;color:#64788c;margin-top:2px}.inline-note{margin-top:5px;font-size:8.5px;line-height:1.35}.inline-note b{font-weight:800}.note-highlight{padding:4px 6px;background:#fffbea;border:1px solid #eadfae;color:#5a4a0a}.note-blue{padding:4px 7px;background:#eef6fd;border-left:3px solid #2684d8;color:#294d6d}.note-minimal{padding:2px 1px;color:#5d7186;font-style:italic}.note-badge{display:flex;align-items:center;gap:6px;color:#415a70}.note-badge span{display:inline-block;background:#2684d8;color:#fff;border-radius:3px;padding:2px 5px;font-size:7px;font-weight:800;letter-spacing:.4px}.note-badge em{font-style:normal}.items td.disc{line-height:1.3}.items .qd-pct{display:block;color:#50657a}.items .qd-amt{display:block}.heading td{background:#eef4fb!important;color:#174b7a!important;font-weight:800!important}.note td{background:#fff!important;color:#475569!important}.standalone-note .inline-note{margin:0}.empty{text-align:center;padding:20px!important;color:#64748b!important}
+.items{width:100%;border-collapse:collapse;border-bottom:1px solid #cbd8e5}.items thead{display:table-header-group}.items tr{break-inside:avoid;page-break-inside:avoid}.items th{background:#174b7a;color:#fff;padding:6px 5px;border:1px solid #174b7a;font-size:8px;text-align:left}.items td{padding:6px 5px;border:0;border-bottom:1px solid #e3eaf1;font-size:9px;color:#263f56;vertical-align:top}.items tbody tr td:first-child{border-left:1px solid #cbd8e5}.items tbody tr td:last-child{border-right:1px solid #cbd8e5}.items tbody tr:last-child td{border-bottom:0}.items{border-bottom:2px solid #174b7a!important}.items tr.sec td{background:#eef4fb;color:#174b7a;font-weight:800;font-size:9.5px}.items tr.sec .bc-qht{font-weight:800;color:#174b7a}.items tr.sec-total td{background:#f7f9fb;color:#174b7a;font-weight:700}.bottom .totals{align-self:start}.items .c{text-align:center}.items .r{text-align:right;white-space:nowrap}.items .imgcell{width:${imageCfg.col};text-align:center;vertical-align:middle;padding:4px}.items .imgcell img{display:block;max-width:${imageCfg.w};max-height:${imageCfg.h};width:auto;height:auto;object-fit:contain;margin:0 auto}.items .imgph{width:100%;min-height:${imageCfg.h};display:flex;align-items:center;justify-content:center;border:1px dashed #cbd8e5;background:#f8fafc;color:#94a3b8;font-size:7.5px}.desc{font-size:9.5px}.sub{font-size:8.5px;color:#64788c;margin-top:2px}.inline-note{margin-top:5px;font-size:8.5px;line-height:1.35}.inline-note b{font-weight:800}.note-highlight{padding:4px 6px;background:#fffbea;border:1px solid #eadfae;color:#5a4a0a}.note-blue{padding:4px 7px;background:#eef6fd;border-left:3px solid #2684d8;color:#294d6d}.note-minimal{padding:2px 1px;color:#5d7186;font-style:italic}.note-badge{display:flex;align-items:center;gap:6px;color:#415a70}.note-badge span{display:inline-block;background:#2684d8;color:#fff;border-radius:3px;padding:2px 5px;font-size:7px;font-weight:800;letter-spacing:.4px}.note-badge em{font-style:normal}.items td.disc{line-height:1.3}.items .qd-pct{display:block;color:#50657a}.items .qd-amt{display:block}.heading td{background:#eef4fb!important;color:#174b7a!important;font-weight:800!important}.note td{background:#fff!important;color:#475569!important}.standalone-note .inline-note{margin:0}.empty{text-align:center;padding:20px!important;color:#64748b!important}
 .bottom{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:18px;padding:12px 0 10px;break-inside:avoid;page-break-inside:avoid}.terms{border-left:3px solid #174b7a;background:#f7f9fb;padding:9px 12px;font-size:9.5px;line-height:1.5}.terms ul{margin:4px 0 0;padding-left:18px}.terms li{margin:3px 0}.eyebrow{display:block;font-size:9px;letter-spacing:1.2px;font-weight:800;color:#174b7a;margin-bottom:5px}.totals{border:1px solid #cbd8e5}.totals>div{display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #d7e1eb;font-size:10px}.totals .grand{background:#174b7a;color:#fff;border-bottom:0;font-weight:800;font-size:12px}.notesbox{border:1px solid #e6c75a;background:#fffbea;padding:8px 10px;margin:4px 0 12px;font-size:9.5px;line-height:1.45;break-inside:avoid;page-break-inside:avoid}.notesbox strong{color:#17324d}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:42px;margin-top:24mm;break-inside:avoid;page-break-inside:avoid}.sigbox{padding-top:7px;border-top:1.5px solid #174b7a;min-height:0;font-size:8.5px;font-weight:800;color:#5d7186;text-transform:uppercase}.sigbox.authorized{position:relative}.digital-auth{position:absolute;left:2px;bottom:20px;width:270px;height:122px;pointer-events:none}.digital-signature{position:absolute;left:0;bottom:0;width:225px;height:96px;object-fit:contain;object-position:left bottom;z-index:1}.digital-stamp{position:absolute;left:78px;bottom:-8px;width:138px;height:138px;object-fit:contain;object-position:center bottom;opacity:.92;z-index:2}.digital-signer{position:absolute;left:8px;bottom:10px;font-size:7px;color:#64788c;text-transform:none;font-weight:600;white-space:nowrap}.thankyou{text-align:center;font-size:9px;font-style:italic;color:#5c6f83;line-height:1.55;padding:8px 0 14px;break-inside:avoid;page-break-inside:avoid}
 .page-footer{margin-top:auto;border-top:2px solid #174b7a;padding-top:6px;color:#64788c;font-size:8.5px;line-height:1.35}.fixed-footer{display:none}
 .attachment-sheet{width:210mm;min-height:297mm;margin:0 auto;padding:12mm 11mm 18mm;background:#fff;page-break-before:always;break-before:page}.attachment-head{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;border-bottom:2px solid #174b7a;padding-bottom:10px;margin-bottom:12px}.attachment-head .q-logo{max-width:190px;max-height:58px}.attachment-head h1{margin:0;color:#174b7a;font-size:17px;letter-spacing:1.4px;text-align:right}.attachment-head p{margin:4px 0 0;color:#64788c;font-size:9px;text-align:right}.attachment-list{display:block}.attach-card{border:1px solid #cbd8e5;margin:0 0 10px;break-inside:avoid;page-break-inside:avoid;background:#fff}.attach-item-no{background:#f3f7fa;border-bottom:1px solid #cbd8e5;padding:6px 9px;color:#174b7a;font-size:8px;font-weight:800;letter-spacing:.8px}.attach-grid{display:grid;grid-template-columns:68mm 1fr;gap:14px;padding:10px;align-items:start}.attach-image{min-height:54mm;display:flex;align-items:center;justify-content:center}.attach-image img{display:block;max-width:64mm;max-height:52mm;width:auto;height:auto;object-fit:contain;border:1px solid #d6e0e9;padding:3px;background:#fff}.attach-ph{width:64mm;height:52mm;border:1px dashed #cbd8e5;background:#f8fafc;color:#94a3b8;display:flex;align-items:center;justify-content:center;font-size:9px}.attach-copy h3{margin:4px 0 6px;color:#174b7a;font-size:12px}.attach-copy p{margin:0;color:#50657a;font-size:9px;line-height:1.5}.attach-meta{display:flex;gap:18px;margin-top:10px;padding-top:8px;border-top:1px solid #e4ebf2;color:#50657a;font-size:8.5px}.attach-empty{padding:30px;text-align:center;border:1px dashed #cbd8e5;color:#64788c}
@@ -13846,10 +13927,10 @@ function printQuotationProductA4(id, imageVariant){
 @media screen{body{background:#d0d0d0;padding:20px 0}.sheet{box-shadow:0 4px 20px rgba(0,0,0,.2)}}
 </style></head><body><div class="fixed-footer">${companyDocumentFooterHtml('quotation')}</div><article class="sheet">
 <header class="header"><div>${logoHtml}</div><div class="company">${companyDocumentHeaderHtml('quotation')}</div><div><div class="titlebox"><h1>${bilingualMode?'QUOTATION / <span class="ar">عرض سعر</span>':'QUOTATION'}</h1><div><small>Quotation No.</small><strong>${escapeHtml(q.qno)}</strong></div><div class="titlegrid"><div><small>Date</small><strong>${fmtDate(q.date)}</strong></div><div><small>Valid Until</small><strong>${fmtDate(vu)}</strong></div></div>${qRevision?'<div><small>Revision</small><strong>R'+qRevision+'</strong></div>':''}</div></div></header>
-<div class="subtitle">${bilingualMode?'COMMERCIAL OFFER / <span class="ar">عرض تجاري</span>':'COMMERCIAL OFFER'}</div><section class="party"><div class="box"><h3>${bilingualMode?'QUOTATION TO / <span class="ar">عرض السعر إلى</span>':'QUOTATION TO'}</h3><div class="content"><strong>${escapeHtml(q.company||'—')}</strong>${custAddr1?'<p>'+escapeHtml(custAddr1)+'</p>':''}${custAddr2?'<p>'+escapeHtml(custAddr2)+'</p>':''}${custCountry?'<p>'+escapeHtml(custCountry)+'</p>':''}${cust?.vat?'<p>VAT No. '+escapeHtml(cust.vat)+'</p>':''}${q.contact?'<p>Attn: '+escapeHtml(q.contact)+'</p>':''}</div></div><div class="box"><h3>${bilingualMode?'REFERENCE / PROJECT / <span class="ar">المرجع / المشروع</span>':'REFERENCE / PROJECT'}</h3><div class="content"><strong>${escapeHtml(q.ref||'—')}</strong>${q.project?'<p>'+escapeHtml(q.project)+'</p>':''}${lRFQ?'<p>RFQ: '+escapeHtml(lRFQ.rfqNo||'—')+'</p>':''}</div></div></section>
-<section class="refs"><div><small>PAYMENT TERMS</small><strong>${escapeHtml(q.payment||'—')}</strong></div><div><small>DELIVERY TERMS</small><strong>${escapeHtml(q.delivery||'—')}</strong></div><div><small>VAT</small><strong>${savedVat}%</strong></div><div><small>CURRENCY</small><strong>${escapeHtml(settings.currency||settings.baseCurrency||'SAR')}</strong></div></section>
-<table class="items"><thead><tr><th class="c">${bilingualMode?'SL<br><span class="ar">م</span>':'SL'}</th>${imageMode?'<th class="c" style="width:'+imageCfg.col+'">Image Ref</th>':''}<th>Description</th><th class="c">${bilingualMode?'Qty<br><span class="ar">الكمية</span>':'Qty'}</th><th class="c">${bilingualMode?'UOM<br><span class="ar">الوحدة</span>':'UOM'}</th><th class="r">${bilingualMode?'Unit Price<br><span class="ar">سعر الوحدة</span>':'Unit Price'}</th>${hasDisc?'<th class="r">'+(bilingualMode?'Disc.<br><span class="ar">الخصم</span>':'Disc.')+'</th>':''}<th class="r">${bilingualMode?'Amount<br><span class="ar">المبلغ</span>':'Amount'}</th></tr></thead><tbody>${rows}</tbody></table>
-<section class="bottom"><div class="terms"><span class="eyebrow">${bilingualMode?'TERMS &amp; CONDITIONS / <span class="ar">الشروط والأحكام</span>':'TERMS &amp; CONDITIONS'}</span><ul>${termsHtml}</ul></div><div class="totals"><div><span>Subtotal</span><strong>${qvSummaryMoney(totals.sub)}</strong></div>${totals.disc>0?'<div><span>Discount</span><strong>- '+qvSummaryMoney(totals.disc)+'</strong></div>':''}<div><span>VAT (${savedVat}%)</span><strong>${qvSummaryMoney(totals.vat)}</strong></div><div class="grand"><span>Grand Total</span><strong>${qvGrandTotalMoney(totals.net)}</strong></div></div></section>
+<div class="subtitle">${bilingualMode?'COMMERCIAL OFFER / <span class="ar">عرض تجاري</span>':(serviceMode?'PROPOSAL FOR WORKS':'COMMERCIAL OFFER')}</div><section class="party"><div class="box"><h3>${bilingualMode?'QUOTATION TO / <span class="ar">عرض السعر إلى</span>':'QUOTATION TO'}</h3><div class="content"><strong>${escapeHtml(q.company||'—')}</strong>${custAddr1?'<p>'+escapeHtml(custAddr1)+'</p>':''}${custAddr2?'<p>'+escapeHtml(custAddr2)+'</p>':''}${custCountry?'<p>'+escapeHtml(custCountry)+'</p>':''}${cust?.vat?'<p>VAT No. '+escapeHtml(cust.vat)+'</p>':''}${q.contact?'<p>Attn: '+escapeHtml(q.contact)+'</p>':''}</div></div><div class="box"><h3>${bilingualMode?'REFERENCE / PROJECT / <span class="ar">المرجع / المشروع</span>':'REFERENCE / PROJECT'}</h3><div class="content"><strong>${escapeHtml(q.ref||'—')}</strong>${q.project?'<p>'+escapeHtml(q.project)+'</p>':''}${lRFQ?'<p>RFQ: '+escapeHtml(lRFQ.rfqNo||'—')+'</p>':''}</div></div></section>
+<section class="refs"><div><small>PAYMENT TERMS</small><strong>${escapeHtml(q.payment||'—')}</strong></div>${serviceMode?'<div><small>COMPLETION PERIOD</small><strong>'+escapeHtml(completion||'—')+'</strong></div><div><small>MOBILIZATION</small><strong>'+escapeHtml(mobilization||'—')+'</strong></div><div><small>VAT / CURRENCY</small><strong>'+savedVat+'% · '+escapeHtml(settings.currency||settings.baseCurrency||'SAR')+'</strong></div>':'<div><small>DELIVERY TERMS</small><strong>'+escapeHtml(q.delivery||'—')+'</strong></div><div><small>VAT</small><strong>'+savedVat+'%</strong></div><div><small>CURRENCY</small><strong>'+escapeHtml(settings.currency||settings.baseCurrency||'SAR')+'</strong></div>'}</section>
+<table class="items"><thead><tr>${svcHead||productHead}</tr></thead><tbody>${rows}</tbody></table>
+<section class="bottom"><div class="terms"><span class="eyebrow">${bilingualMode?'TERMS &amp; CONDITIONS / <span class="ar">الشروط والأحكام</span>':'TERMS &amp; CONDITIONS'}</span><ul>${termsHtml}</ul></div><div class="totals"><div><span>${svcSubLabel||'Subtotal'}</span><strong>${qvSummaryMoney(totals.sub)}</strong></div>${totals.disc>0?'<div><span>Discount</span><strong>- '+qvSummaryMoney(totals.disc)+'</strong></div>':''}<div><span>VAT (${savedVat}%)</span><strong>${qvSummaryMoney(totals.vat)}</strong></div><div class="grand"><span>Grand Total</span><strong>${qvGrandTotalMoney(totals.net)}</strong></div></div></section>
 ${notes?'<section class="notesbox"><strong>Notes.</strong> '+escapeHtml(notes)+'</section>':''}
 <section class="signatures"><div class="sigbox">${bilingualMode?'Customer Acceptance &amp; Signature / <span class="ar">اعتماد وتوقيع العميل</span>':'Customer Acceptance &amp; Signature'}</div><div class="sigbox authorized">${quotationAuthorizationHtml()}<div>${bilingualMode?'Authorized Signature / <span class="ar">التوقيع المعتمد</span> — ':'Authorized Signature — '}${escapeHtml(co)}</div></div></section>
 <section class="thankyou">${bilingualMode?'<span class="ar">شكراً لإتاحة الفرصة لتقديم عرضنا. نتطلع إلى خدمتكم.</span><br>':''}Thank you for the opportunity to quote. We look forward to serving you.<br>${bilingualMode?'<span class="ar">لأي استفسار بخصوص هذا العرض، يرجى التواصل معنا.</span><br>':''}If you have any questions regarding this quotation, please feel free to contact us.</section><footer class="page-footer">${companyDocumentFooterHtml('quotation')}</footer></article>${attachmentHtml}<script>window.onload=function(){setTimeout(function(){window.print()},700)}<\/script></body></html>`;
