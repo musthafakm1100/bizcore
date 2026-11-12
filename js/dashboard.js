@@ -1,5 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
    BizCore V271.8 — Dashboard (approved mockup "E · Final direction", 12 Nov 2026)
+   V271.8.1 — the period works on whole months / quarter / year (target for the whole period, no future months),
+   and the header filters open BizCore menus (mockup F) instead of the browser's lists.
    Dark header with one line of filters · Needs attention (live work queues) · sales target ring and
    trend cards · Sales & gross profit (12 months) · Sales pipeline · Next 2 weeks · Receivables ·
    Top customers · Contracting jobs. Phone: one column, tiles 2 × 3, swipe cards, the 2 weeks as a list.
@@ -33,6 +35,7 @@
   const monthEnd = key => { const [y, m] = key.split('-').map(Number); return isoOf(new Date(y, m, 0)); };
   const addMonths = (key, n) => { const [y, m] = key.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return d.getFullYear() + '-' + pad(d.getMonth() + 1); };
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const monLabel = key => MON[Number(key.slice(5, 7)) - 1];
   const dmy = iso => (typeof fmtDate === 'function' ? fmtDate(iso) : iso) || '—';
@@ -350,23 +353,26 @@
   function greet() { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
   function firstName() { const u = window.currentUser || {}; const n = String(u.name || u.displayName || '').trim(); return n ? n.split(/\s+/)[0] : ''; }
 
+  /* ── V271.8.1: header filters as BizCore menus (mockup F) — Period / Activity / Customer / Salesperson / vs ── */
+  const CHEV = '<svg class="bd-chev" viewBox="0 0 10 6" width="10" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
+  function fbtn(id, label) { return `<button type="button" class="bd-f" id="${id}" aria-haspopup="dialog" aria-expanded="false"><span>${label}</span><b></b>${CHEV}</button>`; }
   function shell(root) {
     root.innerHTML = `
 <section class="bd-hero" aria-label="Dashboard header">
   <div class="bd-hero-in">
     <div class="bd-hello"><span class="bd-date" id="bd-date"></span><h2 id="bd-greet"></h2></div>
     <div class="bd-filters" role="group" aria-label="Dashboard filters">
-      <label class="bd-f"><span>Activity</span><select id="bd-f-activity" aria-label="Activity"><option value="all">All</option><option value="trading">Trading</option><option value="contracting">Contracting</option></select></label>
+      ${fbtn('bd-f-activity', 'Activity')}
       <i class="bd-sep" aria-hidden="true"></i>
       <button type="button" class="bd-step" id="bd-prev" aria-label="Previous month">‹</button>
-      <div class="bd-f bd-f-period"><span>Period</span><div data-bc-date="dash" data-bc-date-title="Period"></div></div>
+      ${fbtn('bd-f-period', 'Period')}
       <button type="button" class="bd-step" id="bd-next" aria-label="Next month">›</button>
       <i class="bd-sep" aria-hidden="true"></i>
-      <label class="bd-f"><span>Customer</span><select id="bd-f-customer" aria-label="Customer"><option value="">All</option></select></label>
+      ${fbtn('bd-f-customer', 'Customer')}
       <i class="bd-sep bd-owner-x" aria-hidden="true"></i>
-      <label class="bd-f bd-owner-x"><span>Salesperson</span><select id="bd-f-owner" aria-label="Salesperson"><option value="">All</option></select></label>
+      <span class="bd-owner-x">${fbtn('bd-f-owner', 'Salesperson')}</span>
       <i class="bd-sep" aria-hidden="true"></i>
-      <label class="bd-f"><span>vs</span><select id="bd-f-compare" aria-label="Compare with"><option value="prev">Previous period</option><option value="year">Same period last year</option><option value="none">No comparison</option></select></label>
+      ${fbtn('bd-f-compare', 'vs')}
       <button type="button" class="bd-clear" id="bd-clear" title="Clear filters" aria-label="Clear filters">${ICON.filter}</button>
     </div>
   </div>
@@ -388,36 +394,61 @@
     <div class="bd-card" id="bd-jobs-card"></div>
   </section>
 </div>`;
-    const sel = id => $(id);
-    sel('bd-f-activity').value = S.activity; sel('bd-f-compare').value = S.compare;
-    sel('bd-f-activity').addEventListener('change', e => { S.activity = e.target.value; savePrefs(); render(); });
-    sel('bd-f-compare').addEventListener('change', e => { S.compare = e.target.value; savePrefs(); render(); });
-    sel('bd-f-customer').addEventListener('change', e => { S.customer = e.target.value; render(); });
-    sel('bd-f-owner').addEventListener('change', e => { S.owner = e.target.value; render(); });
-    sel('bd-prev').addEventListener('click', () => stepMonth(-1));
-    sel('bd-next').addEventListener('click', () => stepMonth(1));
-    sel('bd-clear').addEventListener('click', clearFilters);
-    const D = window.BCDateFilter;
-    if (D) { D.register('dash', st => { S.period = st.preset === 'all' ? { preset: 'all', from: '', to: '' } : { preset: st.preset, from: st.from || '', to: st.to || '' }; olderThen(render); }); D.set('dash', S.period); relabelPeriod(); }
+    $('bd-f-activity').addEventListener('click', e => openMenu(e.currentTarget, menuActivity));
+    $('bd-f-period').addEventListener('click', e => openMenu(e.currentTarget, menuPeriod));
+    $('bd-f-customer').addEventListener('click', e => openMenu(e.currentTarget, menuCustomer));
+    $('bd-f-owner').addEventListener('click', e => openMenu(e.currentTarget, menuOwner));
+    $('bd-f-compare').addEventListener('click', e => openMenu(e.currentTarget, menuCompare));
+    $('bd-prev').addEventListener('click', () => stepMonth(-1));
+    $('bd-next').addEventListener('click', () => stepMonth(1));
+    $('bd-clear').addEventListener('click', clearFilters);
   }
-  function relabelPeriod() {
-    const host = document.querySelector('#page-dashboard [data-bc-date="dash"] .bc-date-label'); if (!host) return;
-    const p = periodNow();
-    if (!p.all && isWholeMonths(p.from, p.to) && monthKey(p.from) === monthKey(p.to)) { const k = monthKey(p.from); host.textContent = MON[+k.slice(5) - 1] + ' ' + k.slice(0, 4); }
+
+  /* periods: whole months, a quarter, a year — figures run to today, the target covers the whole period */
+  const curKey = () => monthKey(today());
+  function presetRange(p) {
+    const k = curKey(), y = k.slice(0, 4);
+    if (p === 'month') return monthRange(k);
+    if (p === 'lastmonth') return monthRange(addMonths(k, -1));
+    if (p === 'quarter') { const qs = addMonths(k, -((Number(k.slice(5)) - 1) % 3)); return { from: monthStart(qs), to: monthEnd(addMonths(qs, 2)) }; }
+    if (p === 'year') return { from: y + '-01-01', to: y + '-12-31' };
+    if (p === 'last3months') return { from: monthStart(addMonths(k, -3)), to: monthEnd(addMonths(k, -1)) };
+    return { from: '', to: '' };
   }
-  function stepMonth(n) {
-    const p = periodNow(), base = p.all ? monthKey(today()) : monthKey(p.from || today());
-    const k = addMonths(base, n);
-    S.period = { preset: k === monthKey(today()) ? 'month' : 'custom', ...monthRange(k) };
-    if (window.BCDateFilter) window.BCDateFilter.set('dash', S.period);
+  const monName = k => MON[Number(k.slice(5)) - 1] + ' ' + k.slice(0, 4);
+  const monShort = k => MON[Number(k.slice(5)) - 1];
+  const PRESETS = [
+    ['month', 'This Month', () => monName(curKey())],
+    ['lastmonth', 'Last Month', () => monName(addMonths(curKey(), -1))],
+    ['quarter', 'This Quarter', () => { const r = presetRange('quarter'); return monShort(monthKey(r.from)) + ' – ' + monShort(monthKey(r.to)); }],
+    ['year', 'This Year', () => curKey().slice(0, 4)],
+    ['last3months', 'Last 3 Months', () => { const r = presetRange('last3months'); return monShort(monthKey(r.from)) + ' – ' + monShort(monthKey(r.to)); }],
+    ['all', 'All Dates', () => ''],
+  ];
+  function setPeriod(p, range) {
+    S.period = p === 'all' ? { preset: 'all', from: '', to: '' } : { preset: p, ...(range || presetRange(p)) };
     olderThen(render);
   }
+  function periodShort() {
+    const p = S.period;
+    if (p.preset === 'all') return 'All dates';
+    if (p.preset === 'quarter') { const m = Number(p.from.slice(5, 7)); return 'Q' + Math.ceil(m / 3) + ' ' + p.from.slice(0, 4); }
+    if (p.preset === 'year') return p.from.slice(0, 4);
+    if (p.preset === 'last3months') return monShort(monthKey(p.from)) + ' – ' + monShort(monthKey(p.to)) + ' ' + p.to.slice(0, 4);
+    if (isWholeMonths(p.from, p.to) && monthKey(p.from) === monthKey(p.to)) return monName(monthKey(p.from));
+    return dmy(p.from) + ' → ' + dmy(p.to);
+  }
+  /** the month the ‹ › arrows move from; never past the current month */
+  function baseMonth() { const p = S.period; return p.preset === 'all' || !p.from ? curKey() : monthKey(p.preset === 'year' || p.preset === 'quarter' || p.preset === 'last3months' ? (p.to < today() ? p.to : today()) : p.from); }
+  function stepMonth(n) {
+    const k = addMonths(baseMonth(), n);
+    if (k > curKey()) return;
+    setPeriod(k === curKey() ? 'month' : 'monthpick', monthRange(k));
+  }
   function clearFilters() {
+    closeMenu();
     S.activity = 'all'; S.customer = ''; S.owner = ''; S.compare = 'prev'; savePrefs();
-    S.period = { preset: 'month', ...monthRange(monthKey(today())) };
-    if (window.BCDateFilter) window.BCDateFilter.set('dash', S.period);
-    ['bd-f-activity', 'bd-f-customer', 'bd-f-owner', 'bd-f-compare'].forEach(id => { const e = $(id); if (e) e.value = id === 'bd-f-activity' ? 'all' : id === 'bd-f-compare' ? 'prev' : ''; });
-    render();
+    setPeriod('month');
   }
   /** a period before the loaded months reads the older sales records first (as the registers do) */
   function olderThen(fn) {
@@ -426,26 +457,179 @@
     fn();
   }
 
-  function fillSelects() {
-    const cs = new Set(), os = new Set();
-    G('sos').forEach(x => { if (live(x)) { if (x.customer) cs.add(x.customer); if (x.ownerUid) os.add(x.ownerUid); } });
-    G('quotes').forEach(x => { if (live(x)) { if (x.company) cs.add(x.company); if (x.ownerUid) os.add(x.ownerUid); } });
-    G('rfqs').forEach(x => { if (live(x)) { if (x.company) cs.add(x.company); if (x.ownerUid) os.add(x.ownerUid); } });
+  /* the choices for the Customer and Salesperson menus */
+  function customerNames() {
+    const cs = new Set();
+    G('sos').forEach(x => { if (live(x) && x.customer) cs.add(x.customer); });
+    G('quotes').forEach(x => { if (live(x) && x.company) cs.add(x.company); });
+    G('rfqs').forEach(x => { if (live(x) && x.company) cs.add(x.company); });
     jobsList().forEach(j => { if (j.company) cs.add(j.company); });
-    const cSel = $('bd-f-customer'), oSel = $('bd-f-owner');
-    if (cSel) {
-      const names = [...cs].sort((a, b) => a.localeCompare(b));
-      const html = '<option value="">All</option>' + names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
-      if (cSel._html !== html) { cSel.innerHTML = html; cSel._html = html; }
-      cSel.value = names.includes(S.customer) ? S.customer : ''; if (!cSel.value) S.customer = '';
-    }
-    if (oSel) {
-      const owners = [...os].map(uid => ({ uid, name: userName(uid) || 'User ' + uid.slice(0, 5) })).sort((a, b) => a.name.localeCompare(b.name));
-      const html = '<option value="">All</option>' + owners.map(o => `<option value="${esc(o.uid)}">${esc(o.name)}</option>`).join('');
-      if (oSel._html !== html) { oSel.innerHTML = html; oSel._html = html; }
-      oSel.value = owners.some(o => o.uid === S.owner) ? S.owner : ''; if (!oSel.value) S.owner = '';
-      document.querySelectorAll('#page-dashboard .bd-owner-x').forEach(e => { e.hidden = owners.length < 2 && !S.owner; });
-    }
+    return [...cs].sort((a, b) => a.localeCompare(b));
+  }
+  function owners() {
+    const os = new Set();
+    ['sos', 'quotes', 'rfqs'].forEach(k => G(k).forEach(x => { if (live(x) && x.ownerUid) os.add(x.ownerUid); }));
+    return [...os].map(uid => ({ uid, name: userName(uid) || 'User ' + uid.slice(0, 5) })).sort((a, b) => a.name.localeCompare(b.name));
+  }
+  function setLabels() {
+    const lab = (id, t) => { const b = $(id); if (b) b.querySelector('b').textContent = t; };
+    lab('bd-f-activity', S.activity === 'trading' ? 'Trading' : S.activity === 'contracting' ? 'Contracting' : 'All');
+    lab('bd-f-period', periodShort());
+    if (S.customer && !customerNames().includes(S.customer)) S.customer = '';
+    lab('bd-f-customer', S.customer || 'All');
+    const os = owners();
+    if (S.owner && !os.some(o => o.uid === S.owner)) S.owner = '';
+    lab('bd-f-owner', S.owner ? (os.find(o => o.uid === S.owner) || {}).name : 'All');
+    document.querySelectorAll('#page-dashboard .bd-owner-x').forEach(e => { e.hidden = os.length < 2 && !S.owner; });
+    lab('bd-f-compare', S.compare === 'year' ? 'Same period last year' : S.compare === 'none' ? 'No comparison' : 'Previous period');
+    const nx = $('bd-next'); if (nx) nx.disabled = baseMonth() >= curKey();
+    const cl = $('bd-clear'); if (cl) cl.classList.toggle('bd-clear-on', S.activity !== 'all' || !!S.customer || !!S.owner || S.compare !== 'prev' || S.period.preset !== 'month');
+  }
+
+  /* ── the menu: a white card under its button (a bottom sheet on a phone); ↑ ↓ Enter, Esc closes ── */
+  let menu = null;
+  const isPhone = () => window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+  function closeMenu() {
+    if (!menu) return null;
+    const m = menu; menu = null;
+    m.el.remove(); if (m.dim) m.dim.remove();
+    document.removeEventListener('mousedown', m.out, true); document.removeEventListener('touchstart', m.out, true);
+    document.removeEventListener('keydown', m.key, true); window.removeEventListener('resize', m.rs);
+    const sc = document.querySelector('.content'); if (sc) sc.removeEventListener('scroll', m.rs);
+    m.btn.setAttribute('aria-expanded', 'false'); m.btn.classList.remove('bd-open');
+    return m.btn;
+  }
+  function placeMenu(el, btn) {
+    const r = btn.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+    let left = Math.min(r.left, window.innerWidth - w - 8); if (left < 8) left = 8;
+    let top = r.bottom + 6; if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+    el.style.left = left + 'px'; el.style.top = top + 'px';
+    el.style.maxHeight = Math.max(200, window.innerHeight - top - 12) + 'px';
+  }
+  function openMenu(btn, build) {
+    if (menu && menu.btn === btn) { closeMenu(); return; }
+    closeMenu();
+    const phone = isPhone();
+    const el = document.createElement('div');
+    el.className = 'bd-menu' + (phone ? ' bd-menu-sheet' : '');
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', (btn.querySelector('span') || btn).textContent.trim());
+    let dim = null;
+    if (phone) { dim = document.createElement('div'); dim.className = 'bd-menu-dim'; dim.addEventListener('click', () => closeMenu()); document.body.appendChild(dim); }
+    document.body.appendChild(el);
+    build(el);
+    if (!phone) placeMenu(el, btn);
+    const out = e => { const t = e.target; if (el.contains(t) || btn.contains(t) || (t.closest && t.closest('.bcd-pop,.bcd-dim'))) return; closeMenu(); };
+    const key = e => {
+      if (e.key === 'Escape') { if (window.BCDate && window.BCDate.isOpen && window.BCDate.isOpen()) return; e.preventDefault(); e.stopPropagation(); const b = closeMenu(); if (b) b.focus(); return; }
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      const a = document.activeElement;
+      if (a && a.classList && a.classList.contains('bcd-input')) return;
+      const items = [...el.querySelectorAll('.bd-mi')].filter(x => !x.hidden && x.offsetParent !== null);
+      if (!items.length) return;
+      e.preventDefault();
+      const i = items.indexOf(a);
+      items[e.key === 'ArrowDown' ? (i + 1) % items.length : (i <= 0 ? items.length - 1 : i - 1)].focus();
+    };
+    const rs = () => { if (!isPhone()) closeMenu(); };
+    document.addEventListener('mousedown', out, true); document.addEventListener('touchstart', out, true);
+    document.addEventListener('keydown', key, true); window.addEventListener('resize', rs);
+    const sc = document.querySelector('.content'); if (sc) sc.addEventListener('scroll', rs, { passive: true });
+    menu = { el, dim, btn, out, key, rs };
+    btn.setAttribute('aria-expanded', 'true'); btn.classList.add('bd-open');
+    const first = el.querySelector('input.bd-search') || el.querySelector('.bd-mi.bd-on') || el.querySelector('.bd-mi');
+    if (first && !phone) first.focus({ preventScroll: true });
+  }
+  /** one menu line: tick when chosen, a grey hint on the right */
+  function mi(label, hint, on, pick, extra) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'bd-mi' + (on ? ' bd-on' : '');
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.innerHTML = `<span class="bd-mi-l"><i class="bd-tick" aria-hidden="true">${on ? '✓' : ''}</i>${esc(label)}</span>${hint ? `<span class="bd-mi-h">${esc(hint)}</span>` : ''}`;
+    if (extra) Object.keys(extra).forEach(k => b.setAttribute(k, extra[k]));
+    b.addEventListener('click', () => { closeMenu(); pick(); });
+    return b;
+  }
+  function sect(el, title) { const h = document.createElement('div'); h.className = 'bd-mh'; h.textContent = title; el.appendChild(h); return h; }
+  function sheetHead(el, title) { if (!el.classList.contains('bd-menu-sheet')) return; const h = document.createElement('div'); h.className = 'bd-sheet-h'; h.innerHTML = `<b>${esc(title)}</b><button type="button" class="bd-sheet-x" aria-label="Close">✕</button>`; h.querySelector('button').addEventListener('click', () => closeMenu()); el.appendChild(h); }
+
+  function menuActivity(el) {
+    sheetHead(el, 'Activity');
+    [['all', 'All activities', ''], ['trading', 'Trading', 'Sales Orders'], ['contracting', 'Contracting', 'Jobs']].forEach(([v, l, h]) =>
+      el.appendChild(mi(l, h, S.activity === v, () => { S.activity = v; savePrefs(); render(); })));
+  }
+  function menuPeriod(el) {
+    sheetHead(el, 'Period');
+    el.classList.add('bd-menu-period');
+    const row = document.createElement('div'); row.className = 'bd-mrow';
+    const k = baseMonth();
+    row.innerHTML = `<button type="button" class="bd-mnav" aria-label="Previous month">‹</button><b>${esc(MONTHS_LONG[Number(k.slice(5)) - 1] + ' ' + k.slice(0, 4))}</b><button type="button" class="bd-mnav" aria-label="Next month"${k >= curKey() ? ' disabled' : ''}>›</button>`;
+    const [pv, nx] = row.querySelectorAll('button');
+    pv.addEventListener('click', () => { stepMonth(-1); rebuild(); });
+    nx.addEventListener('click', () => { stepMonth(1); rebuild(); });
+    function rebuild() { if (!menu || menu.el !== el) return; el.innerHTML = ''; el.classList.remove('bd-menu-period'); menuPeriod(el); if (!el.classList.contains('bd-menu-sheet')) placeMenu(el, menu.btn); }
+    el.appendChild(row);
+    PRESETS.forEach(([v, l, h]) => el.appendChild(mi(l, h(), S.period.preset === v, () => setPeriod(v), { 'data-preset': v })));
+    const box = document.createElement('div'); box.className = 'bd-custom';
+    const p = S.period, isC = p.preset === 'custom';
+    box.innerHTML = `<span class="bd-custom-t">Custom range</span><div class="bd-custom-r"><input type="text" class="bd-cd" aria-label="From date"><span aria-hidden="true">→</span><input type="text" class="bd-cd" aria-label="To date"></div><div class="bd-custom-err" hidden></div><button type="button" class="bd-apply">Apply</button>`;
+    el.appendChild(box);
+    const [fi, ti] = box.querySelectorAll('input');
+    if (window.BCDate) { window.BCDate.attach(fi, { allowEmpty: true }); window.BCDate.attach(ti, { allowEmpty: true }); }
+    if (isC) { if (window.BCDate) { window.BCDate.setISO(fi, p.from); window.BCDate.setISO(ti, p.to); } else { fi.value = p.from; ti.value = p.to; } }
+    const err = box.querySelector('.bd-custom-err');
+    box.querySelector('.bd-apply').addEventListener('click', () => {
+      const get = i => window.BCDate ? window.BCDate.getISO(i) : i.value;
+      const f = get(fi), t = get(ti);
+      const bad = m => { err.textContent = m; err.hidden = false; };
+      if (!f || !t) return bad('Enter both dates.');
+      if (f > t) return bad('The From date is after the To date.');
+      closeMenu(); setPeriod('custom', { from: f, to: t });
+    });
+  }
+  function menuCustomer(el) {
+    sheetHead(el, 'Customer');
+    el.classList.add('bd-menu-wide');
+    const names = customerNames();
+    const sw = document.createElement('label'); sw.className = 'bd-searchw';
+    sw.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" class="bd-search" placeholder="Search customer…" aria-label="Search customer" autocomplete="off">';
+    el.appendChild(sw);
+    const list = document.createElement('div'); list.className = 'bd-mlist'; el.appendChild(list);
+    list.appendChild(mi('All customers', String(names.length), !S.customer, () => { S.customer = ''; render(); }));
+    const P = periodNow(), by = new Map();
+    salesRecords().forEach(r => { if (r.cust && inRange(r.date, P.from, P.to)) by.set(r.cust, (by.get(r.cust) || 0) + r.value); });
+    const top = [...by.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const heads = [];
+    if (top.length) { heads.push(sect(list, 'Most sales · ' + periodShort())); top.forEach(([n, v]) => list.appendChild(mi(n, sar(v), S.customer === n, () => { S.customer = n; render(); }, { 'data-top': '1' }))); }
+    heads.push(sect(list, 'All A–Z'));
+    names.forEach(n => list.appendChild(mi(n, '', S.customer === n, () => { S.customer = n; render(); }, { 'data-name': n.toLowerCase() })));
+    const none = document.createElement('p'); none.className = 'bd-mnone'; none.textContent = 'No customer matches.'; none.hidden = true; list.appendChild(none);
+    const inp = sw.querySelector('input');
+    inp.addEventListener('input', () => {
+      const q = inp.value.trim().toLowerCase(); let shown = 0;
+      list.querySelectorAll('.bd-mi').forEach(b => {
+        if (b.hasAttribute('data-name')) { const ok = !q || b.getAttribute('data-name').includes(q); b.hidden = !ok; if (ok) shown++; }
+        else b.hidden = !!q;   // "All customers" and the top list hide while searching
+      });
+      heads.forEach(h => { h.hidden = !!q; });
+      none.hidden = !q || shown > 0;
+    });
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { const f = [...list.querySelectorAll('.bd-mi')].find(b => !b.hidden); if (f) { e.preventDefault(); f.click(); } }
+      if (e.key === 'ArrowDown') { const f = [...list.querySelectorAll('.bd-mi')].find(b => !b.hidden); if (f) { e.preventDefault(); e.stopPropagation(); f.focus(); } }
+    });
+  }
+  function menuOwner(el) {
+    sheetHead(el, 'Salesperson');
+    el.appendChild(mi('All salespeople', '', !S.owner, () => { S.owner = ''; render(); }));
+    owners().forEach(o => el.appendChild(mi(o.name, '', S.owner === o.uid, () => { S.owner = o.uid; render(); })));
+  }
+  function menuCompare(el) {
+    sheetHead(el, 'Compare with');
+    const keep = S.compare;
+    const hintFor = v => { S.compare = v; const c = compareRange(); S.compare = keep; return c ? (sd(c.from) === sd(c.to) ? dmy(c.from) : sd(c.from) + ' – ' + sd(c.to) + '-' + c.to.slice(0, 4)) : ''; };
+    [['prev', 'Previous period'], ['year', 'Same period last year'], ['none', 'No comparison']].forEach(([v, l]) =>
+      el.appendChild(mi(l, v === 'none' ? '' : hintFor(v), S.compare === v, () => { S.compare = v; savePrefs(); render(); })));
   }
 
   function paintTiles() {
@@ -636,7 +820,7 @@ ${open.length ? open.map(j => {
       const now = new Date();
       $('bd-date').textContent = now.toLocaleDateString('en-GB', { weekday: 'long' }) + ', ' + dmy(today());
       const fn = firstName(); $('bd-greet').textContent = greet() + (fn ? ', ' + fn : '');
-      fillSelects(); relabelPeriod();
+      setLabels();
       const P = periodNow(), C = compareRange(), list = salesRecords();
       paintTiles(); paintKpis(list, P, C); paintChart(list, P); paintPipe(P); paintCalendar(); paintRecv(); paintCustomers(list, P); paintJobs();
       const row = $('bd-sales-row'); if (row) row.hidden = $('bd-chart-card').hidden && $('bd-pipe-card').hidden;
@@ -665,7 +849,7 @@ ${open.length ? open.map(j => {
       if (kind === 'job') return window.BCJobs && window.BCJobs.view(id);
     } catch (e) { console.error('[BizCore] Dashboard open:', e); }
   }
-  function pickCustomer(name) { S.customer = S.customer === name ? '' : name; const s = $('bd-f-customer'); if (s) s.value = S.customer; render(); }
+  function pickCustomer(name) { S.customer = S.customer === name ? '' : name; render(); }
 
   /* the monthly sales target — Administration rights (saved with the company settings, settings/main) */
   function editTarget() {

@@ -49,7 +49,10 @@ test('Dashboard V271.8: figures, filters, target, roles and phone layout', { tim
 
     // header: greeting and the filter line (one line, the standard date filter inside)
     assert.match(await p.textContent('#bd-greet'), /Alice/);
-    assert.ok(await p.isVisible('#page-dashboard [data-bc-date="dash"] .bc-date-btn'), 'period filter shown');
+    assert.ok(await p.isVisible('#bd-f-period'), 'period filter shown');
+    const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], now = new Date();
+    assert.equal(await p.textContent('#bd-f-period b'), MON[now.getMonth()] + ' ' + now.getFullYear());
+    assert.ok(await p.isDisabled('#bd-next'), 'no future months');
     const filterRow = await p.evaluate(() => { const r = document.querySelector('.bd-filters'); return { h: r.getBoundingClientRect().height, wrap: getComputedStyle(r).flexWrap }; });
     assert.equal(filterRow.wrap, 'nowrap'); assert.ok(filterRow.h < 44, 'filters stay on one line');
 
@@ -78,14 +81,49 @@ test('Dashboard V271.8: figures, filters, target, roles and phone layout', { tim
 
     // customer filter (click a top customer)
     await p.click('#bd-cust-card .bd-cust[data-c="Al Noor Trading"]'); await sleep(300);
-    assert.equal(await p.$eval('#bd-f-customer', s => s.value), 'Al Noor Trading');
+    assert.equal(await p.textContent('#bd-f-customer b'), 'Al Noor Trading');
     assert.match(await p.textContent('.bd-ring-card'), /SAR 4K/);
     await p.click('#bd-clear'); await sleep(300);
-    assert.equal(await p.$eval('#bd-f-customer', s => s.value), '');
+    assert.equal(await p.textContent('#bd-f-customer b'), 'All');
+
+    // V271.8.1 — the Customer menu: search, pick, Esc
+    await p.click('#bd-f-customer'); await p.waitForSelector('.bd-menu .bd-search');
+    await p.fill('.bd-menu .bd-search', 'gulf'); await sleep(150);
+    assert.deepEqual(await p.$$eval('.bd-menu .bd-mi:not([hidden])', b => b.map(x => x.textContent.trim())), ['Gulf Supplies']);
+    await p.keyboard.press('Enter'); await sleep(300);
+    assert.equal(await p.$('.bd-menu'), null, 'menu closed after picking');
+    assert.equal(await p.textContent('#bd-f-customer b'), 'Gulf Supplies');
+    assert.match(await p.textContent('.bd-ring-card'), /SAR 3K/);
+    await p.click('#bd-f-customer'); await p.waitForSelector('.bd-menu');
+    await p.keyboard.press('Escape'); await sleep(150);
+    assert.equal(await p.$('.bd-menu'), null, 'Esc closes');
+    await p.click('#bd-clear'); await sleep(300);
+
+    // V271.8.1 — "This Month" from the Period menu keeps the whole month (target, days left)
+    await p.click('#bd-f-period'); await p.waitForSelector('.bd-menu [data-preset="month"]');
+    await p.click('.bd-menu [data-preset="month"]'); await sleep(400);
+    const ringM = await p.textContent('.bd-ring-card');
+    const left = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate();
+    assert.match(ringM, new RegExp('of SAR 20K · ' + left + ' day'), ringM);
+    // This Year: target for 12 months
+    await p.click('#bd-f-period'); await p.click('.bd-menu [data-preset="year"]'); await sleep(400);
+    assert.equal(await p.textContent('#bd-f-period b'), String(now.getFullYear()));
+    assert.match(await p.textContent('.bd-ring-card'), /of SAR 240K/);
+    // custom range
+    await p.click('#bd-f-period'); await p.waitForSelector('.bd-menu .bd-apply');
+    const cds = await p.$$('.bd-menu .bd-cd');
+    await cds[0].fill('01-10-2026'); await cds[0].press('Tab'); await cds[1].fill('31-10-2026'); await cds[1].press('Tab');
+    await p.click('.bd-menu .bd-apply'); await sleep(400);
+    assert.equal(await p.textContent('#bd-f-period b'), 'Oct 2026');
+    await p.click('#bd-clear'); await sleep(300);
+    if (shots) {
+      await p.click('#bd-f-period'); await sleep(250); await p.screenshot({ path: join(shots, 'menu-period.png'), clip: { x: 500, y: 40, width: 940, height: 640 } }); await p.keyboard.press('Escape');
+      await p.click('#bd-f-customer'); await sleep(250); await p.screenshot({ path: join(shots, 'menu-customer.png'), clip: { x: 500, y: 40, width: 940, height: 640 } }); await p.keyboard.press('Escape');
+    }
 
     // previous month with the stepper: October has the four sample orders (dated 05-10-2026)
     await p.click('#bd-prev'); await sleep(500);
-    assert.match(await p.textContent('#page-dashboard [data-bc-date="dash"] .bc-date-label'), /Oct 2026/);
+    assert.equal(await p.textContent('#bd-f-period b'), 'Oct 2026');
     assert.match(await p.textContent('.bd-ring-card'), /Target reached|Below target/);
     await p.click('#bd-next'); await sleep(400);
 
@@ -105,7 +143,8 @@ test('Dashboard V271.8: figures, filters, target, roles and phone layout', { tim
     await p.setViewportSize({ width: 390, height: 844 }); await sleep(500);
     const ph = await p.evaluate(() => ({ cols: getComputedStyle(document.getElementById('bd-tiles')).gridTemplateColumns.split(' ').length, agenda: getComputedStyle(document.querySelector('.bd-agenda')).display, days: getComputedStyle(document.querySelector('.bd-days')).display, wide: document.documentElement.scrollWidth > window.innerWidth + 2 }));
     assert.equal(ph.cols, 2); assert.equal(ph.agenda, 'flex'); assert.equal(ph.days, 'none'); assert.equal(ph.wide, false, 'no sideways page scroll on a phone');
-    if (shots) { await p.setViewportSize({ width: 390, height: 2600 }); await sleep(300); await p.screenshot({ path: join(shots, 'dash-phone.png') }); await p.setViewportSize({ width: 390, height: 844 }); }
+    if (shots) { await p.setViewportSize({ width: 390, height: 2600 }); await sleep(300); await p.screenshot({ path: join(shots, 'dash-phone.png') }); await p.setViewportSize({ width: 390, height: 844 }); await sleep(200);
+      await p.click('#bd-f-period'); await sleep(300); await p.screenshot({ path: join(shots, 'menu-phone.png') }); await p.click('.bd-sheet-x'); await sleep(200); }
     assert.deepEqual(errors, [], 'no page errors: ' + errors.join(' | '));
 
     // a sales user without the cost right sees no profit
