@@ -105,6 +105,36 @@
     if (diff) { let big = 0; weights.forEach((w, i) => { if (w > weights[big]) big = i; }); parts[big] = r2(parts[big] + diff); }
     return parts;
   }
+  /** V271.9: rates in whole halalas whose amounts (qty × rate) add up to `goal` where possible. */
+  function fitRates(items, goal) {
+    if (!items.length) return;
+    const qOf = x => x.qty > 0 ? x.qty : 1;
+    const whole = x => Math.abs(qOf(x) - Math.round(qOf(x))) < 1e-9;
+    items.forEach(x => { x._lo = Math.floor(x.offer / qOf(x) * 100 + 1e-6) / 100; x.offer = r2(x._lo * qOf(x)); });
+    const goalC = Math.round(goal * 100);
+    let D = goalC - Math.round(items.reduce((a, x) => r2(a + x.offer), 0) * 100);   // cents still to add (≥ 0)
+    const one = items.find(x => qOf(x) === 1);
+    const rest = items.filter(x => x !== one && whole(x));
+    const steps = rest.map(x => Math.round(qOf(x)));   // +1 halala on the rate adds qty cents
+    const cap = D;
+    if (D > 0 && cap > 0 && cap <= 300000 && rest.length <= 400) {
+      // subset-sum: the largest total ≤ D that the +1 halala steps can make
+      const from = new Int32Array(cap + 1).fill(-2); from[0] = -1;
+      steps.forEach((w, i) => { if (w > 0) for (let v = w; v <= cap; v++) if (from[v] === -2 && from[v - w] !== -2) from[v] = i; });   // a rate may move several halalas
+      let v = cap; while (v > 0 && from[v] === -2) v--;
+      const pick = v, add = new Map(); let u = pick; while (u > 0) { const i = from[u]; add.set(i, (add.get(i) || 0) + 1); u -= steps[i]; }
+      add.forEach((k, i) => { const x = rest[i]; x._lo = r2(x._lo + k / 100); x.offer = r2(x._lo * qOf(x)); });
+      D -= pick;
+    } else if (D > 0 && !one) {
+      for (const x of rest.slice().sort((a, b) => qOf(b) - qOf(a))) { const w = Math.round(qOf(x)); if (w <= D) { x._lo = r2(x._lo + 0.01); x.offer = r2(x._lo * qOf(x)); D -= w; } }
+    }
+    if (D !== 0 && one) { one.offer = r2(one.offer + D / 100); D = 0; }
+    if (D > 0) {   // not reachable exactly: the nearest amount — one more rate up when that is closer than staying below
+      const x = items.filter(whole).sort((a, b) => qOf(a) - qOf(b))[0] || items[0], w = Math.round(qOf(x));
+      if (w - D < D) x.offer = r2((Math.round(x.offer / qOf(x) * 100) + 1) / 100 * qOf(x));
+    }
+    items.forEach(x => { delete x._lo; });
+  }
   /** Everything the screen shows, from one estimate.
       V271.7: items may carry a typed selling price (🔒) — it is kept exactly; the other items share the selling price
       built from their cost (overheads + contingency + markup), and the rounding of the lump sum goes to them only. */
@@ -136,7 +166,8 @@
       markup = r2(fTotal * mk); freeSell = r2(fTotal + markup);
     }
     const sell = r2(freeSell + lockedSum);
-    const offer = num(est.roundTo) > 0 ? r2(num(est.roundTo)) : sell;
+    let offer = num(est.roundTo) > 0 ? r2(num(est.roundTo)) : sell;
+    const target = offer;
     // each item's selling amount: typed ones as typed; the others share the calculated selling price by cost
     const fs = distribute(freeSell, free.map(x => x.cost.total));
     free.forEach((x, i) => { x.sell = fs[i]; });
@@ -148,6 +179,11 @@
     } else {
       const ao = distribute(offer, flat.map(x => x.sell)); flat.forEach((x, i) => { x.offer = ao[i]; });
     }
+    // V271.9: every calculated item gets a rate in whole halalas, so its amount is exactly qty × rate (no hidden halala
+    // discounts on the quotation). Each rate is rounded down or up so that the lines add up to the lump sum; an item with
+    // qty 1 takes any rest. Only when no choice reaches it exactly does the lump sum move to the nearest reachable amount.
+    fitRates(flat.filter(x => !x.locked || x.typed !== x.offer), r2(target - flat.filter(x => x.locked && x.typed === x.offer).reduce((a, x) => r2(a + x.offer), 0)));
+    offer = r2(flat.reduce((a, x) => r2(a + x.offer), 0));
     flat.forEach(x => { x.sellRate = x.qty > 0 ? r2(x.sell / x.qty) : 0; x.costRate = x.qty > 0 ? r2(x.cost.total / x.qty) : 0;
       const lc = x.cost.total * (1 + oh + ct); x.markupPct = lc > 0 ? r2((x.sell / lc - 1) * 100) : null; });
     secs.forEach(s => { s.sell = r2(s.items.reduce((a, x) => a + x.sell, 0)); s.offer = r2(s.items.reduce((a, x) => a + x.offer, 0)); });
@@ -558,7 +594,7 @@ ${c.lockedCount ? `<div class="es-split"><div><span>Calculated · ${c.itemCount 
 ${chips.length ? `<div class="es-rchips">${chips.join('')}</div>` : ''}
 ${diff && c.lockedCount ? `<div class="es-note2" style="margin:0 0 4px">The ${fmt(Math.abs(diff))} ${diff > 0 ? 'added by' : 'taken off by'} rounding goes to the calculated items — typed prices stay exactly as typed.</div>` : ''}
 <div class="es-res" data-state="${c.pricedNoCost && ms.state === 'ok' ? 'low' : ms.state}">
-<div class="es-kv"><span>Quoted Price</span><b>${fmt(c.offer)}</b></div>
+<div class="es-kv"><span>Quoted Price</span><b>${fmt(c.offer)}</b></div>${num(E.est.roundTo) > 0 && c.offer !== r2(num(E.est.roundTo)) ? `<div class="es-note2">Rates are rounded to the halala — with these quantities the lines make ${fmt(c.offer)}, the nearest to ${fmt(r2(num(E.est.roundTo)))}.</div>` : ''}
 <div class="es-kv"><span>Profit${c.pricedNoCost ? ' (costed items)' : ''}</span><b>${fmt(c.profit)}</b></div>
 <div class="es-kv"><span>Margin · Markup</span><b>${c.costedOffer > 0 && c.totalCost > 0 ? fq(r2(c.marginPct)) + ' % · ' + fq(r2(c.markupPct)) + ' %' : '—'}</b></div>
 <div class="es-st">${esc(ms.text)}</div>
@@ -1494,12 +1530,7 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     if (!card) { card = document.createElement('div'); card.id = 'qt-est-card'; card.className = 'qt-est-card'; const hd = side.querySelector('.qt-side-hd'); hd ? hd.after(card) : side.prepend(card); }
     card.hidden = false;
     card.innerHTML = `<div class="qt-est-h">Contracting · <b>Estimation V${esc(ctx.version)}</b>${ctx.rfqNo ? ' · ' + esc(ctx.rfqNo) : ''}</div>
-<div class="qt-est-l">Print Style</div>
-<label class="qt-est-o"><input type="radio" name="qt-est-style" value="lumpsum"${!STYLES[ctx.style] || ctx.style === 'lumpsum' ? ' checked' : ''}><span><b>Lump Sum Only</b><small>Sections with their scope · one total</small></span></label>
-<label class="qt-est-o"><input type="radio" name="qt-est-style" value="sections"${ctx.style === 'sections' ? ' checked' : ''}><span><b>With Section Totals</b><small>Each section shows its amount · total</small></span></label>
-<label class="qt-est-o"><input type="radio" name="qt-est-style" value="grouped"${ctx.style === 'grouped' ? ' checked' : ''}><span><b>Section Total with Item Rates</b><small>The section line carries its total · items show qty, unit and rate</small></span></label>
-<label class="qt-est-c"><input type="checkbox" id="qt-est-qty"${ctx.showQty !== false ? ' checked' : ''}> Show Qty / Unit on print</label>
-<div class="qt-est-n">Lump sum ${fmt(ctx.offer)} from the estimate. Qty, rates and line discounts are locked — only the quotation discount can be given. To change the price, make a new estimate version.<br>Rates are rounded up to the halala; the few halalas shown as line discounts keep every line exactly at its share of the lump sum (they are not printed).</div>`;
+<div class="qt-est-n">Print style: <b>${esc(({ lumpsum: 'Lump Sum Only', sections: 'With Section Totals', grouped: 'Section Total with Item Rates' })[ctx.style] || 'Lump Sum Only')}</b> — chosen at Print / PDF.<br>Lump sum ${fmt(ctx.offer)} from the estimate. Qty and rates are locked — only the quotation discount can be given. To change the price, make a new estimate version.</div>`;
     card.onchange = e => {
       if (e.target.name === 'qt-est-style') ctx.style = STYLES[e.target.value] ? e.target.value : 'lumpsum';
       if (e.target.id === 'qt-est-qty') ctx.showQty = e.target.checked;

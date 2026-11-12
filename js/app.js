@@ -13718,9 +13718,30 @@ async function printWithSelectedTemplate() {
   try { localStorage.setItem('dtq_settings', JSON.stringify(settings)); } catch(e){}
   closeModal('template-picker-modal');
   const sig=document.getElementById('qout-signature'), stamp=document.getElementById('qout-stamp');
-  if(sig)sig.checked=false;if(stamp)stamp.checked=false; refreshQuotationOutputOptions(); if(window.BCScope) BCScope.paintPrintOption(quotations.find(x=>x.id===_printQID));
+  if(sig)sig.checked=false;if(stamp)stamp.checked=false; refreshQuotationOutputOptions(); bcPaintPrintStyle(quotations.find(x=>x.id===_printQID),tpl); if(window.BCScope) BCScope.paintPrintOption(quotations.find(x=>x.id===_printQID));
   { const dn=document.getElementById('qout-draft'), qq=quotations.find(x=>x.id===_printQID); if(dn) dn.hidden=!(qq&&(qq.status||'Draft')==='Draft'&&(typeof bcCan!=='function'||bcCan('quotation','e'))); }   // V271.7.5: a reminder to mark it Sent
   (bcRaiseModal('quotation-output-modal'),openModalWithSize('quotation-output-modal'));
+}
+/* V271.9: the print style of a quotation made from an estimate is chosen here (not on the quotation screen) and remembered
+   on the quotation, so the next print / PDF and the view use it too. */
+const BC_PRINT_STYLES=[['lumpsum','Lump Sum Only','sections with their scope · one total'],['sections','With Section Totals','each section shows its amount · line amounts'],['grouped','Section Total with Item Rates','qty, unit, rate and amount per line · a total under each section']];
+function bcPaintPrintStyle(q,tpl){
+  const m=document.getElementById('quotation-output-modal'); if(!m) return;
+  let box=document.getElementById('qout-style');
+  if(!box){ const body=m.querySelector('.qout-body')||m.querySelector('.modal-body'); if(!body) return; box=document.createElement('div'); box.id='qout-style'; box.className='qs-printopt'; const opts=body.querySelector('.qout-options'); opts?opts.after(box):body.appendChild(box); }
+  const e=q&&q.estimate; box.hidden=!(e&&tpl==='servicequote');
+  if(box.hidden) return;
+  const st=BC_PRINT_STYLES.some(x=>x[0]===e.style)?e.style:'lumpsum';
+  box.innerHTML='<div class="qs-po-h">Print style</div>'+BC_PRINT_STYLES.map(([v,t,d])=>'<label><input type="radio" name="qout-st" value="'+v+'"'+(v===st?' checked':'')+'> <span><b>'+t+'</b> — '+d+'</span></label>').join('')
+    +'<label><input type="checkbox" id="qout-st-qty"'+(e.showQty!==false?' checked':'')+'> <span>Show Qty / Unit</span></label><div style="font-size:11.5px;color:#64748b">Remembered for this quotation.</div>';
+}
+/** at Generate: the chosen print style goes on the quotation (memory now; saved when the user may edit quotations) */
+function bcTakePrintStyle(q){
+  const box=document.getElementById('qout-style'); if(!box||box.hidden||!q||!q.estimate) return;
+  const st=(box.querySelector('input[name="qout-st"]:checked')||{}).value||q.estimate.style||'lumpsum', sq=!!document.getElementById('qout-st-qty')?.checked;
+  if(q.estimate.style===st&&(q.estimate.showQty!==false)===sq) return;
+  q.estimate.style=st; q.estimate.showQty=sq;
+  if(typeof bcCan!=='function'||bcCan('quotation','e')) Promise.resolve(saveQuotations()).catch(()=>{});
 }
 function refreshQuotationOutputOptions(){
   const sig=document.getElementById('qout-signature'),stamp=document.getElementById('qout-stamp');
@@ -13757,6 +13778,7 @@ async function qoutMarkSentAndPrint(){
 function generateQuotationOutput(){
   { const qq = quotations.find(x => x.id === _printQID); if (qq && isProvisionalNumber(qq.qno)) { closeModal('quotation-output-modal'); ensureFinalQuotationNumber(_printQID); return; } }
   _quotationOutputOptions={signature:!!document.getElementById('qout-signature')?.checked,stamp:!!document.getElementById('qout-stamp')?.checked};
+  bcTakePrintStyle(quotations.find(x=>x.id===_printQID));   // V271.9
   const _scopeMode=window.BCScope?BCScope.chosenPrintMode():'';   // V271.6: long scope inline / Annexure A
   closeModal('quotation-output-modal'); logQuotationOutput(); const tpl=_pendingQuotationTemplate||'erpbox';
   if(window.BCScope) BCScope.printBegin(quotations.find(x=>x.id===_printQID),tpl==='professional'?'inline':_scopeMode);
@@ -13882,7 +13904,7 @@ function printQuotationProductA4(id, imageVariant){
       if(it.lineType==='note'){ out.push('<tr class="note standalone-note'+(it.textHtml?' bc-rt-row':'')+'"><td></td><td colspan="'+(ecols-1)+'">'+quotationPrintLineNoteHtml(it.text||it.desc||'',quotationEffectiveNoteStyle(q,it),it.textHtml)+'</td></tr>'); return; }
       if(sec<0) sec=0;
       n++;
-      out.push('<tr'+(it.descHtml||it.scopeKey||it.scopePreview?' class="bc-rt-row"':'')+'><td class="c">'+letter(sec)+n+'</td><td><div class="desc">'+bcLineDescHtml(it)+'</div></td>'+(showQ?'<td class="c">'+escapeHtml(String(it.qty??''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td>':'')+(rates?'<td class="r">'+qvLineUnitMoney(it.up)+'</td>':'')+(amt?'<td class="r"></td>':'')+'</tr>');
+      out.push('<tr'+(it.descHtml||it.scopeKey||it.scopePreview?' class="bc-rt-row"':'')+'><td class="c">'+letter(sec)+n+'</td><td><div class="desc">'+bcLineDescHtml(it)+'</div></td>'+(showQ?'<td class="c">'+escapeHtml(String(it.qty??''))+'</td><td class="c">'+escapeHtml(it.uom||'')+'</td>':'')+(rates?'<td class="r">'+qvLineUnitMoney(it.up)+'</td>':'')+(amt?'<td class="r">'+qvLineAmountMoney(quoteLineNet(it))+'</td>':'')+'</tr>');   // V271.9: the line amount
     });
     flush();
     rows=out.join('')||rows;
