@@ -6339,7 +6339,8 @@ async function saveQuotation(mode='save', opts={}) {
     taxEffectiveFrom: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.taxEffectiveFrom||activeTaxSettings().effectiveFrom) : activeTaxSettings(document.getElementById('f-date')?.value).effectiveFrom,
     vatRate: qtVatPercent(),
     vatSource: capturedEditingId ? (quotations.find(x=>x.id===capturedEditingId)?.vatSource||'Document Snapshot') : 'Tax Master Snapshot',
-    ...(window._pendingEstimate&&typeof window.bcEstQuoteBlock==='function'?{estimate:window.bcEstQuoteBlock()}:{}),   // V271.2: Contracting estimate (print style, section amounts)
+    ...(window._pendingEstimate&&typeof window.bcEstQuoteBlock==='function'?{estimate:window.bcEstQuoteBlock()}
+      :prevQ&&prevQ.estimate?{estimate:JSON.parse(JSON.stringify(prevQ.estimate))}:{}),   // V271.2: Contracting estimate (print style, section amounts); V271.8.2: an edit never drops it
     ...(prevQ&&prevQ.jobId?{jobId:prevQ.jobId,jobNo:prevQ.jobNo||''}:{}),
     ...(window.BCScope?BCScope.quoteFields(_scopes,prevQ):{}),   // V271.6: default work category, body record, RFQ scope used
     items, custId:selectedCustId, ...quotationItemKeysField(items),   // V270.1.3: itemKeys for Selling Price History

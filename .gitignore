@@ -1,0 +1,5 @@
+node_modules/
+*.log
+service-account*.json
+bizcore-backup-*.json
+emulator/firestore.rules

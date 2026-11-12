@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    { "collectionGroup": "purchaseInvoices", "queryScope": "COLLECTION",
+      "fields": [ { "fieldPath": "itemKeys", "arrayConfig": "CONTAINS" }, { "fieldPath": "date", "order": "DESCENDING" } ] },
+    { "collectionGroup": "purchaseInvoices", "queryScope": "COLLECTION",
+      "fields": [ { "fieldPath": "itemKeys", "arrayConfig": "CONTAINS" }, { "fieldPath": "supplierId", "order": "ASCENDING" }, { "fieldPath": "date", "order": "DESCENDING" } ] },
+    { "collectionGroup": "quotations", "queryScope": "COLLECTION",
+      "fields": [ { "fieldPath": "itemKeys", "arrayConfig": "CONTAINS" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "date", "order": "DESCENDING" } ] },
+    { "collectionGroup": "quotations", "queryScope": "COLLECTION",
+      "fields": [ { "fieldPath": "itemKeys", "arrayConfig": "CONTAINS" }, { "fieldPath": "custId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "date", "order": "DESCENDING" } ] }
+  ],
+  "fieldOverrides": []
+}

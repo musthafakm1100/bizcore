@@ -169,6 +169,30 @@ service cloud.firestore {
       allow update: if (canW(['quotation']) || canC(['salesOrder'])) && ownOk('quotation', resource.data);
       allow delete: if canX(['quotation']) && ownOk('quotation', resource.data);
     }
+    // V271.6: the long scope of work of a quotation's lines — one body record per quotation (quotations/{id}/bodies/main),
+    // read only when the quotation is opened, written in the same commit as the quotation. Never deleted from the app.
+    match /quotations/{qId}/bodies/{bid} {
+      function qPath() { return /databases/$(database)/documents/quotations/$(qId); }
+      allow read: if canV(['quotation']) && ownOk('quotation', get(qPath()).data);
+      allow create, update: if bid == 'main' && (canC(['quotation']) || canW(['quotation']))
+        && existsAfter(qPath()) && ownOk('quotation', getAfter(qPath()).data)
+        && request.resource.data.qid is string && request.resource.data.qid.replace('/', '_') == qId
+        && request.resource.data.scopes is map && request.resource.data.scopes.size() <= 400;
+      allow delete: if isAdmin();
+    }
+    // V271.6: Text Blocks (Master Data → Proposal Text). Inserting one needs only Quotations; its use count may then be
+    // moved. svc_{item} = the standard scope of a service item, saved by the item form (Products rights).
+    match /textBlocks/{id} {
+      function svc() { return id.matches('^svc_.*'); }
+      function onlyUse() { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedCount', 'lastUsed']); }
+      allow read: if canV(['textBlocks', 'quotation', 'products']);
+      allow create: if request.resource.data.id == id && request.resource.data.html is string
+        && (svc() ? (canC(['products']) || canW(['products'])) : canC(['textBlocks']));
+      allow update: if request.resource.data.id == resource.data.id
+        && (svc() ? (canC(['products']) || canW(['products']))
+                  : (canE(['textBlocks']) || canX(['textBlocks']) || (canV(['quotation']) && onlyUse())));
+      allow delete: if isAdmin();
+    }
     // V270.4.9: master records. A VAT number belongs to one customer (and to one supplier): a customer / supplier whose
     // VAT number is new or changed must claim it in partyVat/{list}_{VAT} in the same commit (js/master-service.mjs).
     // A record's system code (CUS-00001 …) never changes once given (a temporary offline code …-OFF-… may be replaced).
@@ -261,12 +285,100 @@ service cloud.firestore {
     }
     // V271.2: Contracting jobs (from a won estimate quotation) — the Sales Orders rights. Number on save (counters).
     match /jobs/{id} {
-      allow read: if canV(['salesOrder', 'quotation']);
+      // V271.3: also read by those who charge costs to a job (purchase invoices, job expenses, stock issued to a job)
+      allow read: if canV(['salesOrder', 'quotation', 'purchaseInvoice', 'cash', 'stock']);
       allow create: if canC(['salesOrder']) && request.resource.data.id == id && request.resource.data.jobNo is string
         && request.resource.data.quotationId is string && request.resource.data.contractValue is number;
       allow update: if (canE(['salesOrder']) || canC(['salesOrder'])) && request.resource.data.id == resource.data.id
         && request.resource.data.jobNo == resource.data.jobNo && request.resource.data.quotationId == resource.data.quotationId;
       allow delete: if isAdmin();
+    }
+    // V271.6: the scope the customer accepted — copied from the quotation when the job is created, in the same commit;
+    // frozen afterwards (never changed or deleted from the app).
+    match /jobs/{jobId}/scope/{sid} {
+      allow read: if canV(['salesOrder', 'quotation', 'purchaseInvoice', 'cash', 'stock']);
+      allow create: if sid == 'main' && canC(['salesOrder']) && request.resource.data.jobId == jobId
+        && request.resource.data.lines is list && request.resource.data.lines.size() <= 600
+        && !exists(/databases/$(database)/documents/jobs/$(jobId))
+        && existsAfter(/databases/$(database)/documents/jobs/$(jobId));
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+    // V271.3: Job Expenses — written with their cash-ledger entry (kind 'job-expense') in one commit; never deleted,
+    // a wrong one is cancelled (Voided) with a reason and its entry is voided with it. Cash & Bank → Create / Cancel.
+    match /jobExpenses/{jeId} {
+      // V271.3.2: one submission from the site in-charge — lines on their own dates, paid from several accounts or from
+      // his own money; one ledger entry per date + account (entryIds), written in the same commit
+      allow read: if canV(['salesOrder', 'quotation', 'cash']);
+      allow create: if canC(['cash']) && jeCreateOk(request.resource.data);
+      allow update: if canX(['cash']) && jeVoidOk(request.resource.data);
+      // a reimbursement (or its cancel) moves only the paid-back figure, with the reimbursement in the same commit
+      allow update: if canC(['cash']) && jeReimburseOk(request.resource.data);
+      allow delete: if false;
+      function entryPath(id) { return /databases/$(database)/documents/cashEntries/$(id); }
+      function jeCreateOk(d) {
+        return d.id == jeId && jeId.matches('^JE-[A-Za-z0-9_-]{8,200}$')
+          && d.status == 'Posted' && d.revision == 1
+          && d.createdByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.jeNo is string && d.jeNo.size() >= 1
+          && d.jobId is string && exists(/databases/$(database)/documents/jobs/$(d.jobId))
+          && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && d.lines is list && d.lines.size() >= 1 && d.lines.size() <= 60
+          && d.amount is number && d.amount > 0 && d.vat is number && d.vat >= 0 && near(d.total, d.amount + d.vat)
+          && d.ownMoney is number && d.ownMoney >= 0 && near(d.paidFromAccounts, d.total - d.ownMoney)
+          && d.reimbursed == 0 && d.reimburseStatus == (d.ownMoney > 0 ? 'open' : 'none')
+          && d.entryIds is list && d.entryIds.size() <= 20
+          && (d.paidFromAccounts > 0 ? d.entryIds.size() >= 1 : d.entryIds.size() == 0)
+          && (d.entryIds.size() == 0
+              || (getAfter(entryPath(d.entryIds[0])).data.kind == 'job-expense' && getAfter(entryPath(d.entryIds[0])).data.jobExpenseId == jeId
+                  && getAfter(entryPath(d.entryIds[0])).data.voucherNo == d.jeNo));
+      }
+      function jeVoidOk(d) {
+        let r = resource.data;
+        return r.status == 'Posted' && d.status == 'Voided'
+          && request.resource.data.diff(r).affectedKeys().hasOnly(['status', 'voidReason', 'voidedAt', 'voidedBy', 'voidedByUid', 'reimburseStatus', 'revision', 'updatedAt', 'updatedBy', 'updatedByUid'])
+          && d.revision == r.revision + 1 && d.voidedByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.voidReason is string && d.voidReason.size() >= 1
+          && r.get('reimbursed', 0) == 0 && d.get('reimburseStatus', 'none') in [r.get('reimburseStatus', 'none'), 'none']
+          && (r.get('entryIds', []).size() == 0 || getAfter(entryPath(r.entryIds[0])).data.void == true)
+          && (r.get('entryId', '') == '' || getAfter(entryPath(r.entryId)).data.void == true);
+      }
+      function jeReimburseOk(d) {
+        let r = resource.data;
+        let rb = getAfter(/databases/$(database)/documents/reimbursements/$(d.lastReimbursementId)).data;
+        return r.status == 'Posted' && d.status == 'Posted'
+          && request.resource.data.diff(r).affectedKeys().hasOnly(['reimbursed', 'reimburseStatus', 'lastReimbursementOp', 'lastReimbursementId', 'revision', 'updatedAt', 'updatedBy', 'updatedByUid'])
+          && d.revision == r.revision + 1 && d.updatedByUid == request.auth.uid
+          && d.reimbursed is number && d.reimbursed >= 0 && d.reimbursed <= r.ownMoney + 0.005
+          && d.reimburseStatus == (r.ownMoney - d.reimbursed <= 0.004 ? 'settled' : 'open')
+          && rb.lastOp == d.lastReimbursementOp && jeId in rb.jobExpenseIds;
+      }
+    }
+    // V271.3.2: own money paid back to the site in-charge — with its cash-ledger entry (kind 'staff-reimbursement') and the
+    // submissions' paid-back figure, in one commit. Never deleted; cancelled with a reason (everything goes back).
+    match /reimbursements/{rbId} {
+      allow read: if canV(['salesOrder', 'quotation', 'cash']);
+      allow create: if canC(['cash']) && rbCreateOk(request.resource.data);
+      allow update: if canX(['cash']) && rbVoidOk(request.resource.data);
+      allow delete: if false;
+      function rbCreateOk(d) {
+        let e = getAfter(/databases/$(database)/documents/cashEntries/$(d.entryId)).data;
+        return d.id == rbId && rbId.matches('^RB-[A-Za-z0-9_-]{8,200}$') && d.entryId == 'rbe-' + rbId.replace('^RB-', '')
+          && d.status == 'Posted' && d.revision == 1
+          && d.createdByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.rbNo is string && d.rbNo.size() >= 1 && d.lastOp is string && d.lastOp.size() >= 1
+          && d.amount is number && d.amount > 0
+          && d.items is list && d.items.size() >= 1 && d.items.size() <= 20 && d.jobExpenseIds is list && d.jobExpenseIds.size() == d.items.size()
+          && e.kind == 'staff-reimbursement' && e.reimbursementId == rbId && near(e.amount, d.amount) && e.voucherNo == d.rbNo;
+      }
+      function rbVoidOk(d) {
+        let r = resource.data;
+        return r.status == 'Posted' && d.status == 'Voided'
+          && request.resource.data.diff(r).affectedKeys().hasOnly(['status', 'voidReason', 'voidedAt', 'voidedBy', 'voidedByUid', 'lastOp', 'revision', 'updatedAt', 'updatedBy', 'updatedByUid'])
+          && d.revision == r.revision + 1 && d.voidedByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.voidReason is string && d.voidReason.size() >= 1 && d.lastOp != r.lastOp
+          && getAfter(/databases/$(database)/documents/cashEntries/$(r.entryId)).data.void == true;
+      }
     }
     match /employees/{id} {
       allow read: if canV(['employees']);
@@ -746,7 +858,35 @@ service cloud.firestore {
       // V268.2: supplier payment / cash back entries, written with their supplierPayments document
       allow create: if canW(['supplierPayment','purchaseInvoice']) && spEntryCreateOk(request.resource.data);
       allow update: if canW(['supplierPayment','purchaseInvoice']) && spEntryVoidOk(request.resource.data);
+      // V271.3: job expense entries, written with their jobExpenses document
+      allow create: if canC(['cash']) && jeEntryCreateOk(request.resource.data);
+      allow update: if canX(['cash']) && jeEntryVoidOk(request.resource.data);
       allow delete: if false;
+      function jeEntryCreateOk(d) {
+        // V271.3.2: one entry per expense date + account of a submission, or the entry of a reimbursement
+        let isJe = d.kind == 'job-expense';
+        let path = isJe ? /databases/$(database)/documents/jobExpenses/$(d.get('jobExpenseId', 'none')) : /databases/$(database)/documents/reimbursements/$(d.get('reimbursementId', 'none'));
+        let j = getAfter(path).data;
+        return d.id == entryId && d.kind in ['job-expense', 'staff-reimbursement']
+          && (isJe ? entryId.matches('^jee-[A-Za-z0-9_-]{8,210}$') && entryId in j.entryIds && d.voucherNo == j.jeNo
+                   : entryId.matches('^rbe-[A-Za-z0-9_-]{8,210}$') && j.entryId == entryId && d.voucherNo == j.rbNo && d.date == j.date && near(d.amount, j.amount))
+          && d.schemaVersion == 1 && d.revision == 1 && d.void == false
+          && d.recordedByUid == request.auth.uid && d.updatedByUid == request.auth.uid && d.updatedAt == request.time
+          && !exists(path) && j.status == 'Posted'
+          && d.amount is number && d.amount > 0
+          && d.accountIds is list && d.accountIds.size() >= 1 && d.accountIds.size() <= 2
+          && d.postings is map && d.postings.keys().hasAll(d.accountIds) && d.postings.keys().hasOnly(d.accountIds)
+          && near(d.postings[d.accountIds[0]].amountOut, d.amount) && d.postings[d.accountIds[0]].amountIn == 0;
+      }
+      function jeEntryVoidOk(d) {
+        let isJe = resource.data.kind == 'job-expense';
+        let jAfter = getAfter(isJe ? /databases/$(database)/documents/jobExpenses/$(resource.data.get('jobExpenseId', 'none')) : /databases/$(database)/documents/reimbursements/$(resource.data.get('reimbursementId', 'none'))).data;
+        return resource.data.kind in ['job-expense', 'staff-reimbursement'] && resource.data.void == false && d.void == true
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['void', 'voidReason', 'revision', 'updatedByUid', 'updatedByName', 'updatedAt'])
+          && d.revision == resource.data.revision + 1 && d.updatedByUid == request.auth.uid && d.updatedAt == request.time
+          && d.voidReason is string && d.voidReason.size() >= 1 && d.voidReason.size() <= 200
+          && jAfter.status == 'Voided';
+      }
       function spEntryCreateOk(d) {
         let p = getAfter(/databases/$(database)/documents/supplierPayments/$(d.paymentId)).data;
         let payPath = /databases/$(database)/documents/supplierPayments/$(d.paymentId);
@@ -833,7 +973,35 @@ service cloud.firestore {
       // V268.2: the postings of a supplier payment / cash back (cash ones wait for the custodian)
       allow create: if canW(['supplierPayment','purchaseInvoice']) && spLineCreateOk(request.resource.data);
       allow update: if canW(['supplierPayment','purchaseInvoice']) && spLineVoidOk();
+      // V271.3: the postings of a job expense (cash ones wait for the custodian)
+      allow create: if canC(['cash']) && jeLineCreateOk(request.resource.data);
+      allow update: if canX(['cash']) && jeLineVoidOk();
       allow delete: if false;
+      function jeLineCreateOk(d) {
+        let e = entryAfter(d);
+        let a = get(/databases/$(database)/documents/paymentAccounts/$(d.accountId)).data;
+        let p = e.postings[d.accountId];
+        return d.id == lineId && lineId == d.entryId + '__' + d.accountId
+          && e.kind in ['job-expense', 'staff-reimbursement'] && d.kind == e.kind
+          && !exists(/databases/$(database)/documents/cashEntries/$(d.entryId))
+          && e.recordedByUid == request.auth.uid && d.recordedByUid == request.auth.uid
+          && d.voucherNo == e.voucherNo && d.date == e.date && d.description == e.description
+          && d.entryRevision == 1 && d.void == false
+          && d.accountId in e.accountIds
+          && d.amountIn == p.amountIn && d.amountOut == p.amountOut && d.get('memoOut', 0) == p.memoOut
+          && d.custodianUid == a.get('custodianUid', '')
+          && d.statusByUid == '' && d.onBehalf == false
+          && d.needsConfirm == (a.type == 'cash' && (p.amountIn > 0 || p.amountOut > 0))
+          && d.status == (d.needsConfirm ? 'pending' : 'none');
+      }
+      function jeLineVoidOk() {
+        let d = request.resource.data;
+        let r = resource.data;
+        let e = entryAfter(r);
+        return r.kind in ['job-expense', 'staff-reimbursement'] && r.void == false && d.void == true
+          && changed().hasOnly(['void', 'voidReason', 'entryRevision'])
+          && e.void == true && d.entryRevision == e.revision;
+      }
       function spLineCreateOk(d) {
         let e = entryAfter(d);
         let a = get(/databases/$(database)/documents/paymentAccounts/$(d.accountId)).data;
@@ -1297,6 +1465,8 @@ service cloud.firestore {
       function stockPath(d) { return /databases/$(database)/documents/stockItems/$(d.itemKey); }
       function ledPath(d) { return /databases/$(database)/documents/salesOrderPurchasing/$(d.soId); }
       function fromStockBefore(d) { return exists(ledPath(d)) ? get(ledPath(d)).data.lines.get(d.soLineId, {}).get('fromStock', 0) : 0; }
+      // V271.3: stock issued to a contracting job — no sales order; the job must exist
+      function isJob(d) { return d.get('jobId', '') is string && d.get('jobId', '') != ''; }
       function allocCreateOk(d) {
         let after = getAfter(stockPath(d)).data;
         return d.id == allocId && allocId.matches('^SA-[A-Za-z0-9_-]{8,200}$')
@@ -1306,8 +1476,10 @@ service cloud.firestore {
           && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
           && after.lastAllocationId == allocId && after.lastEventId == d.lastEventId
           && get(stockPath(d)).data.qty - after.qty > d.qty - 0.000001 && get(stockPath(d)).data.qty - after.qty < d.qty + 0.000001
-          && getAfter(ledPath(d)).data.lastAllocationId == allocId
-          && near(getAfter(ledPath(d)).data.lines[d.soLineId].fromStock - fromStockBefore(d), d.qty);
+          && (isJob(d)
+            ? exists(/databases/$(database)/documents/jobs/$(d.jobId)) && d.get('soId', '') == ''
+            : getAfter(ledPath(d)).data.lastAllocationId == allocId
+              && near(getAfter(ledPath(d)).data.lines[d.soLineId].fromStock - fromStockBefore(d), d.qty));
       }
       function allocCancelOk(d) {
         let r = resource.data;
@@ -1319,8 +1491,9 @@ service cloud.firestore {
           && after.lastAllocationId == allocId && after.lastEventId == d.lastEventId
           && after.qty - (exists(stockPath(r)) ? get(stockPath(r)).data.qty : 0) > r.qty - 0.000001
           && after.qty - (exists(stockPath(r)) ? get(stockPath(r)).data.qty : 0) < r.qty + 0.000001
-          && getAfter(ledPath(r)).data.lastAllocationId == allocId
-          && near(fromStockBefore(r) - getAfter(ledPath(r)).data.lines[r.soLineId].fromStock, r.qty);
+          && (isJob(r)
+            || (getAfter(ledPath(r)).data.lastAllocationId == allocId
+              && near(fromStockBefore(r) - getAfter(ledPath(r)).data.lines[r.soLineId].fromStock, r.qty)));
       }
     }
 
