@@ -91,6 +91,7 @@ button,.btn{font-size:14px!important;font-weight:600!important;}
 <script src="js/pricing-filter-visual.js?v=271.5.17" defer></script>
 <link rel="stylesheet" href="css/master-registers-pricing-standard.css?v=271.5.34.2"/>
 <link rel="stylesheet" href="css/party-details-two-tabs.css?v=271.5.36"/>
+<link rel="stylesheet" href="css/dashboard.css?v=271.8"/>
 </head>
 <body>
 <script>
@@ -243,57 +244,9 @@ document.addEventListener('error', function(e) {
 </div>
 </header>
 <div class="content">
-<!-- DASHBOARD -->
+<!-- DASHBOARD — V271.8 (approved mockup E, 12 Nov 2026): built by js/dashboard.js -->
 <div class="page active" id="page-dashboard">
-<!-- Dashboard date filter -->
-<div aria-label="Dashboard period controls" class="page-toolbar page-toolbar--filters dashboard-period-toolbar" role="toolbar">
-<i class="ti ti-calendar-filter" style="font-size:16px;color:var(--blue-mid)"></i>
-<span style="font-size:12px;font-weight:600;color:var(--blue);margin-right:4px">Period:</span>
-<button class="dash-period-btn active" onclick="setDashPeriod('all',this)">All time</button>
-<button class="dash-period-btn" onclick="setDashPeriod('thismonth',this)">This month</button>
-<button class="dash-period-btn" onclick="setDashPeriod('lastmonth',this)">Last month</button>
-<button class="dash-period-btn" onclick="setDashPeriod('last3',this)">Last 3 months</button>
-<button class="dash-period-btn" onclick="setDashPeriod('thisyear',this)">This year</button>
-<div style="display:flex;align-items:center;gap:6px;margin-left:8px">
-<span style="font-size:11px;color:var(--gray)">From</span>
-<input id="dash-date-from" onchange="onDashCustomDate()" style="height:28px;border:1px solid var(--border);border-radius:var(--radius);padding:0 8px;font-size:12px;outline:none" type="date"/>
-<span style="font-size:11px;color:var(--gray)">To</span>
-<input id="dash-date-to" onchange="onDashCustomDate()" style="height:28px;border:1px solid var(--border);border-radius:var(--radius);padding:0 8px;font-size:12px;outline:none" type="date"/>
-</div>
-<span id="dash-period-label" style="font-size:11px;color:var(--gray);margin-left:auto;font-style:italic">Showing all sales orders</span>
-</div>
-<div class="stats-grid dashboard-kpi-grid">
-<div class="stat-card dashboard-kpi"><div class="dashboard-kpi-icon"><i class="ti ti-shopping-cart"></i></div><div class="dashboard-kpi-copy"><div class="label">Total sales orders</div><div class="value" id="s-total">0</div><div class="sub" id="s-total-sub">all time</div></div></div>
-<div class="stat-card dashboard-kpi green"><div class="dashboard-kpi-icon"><i class="ti ti-circle-check"></i></div><div class="dashboard-kpi-copy"><div class="label">Paid orders</div><div class="value" id="s-won">0</div><div class="sub" id="s-won-val">SAR 0</div></div></div>
-<div class="stat-card dashboard-kpi amber"><div class="dashboard-kpi-icon"><i class="ti ti-truck-delivery"></i></div><div class="dashboard-kpi-copy"><div class="label">Pending delivery</div><div class="value" id="s-pending">0</div><div class="sub">confirmed + in transit</div></div></div>
-<div class="stat-card dashboard-kpi red"><div class="dashboard-kpi-icon"><i class="ti ti-cash-banknote"></i></div><div class="dashboard-kpi-copy"><div class="label">Pending payment</div><div class="value" id="s-lost">0</div><div class="sub">invoiced + partial</div></div></div>
-<div class="stat-card dashboard-kpi dashboard-kpi--value"><div class="dashboard-kpi-icon"><i class="ti ti-report-money"></i></div><div class="dashboard-kpi-copy"><div class="label">Order value</div><div class="value" id="s-pipeline">SAR 0</div><div class="sub">selected period</div></div></div>
-</div>
-<div class="dashboard-primary-grid">
-<div class="card dashboard-panel dashboard-panel--orders">
-<div class="card-header dashboard-card-header"><h3><i class="ti ti-clock"></i>Recent sales orders</h3><button class="dashboard-text-action" onclick="showPage('salesorders')" type="button">View all <i class="ti ti-arrow-right"></i></button></div>
-<div class="card-body dashboard-table-wrap">
-<table><thead><tr><th>SO No</th><th>Date</th><th>Customer</th><th class="right">Amount</th><th>Status</th></tr></thead><tbody id="recent-tbody"></tbody></table>
-</div>
-</div>
-<div class="card dashboard-panel">
-<div class="card-header dashboard-card-header"><h3><i class="ti ti-chart-pie"></i>Status breakdown</h3><span class="dashboard-panel-meta">Selected period</span></div>
-<div class="card-body dashboard-status-body"><div id="status-chart"></div></div>
-</div>
-<div class="card dashboard-panel dashboard-quick-actions">
-<div class="card-header dashboard-card-header"><h3><i class="ti ti-bolt"></i>Quick actions</h3></div>
-<div class="card-body">
-<button class="dashboard-quick-action" onclick="openDashboardNewRFQ()" type="button"><span><i class="ti ti-file-search"></i><b>New RFQ</b></span><i class="ti ti-chevron-right"></i></button>
-<button class="dashboard-quick-action" onclick="showPage('quotations')" type="button"><span><i class="ti ti-file-dollar"></i><b>New quotation</b></span><i class="ti ti-chevron-right"></i></button>
-<button class="dashboard-quick-action" onclick="showPage('salesorders')" type="button"><span><i class="ti ti-shopping-cart-plus"></i><b>Sales orders</b></span><i class="ti ti-chevron-right"></i></button>
-<button class="dashboard-quick-action" onclick="showPage('customers')" type="button"><span><i class="ti ti-users"></i><b>Customers</b></span><i class="ti ti-chevron-right"></i></button>
-</div>
-</div>
-</div>
-<div class="card dashboard-panel dashboard-chart-panel">
-<div class="card-header dashboard-card-header"><h3><i class="ti ti-trending-up"></i>Monthly sales orders</h3><span class="dashboard-panel-meta">Value in SAR</span></div>
-<div class="card-body"><div class="chart-bars" id="monthly-chart"></div></div>
-</div>
+<div class="bd" id="bd-root"><p class="bd-loading" style="padding:24px;color:#586a80;font-size:13px">Loading the dashboard…</p></div>
 </div>
 <!-- QUOTATIONS -->
 <div class="page" id="page-quotations">
@@ -1627,7 +1580,7 @@ document.addEventListener('error', function(e) {
 <span class="qt-stp" id="qcs-status"></span>
 <div class="qt-small" id="qcs-cmp" hidden></div>
 <div class="qt-small qt-chg" id="qcs-change" hidden><span></span></div>
-<div class="qt-small">Pricing <button type="button" class="qt-lnk" id="qcs-ref" onclick="qtOpenFlow('pricing')"></button></div>
+<div class="qt-small"><span id="qcs-ref-l">Pricing</span> <button type="button" class="qt-lnk" id="qcs-ref" onclick="qtOpenFlow('pricing')"></button></div>
 </div>
 <div class="qt-res qt-res-none" id="quote-commercial-none"><div class="qt-h4"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Internal · Never Printed</div><div class="qt-small">No Pricing is linked to this quotation, so cost and profit are not available. They show when a quotation is made from Pricing.</div></div>
 </aside>
@@ -4041,6 +3994,14 @@ const ledgerService = createLedgerService({ db, doc, getDoc, getDocs, setDoc, up
 });
 let _cashLinesUnsub = null, _cashDirUnsub = null, _cashCustUnsub = null, _cashLines = [], _cashDirectory = [], _cashCustodians = [];
 let _cashBalUnsub = null, _cashBalances = new Map(), _cashBalLoaded = false, _cashRebuilding = false;   // V269.3
+let _cashRebuildAsked = false;   // V271.8
+function _cashBalListen(){
+  if (_cashBalUnsub) return;
+  _cashBalUnsub = onSnapshot(collection(db, BALANCE_COLLECTION), snap => {
+    const m = new Map(); snap.forEach(d => m.set(d.id, d.data())); _cashBalances = m; _cashFire();
+    if (!_cashBalLoaded) { _cashBalLoaded = true; if (_cashRebuildAsked) setTimeout(() => window.BizCoreCash.rebuildBalances(), 1500); }
+  }, err => console.warn('[BizCore] Cash balances unavailable:', err.message));
+}
 const _cashListeners = new Set();
 const _cashFire = () => _cashListeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } });
 window.BizCoreCash = {
@@ -4080,10 +4041,14 @@ window.BizCoreCash = {
     // V269.3: waiting / queried lines and the recent ones (older on request); balances from the running records
     if (!_cashLinesUnsub) _cashLinesUnsub = _winListen(LedgerCore.LEDGER_COLLECTIONS.lines, rows => { _cashLines = rows || []; _cashFire(); },
       err => console.warn('[BizCore] Cash ledger unavailable:', err.message));
-    if (!_cashBalUnsub) _cashBalUnsub = onSnapshot(collection(db, BALANCE_COLLECTION), snap => {
-      const m = new Map(); snap.forEach(d => m.set(d.id, d.data())); _cashBalances = m; _cashFire();
-      if (!_cashBalLoaded) { _cashBalLoaded = true; setTimeout(() => window.BizCoreCash.rebuildBalances(), 1500); }
-    }, err => console.warn('[BizCore] Cash balances unavailable:', err.message));
+    // V271.8: the incomplete running records are rebuilt once, when a cash screen starts (not by the Dashboard)
+    if (!_cashRebuildAsked) { _cashRebuildAsked = true; if (_cashBalLoaded) setTimeout(() => window.BizCoreCash.rebuildBalances(), 1500); }
+    _cashBalListen();
+  },
+  /** V271.8: the Dashboard — only the payment accounts and their running balances (a few small records; no ledger lines). */
+  startBalances() {
+    if (window.BizCoreAcc) window.BizCoreAcc.start();
+    _cashBalListen();
   },
   startDirectory() {
     if (!_cashDirUnsub) _cashDirUnsub = onSnapshot(collection(db, LedgerCore.LEDGER_COLLECTIONS.directory), snap => {
@@ -4604,7 +4569,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=271.7.5';
+      s.src = 'js/app.js?v=271.8';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)
@@ -4612,7 +4577,7 @@ onAuthStateChanged(auth, async user => {
         // V270.1: the Pricing screen (tabs, line menu, price references, phone cards)
         const pu = document.createElement('script'); pu.id = 'bizcore-pricing-ui-script'; pu.src = 'js/pricing-ui.js?v=270.24'; document.body.appendChild(pu);
         // V270.2: the Quotation Entry screen (tabs, details band, line menu, discounts, note styles, phone cards)
-        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=271.7.4';
+        const qu = document.createElement('script'); qu.id = 'bizcore-quotation-ui-script'; qu.src = 'js/quotation-ui.js?v=271.7.6';
         // V271.6: scope of work, work categories, text blocks, annexure print, job scope — after the Quotation Entry screen
         qu.onload = () => { const qs = document.createElement('script'); qs.id = 'bizcore-quote-scope-script'; qs.src = 'js/quote-scope.js?v=271.7.3'; document.body.appendChild(qs); };
         document.body.appendChild(qu);
@@ -4627,7 +4592,9 @@ onAuthStateChanged(auth, async user => {
         // V270.4.1: Administration → Users, Roles & Permissions
         const us = document.createElement('script'); us.id = 'bizcore-users-script'; us.src = 'js/users.js?v=270.43'; document.body.appendChild(us);
         // V270.4.2: what the screens show for the role (sidebar, guarded actions)
-        const pm = document.createElement('script'); pm.id = 'bizcore-permissions-script'; pm.src = 'js/permissions-ui.js?v=271.6'; document.body.appendChild(pm); };
+        const pm = document.createElement('script'); pm.id = 'bizcore-permissions-script'; pm.src = 'js/permissions-ui.js?v=271.6'; document.body.appendChild(pm);
+        // V271.8: the Dashboard (approved mockup E) — after so-view.js (the profit figures)
+        const dbs = document.createElement('script'); dbs.id = 'bizcore-dashboard-script'; dbs.src = 'js/dashboard.js?v=271.8'; document.body.appendChild(dbs); };
       document.body.appendChild(s);
     };
     // V268.1: purchases.js (Purchase Invoices) after cashbank.js, before app.js

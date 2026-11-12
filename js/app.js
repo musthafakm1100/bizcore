@@ -3947,41 +3947,9 @@ function openDashboardNewRFQ() {
   requestAnimationFrame(()=>openNewRFQ());
 }
 
+/* V271.8: the Dashboard is built by js/dashboard.js (approved mockup E); the listeners keep calling this name. */
 function renderDashboard() {
-  const list=salesOrders.filter(so=>{
-    const d=so.date||'';
-    if(dashFrom && d<dashFrom) return false;
-    if(dashTo && d>dashTo) return false;
-    return true;
-  }).map(so=>({...so,_status:getSOStatus(so)}));
-  const total=list.length;
-  const paid=list.filter(so=>so._status==='Paid');
-  const pendingDelivery=list.filter(so=>['Confirmed','Out for Delivery','Partially Delivered'].includes(so._status));
-  const pendingPayment=list.filter(so=>['Invoiced','Partially Paid'].includes(so._status));
-  const paidValue=paid.reduce((sum,so)=>sum+(parseFloat(so.total)||0),0);
-  const orderValue=list.reduce((sum,so)=>sum+(parseFloat(so.total)||0),0);
-  document.getElementById('s-total').textContent=total;
-  document.getElementById('s-total-sub').textContent=(!dashFrom&&!dashTo)?'all time':(dashFrom&&dashTo?fmtDate(dashFrom)+' → '+fmtDate(dashTo):fmtDate(dashFrom||dashTo));
-  document.getElementById('s-won').textContent=paid.length;
-  document.getElementById('s-won-val').textContent=fmtShort(paidValue);
-  document.getElementById('s-pending').textContent=pendingDelivery.length;
-  document.getElementById('s-lost').textContent=pendingPayment.length;
-  document.getElementById('s-pipeline').textContent=fmtShort(orderValue);
-
-  const lbl=document.getElementById('dash-period-label');
-  if(lbl) lbl.textContent=(!dashFrom&&!dashTo)?`Showing all ${salesOrders.length} sales orders`:`Showing ${total} of ${salesOrders.length} sales orders · ${fmtDate(dashFrom)} → ${fmtDate(dashTo)}`;
-
-  const recent=[...list].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,8);
-  document.getElementById('recent-tbody').innerHTML=recent.length?recent.map(so=>`<tr class="dashboard-order-row" role="link" tabindex="0" aria-label="Open sales order ${so.soNo||''}" onclick="openDashboardSalesOrder('${so.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDashboardSalesOrder('${so.id}')}"><td><span class="dashboard-order-link">${so.soNo||'—'}</span></td><td>${fmtDate(so.date)}</td><td>${so.customer||'—'}</td><td class="right" style="font-weight:500">${fmtShort(parseFloat(so.total)||0)}</td><td><span class="badge ${getSOBadgeClass(so._status)}">${so._status}</span></td></tr>`).join(''):`<tr><td colspan="5" style="text-align:center;color:var(--gray);padding:24px">No sales orders in this period</td></tr>`;
-
-  const statuses=['Confirmed','Out for Delivery','Partially Delivered','Delivered','Invoiced','Partially Paid','Paid'];
-  const colors={'Confirmed':'#245780','Out for Delivery':'#6f42c1','Partially Delivered':'#92400E','Delivered':'#0F766E','Invoiced':'#6c757d','Partially Paid':'#d39e00','Paid':'#166534'};
-  document.getElementById('status-chart').innerHTML=statuses.map(st=>{const count=list.filter(so=>so._status===st).length;const pct=total?Math.round(count/total*100):0;return `<div style="display:flex;align-items:center;gap:8px"><div style="width:105px;font-size:11px;color:var(--gray)">${st}</div><div style="flex:1;background:#f0f0f0;border-radius:3px;height:12px"><div style="width:${pct}%;height:100%;background:${colors[st]};border-radius:3px"></div></div><div style="width:40px;font-size:11px;text-align:right;color:${colors[st]};font-weight:600">${count}</div></div>`;}).join('');
-
-  const months=[];for(let i=5;i>=0;i--){const d=new Date();d.setMonth(d.getMonth()-i);months.push({label:d.toLocaleString('default',{month:'short'}),key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`});}
-  const values=months.map(m=>list.filter(so=>(so.date||'').startsWith(m.key)).reduce((sum,so)=>sum+(parseFloat(so.total)||0),0));
-  const maxVal=Math.max(1,...values);
-  document.getElementById('monthly-chart').innerHTML=months.map((m,i)=>{const val=values[i];const h=Math.round(val/maxVal*72);return `<div class="bar-wrap"><div class="bar-val">${val>0?fmtShort(val):''}</div><div class="bar" style="height:${Math.max(h,2)}px"></div><div class="bar-label">${m.label}</div></div>`;}).join('');
+  if (window.BCDash) { window.BCDash.soon(); return; }
 }
 
 /* ── QUOTATION REGISTER DATE FILTER ── */
@@ -5140,6 +5108,7 @@ function showPage(page, el) {
   if(page==='rfq'){renderRFQPage();setTimeout(()=>{const btn=document.getElementById('rfq-f-all');filterRFQ('all',btn);},0);}
   if(page==='costing'){pricingDocumentFilter='all';renderPricingDocuments();}
   if(page==='quotations'){currentPage=1;renderTable();}
+  if(page==='dashboard'&&window.BCDash)BCDash.render();   // V271.8
   if(page==='analytics')renderAnalytics();
   if(page==='salesorders')renderSOPage();
   if(page==='jobs'&&window.BCJobs)BCJobs.renderRegister();   // V271.2
