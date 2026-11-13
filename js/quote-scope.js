@@ -84,18 +84,35 @@
     closeMenu();
     const cats = serviceCats();
     menu = document.createElement('div'); menu.className = 'pr-pop qs-catmenu'; menu.setAttribute('role', 'listbox');
-    menu.innerHTML = `<div class="qs-cm-h">Work category</div><div class="qs-cm-l">${cats.map(n => `<button type="button" class="pr-mi${n === cur ? ' qt-on' : ''}" data-cat="${esc(n)}"><span>${esc(n)}</span>${n === cur ? '<span class="pr-k">✓</span>' : ''}</button>`).join('') || '<div class="qs-cm-e">No service categories yet.</div>'}</div><div class="pr-sepm"></div><button type="button" class="pr-mi" data-cat="__new"><span>+ New category…</span></button>`;
+    menu.innerHTML = `<div class="qs-cm-h">Work category</div><div class="qs-cm-sw"><input type="search" class="qs-cm-s" placeholder="Type to search…" aria-label="Search work categories" autocomplete="off"></div><div class="qs-cm-l">${cats.map(n => `<button type="button" class="pr-mi${n === cur ? ' qt-on' : ''}" data-cat="${esc(n)}"><span>${esc(n)}</span>${n === cur ? '<span class="pr-k">✓</span>' : ''}</button>`).join('') || '<div class="qs-cm-e">No service categories yet.</div>'}</div><div class="pr-sepm"></div><button type="button" class="pr-mi" data-cat="__new"><span>+ New category…</span></button>`;
     document.body.appendChild(menu);
     const b = anchor.getBoundingClientRect(), h = menu.offsetHeight, w = menu.offsetWidth;
     menu.style.left = Math.max(8, Math.min(b.left, window.innerWidth - w - 8)) + 'px';
     menu.style.top = (b.bottom + h + 6 < window.innerHeight ? b.bottom + 4 : Math.max(8, b.top - h - 4)) + 'px';
     menu.addEventListener('click', e => {
       const x = e.target.closest('[data-cat]'); if (!x) return;
-      const v = x.dataset.cat; closeMenu();
-      if (v === '__new') { askText({ title: 'New Work Category', label: 'Category name (service)', placeholder: 'e.g. Partition & Ceiling Works', ok: 'Add Category' }).then(n => { const got = n && addCategory(n); if (got) onPick(got); }); return; }
+      const v = x.dataset.cat, typed = (menu && menu.querySelector('.qs-cm-s')?.value || '').trim(); closeMenu();
+      if (v === '__new') { askText({ title: 'New Work Category', label: 'Category name (service)', placeholder: 'e.g. Partition & Ceiling Works', ok: 'Add Category', value: typed }).then(n => { const got = n && addCategory(n); if (got) onPick(got); }); return; }
       onPick(v);
     });
-    setTimeout(() => (menu && (menu.querySelector('.qt-on') || menu.querySelector('button')))?.focus({ preventScroll: true }), 0);
+    // V271.10: type to search — the list narrows as you type; Enter picks the first match (or offers a new category); ↓ / ↑ move
+    const sInp = menu.querySelector('.qs-cm-s'), items = () => [...menu.querySelectorAll('.qs-cm-l [data-cat]')].filter(b => !b.hidden);
+    sInp.addEventListener('input', () => {
+      const t = sInp.value.trim().toLowerCase();
+      menu.querySelectorAll('.qs-cm-l [data-cat]').forEach(b => { b.hidden = !!t && !b.dataset.cat.toLowerCase().includes(t); });
+      let none = menu.querySelector('.qs-cm-none');
+      if (!items().length && t) { if (!none) { none = document.createElement('div'); none.className = 'qs-cm-e qs-cm-none'; menu.querySelector('.qs-cm-l').appendChild(none); } none.textContent = 'No match — Enter adds "' + sInp.value.trim() + '" as a new category.'; }
+      else if (none) none.remove();
+    });
+    menu.addEventListener('keydown', e => {
+      const list = items(), i = list.indexOf(document.activeElement);
+      if (e.key === 'Escape') { e.preventDefault(); closeMenu(); anchor.focus && anchor.focus(); return; }
+      if (e.target === sInp && e.key === 'Enter') { e.preventDefault(); const first = list[0]; if (first) { const v = first.dataset.cat; closeMenu(); onPick(v); } else if (sInp.value.trim()) menu.querySelector('[data-cat="__new"]').click(); return; }
+      if (e.key === 'ArrowDown') { e.preventDefault(); (list[i + 1] || (i < 0 ? list[0] : list[list.length - 1]))?.focus({ preventScroll: false }); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); if (i <= 0) sInp.focus(); else list[i - 1].focus({ preventScroll: false }); }
+      if (e.key.length === 1 && e.target !== sInp && !e.ctrlKey && !e.altKey && !e.metaKey) { sInp.focus(); }   // typing on a button goes to the search box
+    });
+    setTimeout(() => menu && sInp.focus({ preventScroll: true }), 0);
   }
   function paintCatChip(btn, val, { missing = false, other = false } = {}) {
     if (!btn) return;

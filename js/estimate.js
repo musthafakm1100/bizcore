@@ -1522,6 +1522,7 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     });
   }
   function estQuoteSetup() {
+    if (typeof window.bcTermsFollowType === 'function') window.bcTermsFollowType(typeof currentQuoteType !== 'undefined' ? currentQuoteType : 'product');   // V271.10: terms follow the estimate link
     const side = $('qt-side'); if (!side) return;
     let card = $('qt-est-card');
     const ctx = window._pendingEstimate;

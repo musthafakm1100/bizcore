@@ -385,6 +385,12 @@
         if (e.key === 'Enter') { e.preventDefault(); choose(ddIdx); return; }
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeDD(); return; }
       }
+      // V271.10: ↑ / ↓ go to the same field in the line above / below (as on the quotation lines)
+      if (l && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
+        const same = ofKind(l.kind), i = same.indexOf(l), to = same[i + (e.key === 'ArrowUp' ? -1 : 1)];
+        if (to) { e.preventDefault(); const el = document.querySelector(`#rfq-pane tr[data-line="${to.lineId}"] [data-f="${f}"]`); if (el) { el.focus(); el.select?.(); } }
+        return;
+      }
       if (!l || S.locked) return;
       if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); move(l, e.key === 'ArrowUp' ? -1 : 1, f); return; }
       if (f === 'qty' && e.key === 'Enter') {

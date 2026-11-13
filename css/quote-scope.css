@@ -41,6 +41,7 @@
 .qs-catmenu{width:260px}
 .qs-cm-h{font-size:10.5px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.04em;padding:6px 10px 4px}
 .qs-cm-l{max-height:300px;overflow:auto}
+.qs-cm-sw{padding:2px 8px 6px}.qs-cm-s{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:6px 9px;border:1px solid #d7e0e9;border-radius:6px;outline:0}.qs-cm-s:focus{border-color:#1f5288;box-shadow:0 0 0 3px rgba(31,82,136,.12)}.qs-cm-l [data-cat][hidden]{display:none}   /* V271.10: type to search */
 .qs-cm-e{padding:8px 10px;color:#64748b;font-size:12.5px}
 .qs-tags{display:inline-flex;gap:6px}
 .qs-tag{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:5px;background:#eef2f6;color:#475569;font-size:10.5px;font-weight:700;white-space:nowrap}

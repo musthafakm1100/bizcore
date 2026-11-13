@@ -2075,9 +2075,28 @@ function cancelNewTerm(type) {
   // Restore previous valid selection
   document.getElementById('f-'+type).value = getDefaultTerm(bcTermList(type));
 }
-/** V271.9: a Service / contracting quotation shows Completion Period + Mobilization instead of Delivery Terms. */
+/* V271.10: what kind of work a quotation is for —
+   contracting = made from an Estimation or for a Contracting RFQ (site work: Completion Period + Mobilization);
+   service     = a Services quotation otherwise (repair, maintenance, fabrication: Delivery Terms, like products);
+   product     = a Products quotation. With no argument: the quotation open in the form. */
+function bcQuoteRfqOf(q){
+  let id=q?q.rfqId:(document._pendingRFQId||null);
+  if(!q&&!id&&typeof editingId!=='undefined'&&editingId){ const eq=quotations.find(x=>x.id===editingId); id=eq&&eq.rfqId; }
+  return id?rfqs.find(r=>String(r.id)===String(id))||null:null;
+}
+function bcQuoteKind(q){
+  const est=q?q.estimate:window._pendingEstimate, qt=q?(q.quoteType||'product'):(typeof currentQuoteType!=='undefined'?currentQuoteType:'product');
+  const r=bcQuoteRfqOf(q);
+  if(est||(r&&r.requestType==='contracting')) return 'contracting';
+  return qt==='contracting'?'service':'product';
+}
+/** the type shown in registers and title bars: Product / Service / Contracting / Mixed (a Mixed RFQ) */
+function bcQuoteTypeKey(q){ const k=bcQuoteKind(q); if(k==='contracting') return k; const r=bcQuoteRfqOf(q); return r&&r.requestType==='mixed'?'mixed':k; }
+const BC_TYPE_LABEL={product:'Product',service:'Service',contracting:'Contracting',mixed:'Mixed'};
+function bcTypeBadge(key){ key=BC_TYPE_LABEL[key]?key:'product'; return '<span class="rv-type-badge rv-type-'+key+'">'+BC_TYPE_LABEL[key]+'</span>'; }
+/** V271.9: a contracting quotation shows Completion Period + Mobilization instead of Delivery Terms (V271.10: not a service quotation). */
 function bcTermsFollowType(type){
-  const svc=type==='contracting';
+  const svc=type==='contracting'&&bcQuoteKind()==='contracting';
   const show=(id,on)=>{const e=document.getElementById(id);if(e)e.style.display=on?'':'none';};
   show('f-delivery-field',!svc); show('f-completion-field',svc); show('f-mobilization-field',svc);
   document.querySelector('#quote-modal .qt-r2')?.classList.toggle('qt-svc-terms',svc);
@@ -4145,7 +4164,9 @@ function getQuotationOverviewScope() {
   const fCust=document.getElementById('filter-customer')?.value || '';
   const fFrom=document.getElementById('filter-date-from')?.value || '';
   const fTo=document.getElementById('filter-date-to')?.value || '';
+  const fType=document.getElementById('filter-qtype')?.value||'';   // V271.10: monitor counts follow the Type filter
   return quotations.filter(q=>{
+    if(fType && bcQuoteTypeKey(q)!==fType) return false;
     if(fCust && q.company!==fCust) return false;
     if(fFrom && q.date < fFrom) return false;
     if(fTo && q.date > fTo) return false;
@@ -4198,6 +4219,7 @@ function clearAllQuotationFilters() {
   const to=document.getElementById('filter-date-to');
   if(status) status.value='';
   if(customer) customer.value='';
+  { const qt=document.getElementById('filter-qtype'); if(qt) qt.value=''; }   // V271.10
   if(search) search.value='';
   if(sort) sort.value='created-desc';
   if(from) from.value='';
@@ -4220,7 +4242,9 @@ function getQuotationRegisterExportRows(){
   const fFrom=document.getElementById('filter-date-from')?.value || '';
   const fTo=document.getElementById('filter-date-to')?.value || '';
 
+  const fType=document.getElementById('filter-qtype')?.value||'';   // V271.10
   let rows=quotations.filter(q=>{
+    if(fType && bcQuoteTypeKey(q)!==fType) return false;
     if(fStatus && q.status!==fStatus) return false;
     if(fCust && q.company!==fCust) return false;
     const qDate=normalizedQuotationDate(q);
@@ -4441,6 +4465,7 @@ function resetQuotationRegisterFiltersForNewRecord(){
   if(search)search.value='';
   if(status)status.value='';
   if(customer)customer.value='';
+  { const qt=document.getElementById('filter-qtype'); if(qt) qt.value=''; }   // V271.10
   if(from)from.value='';
   if(to)to.value='';
   currentPage=1;
@@ -4470,7 +4495,9 @@ function renderTable() {
   const legacyDateClear = document.getElementById('date-clear-btn');
   if (legacyDateClear) legacyDateClear.style.display = (fFrom||fTo) ? 'inline-flex' : 'none';
 
+  const fType=document.getElementById('filter-qtype')?.value||'';   // V271.10
   let filtered=quotations.filter(q=>{
+    if(fType && bcQuoteTypeKey(q)!==fType) return false;
     if(fStatus && q.status!==fStatus) return false;
     if(fCust && q.company!==fCust) return false;
     if(fFrom && q.date < fFrom) return false;
@@ -4490,7 +4517,7 @@ function renderTable() {
   else if(fSort==='date-asc') filtered.sort((a,b)=>a.date.localeCompare(b.date));
   else if(fSort==='amount-desc') filtered.sort((a,b)=>calcQuote(b).net-calcQuote(a).net);
   else if(fSort==='amount-asc') filtered.sort((a,b)=>calcQuote(a).net-calcQuote(b).net);
-  filtered=sortRegisterRows(filtered,'quotation',{created:q=>bcRegisterCreated(q),no:q=>q.qno,date:q=>normalizedQuotationDate(q),customer:q=>q.company,reference:q=>q.ref,items:q=>(q.items||[]).length,amount:q=>calcQuote(q).net,status:q=>q.status,salesorders:q=>salesOrders.filter(x=>x.quotationId===q.id).map(x=>x.soNo).join(' '),valid:q=>validUntil(q)});
+  filtered=sortRegisterRows(filtered,'quotation',{created:q=>bcRegisterCreated(q),no:q=>q.qno,date:q=>normalizedQuotationDate(q),customer:q=>q.company,type:q=>bcQuoteTypeKey(q),reference:q=>q.ref,items:q=>(q.items||[]).length,amount:q=>calcQuote(q).net,status:q=>q.status,salesorders:q=>salesOrders.filter(x=>x.quotationId===q.id).map(x=>x.soNo).join(' '),valid:q=>validUntil(q)});
 
   // V265 standard: the count shows only the number; the chosen period is shown on the date filter itself
   document.getElementById('q-count').textContent = `${filtered.length} quotation${filtered.length!==1?'s':''}`;
@@ -4523,6 +4550,7 @@ function renderTable() {
       <td class="rfq-cell-no quotation-cell-regular" style="${qCellStyle}">${q.qno}</td>
       <td class="mob-hide rfq-cell-muted" style="${qCellStyle}">${fmtDate(normalizedQuotationDate(q))}</td>
       <td class="rfq-cell-customer quotation-cell-regular" style="${qCellStyle}">${q.company}${itemMatchBadge}</td>
+      <td class="mob-hide" style="${qCellStyle}"><span class="bc-type-text bc-type-text-${bcQuoteTypeKey(q)}">${BC_TYPE_LABEL[bcQuoteTypeKey(q)]}</span></td>
       <td class="mob-hide" style="${qCellStyle}">${q.ref||'—'}</td>
       <td class="mob-hide center" style="${qCellStyle}">${(q.items||[]).length}</td>
       <td class="right" style="${qCellStyle}">${formatNumber(net,2)}</td>
@@ -4532,9 +4560,9 @@ function renderTable() {
     </tr>`;
    } catch(err) {
     console.error('Skipped a quotation row that failed to render:', q && q.qno, err);
-    return `<tr><td colspan="9" style="color:#b91c1c;font-size:12px">⚠ Could not display quotation ${q&&q.qno?q.qno:'(unknown)'} — data may be incomplete.</td></tr>`;
+    return `<tr><td colspan="10" style="color:#b91c1c;font-size:12px">⚠ Could not display quotation ${q&&q.qno?q.qno:'(unknown)'} — data may be incomplete.</td></tr>`;
    }
-  }).join(''):`<tr><td colspan="9"><div class="empty-state"><i class="ti ti-file-off"></i><strong>No quotations found</strong><p>Adjust your filters or create a new quotation.</p></div></td></tr>`;
+  }).join(''):`<tr><td colspan="10"><div class="empty-state"><i class="ti ti-file-off"></i><strong>No quotations found</strong><p>Adjust your filters or create a new quotation.</p></div></td></tr>`;
 
   document.getElementById('pagination').innerHTML = buildPaginationHTML(currentPage, pages, 'goPage');
 }
@@ -4854,7 +4882,7 @@ function getPricingDocuments(){
       const cost=material+extras;
       const profit=selling-cost;
       const marginPct=selling>0?(profit/selling)*100:0;
-      docs.push({rfq:r,version,status,rawStatus:v.status||'Saved',updated:v.updated||v.created||r.date||'',cost,selling,profit,marginPct,quote,versionData:v,kind:'pricing',pricingNo:'PRC-'+String(r.rfqNo||r.id).replace(/[^A-Za-z0-9-]/g,'')+'-V'+version});
+      docs.push({rfq:r,version,status,rawStatus:v.status||'Saved',updated:v.updated||v.created||r.date||'',cost,selling,profit,marginPct,quote,versionData:v,kind:'pricing',type:BC_TYPE_LABEL[r.requestType]?r.requestType:'product',pricingNo:'PRC-'+String(r.rfqNo||r.id).replace(/[^A-Za-z0-9-]/g,'')+'-V'+version});
     });
     // V271.9: Contracting estimates are listed with the pricing documents (Type filter: Pricing / Estimation)
     (Array.isArray(r.estimateIndex)?r.estimateIndex:[]).forEach(e=>{
@@ -4862,7 +4890,7 @@ function getPricingDocuments(){
       const status=e.status==='Converted'?'Converted':(e.status==='Superseded'?'Superseded':'Saved');
       const quote=e.quotationId?quotations.find(q=>q.id===e.quotationId||q.qno===e.quotationId):null;
       const cost=Number(e.totalCost)||0, selling=Number(e.offerPrice)||Number(e.sellTotal)||0, profit=selling-cost;
-      docs.push({rfq:r,version,status,rawStatus:e.status||'Saved',updated:e.updated||e.created||r.date||'',cost,selling,profit,marginPct:selling>0?(profit/selling)*100:0,quote,versionData:e,kind:'estimate',
+      docs.push({rfq:r,version,status,rawStatus:e.status||'Saved',updated:e.updated||e.created||r.date||'',cost,selling,profit,marginPct:selling>0?(profit/selling)*100:0,quote,versionData:e,kind:'estimate',type:'contracting',
         pricingNo:'EST-'+String(r.rfqNo||r.id).replace(/^RFQ-?/i,'').replace(/[^A-Za-z0-9-]/g,'')+'-V'+version});
     });
   });
@@ -5044,7 +5072,7 @@ function renderPricingDocuments(){
   const allDocs=getPricingDocuments();
   const pCust=document.getElementById('pricing-customer-filter')?.value||'';
   const pType=document.getElementById('pricing-type-filter')?.value||'';   // V271.9: Pricing / Estimation
-  const all=allDocs.filter(d=>(!pCust||d.rfq.company===pCust)&&(!pType||d.kind===pType));   // V265: customer filter (monitor counts follow it)
+  const all=allDocs.filter(d=>(!pCust||d.rfq.company===pCust)&&(!pType||d.type===pType));   // V271.10: Product / Service / Contracting / Mixed   // V265: customer filter (monitor counts follow it)
   const saved=all.filter(d=>d.status==='Saved'), converted=all.filter(d=>d.status==='Converted');
   const set=(id,val)=>{const e=document.getElementById(id);if(e)e.textContent=val};
   set('pricing-doc-k-total',all.length);set('pricing-doc-k-saved',saved.length);set('pricing-doc-k-converted',converted.length);updatePricingOverviewTint();
@@ -5066,17 +5094,17 @@ function renderPricingDocuments(){
   else if(pSort==='customer-asc')rows.sort((a,b)=>String(a.rfq.company||'').localeCompare(String(b.rfq.company||'')));
   else rows.sort((a,b)=>String(b.updated||'').localeCompare(String(a.updated||'')));
   {const c=document.getElementById('pricing-register-count');if(c)c.textContent=`${rows.length} document${rows.length===1?'':'s'}`;}
-  const sortedRows=sortRegisterRows(rows,'pricing',{created:d=>bcRegisterCreated(d),no:d=>d.pricingNo,customer:d=>d.rfq.company,version:d=>d.version,updated:d=>d.updated,cost:d=>d.cost,selling:d=>d.selling,profit:d=>d.profit,margin:d=>d.marginPct,status:d=>d.status,quotation:d=>d.quote?.qno||''});
+  const sortedRows=sortRegisterRows(rows,'pricing',{created:d=>bcRegisterCreated(d),no:d=>d.pricingNo,customer:d=>d.rfq.company,type:d=>d.type,version:d=>d.version,updated:d=>d.updated,cost:d=>d.cost,selling:d=>d.selling,profit:d=>d.profit,margin:d=>d.marginPct,status:d=>d.status,quotation:d=>d.quote?.qno||''});
   const pricingDocPages = Math.ceil(sortedRows.length / PRICING_DOC_PER_PAGE) || 1;
   if (pricingDocPage > pricingDocPages) pricingDocPage = 1;
   const pageRows = sortedRows.slice((pricingDocPage-1)*PRICING_DOC_PER_PAGE, pricingDocPage*PRICING_DOC_PER_PAGE);
   tbody.innerHTML=pageRows.length?pageRows.map(d=>`<tr class="pricing-doc-row" onclick="openPricingDocument('${d.rfq.id}',${d.version},'${d.kind}')" title="Open ${esc(d.pricingNo)}" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPricingDocument('${d.rfq.id}',${d.version},'${d.kind}')}">
     <td class="pricing-doc-no">${esc(d.pricingNo)}</td>
-    <td class="pricing-doc-customer" title="${esc(d.rfq.company||'—')}">${esc(d.rfq.company||'—')}</td><td class="pricing-doc-muted center">V${d.version}</td><td class="pricing-doc-muted">${fmtDate(String(d.updated).slice(0,10))}</td>
+    <td class="pricing-doc-customer" title="${esc(d.rfq.company||'—')}">${esc(d.rfq.company||'—')}</td><td><span class="bc-type-text bc-type-text-${d.type}">${BC_TYPE_LABEL[d.type]||'Product'}</span></td><td class="pricing-doc-muted center">V${d.version}</td><td class="pricing-doc-muted">${fmtDate(String(d.updated).slice(0,10))}</td>
     <td class="right">${pricingDocMoney(d.cost)}</td><td class="right">${pricingDocMoney(d.selling)}</td><td class="right pricing-doc-profit ${d.profit<0?'is-negative':''}">${pricingDocMoney(d.profit)}</td><td class="right pricing-doc-margin ${d.marginPct<0?'is-negative':''}">${pricingDocMargin(d.marginPct)}</td>
     <td class="center"><span class="status ${d.status==='Converted'?'status-won':d.status==='Superseded'?'status-cancelled':'status-draft'}">${d.status}</span></td>
     <td>${d.quote?`<button class="pricing-doc-link" onclick="event.stopPropagation();openPricingLinkedQuotation('${d.quote.id}')">${esc(d.quote.qno)}</button>`:'—'}</td>
-  </tr>`).join(''):`<tr><td colspan="10"><div class="empty-state"><i class="ti ti-calculator"></i><h3>No pricing documents found</h3><p>Pricing documents appear here after a pricing sheet is saved.</p></div></td></tr>`;
+  </tr>`).join(''):`<tr><td colspan="11"><div class="empty-state"><i class="ti ti-calculator"></i><h3>No pricing documents found</h3><p>Pricing documents appear here after a pricing sheet is saved.</p></div></td></tr>`;
   document.querySelectorAll('.rows-per-page-select').forEach(el=>{ if(el.value!=String(PRICING_DOC_PER_PAGE)) el.value = String(PRICING_DOC_PER_PAGE); });
   const pdp = document.getElementById('pricing-doc-pagination');
   if (pdp) pdp.innerHTML = buildPaginationHTML(pricingDocPage, pricingDocPages, 'goPricingDocPage');
@@ -5089,8 +5117,8 @@ function renderPricingDocuments(){
 function getPricingRegisterExportRows(){
   const search=(document.getElementById('pricing-doc-search')?.value||'').trim().toLowerCase();
   const pType=document.getElementById('pricing-type-filter')?.value||'', pCust=document.getElementById('pricing-customer-filter')?.value||'';
-  const rows=getPricingDocuments().filter(d=>(!pType||d.kind===pType)&&(!pCust||d.rfq.company===pCust)&&(pricingDocumentFilter==='all'||d.status===pricingDocumentFilter)&&pricingMatchesDateFilter(d)&&(!search||[d.pricingNo,d.rfq.rfqNo,d.rfq.company,d.rfq.ref,d.quote?.qno].some(x=>String(x||'').toLowerCase().includes(search))));
-  return sortRegisterRows(rows,'pricing',{created:d=>bcRegisterCreated(d),no:d=>d.pricingNo,customer:d=>d.rfq.company,version:d=>d.version,updated:d=>d.updated,cost:d=>d.cost,selling:d=>d.selling,profit:d=>d.profit,margin:d=>d.marginPct,status:d=>d.status,quotation:d=>d.quote?.qno||''});
+  const rows=getPricingDocuments().filter(d=>(!pType||d.type===pType)&&(!pCust||d.rfq.company===pCust)&&(pricingDocumentFilter==='all'||d.status===pricingDocumentFilter)&&pricingMatchesDateFilter(d)&&(!search||[d.pricingNo,d.rfq.rfqNo,d.rfq.company,d.rfq.ref,d.quote?.qno].some(x=>String(x||'').toLowerCase().includes(search))));
+  return sortRegisterRows(rows,'pricing',{created:d=>bcRegisterCreated(d),no:d=>d.pricingNo,customer:d=>d.rfq.company,type:d=>d.type,version:d=>d.version,updated:d=>d.updated,cost:d=>d.cost,selling:d=>d.selling,profit:d=>d.profit,margin:d=>d.marginPct,status:d=>d.status,quotation:d=>d.quote?.qno||''});
 }
 function pricingExportFilterSummary(){
   const parts=[];
@@ -6432,7 +6460,7 @@ async function saveQuotation(mode='save', opts={}) {
     status:document.getElementById('f-status').value,
     validity:parseInt(document.getElementById('f-validity').value)||7,
     delivery:(()=>{const v=document.getElementById('f-delivery').value; return v==='__add__'?getDefaultTerm(deliveryTerms):v;})(),
-    ...(currentQuoteType==='contracting'?{completion:bcTermValue('completion'),mobilization:bcTermValue('mobilization')}:{}),   // V271.9: Service quotation terms
+    ...(bcQuoteKind()==='contracting'?{completion:bcTermValue('completion'),mobilization:bcTermValue('mobilization')}:{}),   // V271.9 / V271.10: contracting quotation terms
     payment:(()=>{const v=document.getElementById('f-payment').value; return v==='__add__'?getDefaultTerm(paymentTerms):v;})(),
     notes:document.getElementById('f-notes').value,
     internalNotes:document.getElementById('f-internal-notes').value,
@@ -6638,7 +6666,7 @@ function viewQuotation(id, skipVatCheck=false) {
   const lRFQ=q.rfqId?rfqs.find(r=>r.id===q.rfqId):null;
   const hPricing=!!(lRFQ&&lRFQ.pricingItems&&lRFQ.pricingItems.length);
   const status=q.status||'Draft';
-  document.getElementById('view-title').innerHTML='<span class="qv-title-kicker">Quotation</span><span class="qv-title-number">'+escapeHtml(q.qno)+'</span>';
+  document.getElementById('view-title').innerHTML='<span class="qv-title-kicker">Quotation</span><span class="qv-title-number">'+escapeHtml(q.qno)+'</span><span class="bc-title-type">'+bcTypeBadge(bcQuoteTypeKey(q))+'</span>';   // V271.10: work type
   renderStatusBar(q,status);
 
   let itemNo=0;
@@ -6668,7 +6696,7 @@ function viewQuotation(id, skipVatCheck=false) {
   if(hasCost) margin=pricingPercent(pricingCost,costSell).toFixed(1)+'%';
   const grossProfit=hasCost?(costSell-pricingCost):null;
   const notes=String(q.notes||'').trim();
-  const qvSvc=q.quoteType==='contracting'&&!bilingualMode, qvCompletion=String(q.completion||q.delivery||'').trim();   // V271.9: Service quotation terms
+  const qvSvc=bcQuoteKind(q)==='contracting'&&!bilingualMode, qvCompletion=String(q.completion||q.delivery||'').trim();   // V271.9: Service quotation terms
   const additionalConditions=quotationAdditionalConditionItems(q);
   const validityDays=parseInt(q.validity,10)||0;
   const termsItems=[
@@ -6726,7 +6754,7 @@ function viewQuotation(id, skipVatCheck=false) {
           <div class="qdoc-subtitle-a4">${qvSvc?'PROPOSAL FOR WORKS':'COMMERCIAL OFFER'}</div>
           <section class="qdoc-party-row-a4">
             <div class="qdoc-box-a4"><h3>QUOTATION TO</h3><div class="content"><strong>${escapeHtml(q.company||'—')}</strong>${custAddr1?`<p>${escapeHtml(custAddr1)}</p>`:''}${custAddr2?`<p>${escapeHtml(custAddr2)}</p>`:''}${custCountry?`<p>${escapeHtml(custCountry)}</p>`:''}${cust?.vat?`<p>VAT No. ${escapeHtml(cust.vat)}</p>`:''}${q.contact?`<p>Attn: ${escapeHtml(q.contact)}</p>`:''}</div></div>
-            <div class="qdoc-box-a4"><h3>REFERENCE / PROJECT</h3><div class="content"><strong>${escapeHtml(q.ref||'—')}</strong>${q.project?`<p>${escapeHtml(q.project)}</p>`:''}${lRFQ?`<p>RFQ: ${escapeHtml(lRFQ.rfqNo||'—')}</p>`:''}</div></div>
+            <div class="qdoc-box-a4"><h3>REFERENCE / PROJECT</h3><div class="content"><strong>${escapeHtml(q.ref||'—')}</strong>${q.project?`<p>${escapeHtml(q.project)}</p>`:''}</div></div>
           </section>
           <section class="qdoc-ref-a4">
             <div><small>${bilingualMode?'PAYMENT TERMS / <span class="ar">شروط الدفع</span>':'PAYMENT TERMS'}</small><strong>${escapeHtml(q.payment||'—')}</strong></div>
@@ -6776,7 +6804,41 @@ function viewQuotation(id, skipVatCheck=false) {
     }
   }
   document.getElementById('view-footer').innerHTML=buttons.join('');
+  bcQuoteViewDocument(q);   // V271.10: the document exactly as Print / PDF
   openModalWithSize('view-modal');
+}
+/* V271.10: the quotation view shows the real print document (same template, same layout) in a frame on an A4 sheet;
+   a quotation from an estimate gets a Print style bar on top (remembered on the quotation, used by Print / PDF). */
+function bcQuoteViewDocument(q){
+  const col=document.querySelector('#view-body .qv-document-column'), sheet=col&&col.querySelector('.qdoc-sheet'); if(!col||!sheet) return;
+  const tpl=bcQuoteViewTemplate(q), html=bcQuoteDocHtml(q.id,tpl); if(!html) return;   // nothing captured → the older screen layout stays
+  let bar='';
+  if(q.estimate&&tpl==='contractquote'){
+    const st=BC_PRINT_STYLES.some(x=>x[0]===q.estimate.style)?q.estimate.style:'lumpsum', canEdit=typeof bcCan!=='function'||bcCan('quotation','e');
+    bar='<div class="qv-style-bar"><span class="qv-sb-l">Print style</span><span class="qv-sb-seg" role="group" aria-label="Print style">'
+      +BC_PRINT_STYLES.map(([v,t])=>'<button type="button" data-st="'+v+'" class="'+(v===st?'on':'')+'" aria-pressed="'+(v===st)+'">'+(v==='grouped'?'Section Total with Item Rates':t)+'</button>').join('')
+      +'</span><label class="qv-sb-q"><input type="checkbox" data-sq'+(q.estimate.showQty!==false?' checked':'')+'> Show Qty / Unit</label><span class="qv-sb-n">'+(canEdit?'Remembered for this quotation · used by Print / PDF':'View only')+'</span></div>';
+  }
+  sheet.classList.add('qv-frame-sheet'); col.classList.add('qv-col-stack'); sheet.innerHTML='<iframe class="qv-doc-iframe" title="Quotation document" tabindex="-1"></iframe>';
+  if(bar){ sheet.insertAdjacentHTML('beforebegin',bar);
+    const b=col.querySelector('.qv-style-bar');
+    b.addEventListener('click',e=>{ const x=e.target.closest('[data-st]'); if(!x||x.classList.contains('on')) return; bcQuoteViewSetStyle(q,x.dataset.st,null); });
+    b.addEventListener('change',e=>{ if(e.target.matches('[data-sq]')) bcQuoteViewSetStyle(q,null,e.target.checked); });
+  }
+  const fr=sheet.querySelector('iframe');
+  fr.addEventListener('load',()=>{
+    const size=()=>{ try{ const d=fr.contentDocument; if(!d||!d.body) return; d.documentElement.style.overflow='hidden'; const h=Math.max(d.documentElement.scrollHeight,d.body.scrollHeight); if(h>50){ fr.style.height=h+'px'; } }catch(e){} };
+    size(); setTimeout(size,150); setTimeout(()=>{ size(); window.dispatchEvent(new Event('resize')); },400);
+  });
+  fr.srcdoc=html;
+}
+function bcQuoteViewSetStyle(q,st,sq){
+  if(!q||!q.estimate) return;
+  if(st) q.estimate.style=st; if(sq!==null&&sq!==undefined) q.estimate.showQty=!!sq;
+  if(typeof bcCan!=='function'||bcCan('quotation','e')) Promise.resolve(saveQuotations()).catch(()=>{});
+  const keep=document.querySelector('#view-modal .modal-body')?.scrollTop||0;
+  viewQuotation(q.id,true);
+  requestAnimationFrame(()=>{ const mb=document.querySelector('#view-modal .modal-body'); if(mb) mb.scrollTop=keep; });
 }
 
 async function updateStatus(id, status) {
@@ -10681,6 +10743,7 @@ async function openPricingSheet(rfqId,{closeSource=true,mode='edit',viewVersion=
   const due=r.due?pricingISOToDisplay(String(r.due).slice(0,10)):'';
   document.getElementById('pricing-rfq-info').innerHTML = `<span class="pr-cust">${esc(r.company||'')}</span><span class="pr-x2">${r.ref?' · Ref '+esc(r.ref):''}${due?' · Due '+esc(due):''} · Target ${ps.marginMethod==='gross_margin'?'Margin':'Markup'} ${Number(ps.minMargin||0)}–${Number(ps.targetMargin||0)}%</span>`;
   document.getElementById('pricing-rfq-info').title=[r.company,r.ref&&('Ref '+r.ref),due&&('Due '+due),r.desc].filter(Boolean).join(' · ');
+  { const tb=document.getElementById('pr-type-badge'); if(tb) tb.innerHTML=bcTypeBadge(BC_TYPE_LABEL[r.requestType]?r.requestType:'product'); }   // V271.10: work type in the title bar
   const statusPill=document.getElementById('pr-status-pill');
   if(statusPill){ const st=activeVersion?.status||(r.pricingItems?.length?'Saved':'Draft'); statusPill.textContent=st==='Revision Draft'?'Revision Draft':st==='Saved'?'Saved':'Draft'; }
   // Supplier
@@ -10899,6 +10962,7 @@ async function convertToQuotation() {
   // Pre-fill quotation form from RFQ + pricing
   editingId = null;
   document.getElementById('modal-title').textContent = 'New quotation — from '+r.rfqNo;
+  clearCustomerSelection();   // V271.10: nothing is carried over from the quotation opened before
   // Customer
   const cust = customers.find(x=>x.id===r.custId) || customers.find(x=>x.company===r.company);
   if (cust) {
@@ -10910,6 +10974,8 @@ async function convertToQuotation() {
   }
   document.getElementById('f-contact').value = r.contact||'';
   document.getElementById('f-ref').value = r.ref||'';
+  document.getElementById('f-project').value = r.site||r.project||'';   // V271.10: from the RFQ (was left from the previous quotation)
+  if(document.getElementById('prod-search-inp')) document.getElementById('prod-search-inp').value='';
   const activePricingVersion=getCurrentPricingVersion(r);
   const isRevision=Number(activePricingVersion?.version||1)>1 || !!r.quotationId;
   const revisionInfo=isRevision ? nextQuotationRevisionNo(r) : null;
@@ -13580,7 +13646,8 @@ let _printQID = null;
 
 const TEMPLATES = [
   { id:'erpbox',       name:'Product', category:'standard', desc:'Standard product quotation with item details. Suitable for most quotations.', badge:'Recommended' },
-  { id:'servicequote', name:'Service', category:'standard', desc:'Service / contracting quotation on the Product layout: scope of work, completion period and mobilization.' },
+  { id:'servicequote', name:'Service', category:'standard', desc:'Repair, maintenance and fabrication work on the Product layout: scope of work and delivery terms.' },
+  { id:'contractquote', name:'Contracting', category:'standard', desc:'Proposal for Works from an Estimation: sections, completion period and mobilization; print style chosen at Print / PDF.' },
   { id:'erpbilingual', name:'Arabic / English', category:'bilingual', desc:'Bilingual quotation layout with English and Arabic labels.' },
   { id:'imageref',     name:'Item Image – Thumbnail', category:'image', desc:'Product quotation with compact thumbnail images.' },
   { id:'imagerefmed',  name:'Item Image – Medium', category:'image', desc:'Product quotation with medium-sized images.' },
@@ -13597,7 +13664,8 @@ const TPL_PREVIEWS = {
   premiumcard: `<div style="padding:7px 8px;background:#fff"><div style="font-size:8px;font-weight:800;color:#1F4E79">CUSTOMER</div><div style="font-size:7px;color:#334155;margin:2px 0 5px">Customer Name · Attention: Name</div><div style="text-align:center;font-size:8px;letter-spacing:1px;color:#64748B;font-weight:800;margin-bottom:3px">QUOTATION</div><div style="border:1px solid #CBD5E1;border-radius:5px;padding:5px;background:#F8FAFC;font-size:6px"><div><b>Quotation No.</b> &nbsp; Q-2606-001</div><div><b>Client Ref</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; RFQ-001</div><div><b>Date</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 27-Jun</div><div><b>Valid Until</b> &nbsp;&nbsp; 27-Jul</div></div><div style="margin-top:5px;background:#1F4E79;height:12px;border-radius:2px"></div></div>`,
   executiveinfo: `<div style="padding:7px 8px;background:#fff"><div style="border-top:2px solid #1F4E79;border-bottom:1px solid #CBD5E1;padding:4px 0;text-align:center;font-size:9px;font-weight:900;color:#1F4E79">QUOTATION</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:5px"><div style="border:1px solid #E2E8F0;border-radius:4px;padding:4px;min-height:36px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div><div style="font-size:6px;color:#64748B">Attention: Name</div></div><div style="border:1px solid #E2E8F0;border-radius:4px;padding:4px;min-height:36px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div><div style="font-size:6px"><b>Client Ref</b> RFQ-001</div><div style="font-size:6px"><b>Date</b> 27-Jun</div></div></div><div style="margin-top:5px;background:#F8FAFC;border:1px solid #E2E8F0;height:10px"></div></div>`,
   erpbilingual: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">QUOTATION / عرض سعر</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER / العميل</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div><div style="font-size:6px;color:#64748B">Attention / عناية</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION / بيانات العرض</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div><div style="font-size:6px"><b>Client Ref</b> RFQ-001</div><div style="font-size:6px"><b>Date</b> 27-Jun</div></div></div><div style="margin-top:5px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"># DESCRIPTION / البيان QTY / الكمية AMOUNT / المبلغ</div></div>`,
-  servicequote: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">PROPOSAL FOR WORKS</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div><div style="font-size:6px"><b>Project</b> Site service</div></div></div><div style="margin-top:5px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"># SCOPE OF WORK QTY RATE AMOUNT</div></div>`,
+  servicequote: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">QUOTATION</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div><div style="font-size:6px"><b>Project</b> Site service</div></div></div><div style="margin-top:5px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"># SCOPE OF WORK QTY RATE AMOUNT</div></div>`,
+  contractquote: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">PROPOSAL FOR WORKS</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div><div style="font-size:6px"><b>Project</b> Site service</div></div></div><div style="margin-top:5px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"># SCOPE OF WORK QTY RATE AMOUNT</div></div>`,
   imageref: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">QUOTATION WITH IMAGE REF</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div></div></div><div style="margin-top:5px;display:grid;grid-template-columns:18px 32px 1fr 40px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"><span>#</span><span>IMAGE</span><span>DESCRIPTION</span><span>AMOUNT</span></div></div>`,
   imagerefmed: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">IMAGE REF – MEDIUM</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div></div></div><div style="margin-top:5px;display:grid;grid-template-columns:18px 44px 1fr 34px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"><span>#</span><span>4×3 cm</span><span>DESCRIPTION</span><span>AMOUNT</span></div><div style="margin-top:3px;display:grid;grid-template-columns:18px 44px 1fr 34px;font-size:5px"><span>01</span><span style="height:22px;border:1px solid #CBD5E1;background:#F8FAFC"></span><span>Product description</span><span>SAR</span></div></div>`,
   imagereflarge: `<div style="padding:7px 8px;background:#fff"><div style="font-size:9px;font-weight:900;color:#1F4E79;text-align:center;margin-bottom:5px">IMAGE REF – LARGE</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">CUSTOMER</div><div style="font-size:8px;color:#1F4E79;font-weight:800;margin-top:3px">Customer Name</div></div><div style="border:1px solid #CBD5E1;border-radius:4px;padding:4px"><div style="font-size:6px;color:#64748B;font-weight:800">QUOTATION INFORMATION</div><div style="font-size:6px;margin-top:3px"><b>Quotation No.</b> Q-2606-001</div></div></div><div style="margin-top:5px;display:grid;grid-template-columns:18px 62px 1fr 32px;background:#1F4E79;color:#fff;font-size:5px;padding:2px 4px"><span>#</span><span>6×5 cm</span><span>DESCRIPTION</span><span>AMOUNT</span></div><div style="margin-top:3px;display:grid;grid-template-columns:18px 62px 1fr 32px;font-size:5px"><span>01</span><span style="height:32px;border:1px solid #CBD5E1;background:#F8FAFC"></span><span>Equipment description</span><span>SAR</span></div></div>`,
@@ -13610,7 +13678,7 @@ let _templateGallerySelected='erpbox';
 
 function templatePreviewPage(t){
   const bilingual=t.id==='erpbilingual';
-  const service=t.id==='servicequote';
+  const service=t.id==='servicequote'||t.id==='contractquote';
   const imageType=t.id.startsWith('imageref');
   const imageMode=t.id==='imageref'?'thumb':t.id==='imagerefmed'?'medium':t.id==='imagereflarge'?'large':t.id==='imagerefattach'?'attach':'';
   const ar=bilingual?' / عرض سعر':'';
@@ -13644,6 +13712,7 @@ function templateGalleryIcon(t){
   const map={
     erpbox:{icon:'ti-file-invoice',tone:'blue',label:'Standard'},
     servicequote:{icon:'ti-tool',tone:'violet',label:'Service'},
+    contractquote:{icon:'ti-building-factory-2',tone:'green',label:'Contracting'},
     erpbilingual:{icon:'ti-language',tone:'teal',label:'Bilingual'},
     imageref:{icon:'ti-photo',tone:'cyan',label:'Thumbnail'},
     imagerefmed:{icon:'ti-photo-scan',tone:'indigo',label:'Medium image'},
@@ -13694,8 +13763,11 @@ async function openTemplatePicker(qid) {
   { const q0=quotations.find(x=>x.id===qid); if(q0&&window.BCScope&&BCScope.needsBody(q0)&&!(await BCScope.loadBody(q0))){ BCScope.loadFailed(q0); return; } }   // V271.6: scope text before printing
   _printQID = qid;
   const qForTpl = quotations.find(x=>x.id===qid);
-  const typeDefault = qForTpl && qForTpl.quoteType === 'contracting' ? 'servicequote' : 'erpbox';
-  const preferredTpl = settings.lastTemplate || typeDefault;
+  // V271.10: each kind of quotation opens on its own template; Product quotations keep the last product template used
+  const kind = qForTpl ? bcQuoteKind(qForTpl) : 'product';
+  const typeDefault = kind === 'contracting' ? 'contractquote' : kind === 'service' ? 'servicequote' : 'erpbox';
+  const lastProd = settings.lastTemplate && !['servicequote','contractquote'].includes(settings.lastTemplate) ? settings.lastTemplate : '';
+  const preferredTpl = kind === 'product' ? (lastProd || typeDefault) : typeDefault;
   _templateGallerySelected = TEMPLATES.some(t => t.id === preferredTpl) ? preferredTpl : typeDefault;
   _templateGalleryFilter='all';
   const search=document.getElementById('template-gallery-search');if(search)search.value='';
@@ -13729,7 +13801,7 @@ function bcPaintPrintStyle(q,tpl){
   const m=document.getElementById('quotation-output-modal'); if(!m) return;
   let box=document.getElementById('qout-style');
   if(!box){ const body=m.querySelector('.qout-body')||m.querySelector('.modal-body'); if(!body) return; box=document.createElement('div'); box.id='qout-style'; box.className='qs-printopt'; const opts=body.querySelector('.qout-options'); opts?opts.after(box):body.appendChild(box); }
-  const e=q&&q.estimate; box.hidden=!(e&&tpl==='servicequote');
+  const e=q&&q.estimate; box.hidden=!(e&&tpl==='contractquote');
   if(box.hidden) return;
   const st=BC_PRINT_STYLES.some(x=>x[0]===e.style)?e.style:'lumpsum';
   box.innerHTML='<div class="qs-po-h">Print style</div>'+BC_PRINT_STYLES.map(([v,t,d])=>'<label><input type="radio" name="qout-st" value="'+v+'"'+(v===st?' checked':'')+'> <span><b>'+t+'</b> — '+d+'</span></label>').join('')
@@ -13781,8 +13853,12 @@ function generateQuotationOutput(){
   bcTakePrintStyle(quotations.find(x=>x.id===_printQID));   // V271.9
   const _scopeMode=window.BCScope?BCScope.chosenPrintMode():'';   // V271.6: long scope inline / Annexure A
   closeModal('quotation-output-modal'); logQuotationOutput(); const tpl=_pendingQuotationTemplate||'erpbox';
+  { const qq=quotations.find(x=>x.id===_printQID); if(qq&&qq.printTemplate!==tpl){ qq.printTemplate=tpl; if(typeof bcCan!=='function'||bcCan('quotation','e')) Promise.resolve(saveQuotations()).catch(()=>{}); } }   // V271.10: the view shows this template
   if(window.BCScope) BCScope.printBegin(quotations.find(x=>x.id===_printQID),tpl==='professional'?'inline':_scopeMode);
-  try {
+  try { bcPrintByTemplate(_printQID,tpl); } finally { if(window.BCScope) BCScope.printEnd(); }
+}
+/** V271.10: one quotation, one template → its print document (the print window, or the view's capture) */
+function bcPrintByTemplate(_printQID,tpl){
   if      (tpl === 'professional') printQuotation(_printQID);
   else if (tpl === 'classic')      printQuotationClassic(_printQID);
   else if (tpl === 'modern')       printQuotationModern(_printQID);
@@ -13791,13 +13867,30 @@ function generateQuotationOutput(){
   else if (tpl === 'premiumcard')  printQuotationInfoLayout(_printQID,'premiumcard');
   else if (tpl === 'executiveinfo')printQuotationInfoLayout(_printQID,'executiveinfo');
   else if (tpl === 'erpbilingual') printQuotationArabicEnglish(_printQID);
-  else if (tpl === 'servicequote') printQuotationProductA4(_printQID,'service');   // V271.9: the Product layout (CQ_1–CQ_3)
+  else if (tpl === 'servicequote') printQuotationProductA4(_printQID,'service');   // V271.10: repair / maintenance / fabrication
+  else if (tpl === 'contractquote') printQuotationProductA4(_printQID,'contracting');   // V271.9 / V271.10: Proposal for Works (CQ_1–CQ_3)
   else if (tpl === 'imageref')     printQuotationProductA4(_printQID,'image');
   else if (tpl === 'imagerefmed')  printQuotationProductA4(_printQID,'image-medium');
   else if (tpl === 'imagereflarge')printQuotationProductA4(_printQID,'image-large');
   else if (tpl === 'imagerefattach')printQuotationProductA4(_printQID,'image-attachment');
   else if (tpl === 'bilingual')    printQuotationArabicEnglish(_printQID);
-  } finally { if(window.BCScope) BCScope.printEnd(); }
+  else printQuotationProductA4(_printQID);
+}
+/** V271.10: the template the view shows — the last one printed for this quotation, else the default for its kind */
+function bcQuoteViewTemplate(q){
+  if(q&&q.printTemplate&&TEMPLATES.some(t=>t.id===q.printTemplate)) return q.printTemplate;
+  const k=q?bcQuoteKind(q):'product';
+  return k==='contracting'?'contractquote':k==='service'?'servicequote':'erpbox';
+}
+/** V271.10: the customer document of a quotation as HTML (exactly what Print / PDF produces, without printing) */
+function bcQuoteDocHtml(id,tpl){
+  const q=quotations.find(x=>x.id===id); if(!q) return '';
+  let out=''; const keepOpt=_quotationOutputOptions;
+  window.__bcTplCapture=h=>{ out=h; }; _quotationOutputOptions={signature:false,stamp:false};
+  try { if(window.BCScope) BCScope.printBegin(q,BCScope.printMode?BCScope.printMode():''); bcPrintByTemplate(id,tpl); }
+  catch(e){ console.error('[BizCore] quotation document view failed', e); out=''; }
+  finally { if(window.BCScope) BCScope.printEnd(); window.__bcTplCapture=null; _quotationOutputOptions=keepOpt; }
+  return out;
 }
 
 /* ── Shared helper: builds common data for all templates ── */
@@ -13823,6 +13916,14 @@ function _quotationPrintFilenameTitle(){
   return safeCustomer ? safeNo+' - '+safeCustomer : safeNo;
 }
 function _tplOpen(html) {
+  // V271.10: the quotation view shows the same document — capture it instead of opening a print window
+  if(typeof window.__bcTplCapture==='function'){
+    let h=String(html||'').replace(/<script>[^<]*window\.print\(\)[^<]*<\/script>/g,'');
+    if(window.BCRich) h=h.replace(/<\/head>/i,'<style>'+bcRichPrintCss()+'</style></head>');
+    if(window.BCScope) h=BCScope.injectAnnex(h);
+    if(window.BCPages){const cfg=/<table class="pw"/.test(h)?BCPages.SERVICE_QUOTE:/<article class="sheet/.test(h)?BCPages.ERP_QUOTE:null;if(cfg)h=BCPages.apply(h,cfg);}
+    window.__bcTplCapture(h); return;
+  }
   const w=window.open('','_blank','width=880,height=1020');
   if(!w) return;
   const printTitle=_quotationPrintFilenameTitle();
@@ -13847,7 +13948,7 @@ function _tplOpen(html) {
 /* v164 — Pilot Product quotation print/PDF: approved A4 display design */
 function printQuotationProductA4(id, imageVariant){
   const q=quotations.find(x=>x.id===id); if(!q) return;
-  const serviceMode=imageVariant==='service';   // V271.9: the Service / Contracting quotation on the Product layout (CQ_1–CQ_3)
+  const contractMode=imageVariant==='contracting', serviceMode=imageVariant==='service'||contractMode;   // V271.10: Service = Product layout with Scope of Work + Delivery Terms; Contracting = Proposal for Works (CQ_1–CQ_3)
   const bilingualMode=imageVariant==='bilingual';
   const imageAttachmentMode=imageVariant==='image-attachment';
   const imageMode=['image','image-medium','image-large'].includes(imageVariant);
@@ -13886,7 +13987,7 @@ function printQuotationProductA4(id, imageVariant){
   }
   let rows=rowParts.join('')||'<tr><td colspan="'+cols+'" class="empty">No line items</td></tr>';
   // V271.9: a quotation from an estimate prints its sections A, B… with numbered lines in its print style
-  const svcEst=serviceMode&&q.estimate?q.estimate:null;
+  const svcEst=contractMode&&q.estimate?q.estimate:null;
   let svcHead='', svcSubLabel='';
   if(svcEst){
     const style=svcEst.style==='sections'||svcEst.style==='grouped'?svcEst.style:'lumpsum';
@@ -13910,17 +14011,17 @@ function printQuotationProductA4(id, imageVariant){
     rows=out.join('')||rows;
     if(style==='lumpsum') svcSubLabel='Lump Sum Price';
   }
-  const completion=String(q.completion||(serviceMode?q.delivery:'')||'').trim(), mobilization=String(q.mobilization||'').trim();   // V271.9
+  const completion=String(q.completion||(contractMode?q.delivery:'')||'').trim(), mobilization=String(q.mobilization||'').trim();   // V271.9
   const notes=String(q.notes||'').trim();
   const additionalConditions=quotationAdditionalConditionItems(q);
   const validityDays=parseInt(q.validity,10)||0;
   const termsItems=[
     validityDays?'<li>'+(bilingualMode?'مدة صلاحية هذا العرض '+validityDays+' يوم'+(validityDays===1?'':'اً')+' من تاريخ الإصدار. / ':'')+'This quotation is valid for '+validityDays+' day'+(validityDays===1?'':'s')+' from the date of issue.</li>':'',
-    !serviceMode&&q.delivery?'<li>'+(bilingualMode?'شروط التسليم / ':'Delivery terms: ')+escapeHtml(q.delivery)+'</li>':'',
-    serviceMode&&completion?'<li>Completion period: '+escapeHtml(completion)+'</li>':'',
-    serviceMode&&mobilization?'<li>Mobilization: '+escapeHtml(mobilization)+'</li>':'',
+    !contractMode&&q.delivery?'<li>'+(bilingualMode?'شروط التسليم / ':'Delivery terms: ')+escapeHtml(q.delivery)+'</li>':'',
+    contractMode&&completion?'<li>Completion period: '+escapeHtml(completion)+'</li>':'',
+    contractMode&&mobilization?'<li>Mobilization: '+escapeHtml(mobilization)+'</li>':'',
     q.payment?'<li>'+(bilingualMode?'شروط الدفع / ':'Payment terms: ')+escapeHtml(q.payment)+'</li>':'',
-    serviceMode?'<li>Work outside the above scope will be quoted separately.</li>':'',
+    contractMode?'<li>Work outside the above scope will be quoted separately.</li>':'',
     additionalConditions
   ].filter(Boolean).join('');
   const termsHtml=termsItems||'<li>Terms are as stated in this quotation.</li>';
@@ -13939,7 +14040,7 @@ function printQuotationProductA4(id, imageVariant){
 @page{size:A4 portrait;margin:10mm 11mm 18mm 11mm}
 .ar{font-family:Tahoma,Arial,sans-serif;direction:rtl;unicode-bidi:isolate}
 .sheet{width:210mm;min-height:297mm;margin:0 auto;padding:12mm 11mm 10mm;background:#fff;display:flex;flex-direction:column}
-.header{display:grid;grid-template-columns:1.22fr .95fr 1.05fr;gap:8px;align-items:start;padding-bottom:10px;border-bottom:2px solid #174b7a}.q-logo{max-width:260px;max-height:78px;width:auto;height:auto;object-fit:contain}.q-logo-fallback{width:78px;height:78px;border:1px solid #cbd8e5;display:flex;align-items:center;justify-content:center;font-size:23px;font-weight:800;color:#174b7a}.company{font-size:9.5px;line-height:1.5;color:#50657a;border-left:1px solid #cbd8e5;padding-left:10px;min-height:58px}.titlebox{border:1px solid #b9cce0}.titlebox h1{margin:0;padding:8px 10px;font-size:19px;letter-spacing:.35px;color:#174b7a;background:#f7fafc}.titlebox>div{padding:7px 10px;border-top:1px solid #d7e1eb}.titlebox small{display:block;text-transform:uppercase;font-weight:800;color:#5f7489;font-size:8px;margin-bottom:2px}.titlebox strong{font-size:11px}.titlegrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.subtitle{margin:5px 0 10px;text-align:right;font-size:8px;letter-spacing:3px;color:#64788c}
+.header{display:grid;grid-template-columns:1.22fr .95fr 1.05fr;gap:8px;align-items:start;padding-bottom:10px;border-bottom:2px solid #174b7a}.q-logo{max-width:260px;max-height:78px;width:auto;height:auto;object-fit:contain}.q-logo-fallback{width:78px;height:78px;border:1px solid #cbd8e5;display:flex;align-items:center;justify-content:center;font-size:23px;font-weight:800;color:#174b7a}.company{font-size:9.5px;line-height:1.5;color:#50657a;border-left:1px solid #cbd8e5;padding-left:10px;min-height:58px}.titlebox{border:1px solid #b9cce0}.titlebox h1{margin:0;padding:8px 10px;font-size:19px;letter-spacing:.35px;color:#174b7a;background:#f7fafc;text-align:center}.titlebox>div{padding:7px 10px;border-top:1px solid #d7e1eb}.titlebox small{display:block;text-transform:uppercase;font-weight:800;color:#5f7489;font-size:8px;margin-bottom:2px}.titlebox strong{font-size:11px}.titlegrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.subtitle{margin:5px 0 10px;text-align:right;font-size:8px;letter-spacing:3px;color:#64788c}
 .party{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}.box{border:1px solid #cbd8e5}.box h3{margin:0;background:#f3f7fa;padding:6px 9px;font-size:9px;text-transform:uppercase;color:#174b7a;border-bottom:1px solid #cbd8e5}.box .content{padding:8px 9px;min-height:67px;line-height:1.45}.box .content strong{display:block;font-size:11.5px;margin-bottom:2px}.box p{font-size:9.5px;color:#50657a;margin:2px 0}.refs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:9px 0}.refs>div{border:1px solid #cbd8e5;background:#f3f7fa;padding:7px 8px;min-height:43px}.refs small{display:block;font-size:7.5px;font-weight:800;text-transform:uppercase;color:#5e7488;margin-bottom:4px}.refs strong{font-size:9.5px}
 .items{width:100%;border-collapse:collapse;border-bottom:1px solid #cbd8e5}.items thead{display:table-header-group}.items tr{break-inside:avoid;page-break-inside:avoid}.items th{background:#174b7a;color:#fff;padding:6px 5px;border:1px solid #174b7a;font-size:8px;text-align:left}.items td{padding:6px 5px;border:0;border-bottom:1px solid #e3eaf1;font-size:9px;color:#263f56;vertical-align:top}.items tbody tr td:first-child{border-left:1px solid #cbd8e5}.items tbody tr td:last-child{border-right:1px solid #cbd8e5}.items tbody tr:last-child td{border-bottom:0}.items{border-bottom:2px solid #174b7a!important}.items tr.sec td{background:#eef4fb;color:#174b7a;font-weight:800;font-size:9.5px}.items tr.sec .bc-qht{font-weight:800;color:#174b7a}.items tr.sec-total td{background:#f7f9fb;color:#174b7a;font-weight:700}.bottom .totals{align-self:start}.items .c{text-align:center}.items .r{text-align:right;white-space:nowrap}.items .imgcell{width:${imageCfg.col};text-align:center;vertical-align:middle;padding:4px}.items .imgcell img{display:block;max-width:${imageCfg.w};max-height:${imageCfg.h};width:auto;height:auto;object-fit:contain;margin:0 auto}.items .imgph{width:100%;min-height:${imageCfg.h};display:flex;align-items:center;justify-content:center;border:1px dashed #cbd8e5;background:#f8fafc;color:#94a3b8;font-size:7.5px}.desc{font-size:9.5px}.sub{font-size:8.5px;color:#64788c;margin-top:2px}.inline-note{margin-top:5px;font-size:8.5px;line-height:1.35}.inline-note b{font-weight:800}.note-highlight{padding:4px 6px;background:#fffbea;border:1px solid #eadfae;color:#5a4a0a}.note-blue{padding:4px 7px;background:#eef6fd;border-left:3px solid #2684d8;color:#294d6d}.note-minimal{padding:2px 1px;color:#5d7186;font-style:italic}.note-badge{display:flex;align-items:center;gap:6px;color:#415a70}.note-badge span{display:inline-block;background:#2684d8;color:#fff;border-radius:3px;padding:2px 5px;font-size:7px;font-weight:800;letter-spacing:.4px}.note-badge em{font-style:normal}.items td.disc{line-height:1.3}.items .qd-pct{display:block;color:#50657a}.items .qd-amt{display:block}.heading td{background:#eef4fb!important;color:#174b7a!important;font-weight:800!important}.note td{background:#fff!important;color:#475569!important}.standalone-note .inline-note{margin:0}.empty{text-align:center;padding:20px!important;color:#64748b!important}
 .bottom{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:18px;padding:12px 0 10px;break-inside:avoid;page-break-inside:avoid}.terms{border-left:3px solid #174b7a;background:#f7f9fb;padding:9px 12px;font-size:9.5px;line-height:1.5}.terms ul{margin:4px 0 0;padding-left:18px}.terms li{margin:3px 0}.eyebrow{display:block;font-size:9px;letter-spacing:1.2px;font-weight:800;color:#174b7a;margin-bottom:5px}.totals{border:1px solid #cbd8e5}.totals>div{display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #d7e1eb;font-size:10px}.totals .grand{background:#174b7a;color:#fff;border-bottom:0;font-weight:800;font-size:12px}.notesbox{border:1px solid #e6c75a;background:#fffbea;padding:8px 10px;margin:4px 0 12px;font-size:9.5px;line-height:1.45;break-inside:avoid;page-break-inside:avoid}.notesbox strong{color:#17324d}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:42px;margin-top:24mm;break-inside:avoid;page-break-inside:avoid}.sigbox{padding-top:7px;border-top:1.5px solid #174b7a;min-height:0;font-size:8.5px;font-weight:800;color:#5d7186;text-transform:uppercase}.sigbox.authorized{position:relative}.digital-auth{position:absolute;left:2px;bottom:20px;width:270px;height:122px;pointer-events:none}.digital-signature{position:absolute;left:0;bottom:0;width:225px;height:96px;object-fit:contain;object-position:left bottom;z-index:1}.digital-stamp{position:absolute;left:78px;bottom:-8px;width:138px;height:138px;object-fit:contain;object-position:center bottom;opacity:.92;z-index:2}.digital-signer{position:absolute;left:8px;bottom:10px;font-size:7px;color:#64788c;text-transform:none;font-weight:600;white-space:nowrap}.thankyou{text-align:center;font-size:9px;font-style:italic;color:#5c6f83;line-height:1.55;padding:8px 0 14px;break-inside:avoid;page-break-inside:avoid}
@@ -13949,8 +14050,8 @@ function printQuotationProductA4(id, imageVariant){
 @media screen{body{background:#d0d0d0;padding:20px 0}.sheet{box-shadow:0 4px 20px rgba(0,0,0,.2)}}
 </style></head><body><div class="fixed-footer">${companyDocumentFooterHtml('quotation')}</div><article class="sheet">
 <header class="header"><div>${logoHtml}</div><div class="company">${companyDocumentHeaderHtml('quotation')}</div><div><div class="titlebox"><h1>${bilingualMode?'QUOTATION / <span class="ar">عرض سعر</span>':'QUOTATION'}</h1><div><small>Quotation No.</small><strong>${escapeHtml(q.qno)}</strong></div><div class="titlegrid"><div><small>Date</small><strong>${fmtDate(q.date)}</strong></div><div><small>Valid Until</small><strong>${fmtDate(vu)}</strong></div></div>${qRevision?'<div><small>Revision</small><strong>R'+qRevision+'</strong></div>':''}</div></div></header>
-<div class="subtitle">${bilingualMode?'COMMERCIAL OFFER / <span class="ar">عرض تجاري</span>':(serviceMode?'PROPOSAL FOR WORKS':'COMMERCIAL OFFER')}</div><section class="party"><div class="box"><h3>${bilingualMode?'QUOTATION TO / <span class="ar">عرض السعر إلى</span>':'QUOTATION TO'}</h3><div class="content"><strong>${escapeHtml(q.company||'—')}</strong>${custAddr1?'<p>'+escapeHtml(custAddr1)+'</p>':''}${custAddr2?'<p>'+escapeHtml(custAddr2)+'</p>':''}${custCountry?'<p>'+escapeHtml(custCountry)+'</p>':''}${cust?.vat?'<p>VAT No. '+escapeHtml(cust.vat)+'</p>':''}${q.contact?'<p>Attn: '+escapeHtml(q.contact)+'</p>':''}</div></div><div class="box"><h3>${bilingualMode?'REFERENCE / PROJECT / <span class="ar">المرجع / المشروع</span>':'REFERENCE / PROJECT'}</h3><div class="content"><strong>${escapeHtml(q.ref||'—')}</strong>${q.project?'<p>'+escapeHtml(q.project)+'</p>':''}${lRFQ?'<p>RFQ: '+escapeHtml(lRFQ.rfqNo||'—')+'</p>':''}</div></div></section>
-<section class="refs"><div><small>PAYMENT TERMS</small><strong>${escapeHtml(q.payment||'—')}</strong></div>${serviceMode?'<div><small>COMPLETION PERIOD</small><strong>'+escapeHtml(completion||'—')+'</strong></div><div><small>MOBILIZATION</small><strong>'+escapeHtml(mobilization||'—')+'</strong></div><div><small>VAT / CURRENCY</small><strong>'+savedVat+'% · '+escapeHtml(settings.currency||settings.baseCurrency||'SAR')+'</strong></div>':'<div><small>DELIVERY TERMS</small><strong>'+escapeHtml(q.delivery||'—')+'</strong></div><div><small>VAT</small><strong>'+savedVat+'%</strong></div><div><small>CURRENCY</small><strong>'+escapeHtml(settings.currency||settings.baseCurrency||'SAR')+'</strong></div>'}</section>
+<div class="subtitle">${bilingualMode?'COMMERCIAL OFFER / <span class="ar">عرض تجاري</span>':(contractMode?'PROPOSAL FOR WORKS':'COMMERCIAL OFFER')}</div><section class="party"><div class="box"><h3>${bilingualMode?'QUOTATION TO / <span class="ar">عرض السعر إلى</span>':'QUOTATION TO'}</h3><div class="content"><strong>${escapeHtml(q.company||'—')}</strong>${custAddr1?'<p>'+escapeHtml(custAddr1)+'</p>':''}${custAddr2?'<p>'+escapeHtml(custAddr2)+'</p>':''}${custCountry?'<p>'+escapeHtml(custCountry)+'</p>':''}${cust?.vat?'<p>VAT No. '+escapeHtml(cust.vat)+'</p>':''}${q.contact?'<p>Attn: '+escapeHtml(q.contact)+'</p>':''}</div></div><div class="box"><h3>${bilingualMode?'REFERENCE / PROJECT / <span class="ar">المرجع / المشروع</span>':'REFERENCE / PROJECT'}</h3><div class="content"><strong>${escapeHtml(q.ref||'—')}</strong>${q.project?'<p>'+escapeHtml(q.project)+'</p>':''}</div></div></section>
+<section class="refs"><div><small>PAYMENT TERMS</small><strong>${escapeHtml(q.payment||'—')}</strong></div>${contractMode?'<div><small>COMPLETION PERIOD</small><strong>'+escapeHtml(completion||'—')+'</strong></div><div><small>MOBILIZATION</small><strong>'+escapeHtml(mobilization||'—')+'</strong></div><div><small>VAT / CURRENCY</small><strong>'+savedVat+'% · '+escapeHtml(settings.currency||settings.baseCurrency||'SAR')+'</strong></div>':'<div><small>DELIVERY TERMS</small><strong>'+escapeHtml(q.delivery||'—')+'</strong></div><div><small>VAT</small><strong>'+savedVat+'%</strong></div><div><small>CURRENCY</small><strong>'+escapeHtml(settings.currency||settings.baseCurrency||'SAR')+'</strong></div>'}</section>
 <table class="items"><thead><tr>${svcHead||productHead}</tr></thead><tbody>${rows}</tbody></table>
 <section class="bottom"><div class="terms"><span class="eyebrow">${bilingualMode?'TERMS &amp; CONDITIONS / <span class="ar">الشروط والأحكام</span>':'TERMS &amp; CONDITIONS'}</span><ul>${termsHtml}</ul></div><div class="totals"><div><span>${svcSubLabel||'Subtotal'}</span><strong>${qvSummaryMoney(totals.sub)}</strong></div>${totals.disc>0?'<div><span>Discount</span><strong>- '+qvSummaryMoney(totals.disc)+'</strong></div>':''}<div><span>VAT (${savedVat}%)</span><strong>${qvSummaryMoney(totals.vat)}</strong></div><div class="grand"><span>Grand Total</span><strong>${qvGrandTotalMoney(totals.net)}</strong></div></div></section>
 ${notes?'<section class="notesbox"><strong>Notes.</strong> '+escapeHtml(notes)+'</section>':''}

@@ -150,8 +150,9 @@
     { const l = $('qcs-ref-l'); if (l) l.textContent = flowInfo().est ? 'Estimation' : 'Pricing'; }   // V271.7.5 / V271.8.2
     if (!$('quote-modal')) return;
     const f = flowInfo(), company = $('f-company')?.value || $('f-cust-search')?.value || '', ref = $('f-ref')?.value.trim() || '';
-    const sub = [company || 'Select a customer', ref ? 'Ref ' + ref : '', f.ctx?.pricingRef ? (f.est ? 'From Estimation ' : 'From Pricing ') + f.ctx.pricingRef : '', typeof quotationTypeLabel === 'function' ? quotationTypeLabel(currentQuoteType).replace(' Quotation', 's') : ''].filter(Boolean);
+    const sub = [company || 'Select a customer', ref ? 'Ref ' + ref : '', f.ctx?.pricingRef ? (f.est ? 'From Estimation ' : 'From Pricing ') + f.ctx.pricingRef : ''].filter(Boolean);
     if ($('quote-header-sub')) $('quote-header-sub').textContent = sub.join(' · ');
+    { const tb = $('qt-type-badge'); if (tb && typeof bcTypeBadge === 'function') tb.innerHTML = bcTypeBadge(bcQuoteTypeKey()); }   // V271.10: work type in the title bar
     const st = $('f-status')?.value || 'Draft';
     if ($('qt-status-text')) $('qt-status-text').textContent = st;
     const pill = $('qt-status-pill'); if (pill) pill.dataset.tone = STATUS_TONE[st] || 'neutral';
@@ -211,7 +212,7 @@
   function applyFold(on) { const w = win(); if (w) w.classList.toggle('qt-folded', !!on); paintFold(); }
   function qtFold(on) { applyFold(on); try { localStorage.setItem('bc_qt_fold', on ? '1' : '0'); } catch (_) {} if (!on) setTimeout(() => $('f-cust-search')?.focus({ preventScroll: true }), 30); }
   const selText = id => { const s = $(id); return s && s.value && s.value !== '__add__' ? (s.options[s.selectedIndex]?.text || s.value).replace(/\s*★$/, '') : ''; };
-  const isSvc = () => typeof currentQuoteType !== 'undefined' && currentQuoteType === 'contracting';   // V271.9
+  const isSvc = () => typeof bcQuoteKind === 'function' && bcQuoteKind() === 'contracting';   // V271.9 / V271.10: contracting quotations only
   function paintFold() {
     const host = $('qt-band-fold'); if (!host) return;
     const ch = (lbl, val, cls = '') => val ? `<span class="qt-chip ${cls}">${lbl ? `<span>${lbl}</span>` : ''}${esc(val)}</span>` : '';
