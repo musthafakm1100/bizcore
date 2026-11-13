@@ -9539,6 +9539,8 @@ table.cm-table .cm-ab{font-size:11px!important;padding:3px 8px!important;line-he
 #view-modal .qv-status-list .sbtn{justify-content:flex-start;width:100%;box-sizing:border-box}
 #view-modal .qv-status-act{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 #view-modal .qv-status-act .btn{width:100%;justify-content:center}
+#view-modal .qv-status-act .btn{margin-left:0!important;box-sizing:border-box}
+#view-modal .qv-status-act > span{margin-left:0!important}
 #view-modal .qv-style-list{display:flex;flex-direction:column;gap:6px}
 #view-modal .qv-style-list button{font:inherit;font-size:12.5px;text-align:left;padding:7px 10px;border:1px solid #cfd8e3;border-radius:8px;background:#fff;color:#34475c;cursor:pointer}
 #view-modal .qv-style-list button.on{background:var(--c-173a5e,#173a5e);border-color:var(--c-173a5e,#173a5e);color:#fff;font-weight:600}
