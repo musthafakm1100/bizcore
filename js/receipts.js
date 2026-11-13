@@ -151,7 +151,7 @@ function renderReceiptRegister(){
   if (custSel) { const cur = custSel.value; const names = [...new Set(receiptsCache.map(r => r.customer).filter(Boolean))].sort((a, b) => a.localeCompare(b)); custSel.innerHTML = '<option value="">All customers</option>' + names.map(n => `<option value="${rctEsc(n)}">${rctEsc(n)}</option>`).join(''); custSel.value = names.includes(cur) ? cur : ''; }
   const cust = custSel ? custSel.value : '';
   const scope = receiptsCache.filter(r => (!cust || r.customer === cust) && (!from || (r.date || '') >= from) && (!to || (r.date || '') <= to)
-    && (!q || [r.rctNo, r.customer, r.reference, r.zohoPaymentNo, r.method, r.account, ...(r.allocations || []).map(a => a.invNo), ...(r.allocations || []).map(a => a.soNo)].some(v => String(v || '').toLowerCase().includes(q))));
+    && (!q || [r.rctNo, r.customer, r.reference, r.zohoPaymentNo, r.method, r.account, ...(r.allocations || []).map(a => a.invNo), ...(r.allocations || []).map(a => a.soNo), ...(r.allocations || []).map(a => a.jobNo)].some(v => String(v || '').toLowerCase().includes(q))));
   const posted = scope.filter(r => r.status !== 'Voided'), unapplied = posted.filter(r => rctNum(r.unapplied) > 0.005);
   const setT = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   const inv = openInvoicesSummary();
@@ -428,7 +428,7 @@ function renderNewReceiptInvoices(resetFocus){
       <label class="rct-inv-check"><input type="checkbox" ${a > 0 ? 'checked' : ''} onchange="newReceiptToggle('${rctEsc(i.id)}',this.checked)" aria-label="Apply to ${rctEsc(i.invNo)}"/></label>
       <span class="rct-inv-no"><button type="button" class="rct-link" onclick="openInvoiceView('${rctEsc(i.id)}')" title="View ${rctEsc(i.invNo)}">${rctEsc(i.invNo)}</button></span>
       <span class="rct-inv-zoho">${rctEsc(i.zohoNo || '—')}</span><span class="rct-inv-date">${rctShortDate(i.date)}</span><span class="rct-inv-due">${duePill}</span>
-      <span class="rct-inv-so">${rctEsc(i.soNo || '—')}</span><span class="num rct-inv-total">${rctF(invoiceNetOf(i))}</span><span class="num rct-inv-paid">${rctF(rctNum((x.payment || {}).paid))}</span>
+      <span class="rct-inv-so">${rctEsc(i.soNo || i.jobNo || '—')}</span><span class="num rct-inv-total">${rctF(invoiceNetOf(i))}</span><span class="num rct-inv-paid">${rctF(rctNum((x.payment || {}).paid))}</span>
       <span class="num rct-inv-bal"><small>Due </small>${rctF(x.balance)}</span>
       <span class="rct-inv-apply"><input type="number" class="bc-num-input rct-apply-input" min="0" max="${x.balance.toFixed(2)}" step="0.01" inputmode="decimal" value="${a > 0 ? a.toFixed(2) : ''}" placeholder="0.00" oninput="newReceiptApplyInput('${rctEsc(i.id)}',this)" aria-label="Amount applied to ${rctEsc(i.invNo)}"/><button type="button" class="btn btn-secondary btn-sm rct-full" onclick="newReceiptFull('${rctEsc(i.id)}')" title="Settle in full">Full</button><small class="rct-left" id="rn-left-${rctEsc(i.id)}"></small></span>
     </div>`;
@@ -623,7 +623,7 @@ function receiptDocumentHtml(r, screenMode){
   const from = `<strong>${rctEsc(r.customer)}</strong>${cv.nameAr ? `<div dir="rtl">${rctEsc(cv.nameAr)}</div>` : ''}${addr ? rctEsc(addr) + '<br>' : ''}${cv.vat ? `VAT No.: ${rctEsc(cv.vat)}` : ''}`;
   const pay = `Method: <strong style="display:inline">${rctEsc(r.method)}</strong>${r.reference ? `<br>Reference: ${rctEsc(r.reference)}` : ''}${r.account ? `<br>Deposited to: ${rctEsc(r.account)}` : ''}`;
   const refs = [['Receipt Date', fmtDate(r.date)], ['Payment Method', rctEsc(r.method)], ['Payment Reference', rctEsc(r.reference || '—')], ['Zoho Payment No.', rctEsc(r.zohoPaymentNo || '—')]];
-  const rows = (r.allocations || []).map((a, i) => `<tr><td class="c">${i + 1}</td><td>${rctEsc(a.invNo)}</td><td>${fmtDate(a.invDate)}</td><td>${rctEsc(a.soNo || '—')}</td><td class="num">${rctF(a.invTotal)}</td><td class="num">${rctF(a.amount)}</td><td class="num">${rctF(Math.max(0, rctNum(a.balanceBefore) - rctNum(a.amount)))}</td></tr>`).join('')
+  const rows = (r.allocations || []).map((a, i) => `<tr><td class="c">${i + 1}</td><td>${rctEsc(a.invNo)}</td><td>${fmtDate(a.invDate)}</td><td>${rctEsc(a.soNo || a.jobNo || '—')}</td><td class="num">${rctF(a.invTotal)}</td><td class="num">${rctF(a.amount)}</td><td class="num">${rctF(Math.max(0, rctNum(a.balanceBefore) - rctNum(a.amount)))}</td></tr>`).join('')
     + (rctNum(r.unapplied) > 0.005 ? `<tr class="rct-onacc"><td class="c">${(r.allocations || []).length + 1}</td><td colspan="4">Received on account (not yet applied to an invoice)</td><td class="num">${rctF(r.unapplied)}</td><td class="num">—</td></tr>` : '')
     || '<tr><td colspan="7" style="text-align:center;color:#64748b">Received on account</td></tr>';
   const tr = (k, val, cls = '') => `<div${cls ? ` class="${cls}"` : ''}><span>${k}</span><strong>${val}</strong></div>`;
@@ -668,6 +668,11 @@ function renderReceiptView(r){
   const flow = [];
   const sos = [...new Map((r.allocations || []).filter(a => a.salesOrderId).map(a => [a.salesOrderId, a])).values()];
   sos.forEach(a => { const so = (salesOrders || []).find(s => s.id === a.salesOrderId); flow.push(so ? { label: 'Sales order', text: so.soNo, onclick: rctViewGo(`viewSO('${so.id}')`) } : { label: 'Sales order', text: a.soNo || '—' }); });
+  // V271.13: an allocation on a contracting job invoice points at the job
+  [...new Set((r.allocations || []).filter(a => a && a.jobId).map(a => a.jobId))].forEach(id => {
+    const job = (typeof jobs !== 'undefined' ? jobs : []).find(j => String(j.id) === String(id));
+    flow.push({ label: 'Job', text: (job && job.jobNo) || ((r.allocations || []).find(a => a.jobId === id) || {}).jobNo || '—', onclick: rctViewGo(`BCJobs.view('${id}',{tab:'wb'})`) });
+  });
   (r.allocations || []).forEach(a => flow.push({ label: `Invoice · ${rctF(a.amount)} applied`, text: a.invNo, onclick: `openInvoiceView('${rctEsc(a.invoiceId)}')` }));
   flow.push({ label: 'Payment receipt', text: r.rctNo, state: 'current' });
   const act = [[`Receipt posted by ${r.createdBy || '—'}`, r.created || r.date]];
@@ -756,7 +761,7 @@ function openApplyReceipt(id){
   document.getElementById('ra-title').textContent = `Apply ${r.rctNo}`;
   document.getElementById('ra-sub').textContent = `${r.customer} · ${rctF(m._avail)} unapplied`;
   const box = document.getElementById('ra-list');
-  box.innerHTML = m._open.length ? m._open.map(x => `<div class="rct-apply-row" data-inv="${rctEsc(x.invoice.id)}"><span><b>${rctEsc(x.invoice.invNo)}</b><small>${rctShortDate(x.invoice.date)} · ${rctEsc(x.invoice.soNo || '')} · due ${rctF(x.balance)}</small></span><input type="number" class="bc-num-input" min="0" max="${x.balance.toFixed(2)}" step="0.01" inputmode="decimal" placeholder="0.00" oninput="applyReceiptInput('${rctEsc(x.invoice.id)}',this)"/></div>`).join('')
+  box.innerHTML = m._open.length ? m._open.map(x => `<div class="rct-apply-row" data-inv="${rctEsc(x.invoice.id)}"><span><b>${rctEsc(x.invoice.invNo)}</b><small>${rctShortDate(x.invoice.date)} · ${rctEsc(x.invoice.soNo || x.invoice.jobNo || '')} · due ${rctF(x.balance)}</small></span><input type="number" class="bc-num-input" min="0" max="${x.balance.toFixed(2)}" step="0.01" inputmode="decimal" placeholder="0.00" oninput="applyReceiptInput('${rctEsc(x.invoice.id)}',this)"/></div>`).join('')
     : '<div class="inv-empty-row"><i class="ti ti-info-circle"></i><span>This customer has no open invoices at the moment.</span></div>';
   recalcApplyReceipt();
   openModalWithSize('rct-apply-modal');

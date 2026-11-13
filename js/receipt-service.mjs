@@ -15,7 +15,7 @@ import {
   receiptIdForOperation, effectiveReceiptSettings, permitted, checkReceiptHeader, checkAllocations,
   applyToPayment, receiptTotals, mergeAllocations, customerKeyOf, r2, MONEY_EPSILON, zohoNoKey,
   receiptEditRights, setPaymentAmount, RECEIPT_FULL_FIELDS,
-} from './receipt-core.mjs?v=266.4';
+} from './receipt-core.mjs?v=271.13';
 import { COLLECTIONS, DeliveryError, isSafeId, eventIdForOperation, requireDate, requireReason, cleanText, assertSize } from './delivery-core.mjs?v=266.0';
 import { INVOICE_COLLECTIONS } from './invoice-core.mjs?v=266.0';
 import { LOCK_COLLECTION, lockId, lockHeldBy } from './lock-service.mjs?v=266.0';

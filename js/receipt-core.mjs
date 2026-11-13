@@ -226,7 +226,10 @@ export function checkAllocations({ custKey, available, allocations, invoices, pa
       { invoiceId: a.invoiceId, balance });
     total = r2(total + amount);
     out.push({ invoiceId: invoice.id, invNo: invoice.invNo || '', invDate: invoice.date || '', invTotal: invoiceNet(invoice),
-      salesOrderId: invoice.salesOrderId || '', soNo: invoice.soNo || '', amount, balanceBefore: balance });
+      salesOrderId: invoice.salesOrderId || '', soNo: invoice.soNo || '',
+      // V271.13: only a contracting job invoice carries these — a Sales Order allocation stays exactly as before
+      ...(invoice.jobId ? { jobId: invoice.jobId, jobNo: invoice.jobNo || '' } : {}),
+      amount, balanceBefore: balance });
   }
   ensure(total <= r2(available) + MONEY_EPSILON, ERR.OVER_RECEIPT,
     `The amounts applied (${total.toFixed(2)}) are more than the money available on the receipt (${r2(available).toFixed(2)}).`);
@@ -262,6 +265,7 @@ export function applyToPayment(payment, invoice, { rctId, rctNo, date, amount },
   const paid = r2(Object.values(receipts).reduce((s, r) => s + num(r.amount), 0));
   return {
     id: invoice.id, invoiceId: invoice.id, invNo: invoice.invNo || '', salesOrderId: invoice.salesOrderId || '',
+    ...(invoice.jobId ? { jobId: invoice.jobId } : {}),   // V271.13
     custId: invoice.custId || '', customer: invoice.customer || '', paid, receipts,
     revision: (Number(payment?.revision) || 0) + 1, lastReceiptId: rctId, updatedAt: at,
   };

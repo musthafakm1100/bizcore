@@ -380,6 +380,96 @@ service cloud.firestore {
           && getAfter(/databases/$(database)/documents/cashEntries/$(r.entryId)).data.void == true;
       }
     }
+    // ═════════ V271.13: Work Completion Certificates and job billing ═════════
+    // A certificate is the customer's acceptance of contracting work — no prices. It is written by the WCC
+    // service with its immutable event AND the job's billing ledger in ONE commit, so "how much is certified"
+    // is one number in one document (client transactions cannot query).
+    match /workCompletionCertificates/{wccId} {
+      allow read: if canV(['salesOrder', 'quotation', 'invoice', 'receipt']);
+      allow create: if canC(['salesOrder']) && wccCreateOk(request.resource.data);
+      allow update: if canE(['salesOrder']) && wccDecideOk(request.resource.data);
+      allow update: if canX(['salesOrder', 'invoice']) && wccCancelOk(request.resource.data);
+      allow delete: if false;
+
+      function wccLedger(d) { return /databases/$(database)/documents/jobBilling/$(d.jobId); }
+      function wccEvent(d) { return /databases/$(database)/documents/workCompletionCertificates/$(wccId)/wccEvents/$(d.lastEventId); }
+      function wccCommit(d) {
+        return !exists(wccEvent(d)) && existsAfter(wccEvent(d))
+          && getAfter(wccEvent(d)).data.toRevision == d.revision
+          && getAfter(wccEvent(d)).data.wccId == wccId
+          && getAfter(wccLedger(d)).data.jobId == d.jobId
+          && getAfter(wccLedger(d)).data.lastWccId == wccId
+          && getAfter(wccLedger(d)).data.lastEventId == d.lastEventId;
+      }
+      function wccCreateOk(d) {
+        return d.id == wccId && wccId.matches('^WCC-[A-Za-z0-9_-]{8,200}$')
+          && d.revision == 1 && d.status == 'Pending Acceptance'
+          && d.createdByUid == request.auth.uid && d.updatedByUid == request.auth.uid
+          && d.wccNo is string && d.wccNo.size() >= 1
+          && d.jobId is string && exists(/databases/$(database)/documents/jobs/$(d.jobId))
+          && d.type in ['partial', 'final']
+          && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && d.lines is list && d.lines.size() >= 1 && d.lines.size() <= 600
+          && d.overallPct is number && d.overallPct >= 0 && d.overallPct <= 100
+          && d.previousPct is number && d.previousPct >= 0 && d.previousPct <= d.overallPct + 0.06
+          && (d.type != 'final' || d.overallPct >= 99.94)
+          && d.acceptance == null
+          && wccCommit(d);
+      }
+      // the customer's decision: accepted · accepted with remarks · not accepted (recorded once)
+      function wccDecideOk(d) {
+        let r = resource.data;
+        return r.status == 'Pending Acceptance'
+          && d.status in ['Accepted', 'Accepted with remarks', 'Not accepted']
+          && d.revision == r.revision + 1 && d.updatedByUid == request.auth.uid && d.decidedByUid == request.auth.uid
+          && d.diff(r).affectedKeys().hasOnly(['status', 'result', 'acceptance', 'certifiedPct', 'revision', 'lastEventId',
+               'decidedAt', 'decidedBy', 'decidedByUid', 'updatedAt', 'updatedBy', 'updatedByUid'])
+          && d.acceptance.date is string && d.acceptance.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && d.acceptance.date >= r.date
+          && (d.status == 'Not accepted' || d.acceptance.by.size() >= 2)
+          && wccCommit(d);
+      }
+      // cancelled with a reason; never while it has been invoiced (the ledger keeps billedWccIds)
+      function wccCancelOk(d) {
+        let r = resource.data;
+        return r.status != 'Cancelled' && d.status == 'Cancelled'
+          && d.revision == r.revision + 1 && d.updatedByUid == request.auth.uid && d.cancelledByUid == request.auth.uid
+          && d.diff(r).affectedKeys().hasOnly(['status', 'cancelReason', 'cancelledAt', 'cancelledBy', 'cancelledByUid',
+               'revision', 'lastEventId', 'updatedAt', 'updatedBy', 'updatedByUid'])
+          && d.cancelReason is string && d.cancelReason.size() >= 3
+          && !get(wccLedger(d)).data.get('billedWccIds', {}).keys().hasAny([wccId])
+          && wccCommit(d);
+      }
+
+      match /wccEvents/{eventId} {
+        allow read: if canV(['salesOrder', 'quotation', 'invoice', 'receipt']);
+        allow create: if canW(['salesOrder', 'invoice'])
+          && request.resource.data.id == eventId
+          && request.resource.data.wccId == wccId
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.recordedAt == request.time
+          && getAfter(/databases/$(database)/documents/workCompletionCertificates/$(wccId)).data.lastEventId == eventId;
+        allow update, delete: if false;
+      }
+    }
+    // One billing record per contracting job: what the customer has certified (per scope line), what has been
+    // invoiced and the advances. Written only together with a certificate or a job invoice — never on its own.
+    match /jobBilling/{jobId} {
+      allow read: if canV(['salesOrder', 'quotation', 'invoice', 'receipt']);
+      allow create, update: if canW(['salesOrder', 'invoice']) && jobBillingOk(request.resource.data);
+      allow delete: if isAdmin();
+      function jobBillingOk(d) {
+        return d.jobId == jobId
+          && d.revision is int && d.revision == (resource == null ? 1 : resource.data.revision + 1)
+          && d.updatedByUid == request.auth.uid
+          && d.certified.pct is number && d.certified.pct >= 0 && d.certified.pct <= 100
+          && d.billing.goodsValue is number && d.billing.goodsValue >= -0.006
+          && d.contractValue is number
+          && d.billing.goodsValue <= d.contractValue + 0.006
+          && (d.lastWccId is string || d.lastInvoiceId is string);
+      }
+    }
+
     match /employees/{id} {
       allow read: if canV(['employees']);
       allow create: if canC(['employees']);
@@ -478,20 +568,49 @@ service cloud.firestore {
         && request.resource.data.updatedByUid == request.auth.uid
         && request.resource.data.revision == 1
         && request.resource.data.status == 'Issued'
-        && invoiceTypeAllowed(request.resource.data.type)
-        && holdsOrderLock(request.resource.data.salesOrderId)
-        && invoiceCommitOk(request.resource.data)
-        && zohoNumberClaimed(request.resource.data);
+        && (isJobInvoice(request.resource.data)
+          ? (jobInvoiceCommitOk(request.resource.data)
+              && (request.resource.data.type != 'job-advance' || invoiceTypeAllowed('advance')))
+          : (invoiceTypeAllowed(request.resource.data.type)
+              && holdsOrderLock(request.resource.data.salesOrderId)
+              && invoiceCommitOk(request.resource.data)
+              && zohoNumberClaimed(request.resource.data)));
       allow update: if canW(['invoice','receipt']) && invoicesIndependent()
         && request.resource.data.revision == resource.data.revision + 1
         && request.resource.data.updatedByUid == request.auth.uid
-        && holdsOrderLock(resource.data.salesOrderId)
-        && ((request.resource.data.status in ['Partially credited', 'Credited']
+        && (isJobInvoice(resource.data)
+          ? (request.resource.data.status in ['Partially credited', 'Credited']
               && creditNotesAllowed()
               && invoiceImmutableUnchanged()
-              && invoiceCommitOk(request.resource.data))
-          || invoiceEditOk(request.resource.data));
+              && jobInvoiceCommitOk(request.resource.data))
+          : (holdsOrderLock(resource.data.salesOrderId)
+              && ((request.resource.data.status in ['Partially credited', 'Credited']
+                    && creditNotesAllowed()
+                    && invoiceImmutableUnchanged()
+                    && invoiceCommitOk(request.resource.data))
+                || invoiceEditOk(request.resource.data))));
       allow delete: if false;
+
+      // ── V271.13: contracting job invoices (lump sum) — no Sales Order and no order lock; what may still
+      //    be billed is decided by jobBilling/{jobId}, written in the same commit. The Zoho number stays
+      //    optional here (it is added in Zoho Books when the invoice is sent), but if given it is claimed.
+      function isJobInvoice(d) {
+        return d.get('jobId', '') != '' && d.get('salesOrderId', '') == ''
+          && d.type in ['job-advance', 'job-progress', 'job-final'];
+      }
+      function jobInvoiceCommitOk(d) {
+        let evPath = /databases/$(database)/documents/customerInvoices/$(invId)/invoiceEvents/$(d.lastEventId);
+        let ledgerPath = /databases/$(database)/documents/jobBilling/$(d.jobId);
+        return isJobInvoice(d)
+          && d.lines is list && d.lines.size() == 0
+          && !exists(evPath) && existsAfter(evPath)
+          && getAfter(evPath).data.toRevision == d.revision
+          && getAfter(evPath).data.jobId == d.jobId
+          && getAfter(ledgerPath).data.jobId == d.jobId
+          && getAfter(ledgerPath).data.lastInvoiceId == invId
+          && getAfter(ledgerPath).data.lastEventId == d.lastEventId
+          && (d.get('zohoNoKey', '') == '' || zohoNumberClaimed(d));
+      }
 
       function invoiceCommitOk(d) {
         let evPath = /databases/$(database)/documents/customerInvoices/$(invId)/invoiceEvents/$(d.lastEventId);
@@ -523,7 +642,8 @@ service cloud.firestore {
       function invoiceImmutableUnchanged() {
         return !request.resource.data.diff(resource.data).affectedKeys().hasAny(
           ['id', 'invNo', 'type', 'salesOrderId', 'lines', 'deductions', 'advance', 'totals', 'date', 'customer', 'zohoNo', 'zohoNoKey',
-           'creationOperationId', 'created', 'createdBy', 'createdByUid', 'schemaVersion', 'migratedFrom']);
+           'creationOperationId', 'created', 'createdBy', 'createdByUid', 'schemaVersion', 'migratedFrom',
+           'jobId', 'jobNo', 'jobLine', 'jobInvoiceType', 'wccId', 'wccNo', 'contractValue', 'contractPct']);
       }
 
       match /invoiceEvents/{eventId} {
@@ -568,9 +688,23 @@ service cloud.firestore {
         && request.resource.data.id == cnId
         && request.resource.data.createdByUid == request.auth.uid
         && request.resource.data.revision == 1
-        && holdsOrderLock(request.resource.data.salesOrderId)
-        && creditCommitOk(request.resource.data);
+        && (request.resource.data.get('jobId', '') != ''
+          ? jobCreditCommitOk(request.resource.data)
+          : (holdsOrderLock(request.resource.data.salesOrderId) && creditCommitOk(request.resource.data)));
       allow update, delete: if false;
+
+      // V271.13: a credit note on a contracting job invoice — the job's billing ledger moves with it.
+      function jobCreditCommitOk(d) {
+        let evPath = /databases/$(database)/documents/creditNotes/$(cnId)/creditNoteEvents/$(d.lastEventId);
+        let invPath = /databases/$(database)/documents/customerInvoices/$(d.invoiceId);
+        let ledgerPath = /databases/$(database)/documents/jobBilling/$(d.jobId);
+        return d.get('salesOrderId', '') == ''
+          && !exists(evPath) && existsAfter(evPath)
+          && getAfter(invPath).data.jobId == d.jobId
+          && getAfter(invPath).data.revision == get(invPath).data.revision + 1
+          && getAfter(invPath).data.creditNotes[getAfter(invPath).data.creditNotes.size() - 1].id == cnId
+          && getAfter(ledgerPath).data.jobId == d.jobId;
+      }
 
       function creditCommitOk(d) {
         let evPath = /databases/$(database)/documents/creditNotes/$(cnId)/creditNoteEvents/$(d.lastEventId);

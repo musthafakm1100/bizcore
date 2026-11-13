@@ -19,10 +19,22 @@ let _invListenersStarted = false;
 function invMode(){ return window.BizCoreInv ? window.BizCoreInv.mode : 'legacy'; }
 function invIndependentMode(){ return invMode() === 'independent'; }
 function invLib(){ return window.BizCoreInv && window.BizCoreInv.core; }
-function invTypeLabel(t){ return t === 'advance' ? 'Advance invoice' : t === 'order' ? 'Order invoice (billed ahead)' : 'Delivery invoice'; }
-function invTypeShort(t){ return t === 'advance' ? 'Advance' : t === 'order' ? 'Billed ahead' : 'Delivery'; }
+function invTypeLabel(t){
+  // V271.13: the three contracting job invoice types sit beside the Sales Order ones
+  if (t === 'job-advance') return 'Advance invoice (job)';
+  if (t === 'job-progress') return 'Progress invoice (job)';
+  if (t === 'job-final') return 'Final invoice (job)';
+  return t === 'advance' ? 'Advance invoice' : t === 'order' ? 'Order invoice (billed ahead)' : 'Delivery invoice';
+}
+function invTypeShort(t){
+  if (t === 'job-advance') return 'Advance';
+  if (t === 'job-progress') return 'Progress';
+  if (t === 'job-final') return 'Full & Final';
+  return t === 'advance' ? 'Advance' : t === 'order' ? 'Billed ahead' : 'Delivery';
+}
 function invTypeBadge(t){
-  const c = t === 'advance' ? ['#EEF2FF','#3730A3','#C7D2FE'] : t === 'order' ? ['#FFF7ED','#9A3412','#FED7AA'] : ['#ECFDF5','#065F46','#A7F3D0'];
+  const c = (t === 'advance' || t === 'job-advance') ? ['#EEF2FF','#3730A3','#C7D2FE'] : t === 'order' ? ['#FFF7ED','#9A3412','#FED7AA']
+    : (t === 'job-progress' || t === 'job-final') ? ['#F0FDFA','#115E59','#99F6E4'] : ['#ECFDF5','#065F46','#A7F3D0'];
   return `<span style="background:${c[0]};color:${c[1]};border:1px solid ${c[2]};border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:700">${invTypeShort(t)}</span>`;
 }
 function invStatusBadge(s){
@@ -296,6 +308,7 @@ function issueInvoiceFromDN(m, so, dnId){
   document.getElementById('ii-subtitle').textContent += ' · From ' + (d.dnNo || 'Delivery Note');
   issueInvoiceStep(2);
 }
+window.permState = (level, isAdmin) => permState(level, isAdmin);   // V271.13: used by the job invoice screens
 function permState(level, isAdmin){
   if (level === 'all') return { ok: true, why: '' };
   if (level === 'admin') return isAdmin ? { ok: true, why: '' } : { ok: false, why: 'Your role doesn\'t have the Special Right for this (Administration → Roles & Permissions).' };   // V270.4.3: isAdmin = has the right
@@ -892,10 +905,14 @@ function invCustomerVat(custName, custId){
   const c = (typeof customers !== 'undefined' ? customers : []).find(x => (custId && x.id === custId) || (x.company || '').trim() === (custName || '').trim());
   return c ? { vat: c.vat || '', nameAr: c.companyAr || '' } : { vat: '', nameAr: '' };
 }
+/** V271.13: is this document a contracting job invoice / credit note (lump sum, no quantities)? */
+function invIsJobDoc(doc){ return !!(doc && doc.jobId) && !doc.salesOrderId; }
+function invJobOf(doc){ return (typeof jobs !== 'undefined' ? jobs : []).find(j => String(j.id) === String(doc && doc.jobId)) || null; }
 /** A4 document for an invoice (kind 'invoice') or a credit note (kind 'credit'). */
 function invoiceDocumentHtml(doc, kind, screenMode){
   const cn = kind === 'credit';
   const so = salesOrders.find(x => x.id === doc.salesOrderId) || { id: doc.salesOrderId, soNo: doc.soNo, customer: doc.customer, customerId: doc.custId, poNo: doc.poNo, items: [] };
+  const job = invIsJobDoc(doc) ? (invJobOf(doc) || { jobNo: doc.jobNo, project: doc.project, poNo: doc.poNo }) : null;
   const cp = dnCompanyProfile(), cust = dnCustomerProfile(so), cv = invCustomerVat(doc.customer, doc.custId);
   const inv = cn ? (invoicesCache.find(i => i.id === doc.invoiceId) || {}) : doc;
   const q = quotations.find(x => x.id === (inv.quotationId || so.quotationId));
@@ -906,13 +923,36 @@ function invoiceDocumentHtml(doc, kind, screenMode){
   const contact = contactParts.join('<br>') + (cp.vat ? `<br><b>VAT No.:</b> ${invEsc(cp.vat)}` : '') + (cp.cr ? `<br><b>CR No.:</b> ${invEsc(cp.cr)}` : '');
   const no = cn ? doc.cnNo : doc.invNo;
   const title = cn ? 'CREDIT NOTE<span>إشعار دائن</span>' : 'TAX INVOICE<span>فاتورة ضريبية</span>';
-  const subtitle = cn ? `AGAINST INVOICE ${invEsc(doc.invNo)}` : { advance: 'ADVANCE INVOICE', order: 'ORDER INVOICE — BILLED AHEAD OF DELIVERY', delivery: 'DELIVERY INVOICE — ACCEPTED GOODS' }[doc.type] || 'INVOICE';
-  const refs = cn
-    ? [['Credit Note Date', fmtDate(doc.date)], ['Original Invoice', invEsc(doc.invNo)], ['Invoice Date', fmtDate(doc.invoiceDate)], ['Sales Order No.', invEsc(doc.soNo || '—')]]
-    : [['Sales Order No.', invEsc(doc.soNo || '—')], ['Customer PO No.', invEsc(doc.poNo || so.poNo || '—')], ['Payment Due', fmtDate(doc.dueDate) || '—'], [doc.zohoNo ? 'Zoho Invoice No.' : 'Quotation', invEsc(doc.zohoNo || (q && q.qno) || '—')]];
+  const subtitle = cn ? `AGAINST INVOICE ${invEsc(doc.invNo)}` : {
+    advance: 'ADVANCE INVOICE', order: 'ORDER INVOICE — BILLED AHEAD OF DELIVERY', delivery: 'DELIVERY INVOICE — ACCEPTED GOODS',
+    'job-advance': 'ADVANCE INVOICE — CONTRACTING WORKS', 'job-progress': 'PROGRESS INVOICE — CONTRACTING WORKS', 'job-final': 'FINAL INVOICE — CONTRACTING WORKS',
+  }[doc.type] || 'INVOICE';
+  const refs = job
+    ? (cn
+      ? [['Credit Note Date', fmtDate(doc.date)], ['Original Invoice', invEsc(doc.invNo)], ['Invoice Date', fmtDate(doc.invoiceDate)], ['Our Job No.', invEsc(doc.jobNo || '—')]]
+      : [['Customer PO No.', invEsc(doc.poNo || job.poNo || '—')], ['Our Job No.', invEsc(doc.jobNo || '—')],
+        [doc.wccNo ? 'Work Completion Cert.' : 'Quotation', invEsc(doc.wccNo || doc.qno || '—')], ['Payment Due', fmtDate(doc.dueDate) || '—']])
+    : cn
+      ? [['Credit Note Date', fmtDate(doc.date)], ['Original Invoice', invEsc(doc.invNo)], ['Invoice Date', fmtDate(doc.invoiceDate)], ['Sales Order No.', invEsc(doc.soNo || '—')]]
+      : [['Sales Order No.', invEsc(doc.soNo || '—')], ['Customer PO No.', invEsc(doc.poNo || so.poNo || '—')], ['Payment Due', fmtDate(doc.dueDate) || '—'], [doc.zohoNo ? 'Zoho Invoice No.' : 'Quotation', invEsc(doc.zohoNo || (q && q.qno) || '—')]];
   // Lines
   let head, rows;
-  if (!cn && doc.type === 'advance') {
+  if (job) {
+    // V271.13: contracting work is sold lump sum — one description line, the advance deduction as its own line.
+    head = '<th>#</th><th>Description</th><th class="num">Amount (SAR)</th>';
+    if (cn) {
+      rows = `<tr><td class="c">1</td><td class="desc">${invEsc(doc.kind === 'advance'
+        ? `Advance credited — invoice ${doc.invNo} dated ${fmtDate(doc.invoiceDate)}`
+        : `Work credited — invoice ${doc.invNo} dated ${fmtDate(doc.invoiceDate)}${doc.reason ? ' · ' + doc.reason : ''}`)}</td><td class="num">${n2(doc.kind === 'advance' ? doc.advanceSubtotal : doc.goodsSubtotal)}</td></tr>`;
+    } else {
+      const l = doc.jobLine || {};
+      const sub = doc.type === 'job-advance' ? (doc.totals || {}).subtotal : (doc.totals || {}).goodsSubtotal;
+      rows = `<tr><td class="c">1</td><td class="desc">${invEsc(l.desc || '—')}${l.percent ? `<small style="color:#50657a">Contract value ${n2(doc.contractValue)} × ${formatNumber(invNum(l.percent), 2)} %</small>` : ''}</td><td class="num">${n2(sub)}</td></tr>`;
+      (doc.deductions || []).forEach(d => {
+        rows += `<tr><td class="c"></td><td class="desc">Less: advance received against ${invEsc(d.advanceInvNo)} dated ${fmtDate(d.advanceDate)}${(doc.deductions || []).length > 1 ? '' : ' (deducted in proportion)'}</td><td class="num">(${n2(d.subtotal)})</td></tr>`;
+      });
+    }
+  } else if (!cn && doc.type === 'advance') {
     const a = doc.advance || {};
     const basis = a.method === 'full' ? 'full order value' : `${formatNumber(a.percent, 2)}% of ${a.method === 'percentLines' ? 'selected lines' : 'order value'} (${n2(a.base)})`;
     head = '<th>#</th><th>Description</th><th class="num">VAT %</th><th class="num">Amount (SAR)</th>';
@@ -933,6 +973,13 @@ function invoiceDocumentHtml(doc, kind, screenMode){
     totals += tr(doc.kind === 'advance' ? 'Advance credited (ex-VAT)' : 'Goods credited (ex-VAT)', n2(goods));
     (doc.deductionReversal || []).forEach(d => { totals += tr(`Less: advance ${invEsc(d.advanceInvNo)} given back`, '− ' + n2(d.subtotal), 'ded'); });
     totals += tr('Subtotal (ex-VAT)', n2(doc.subtotal), 'sub') + tr('VAT', n2(doc.vat)) + tr('Total credited (SAR)', n2(doc.total), 'grand');
+  } else if (job) {
+    const t = doc.totals || {};
+    if (doc.type !== 'job-advance') {
+      totals += tr('Work (ex-VAT)', n2(t.goodsSubtotal));
+      (doc.deductions || []).forEach(d => { totals += tr(`Less: advance ${invEsc(d.advanceInvNo)}`, '− ' + n2(d.subtotal), 'ded'); });
+    }
+    totals += tr('Subtotal (ex-VAT)', n2(t.subtotal), 'sub') + tr('VAT', n2(t.vat)) + tr('Total Due (SAR)', n2(t.total), 'grand');
   } else {
     const t = doc.totals || {};
     if (doc.type !== 'advance') {
@@ -942,9 +989,18 @@ function invoiceDocumentHtml(doc, kind, screenMode){
     totals += tr('Subtotal (ex-VAT)', n2(t.subtotal), 'sub') + tr('VAT', n2(t.vat)) + tr('Total (SAR)', n2(t.total), 'grand');
   }
   const creditedLine = !cn && (doc.creditNotes || []).length ? `<div class="inv-doc-credited">Credited by ${(doc.creditNotes || []).map(c => `${invEsc(c.cnNo)} (${n2(c.total)})`).join(', ')}</div>` : '';
+  // V271.13: the contract summary on a job invoice (approved 13 Nov) — what the customer's accountant checks.
+  const jobSummary = !cn && job && window.BCJobBilling ? (() => {
+    const f = BCJobBilling.financeOf(invJobOf(doc) || { id: doc.jobId, contractValue: doc.contractValue, vatRate: 0.15 });
+    if (!f) return '';
+    const billedNow = doc.type === 'job-advance' ? f.goodsValue : invNum((doc.totals || {}).goodsSubtotal) + Math.max(0, f.goodsValue - invNum((doc.totals || {}).goodsSubtotal));
+    return `<p><b>Contract summary</b>Value ${n2(doc.contractValue || f.contract)} · certified to date ${formatNumber(f.certifiedPct, 1)} % · invoiced to date incl. this invoice ${n2(billedNow)} · advance remaining to deduct ${n2(f.advances.remaining)} · balance to invoice ${n2(Math.max(0, (doc.contractValue || f.contract) - billedNow))}.</p>`;
+  })() : '';
   const notes = [cn ? `<p><b>Reason</b>${invEsc(doc.reason || '—')}</p>` : '', !cn && doc.reason ? `<p><b>${doc.type === 'order' ? 'Billed ahead because' : 'Description'}</b>${invEsc(doc.reason)}</p>` : '', !cn && doc.notes ? `<p><b>Notes</b>${invEsc(doc.notes)}</p>` : '',
-    !cn && doc.type === 'advance' ? '<p><b>Advance</b>This advance will be deducted from the following invoices for this order.</p>' : ''].filter(Boolean).join('') || '<p><b>Notes</b>—</p>';
-  const billTo = `<strong>${invEsc(doc.customer || cust.name)}</strong>${cv.nameAr ? `<div dir="rtl">${invEsc(cv.nameAr)}</div>` : ''}${cust.address ? invEsc(cust.address) : ''}${cust.contact ? `<br>Attn: ${invEsc(cust.contact)}` : ''}${cust.phone ? `<br>Tel: ${invEsc(cust.phone)}` : ''}`;
+    !cn && doc.type === 'advance' ? '<p><b>Advance</b>This advance will be deducted from the following invoices for this order.</p>' : '',
+    !cn && doc.type === 'job-advance' ? '<p><b>Advance</b>This advance will be deducted from the progress and final invoices of this job.</p>' : '',
+    jobSummary].filter(Boolean).join('') || '<p><b>Notes</b>—</p>';
+  const billTo = `<strong>${invEsc(doc.customer || cust.name)}</strong>${cv.nameAr ? `<div dir="rtl">${invEsc(cv.nameAr)}</div>` : ''}${cust.address ? invEsc(cust.address) : ''}${cust.contact ? `<br>Attn: ${invEsc(cust.contact)}` : ''}${cust.phone ? `<br>Tel: ${invEsc(cust.phone)}` : ''}${job && (doc.project || job.project) ? `<br><b>Project / Site:</b> ${invEsc(doc.project || job.project)}` : ''}`;
   return `<div class="dn-a4 inv-a4${cn ? ' inv-cn' : ''}${screenMode ? ' dn-a4-screen' : ''}"><style>${invDnBaseCss()}${INV_DOC_CSS}</style>
   <div class="dn-head"><div>${logo}</div><div class="dn-contact">${contact || '&nbsp;'}</div><div class="dn-title-stack">${screenMode ? invDocStatusChip(cn ? 'Issued' : doc.status) : ''}<div class="dn-titlebox"><h1>${title}</h1><div><small>${cn ? 'Credit Note No.' : 'Invoice No.'}</small><strong>${invEsc(no || '—')}</strong></div><div><small>Date</small><strong>${fmtDate(doc.date)}</strong></div></div></div></div>
   <div class="dn-subtitle">${subtitle}</div>
@@ -1008,7 +1064,8 @@ function renderInvoiceView(doc, kind){
     rows = row('Status', invStatusBadge(doc.status) || '<span style="background:#ECFDF5;color:#0F766E;border:1px solid #99F6E4;border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:700">Issued</span>')
       + row('Type', invTypeBadge(doc.type)) + row('Payment due', dueText(doc.dueDate)) + row('Zoho invoice', invEsc(doc.zohoNo || '—')) + row('Created by', invEsc(doc.createdBy || '—'))
       + (doc.editCount ? row('Revised', `${doc.editCount}× · ${invEsc(doc.revisedBy || '')}`) : '');
-    note = '<div class="bc-kpi-note"><i class="ti ti-info-circle"></i> Payments are recorded on the Sales Order, not per invoice.</div>';
+    note = invIsJobDoc(doc) ? '<div class="bc-kpi-note"><i class="ti ti-info-circle"></i> A job is billed lump sum — see Completion &amp; Billing on the job.</div>'
+      : '<div class="bc-kpi-note"><i class="ti ti-info-circle"></i> Payments are recorded on the Sales Order, not per invoice.</div>';
     // V266: Payment Receipts — Paid / Balance due on the invoice itself
     if (typeof receiptsActive === 'function' && receiptsActive()) {
       const paidAmt = invoicePaidOf(doc), bal = invoiceBalanceOf(doc), pst = invoicePayStatusOf(doc);
@@ -1020,8 +1077,16 @@ function renderInvoiceView(doc, kind){
   const summary = `${bcKpiGrid(kpis)}<div class="bc-kpi-rows">${rows}</div>${note}`;
   // Document flow (one line): Quotation › Sales Order › (advance) › this document › credit notes
   const flow = [];
-  flow.push(q ? { label: 'Quotation', text: q.qno, onclick: invViewGo(`viewQuotation('${q.id}')`) } : { label: 'Quotation', state: 'muted' });
-  flow.push(so ? { label: 'Sales order', text: so.soNo, onclick: invViewGo(`viewSO('${so.id}')`) } : (doc.soNo ? { label: 'Sales order', text: doc.soNo } : { label: 'Sales order', state: 'muted' }));
+  const jobDoc = invIsJobDoc(doc) ? (invJobOf(doc) || { id: doc.jobId, jobNo: doc.jobNo }) : null;
+  if (jobDoc) {
+    // V271.13: a job invoice runs Quotation › Job › (certificate) › this invoice › credit notes / receipts
+    flow.push(doc.qno ? { label: 'Quotation', text: doc.qno } : { label: 'Quotation', state: 'muted' });
+    flow.push({ label: 'Job', text: jobDoc.jobNo || '—', onclick: invViewGo(`BCJobs.view('${jobDoc.id}',{tab:'wb'})`) });
+    flow.push(doc.wccNo ? { label: 'Work completion certificate', tag: 'WCC', text: doc.wccNo, onclick: invViewGo(`BCJobBilling.openWccView('${doc.wccId}')`) } : null);
+  } else {
+    flow.push(q ? { label: 'Quotation', text: q.qno, onclick: invViewGo(`viewQuotation('${q.id}')`) } : { label: 'Quotation', state: 'muted' });
+    flow.push(so ? { label: 'Sales order', text: so.soNo, onclick: invViewGo(`viewSO('${so.id}')`) } : (doc.soNo ? { label: 'Sales order', text: doc.soNo } : { label: 'Sales order', state: 'muted' }));
+  }
   if (!cn) (doc.deductions || []).forEach(d => flow.push({ label: `Advance deducted · ${n(d.subtotal)}`, tag: 'Adv.', text: d.advanceInvNo, onclick: `openInvoiceView('${d.advanceInvoiceId}')` }));
   if (cn && inv) flow.push({ label: inv.type === 'advance' ? 'Advance invoice' : 'Invoice', text: inv.invNo, onclick: `openInvoiceView('${inv.id}')` });
   flow.push({ label: cn ? 'Credit note' : (doc.type === 'advance' ? 'Advance invoice' : 'Invoice'), text: cn ? doc.cnNo : doc.invNo, state: 'current' });
@@ -1052,15 +1117,17 @@ function renderInvoiceView(doc, kind){
   b.push('<div class="dn-view-actionbar-spacer"></div>');
   b.push(`<button class="btn btn-secondary" onclick="closeViewWithReturn('inv-view-modal')"><i class="ti ti-x"></i><span>Close</span></button>`);
   if (so) b.push(`<button class="btn btn-secondary" id="inv-view-so-btn" onclick="${invViewGo(`viewSO('${so.id}')`)}"><i class="ti ti-file-description"></i><span>Sales Order</span></button>`);
+  if (jobDoc) b.push(`<button class="btn btn-secondary" id="inv-view-job-btn" onclick="${invViewGo(`BCJobs.view('${jobDoc.id}',{tab:'wb'})`)}"><i class="ti ti-briefcase"></i><span>${invEsc(jobDoc.jobNo || 'Job')}</span></button>`);
   if (cn && inv) b.push(`<button class="btn btn-secondary" onclick="openInvoiceView('${inv.id}')"><i class="ti ti-file-invoice"></i><span>${invEsc(inv.invNo)}</span></button>`);
   if (!cn && typeof receiptsActive === 'function' && receiptsActive() && invoiceBalanceOf(doc) > 0.005) b.push(`<button class="btn btn-success" id="inv-view-receipt-btn" onclick="${invViewGo(`openNewReceipt({invoiceId:'${doc.id}'})`)}"><i class="ti ti-cash"></i><span>New Receipt</span></button>`);
-  if (!cn) {
+  if (!cn && !jobDoc) {
     const er = invoiceEditRightsOf(doc);
     if (er.shown) b.push(`<button class="btn btn-secondary" id="inv-view-edit-btn" ${er.ok ? '' : `disabled title="${invEsc(er.why)}"`} onclick="${invViewGo(`openEditInvoice('${doc.salesOrderId}','${doc.id}')`)}"><i class="ti ti-pencil"></i><span>Edit</span></button>`);
     // V266.4: "full" invoice edit = Cancel and re-issue (also needs the credit-note permission)
     if (er.full && doc.status === 'Issued') b.push(`<button class="btn btn-secondary" id="inv-view-reissue-btn" ${canCredit ? '' : 'disabled title="Cancel and re-issue makes a credit note — only users allowed to issue credit notes can use it (Administration → Billing Settings)."'} onclick="${invViewGo(`openCancelReissue('${doc.salesOrderId}','${doc.id}')`)}"><i class="ti ti-refresh"></i><span>Cancel &amp; re-issue</span></button>`);
   }
-  if (canCredit) b.push(`<button class="btn btn-danger" id="inv-view-credit-btn" onclick="${invViewGo(`openIssueCreditNote('${doc.salesOrderId}','${doc.id}')`)}"><i class="ti ti-receipt-refund"></i><span>Credit Note</span></button>`);
+  if (canCredit && jobDoc && window.BCJobBilling) b.push(`<button class="btn btn-danger" id="inv-view-credit-btn" onclick="${invViewGo(`BCJobBilling.openJobCreditNote('${doc.id}')`)}"><i class="ti ti-receipt-refund"></i><span>Credit Note</span></button>`);
+  else if (canCredit && !jobDoc) b.push(`<button class="btn btn-danger" id="inv-view-credit-btn" onclick="${invViewGo(`openIssueCreditNote('${doc.salesOrderId}','${doc.id}')`)}"><i class="ti ti-receipt-refund"></i><span>Credit Note</span></button>`);
   b.push(`<button class="btn btn-primary" id="inv-view-print-btn" onclick="${cn ? `printCreditNote('${doc.id}')` : `printCustomerInvoice('${doc.id}')`}"><i class="ti ti-printer"></i><span>Print / PDF</span></button>`);
   document.getElementById('inv-view-actions').innerHTML = b.join('');
   if (!m.classList.contains('open')) openModalWithSize('inv-view-modal');
@@ -1092,7 +1159,8 @@ function invPrintDocument(html, fileTitle){
 function printCustomerInvoice(invoiceId){
   const inv = invoicesCache.find(i => i.id === invoiceId); if (!inv) return;
   // V270.4.8: "INV-2610-0001 - SNC Lavalin Arabia - PO2200005124" (the invoice's PO no., else the order's; none → no PO part)
-  const po = inv.poNo || ((typeof salesOrders !== 'undefined' ? salesOrders : []).find(x => x.id === inv.salesOrderId) || {}).poNo || '';
+  const po = inv.poNo || ((typeof salesOrders !== 'undefined' ? salesOrders : []).find(x => x.id === inv.salesOrderId) || {}).poNo
+    || ((typeof jobs !== 'undefined' ? jobs : []).find(x => String(x.id) === String(inv.jobId)) || {}).poNo || '';
   invPrintDocument(invoiceDocumentHtml(inv, 'invoice', false), [inv.invNo, typeof dnSafeFilePart === 'function' ? dnSafeFilePart(inv.customer) : inv.customer, typeof docPoFilePart === 'function' ? docPoFilePart(po) : ''].filter(Boolean).join(' - '));
 }
 function printCreditNote(cnId){
@@ -1123,6 +1191,8 @@ function renderBillingSettings(){
       <div class="form-group"><label for="bs-order">Order invoices (bill ahead of delivery)</label>${sel('bs-order', s.allowOrderInvoices, who)}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Delivery invoices (accepted goods) are always allowed.</div></div>
       <div class="form-group"><label for="bs-adv">Advance invoices</label>${sel('bs-adv', s.allowAdvanceInvoices, who)}</div>
       <div class="form-group"><label for="bs-cn">Credit notes</label>${sel('bs-cn', s.allowCreditNotes, who.filter(w => w[0] !== 'none'))}<div style="font-size:11.5px;color:var(--gray);margin-top:4px">Corrections must stay possible, so credit notes cannot be switched off.</div></div>
+      <div class="form-group"><label for="bs-final-wcc">Final invoice of a contracting job</label>${sel('bs-final-wcc', (window.BizCoreWcc && window.BizCoreWcc.settings && window.BizCoreWcc.settings.finalNeedsWcc) ? 'yes' : 'no', [['no', 'A warning only — the invoice can still be issued'], ['yes', 'Needs a final Work Completion Certificate accepted by the customer']])}
+        <div style="font-size:11.5px;color:var(--gray);margin-top:4px">A job is billed lump sum: advance, progress payments, then the final payment. Whatever the setting: a job is never billed more than its contract value, and the final invoice always deducts the whole remaining advance.</div></div>
       ${R ? `<div class="form-group"><label for="bs-edit-inv">Editing invoices</label>${sel('bs-edit-inv', R.settings.editInvoices, [['none', 'Nobody — corrections by credit note only'], ['limited', 'Limited edit for all users'], ['limited-admin-full', 'Limited for all users, full with the Full edit right'], ['full', 'Full edit for all users']])}
         <div style="font-size:11.5px;color:var(--gray);margin-top:4px">Limited: Zoho no., payment due date, customer PO no., description and notes. Full: also <strong>Cancel and re-issue</strong> (a full credit note and a corrected new invoice) — the figures of an issued invoice are never changed (ZATCA). Cancel and re-issue also needs the credit-note permission above. The edit time limit is set under Payment receipts.</div></div>` : ''}
     </div>
@@ -1138,7 +1208,8 @@ async function saveBillingSettings(){
   const btn = document.getElementById('bs-save'); if (btn) btn.disabled = true;
   // read everything first: saving re-renders this section
   const R = window.BizCoreRct, ei = document.getElementById('bs-edit-inv'), editInvoices = ei ? ei.value : null;
-  const billing = { deductionMethod: v('bs-ded'), allowOrderInvoices: v('bs-order'), allowAdvanceInvoices: v('bs-adv'), allowCreditNotes: v('bs-cn') };
+  const billing = { deductionMethod: v('bs-ded'), allowOrderInvoices: v('bs-order'), allowAdvanceInvoices: v('bs-adv'), allowCreditNotes: v('bs-cn'),
+    finalNeedsWcc: v('bs-final-wcc') === 'yes' };   // V271.13: contracting job final invoice
   try {
     await window.BizCoreInv.saveSettings(billing);
     // V266.4: "Editing invoices" lives in settings/receipts (with the edit time limit); saved only when changed
@@ -1167,9 +1238,9 @@ function invoiceRegisterRows(){
   const rows = [];
   if (invIndependentMode()) {
     const pay = typeof receiptsActive === 'function' && receiptsActive();
-    invoicesCache.forEach(i => rows.push({ kind: 'invoice', id: i.id, soId: i.salesOrderId, no: i.invNo, type: i.type, date: i.date, customer: i.customer, soNo: i.soNo, status: i.status || 'Issued', total: invNum(i.totals?.total), ref: i.zohoNo ? 'Zoho ' + i.zohoNo : (i.reason || ''), updated: i.updatedAt || i.created || '',
+    invoicesCache.forEach(i => rows.push({ kind: 'invoice', id: i.id, soId: i.salesOrderId, jobId: i.jobId || '', no: i.invNo, type: i.type, date: i.date, customer: i.customer, soNo: i.soNo || i.jobNo || '', status: i.status || 'Issued', total: invNum(i.totals?.total), ref: i.zohoNo ? 'Zoho ' + i.zohoNo : (i.reason || ''), updated: i.updatedAt || i.created || '',
       paid: pay ? invoicePaidOf(i) : null, balance: pay ? invoiceBalanceOf(i) : null, payStatus: pay ? invoicePayStatusOf(i) : '', dueDate: i.dueDate || '' }));
-    creditNotesCache.forEach(c => rows.push({ kind: 'credit', id: c.id, soId: c.salesOrderId, no: c.cnNo, type: 'credit', date: c.date, customer: c.customer, soNo: c.soNo, status: 'Credit note', total: -invNum(c.total), ref: 'Against ' + c.invNo + (c.reason ? ' · ' + c.reason : ''), updated: c.created || '' }));
+    creditNotesCache.forEach(c => rows.push({ kind: 'credit', id: c.id, soId: c.salesOrderId, jobId: c.jobId || '', no: c.cnNo, type: 'credit', date: c.date, customer: c.customer, soNo: c.soNo || c.jobNo || '', status: 'Credit note', total: -invNum(c.total), ref: 'Against ' + c.invNo + (c.reason ? ' · ' + c.reason : ''), updated: c.created || '' }));
   } else {
     (salesOrders || []).forEach(so => (so.invoices || []).forEach((i, idx) => rows.push({ kind: 'legacy', idx, soId: so.id, no: i.invNo, type: 'delivery', date: i.date, customer: so.customer, soNo: so.soNo, status: 'Issued', total: invNum(i.total), ref: i.zohoNo ? 'Zoho ' + i.zohoNo : '' })));
   }

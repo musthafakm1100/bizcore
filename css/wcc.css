@@ -1,0 +1,175 @@
+/* ═══════════════════════════════════════════════════════════════════
+   BizCore V271.13 — Work Completion Certificates and job invoicing
+   Approved mockups WCC_1 – WCC_4 and JI_1 – JI_3 (13 Nov 2026).
+   Built on the Jobs / document-view look: the same cards, tables, filter sizes and date fields;
+   teal is the certificate's own accent colour, the invoice keeps the navy of the other documents.
+═══════════════════════════════════════════════════════════════════ */
+
+/* ── Job view → Completion & Billing ── */
+.wb-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.wb-card { border: 1px solid var(--border, #dbe3ec); border-radius: 10px; padding: 11px 13px; background: #fff; min-width: 0; }
+.wb-card > span { display: block; font-size: 11px; color: var(--gray, #5b6b7c); }
+.wb-card > b { display: block; font-size: 21px; font-weight: 600; margin-top: 3px; color: var(--ink, #17324d); font-variant-numeric: tabular-nums; }
+.wb-card > b.teal { color: #0f766e; } .wb-card > b.green { color: #15803d; }
+.wb-card small { display: block; font-size: 11px; color: var(--gray, #5b6b7c); margin-top: 5px; }
+.wb-bar { display: block; height: 6px; border-radius: 4px; background: #edf1f5; overflow: hidden; margin-top: 7px; }
+.wb-bar > i { display: block; height: 6px; border-radius: 4px; }
+.wb-work { background: #7c3aed; } .wb-cert { background: #0f766e; } .wb-inv { background: #2e75b6; } .wb-recv { background: #15803d; }
+
+.wb-box { border: 1px solid var(--border, #dbe3ec); border-radius: 10px; background: #fff; overflow: hidden; margin-bottom: 14px; }
+.wb-box-hd { display: flex; align-items: center; gap: 12px; padding: 10px 13px; border-bottom: 1px solid var(--border, #dbe3ec); flex-wrap: wrap; }
+.wb-box-hd > div { flex-grow: 1; min-width: 0; }
+.wb-box-hd h4 { margin: 0; font-size: 14px; font-weight: 600; color: var(--ink, #17324d); }
+.wb-box-hd p { margin: 2px 0 0; font-size: 11.5px; color: var(--gray, #5b6b7c); line-height: 1.45; }
+.wb-tbl th { white-space: nowrap; }
+.wb-tbl td { vertical-align: middle; }
+.wb-tbl td.r, .wb-tbl th.r { text-align: right; }
+.wb-tbl .wb-act { text-align: right; }
+.wb-void td { opacity: .55; text-decoration: line-through; }
+.wb-part td { background: #fffdf5; }
+.wb-dim { color: var(--gray, #5b6b7c); font-size: 11.5px; }
+.wb-foot { display: flex; flex-wrap: wrap; gap: 16px; padding: 9px 13px; border-top: 1px solid var(--border, #dbe3ec); background: #f8fafc; font-size: 12px; color: var(--gray, #5b6b7c); }
+.wb-foot b { color: var(--ink, #17324d); font-weight: 600; font-variant-numeric: tabular-nums; }
+.wb-ready { color: #0f766e; } .wb-ready b { color: #0f766e; }
+.wb-two { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; align-items: start; }
+.wb-note { padding: 12px 14px; border-color: #fde68a; background: #fffbeb; }
+.wb-note h4 { margin: 0 0 5px; font-size: 13px; font-weight: 600; color: #78350f; }
+.wb-note ul { margin: 0; padding-left: 16px; }
+.wb-note li { font-size: 12px; color: #78350f; line-height: 1.5; margin-bottom: 3px; }
+.wb-hint { display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: var(--gray, #5b6b7c); }
+.wb-pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.wb-pill.green { background: #dcfce7; color: #14532d; }
+.wb-pill.teal { background: #ccfbf1; color: #0f5f58; }
+.wb-pill.amber { background: #fef3c7; color: #78350f; }
+.wb-pill.red { background: #fee4e2; color: #b42318; }
+.wb-pill.grey { background: #eef2f6; color: #53657a; }
+.wb-split { display: inline-flex; border-radius: 8px; overflow: hidden; }
+.wb-split > .btn { border-radius: 0; }
+.wb-split-x { padding-left: 9px; padding-right: 9px; border-left: 1px solid rgba(255, 255, 255, .35); }
+
+/* ── New WCC · Record Acceptance · New Job Invoice ── */
+.wcc-win .modal-body { padding: 15px 18px; }
+.wcc-hd { background: #0f766e; color: #fff; }
+.wcc-hd h2, .wcc-hd .jb-sub { color: #fff; }
+.wcc-hd .jb-sub { opacity: .88; }
+.wcc-hd .close-btn { color: #fff; }
+.wcc-hd-slim { padding-top: 9px; padding-bottom: 9px; }
+.wcc-chip { font-size: 11.5px; background: rgba(255, 255, 255, .17); color: #fff; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.wcc-ft { display: flex; align-items: center; gap: 10px; }
+.wcc-chk { font-size: 12.5px; }
+.wcc-chk.ok { color: #15803d; } .wcc-chk.bad { color: #9a6700; }
+
+.wcc-f { min-width: 0; }
+.wcc-f > label { display: block; font-size: 11.5px; color: var(--gray, #5b6b7c); margin-bottom: 5px; }
+.wcc-f input, .wcc-f textarea, .wcc-f select { box-sizing: border-box; width: 100%; border: 1px solid #cdd7e2; border-radius: 8px; padding: 0 10px; height: 34px; font-family: inherit; font-size: 13px; font-weight: 400; color: var(--ink, #17324d); background: #fff; }
+.wcc-f textarea { height: auto; padding: 8px 10px; resize: vertical; line-height: 1.5; }
+.wcc-f input.r { text-align: right; font-variant-numeric: tabular-nums; }
+.wcc-f input:disabled, .wcc-f textarea:disabled { background: #f4f7fa; color: #7c8da1; }
+.wcc-top { display: grid; grid-template-columns: 220px 150px minmax(0, 1fr) 190px; gap: 12px; align-items: end; margin-bottom: 12px; }
+.wcc-range { display: flex; align-items: center; gap: 7px; }
+.wcc-range > span { color: var(--gray, #5b6b7c); }
+.wcc-segs { display: flex; border: 1px solid #cdd7e2; border-radius: 8px; overflow: hidden; height: 34px; }
+.wcc-seg { flex: 1; border: 0; background: #fff; color: var(--ink, #17324d); font-family: inherit; font-size: 13px; font-weight: 400; cursor: pointer; padding: 0 8px; }
+.wcc-seg.on { background: #0f766e; color: #fff; font-weight: 500; }
+.wcc-sum { margin-bottom: 12px; }
+.wcc-sum-in { display: flex; flex-wrap: wrap; gap: 16px; background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 10px; padding: 9px 13px; font-size: 12.5px; color: #134e48; }
+.wcc-sum-in b { font-weight: 600; } .wcc-sum-in b.teal { color: #0f766e; }
+.wcc-tbl td { vertical-align: middle; }
+.wcc-tbl td.c, .wcc-tbl th.c { text-align: center; }
+.wcc-tbl td.r, .wcc-tbl th.r { text-align: right; }
+.wcc-tbl .wcc-prev { color: var(--gray, #5b6b7c); font-variant-numeric: tabular-nums; }
+.wcc-tbl td small { display: block; font-size: 11px; color: var(--gray, #5b6b7c); margin-top: 2px; }
+.wcc-cat { display: inline-block; margin-left: 7px; font-size: 10.5px; color: #50657a; border: 1px solid #dfe7ef; border-radius: 4px; padding: 0 5px; }
+.wcc-done td { background: #f6fefb; }
+.wcc-in { white-space: nowrap; }
+.wcc-in > i { font-style: normal; color: var(--gray, #5b6b7c); margin-left: 5px; font-size: 12px; }
+.wcc-spin { display: inline-flex; align-items: stretch; border: 1px solid #cdd7e2; border-radius: 8px; overflow: hidden; background: #fff; height: 32px; }
+.wcc-spin input { width: 56px; border: 0; text-align: right; padding: 0 7px; font-family: inherit; font-size: 13px; font-weight: 400; color: var(--ink, #17324d); font-variant-numeric: tabular-nums; }
+.wcc-spin input:disabled { background: #f4f7fa; color: #7c8da1; }
+.wcc-arrows { display: flex; flex-direction: column; border-left: 1px solid #e2e8f0; }
+.wcc-arrows button { flex: 1; border: 0; background: #f8fafc; color: #5b6b7c; font-size: 8px; line-height: 1; padding: 0 6px; cursor: pointer; }
+.wcc-arrows button:hover { background: #eef2f6; color: #17324d; }
+.wcc-ok { color: #0f766e; font-size: 12px; font-weight: 500; }
+.wcc-up { color: #2e75b6; font-size: 12px; font-weight: 500; }
+.wcc-two { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; margin-top: 12px; }
+.wcc-three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.wcc-opts { display: flex; flex-direction: column; gap: 8px; }
+.wcc-opt { display: flex; gap: 10px; align-items: flex-start; border: 1px solid #cdd7e2; border-radius: 10px; padding: 10px 12px; background: #fff; cursor: pointer; }
+.wcc-opt.on { border-color: #0f766e; background: #f0fdfa; }
+.wcc-opt input { margin-top: 2px; accent-color: #0f766e; }
+.wcc-opt b { display: block; font-size: 13px; font-weight: 500; color: var(--ink, #17324d); }
+.wcc-opt small { display: block; font-size: 11.5px; color: var(--gray, #5b6b7c); line-height: 1.45; margin-top: 2px; }
+.wcc-info { display: flex; gap: 9px; align-items: flex-start; background: #f6f8fb; border: 1px solid var(--border, #dbe3ec); border-radius: 10px; padding: 9px 12px; font-size: 11.5px; color: var(--gray, #5b6b7c); line-height: 1.5; margin-top: 12px; }
+.wcc-acc-win { max-width: 620px; }
+.wcc-stat { margin: 4px 0 8px; }
+.wcc-accept-btn { width: 100%; margin-top: 8px; }
+.wcc-note { font-size: 11.5px; color: var(--gray, #5b6b7c); line-height: 1.5; margin-top: 7px; }
+.wcc-note.teal { color: #0f766e; }
+.wcc-panel .qv-side-card { padding-bottom: 10px; }
+
+/* ── New Job Invoice ── */
+.ji-top { display: grid; grid-template-columns: 300px 150px 150px; gap: 12px; align-items: end; margin-bottom: 12px; }
+.ji-basis-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; padding: 12px 13px; }
+.ji-basis { text-align: left; border: 1px solid #cdd7e2; border-radius: 10px; padding: 10px 12px; background: #fff; cursor: pointer; }
+.ji-basis.on { border-color: #174b7a; background: #f4f9ff; }
+.ji-basis:disabled { opacity: .55; cursor: default; }
+.ji-basis b { display: block; font-size: 13px; font-weight: 500; color: var(--ink, #17324d); }
+.ji-basis small { display: block; font-size: 11.5px; color: var(--gray, #5b6b7c); line-height: 1.45; margin-top: 3px; }
+.ji-inputs { display: grid; grid-template-columns: 160px 200px minmax(0, 1fr); gap: 12px; align-items: end; margin-bottom: 12px; }
+.ji-inputs.only-help { grid-template-columns: minmax(0, 1fr); }
+.ji-inputs .ji-help { padding-bottom: 8px; }
+.ji-help { font-size: 11.5px; color: var(--gray, #5b6b7c); line-height: 1.45; }
+.ji-help b { color: var(--ink, #17324d); font-weight: 600; }
+.ji-help .bad, .ji-sum-bad { color: #9a6700; }
+.ji-note { display: flex; gap: 10px; align-items: flex-start; border-radius: 10px; padding: 10px 13px; font-size: 12.5px; line-height: 1.5; margin-bottom: 12px; }
+.ji-note.good { background: #f0fdf4; border: 1px solid #bbf7d0; color: #14532d; }
+.ji-note.warn { background: #fffbeb; border: 1px solid #fde68a; color: #78350f; }
+.ji-note.bad { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+.ji-ded .wb-box-hd { align-items: flex-start; }
+.ji-ded-row { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 12px; align-items: end; padding: 12px 13px; }
+.ji-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.ji-sum-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ji-sum-card { border: 1px solid var(--border, #dbe3ec); border-radius: 10px; padding: 11px 13px; background: #fff; }
+.ji-sum-card.dim { background: #f8fafc; }
+.ji-sum-card h4 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--ink, #17324d); }
+.ji-sum-card > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 4px 0; }
+.ji-sum-card > div > span { color: var(--gray, #5b6b7c); }
+.ji-sum-card > div > b { font-weight: 500; font-variant-numeric: tabular-nums; color: var(--ink, #17324d); }
+.ji-sum-card > div.ded > b { color: #9a3412; }
+.ji-sum-card > div.sub { border-top: 1px solid var(--border, #dbe3ec); margin-top: 4px; padding-top: 7px; }
+.ji-sum-card > div.sub > span, .ji-sum-card > div.grand > span { color: var(--ink, #17324d); }
+.ji-sum-card > div.grand { border-top: 1px solid var(--border, #dbe3ec); margin-top: 4px; padding-top: 7px; font-size: 15px; }
+.ji-sum-card > div.grand > b { font-weight: 600; }
+.ji-cap { margin: 7px 0 0; font-size: 11px; color: var(--gray, #5b6b7c); line-height: 1.45; }
+
+/* ── the certificate on screen: A4 page + the staff panel, like the other document views ── */
+@media (min-width: 1200px) {
+  html body #wcc-view-modal.modal-overlay { padding: 18px !important; align-items: center !important; justify-content: center !important; }
+  html body #wcc-view-modal.modal-overlay > .modal {
+    width: min(1320px, calc(100vw - 36px)) !important; max-width: 1320px !important;
+    height: calc(100vh - 36px) !important; max-height: calc(100vh - 36px) !important;
+    margin: 0 auto !important; border-radius: 12px !important; overflow: hidden !important;
+  }
+  html body #wcc-view-modal .wcc-view-workspace {
+    display: grid !important; grid-template-columns: minmax(0, 794px) 300px !important;
+    justify-content: center !important; gap: 20px !important; padding: 18px !important; align-items: start !important;
+  }
+  html body #wcc-view-modal .qv-erp-panel { width: 300px !important; min-width: 0 !important; }
+}
+
+/* ── tablet and phone: no full-width screens, nothing cut off at the bottom ── */
+@media (max-width: 1100px) {
+  .wb-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wb-two, .wcc-two, .ji-sum-grid, .ji-two { grid-template-columns: minmax(0, 1fr); }
+  .wcc-top { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ji-top, .ji-inputs, .ji-ded-row, .wcc-three { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .wb-cards { grid-template-columns: minmax(0, 1fr); }
+  .wcc-top { grid-template-columns: minmax(0, 1fr); }
+  .wb-box-hd { align-items: flex-start; }
+  .wb-foot { gap: 8px; flex-direction: column; }
+  .wcc-win .modal-body { padding: 12px 13px; }
+  .wcc-ft { flex-wrap: wrap; }
+  .wcc-chk { order: -1; width: 100%; }
+}

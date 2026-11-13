@@ -232,6 +232,10 @@ ${KINDS.map(([k, l, c]) => row(l, b[k], c)).join('')}${row('Overheads', b.overhe
     $('jv-tabs').onclick = e => { const b = e.target.closest('[data-tab]'); if (!b || !V) return; V.tab = b.dataset.tab; paintView(); };
     $('jv-body').onclick = e => {
       const rbBtn = e.target.closest('[data-reimb]'); if (rbBtn) { openReimburse(rbBtn.dataset.reimb, rbBtn.dataset.name); return; }
+      // V271.13: certificates and job invoices
+      const tabBtn = e.target.closest('[data-tab]');
+      if (tabBtn && V) { V.tab = tabBtn.dataset.tab; paintView(); return; }
+      if (window.BCJobBilling && V && BCJobBilling.onTabClick(e, V.job, paintView)) return;
       const a = e.target.closest('[data-open]'); if (!a) return;
       const [kind, id] = [a.dataset.open, a.dataset.id];
       if (kind === 'pi' && typeof openPurchaseInvoiceView === 'function') openPurchaseInvoiceView(id);
@@ -251,6 +255,10 @@ ${KINDS.map(([k, l, c]) => row(l, b[k], c)).join('')}${row('Overheads', b.overhe
     V = { job: j, tab: opts.tab || (V && V.job && V.job.id === j.id ? V.tab : 'eva'), type: '', costs: null, rows: [], bva: null, loading: true, error: '' };
     paintView();
     if (!$('job-view-modal').classList.contains('open')) openModalWithSize('job-view-modal');
+    // V271.13: the certificates and the billing ledger of this job (two reads, kept until Refresh)
+    if (window.BCJobBilling) {
+      try { await BCJobBilling.loadFor(j, !!opts.fresh); if (V && V.job.id === j.id) paintView(); } catch (e) { /* shown in the tab */ }
+    }
     await loadCosts(!!opts.fresh);
   }
   async function loadCosts(fresh) {
@@ -313,6 +321,18 @@ ${rows.length ? `<tr class="jb-tot"><td colspan="5">Total${V.type ? ' — ' + es
     const items = activityItems(j), list = max ? items.slice(0, max) : items;
     return `<ul class="jv-act">${list.map(x => `<li><i class="jv-dot ${esc(x.c)}"></i><span>${esc(x.text)}</span><small>${dmy(x.date)}</small></li>`).join('')}</ul>${max && items.length > max ? `<button type="button" class="jv-more" onclick="BCJobs._tab('activity')">All activity (${items.length})</button>` : ''}`;
   }
+  /** V271.13: a short billing summary on the Overview tab, with the way into Completion & Billing. */
+  function billingBox(j) {
+    if (!window.BCJobBilling) return '';
+    const f = BCJobBilling.data && BCJobBilling.data.jobId === String(j.id) ? BCJobBilling.financeOf(j) : null;
+    if (!f) return `<div class="jv-box jv-next"><h4>Completion &amp; Billing</h4><p>Loading the certificates and invoices…</p></div>`;
+    const p = v => (Math.round((Number(v) || 0) * 10) / 10) + ' %';
+    return `<div class="jv-box"><h4>Completion &amp; Billing<button type="button" class="jv-edit" data-tab="wb" title="Open the tab"><i class="ti ti-arrow-right"></i>Open</button></h4>
+<div class="jv-kv"><span>Certified by the customer</span><b>${p(f.certifiedPct)}${f.certifiedWcc ? ' · ' + esc(f.certifiedWcc.wccNo) : ''}</b></div>
+<div class="jv-kv"><span>Invoiced</span><b>${fmt(f.goodsValue)} · ${p(f.invoicedPct)}</b></div>
+<div class="jv-kv"><span>Received</span><b>${fmt(f.receivedTotal)}${f.balanceTotal > 0.005 ? ' · balance ' + fmt(f.balanceTotal) : ''}</b></div>
+<div class="jv-kv"><span>Still to invoice</span><b>${fmt(f.roomTotal)}</b></div></div>`;
+  }
   function progressBox(j, x) {
     const used = x ? x.direct.usedPct : null, wd = j.workDonePct != null && j.workDonePct !== '' ? num(j.workDonePct) : null;
     const canE = canEditJob();
@@ -329,7 +349,9 @@ ${rows.length ? `<tr class="jb-tot"><td colspan="5">Total${V.type ? ' — ' + es
     const b = j.budget || {}, x = V.bva, see = canSeeCost();
     const nCosts = V.rows ? V.rows.length : 0;
     const nSubs = V.costs ? (V.costs.expenses || []).length : 0;
-    $('jv-tabs').innerHTML = [['overview', 'Overview'], ...(window.BCScope ? [['scope', 'Scope']] : []), ['eva', 'Estimate vs Actual'], ['costs', `Costs${V.costs ? ' (' + nCosts + ')' : ''}`], ['subs', `Submissions${V.costs ? ' (' + nSubs + ')' : ''}`], ['activity', 'Activity']]
+    const nWcc = window.BCJobBilling && BCJobBilling.data && BCJobBilling.data.jobId === String(j.id) ? (BCJobBilling.data.wccs || []).length : null;
+    $('jv-tabs').innerHTML = [['overview', 'Overview'], ...(window.BCScope ? [['scope', 'Scope']] : []), ['eva', 'Estimate vs Actual'], ['costs', `Costs${V.costs ? ' (' + nCosts + ')' : ''}`], ['subs', `Submissions${V.costs ? ' (' + nSubs + ')' : ''}`],
+      ...(window.BCJobBilling ? [['wb', `Completion &amp; Billing${nWcc ? ' (' + nWcc + ')' : ''}`]] : []), ['activity', 'Activity']]
       .map(([k, t]) => `<button type="button" role="tab" class="jv-tab${V.tab === k ? ' on' : ''}" aria-selected="${V.tab === k}" data-tab="${k}">${t}</button>`).join('');
     const actual = x ? x.actualTotal : null, direct = num(b.material) + num(b.manpower) + num(b.subcontract) + num(b.other);
     const cards = `<div class="jv-cards">
@@ -347,7 +369,9 @@ ${rows.length ? `<tr class="jb-tot"><td colspan="5">Total${V.type ? ' — ' + es
 <div class="jv-kv"><span>Site in-charge</span><b>${esc(j.siteInCharge || '—')}</b></div>
 <div class="jv-kv"><span>Created</span><b>${dmy(j.date)}${j.createdBy ? ' · ' + esc(j.createdBy) : ''}</b></div></div>
 ${j.notes ? `<div class="jv-box"><h4>Notes</h4><p class="jv-note">${esc(j.notes)}</p></div>` : ''}
-<div class="jv-box jv-next"><h4>Coming next</h4><p>Job invoices (advance, part, final) and the Work Completion Certificate come in the next update.</p></div></div></div>`;
+${billingBox(j)}</div></div>`;
+    } else if (V.tab === 'wb') {
+      main = window.BCJobBilling ? BCJobBilling.tabHtml(j) : '';
     } else if (V.tab === 'eva') {
       main = `<div class="jv-two"><div>${evaHtml(j)}</div><div class="jv-side">${progressBox(j, x)}<div class="jv-box"><h4>Activity</h4>${V.costs ? activityHtml(j, 6) : '<p class="jv-pnote">Loading…</p>'}</div></div></div>`;
     } else if (V.tab === 'costs') main = costsHtml();
@@ -361,7 +385,20 @@ ${j.notes ? `<div class="jv-box"><h4>Notes</h4><p class="jv-note">${esc(j.notes)
       + (j.rfqId ? `<button type="button" class="btn btn-secondary" data-rid="${esc(j.rfqId)}" onclick="closeModal('job-view-modal');bcOpenEstimate(this.dataset.rid,{version:${Number(j.estimateVersion) || 1}})"><i class="ti ti-calculator"></i>Estimate</button>` : '')
       + `<button type="button" class="btn btn-secondary" data-qid="${esc(j.quotationId)}" onclick="closeModal('job-view-modal');viewQuotation(this.dataset.qid)"><i class="ti ti-file-text"></i>${esc(j.qno || 'Quotation')}</button>`
       + (canE ? `<button type="button" class="btn btn-secondary" data-jid="${esc(j.id)}" onclick="BCJobs.openEdit(this.dataset.jid)"><i class="ti ti-edit"></i>Edit Details</button>` : '')
-      + (canJE ? `<button type="button" class="btn btn-primary" data-jid="${esc(j.id)}" onclick="BCJobs.openExpense(this.dataset.jid)"><i class="ti ti-receipt"></i>+ Job Expense</button>` : '');
+      + (canJE ? `<button type="button" class="btn btn-secondary" data-jid="${esc(j.id)}" onclick="BCJobs.openExpense(this.dataset.jid)"><i class="ti ti-receipt"></i>+ Job Expense</button>` : '')
+      + (window.BCJobBilling && !/^(closed|cancelled)$/i.test(String(j.status || '')) ? jobBillingButtons(j) : '');
+  }
+  /** V271.13: + New WCC (while the work is not fully certified) and + Job Invoice (while something is unbilled). */
+  function jobBillingButtons(j) {
+    const f = BCJobBilling.data && BCJobBilling.data.jobId === String(j.id) ? BCJobBilling.financeOf(j) : null;
+    if (!f) return '';
+    const canC = typeof window.bcCan !== 'function' || window.bcCan('salesOrder', 'c') || window.bcCan('salesOrder', 'e');
+    const canI = typeof window.bcCan !== 'function' || window.bcCan('invoice', 'c');
+    const openWcc = window.BCJobBilling.data && (BCJobBilling.data.wccs || []).some(w => w && w.status === 'Pending Acceptance');
+    let out = '';
+    if (canC && !openWcc && f.certifiedPct < 100) out += `<button type="button" class="btn btn-secondary" data-jid="${esc(j.id)}" onclick="BCJobBilling.openNewWcc(this.dataset.jid)"><i class="ti ti-clipboard-check"></i>+ New WCC</button>`;
+    if (canI && f.roomTotal > 0.005) out += `<button type="button" class="btn btn-primary" data-jid="${esc(j.id)}" onclick="BCJobBilling.openNewJobInvoice(this.dataset.jid,{})"><i class="ti ti-file-invoice"></i>+ Job Invoice</button>`;
+    return out;
   }
   const canEditJob = () => typeof window.bcCan !== 'function' || window.bcCan('salesOrder', 'e') || window.bcCan('salesOrder', 'c');
   const canExpense = () => typeof window.bcCan !== 'function' || window.bcCan('cash', 'c');
@@ -844,6 +881,15 @@ ${sig([['Received by', rb.employeeName], ['Paid by', rb.createdBy], ['Approved b
   }
 
   /* ══ Jobs register (Sales → Jobs) ══ */
+  /** V271.13: contract value of a job not yet covered by its job invoices (0 when closed or cancelled). */
+  function toInvoiceLeft(j) {
+    if (!j || /^(closed|cancelled)$/i.test(String(j.status || ''))) return 0;
+    const value = num(j.contractValue);
+    if (value <= 0) return 0;
+    const invs = (typeof invoicesCache !== 'undefined' ? invoicesCache : []).filter(i => i && String(i.jobId || '') === String(j.id) && !/^credited$/i.test(i.status || ''));
+    const billed = invs.reduce((s, i) => s + num((i.totals || {}).goodsSubtotal), 0);
+    return Math.max(0, r2(value - billed));
+  }
   const F = { customer: '', status: '', q: '', sort: 'created-desc', heading: '', direction: 'desc', monitor: '' };
   let built = false;
   function buildPage() {
@@ -852,7 +898,7 @@ ${sig([['Received by', rb.employeeName], ['Paid by', rb.createdBy], ['Approved b
     page.innerHTML = `<div class="dn-register-area module-register-area jb-reg">
 <div class="jb-monitor" id="jb-monitor" role="group" aria-label="Job status monitor">
 <button type="button" class="jb-monitor-main" data-jb-monitor=""><span>JOBS</span><strong id="jbmon-total">0</strong><small>Total jobs</small><small class="jb-monitor-amount" id="jbmon-total-amount">SAR — contract value</small></button>
-${[['Open','Open'],['In Progress','In Progress'],['Completed','Completed'],['To Invoice','To Invoice']].map(([status,label])=>`<button type="button" class="jb-monitor-tile" data-jb-monitor="${status}"${status === 'To Invoice' ? ' disabled title="Job invoicing is not yet implemented"' : ''}><span>${label}</span><strong data-jb-count="${status}">${status === 'To Invoice' ? '—' : '0'}</strong><small class="jb-monitor-amount" data-jb-amount="${status}">SAR —</small><i class="jb-monitor-track"><i class="jb-monitor-fill"></i></i></button>`).join('')}
+${[['Open','Open'],['In Progress','In Progress'],['Completed','Completed'],['To Invoice','To Invoice']].map(([status,label])=>`<button type="button" class="jb-monitor-tile" data-jb-monitor="${status}"${status === 'To Invoice' ? ' title="Jobs with a contract value still to invoice"' : ''}><span>${label}</span><strong data-jb-count="${status}">0</strong><small class="jb-monitor-amount" data-jb-amount="${status}">SAR —</small><i class="jb-monitor-track"><i class="jb-monitor-fill"></i></i></button>`).join('')}
 </div>
 <div class="dn-register-toolbar page-toolbar page-toolbar--sticky page-control-bar bc-filterbar" role="toolbar" aria-label="Job filters">
 <div class="dn-toolbar-left bc-filterbar-left"><span class="bc-filter-count" id="jbreg-count">0 jobs</span></div>
@@ -891,15 +937,19 @@ ${[['Open','Open'],['In Progress','In Progress'],['Completed','Completed'],['To 
     const counts={};for(const job of base)counts[job.status||'Open']=(counts[job.status||'Open']||0)+1;
     $('jbmon-total').textContent=base.length;
     // Display-only contract-value subtotals from the same already-loaded, scoped Jobs.
-    // The unimplemented To Invoice measure must not invent an amount.
     const contractMoney = list => 'SAR ' + list.reduce((sum,j)=>sum+(Number(j.contractValue)||0),0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
     $('jbmon-total-amount').textContent=contractMoney(base)+' contract value';
+    // V271.13: "To Invoice" = jobs (not closed / cancelled) whose job invoices come to less than the contract value.
+    const toBill = base.filter(j=>toInvoiceLeft(j)>0.005);
+    const billMoney = 'SAR ' + toBill.reduce((sum,j)=>sum+toInvoiceLeft(j),0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
     $('jb-monitor').querySelectorAll('[data-jb-monitor]').forEach(b=>{const status=b.dataset.jbMonitor;
       const amount=b.querySelector('[data-jb-amount]');
-      if(amount) amount.textContent=status==='To Invoice'?'SAR — (not available)':contractMoney(base.filter(j=>(j.status||'Open')===status));
+      if(amount) amount.textContent=status==='To Invoice'?billMoney+' left':contractMoney(base.filter(j=>(j.status||'Open')===status));
       b.classList.toggle('is-active',status===F.monitor&&!!status);
-      if(status && status !== 'To Invoice'){const n=counts[status]||0;b.querySelector('strong').textContent=n;
-        b.querySelector('.jb-monitor-fill').style.width=(base.length?Math.round(n/base.length*100):0)+'%';}else if(status === 'To Invoice'){b.querySelector('strong').textContent='—';}
+      if(status==='To Invoice'){const n=toBill.length;b.querySelector('strong').textContent=n;
+        b.querySelector('.jb-monitor-fill').style.width=(base.length?Math.round(n/base.length*100):0)+'%';}
+      else if(status){const n=counts[status]||0;b.querySelector('strong').textContent=n;
+        b.querySelector('.jb-monitor-fill').style.width=(base.length?Math.round(n/base.length*100):0)+'%';}
     });
     const cmp=(x,y)=>typeof compareBizCoreDocumentNumbers==='function'
       ?compareBizCoreDocumentNumbers(x,y,'job')
@@ -911,7 +961,7 @@ ${[['Open','Open'],['In Progress','In Progress'],['Completed','Completed'],['To 
       ?String(a.created||'').localeCompare(String(b.created||''))
       :typeof read(a,sortKey)==='number'?read(a,sortKey)-read(b,sortKey)
       :String(read(a,sortKey)).localeCompare(String(read(b,sortKey)),undefined,{numeric:true});
-    const list=base.filter(j=>(!F.status||j.status===F.status)&&(!F.monitor||j.status===F.monitor))
+    const list=base.filter(j=>(!F.status||j.status===F.status)&&(!F.monitor||(F.monitor==='To Invoice'?toInvoiceLeft(j)>0.005:j.status===F.monitor)))
       .sort((a,b)=>compare(a,b)*(sortDir==='asc'?1:-1)||cmp(b.jobNo,a.jobNo));
     document.querySelectorAll('#page-jobs .jb-sort-head').forEach(th=>{
       const active=th.dataset.jbSort===sortKey;th.setAttribute('aria-sort',active?(sortDir==='asc'?'ascending':'descending'):'none');
