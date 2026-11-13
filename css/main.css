@@ -154,8 +154,9 @@ td.center,th.center{text-align:center}
 .btn-success:hover{background:#155724}
 .btn:not(:disabled):active{transform:translateY(1px);box-shadow:none}
 .btn:disabled,.btn.disabled{background:#eef1f4!important;color:#98a2ad!important;border-color:#d6dce2!important;box-shadow:none!important;opacity:.72!important;cursor:not-allowed!important;transform:none!important}
-.smart-back-btn{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.5);color:#fff;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;display:none;align-items:center;gap:5px;margin-right:10px}
-.smart-back-btn.show{display:inline-flex}.smart-back-btn:hover{background:rgba(255,255,255,.25)}
+.smart-back-btn{flex:0 0 auto;width:32px;height:32px;padding:0;border:0;border-radius:8px;background:transparent;color:#fff;opacity:.9;cursor:pointer;display:none;align-items:center;justify-content:center;margin:0 6px 0 -6px}
+.smart-back-btn span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.smart-back-btn.show{display:inline-flex}.smart-back-btn:hover{background:rgba(255,255,255,.14);opacity:1}
 .modal-header-title-wrap{display:flex;align-items:center;min-width:0}.modal-header-title-wrap h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .btn-sm{padding:4px 10px;font-size:11px}
 .btn i{font-size:14px}
@@ -9560,3 +9561,9 @@ table.cm-table .cm-ab{font-size:11px!important;padding:3px 8px!important;line-he
   /* V271.11: the left Status column adds its width to the window, so the A4 page keeps 100% where there is room */
   html body #view-modal.modal-overlay > .modal:has(.qv-3col){width:min(1510px,calc(100vw - 36px))!important;max-width:1510px!important}
 }
+
+/* V271.12: compact back chevron — Quotation Output (one step back to the Gallery only) */
+.qout-header{min-height:48px!important}
+.qout-back{width:32px!important;height:32px!important;padding:0!important;border:0!important;background:transparent!important;justify-content:center;margin-left:-6px;opacity:.9}
+.qout-back:hover{background:rgba(255,255,255,.14)!important;opacity:1}
+#quotation-output-modal .smart-back-btn{display:none!important}

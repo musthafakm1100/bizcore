@@ -21,7 +21,7 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.51.0/dist/tabler-icons.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link href="css/main.css?v=271.11.1" rel="stylesheet"/>
+<link href="css/main.css?v=271.12" rel="stylesheet"/>
 <link href="css/bizcore-design.css?v=266.5" rel="stylesheet"/>
 <link href="css/typography.css?v=215" rel="stylesheet"/>
 <link href="css/masters.css?v=266.5" rel="stylesheet"/>
@@ -2280,7 +2280,7 @@ document.addEventListener('error', function(e) {
 <!-- QUOTATION OUTPUT OPTIONS -->
 <div class="modal-overlay" id="quotation-output-modal">
 <div class="modal qout-modal">
-<div class="modal-header qout-header"><div class="qout-header-left"><button class="qout-back" onclick="backToQuotationGallery()"><i class="ti ti-arrow-left"></i><span>Back to Gallery</span></button><span class="qout-header-divider"></span><h2><i class="ti ti-file-export"></i>Quotation Output</h2></div><button class="close-btn" onclick="closeModal('quotation-output-modal')">✕</button></div>
+<div class="modal-header qout-header"><div class="qout-header-left"><button type="button" class="qout-back" onclick="backToQuotationGallery()" title="Back to Gallery" aria-label="Back to Gallery"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><h2><i class="ti ti-file-export"></i>Quotation Output</h2></div><button class="close-btn" onclick="closeModal('quotation-output-modal')">✕</button></div>
 <div class="modal-body qout-body">
 <div class="qout-intro"><div class="qout-intro-icon"><i class="ti ti-file-check"></i></div><div><h3>Finalize your quotation</h3><p>Choose what should appear on this PDF / print copy. Your saved quotation will not be changed.</p></div></div>
 <div class="qout-options">
@@ -4577,7 +4577,7 @@ onAuthStateChanged(auth, async user => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
       s.id  = 'bizcore-app-script';
-      s.src = 'js/app.js?v=271.11';
+      s.src = 'js/app.js?v=271.12';
       // V265.5: the Deliveries screen builds on app.js
       s.onload = () => { const d = document.createElement('script'); d.id = 'bizcore-deliveries-script'; d.src = 'js/deliveries.js?v=265.7'; document.body.appendChild(d);
         // V269.7: the Sales Order view (tabs, rings, document lists, profit)

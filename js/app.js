@@ -6052,13 +6052,14 @@ function ensureSmartBackButton(modalId) {
     title.parentNode.insertBefore(wrap,title); wrap.appendChild(title);
   }
   let btn=wrap.querySelector('.smart-back-btn');
+  if(btn&&btn.querySelector('i.ti-arrow-left')){btn.remove();btn=null;}
   if(!btn){
     btn=document.createElement('button'); btn.type='button'; btn.className='smart-back-btn';
-    btn.innerHTML='<i class="ti ti-arrow-left"></i><span>Back</span>';
+    btn.innerHTML='<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Back</span>';   // V271.12: compact chevron (label kept for screen readers / tooltip)
     btn.onclick=()=>smartModalBack(modalId); wrap.insertBefore(btn,title);
   }
   const entry=[...modalNavHistory].reverse().find(x=>x.to===modalId);
-  if(entry){btn.querySelector('span').textContent='Back to '+modalFriendlyName(entry.from);btn.classList.add('show');}
+  if(entry){const lb='Back to '+modalFriendlyName(entry.from);btn.querySelector('span').textContent=lb;btn.title=lb;btn.setAttribute('aria-label',lb);btn.classList.add('show');}
   else btn.classList.remove('show');
 }
 
