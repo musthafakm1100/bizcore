@@ -6666,7 +6666,9 @@ function viewQuotation(id, skipVatCheck=false) {
   const lRFQ=q.rfqId?rfqs.find(r=>r.id===q.rfqId):null;
   const hPricing=!!(lRFQ&&lRFQ.pricingItems&&lRFQ.pricingItems.length);
   const status=q.status||'Draft';
-  document.getElementById('view-title').innerHTML='<span class="qv-title-kicker">Quotation</span><span class="qv-title-number">'+escapeHtml(q.qno)+'</span><span class="bc-title-type">'+bcTypeBadge(bcQuoteTypeKey(q))+'</span>';   // V271.10: work type
+  document.getElementById('view-title').innerHTML='<span class="qv-title-kicker">Quotation</span><span class="qv-title-number">'+escapeHtml(q.qno)+'</span>';
+  { const hr=document.querySelector('#view-modal .modal-header > div'); if(hr){ let tb=document.getElementById('view-type-badge'); if(!tb){ tb=document.createElement('span'); tb.id='view-type-badge'; tb.className='bc-title-type'; hr.insertBefore(tb,hr.firstChild); } tb.innerHTML=bcTypeBadge(bcQuoteTypeKey(q)); } }   // V271.10 / V271.11: work type on the right of the title bar
+  document.querySelector('#view-body .qv-left')?.remove();   // V271.11: the left column is rebuilt with the document
   renderStatusBar(q,status);
 
   let itemNo=0;
@@ -6810,21 +6812,23 @@ function viewQuotation(id, skipVatCheck=false) {
 /* V271.10: the quotation view shows the real print document (same template, same layout) in a frame on an A4 sheet;
    a quotation from an estimate gets a Print style bar on top (remembered on the quotation, used by Print / PDF). */
 function bcQuoteViewDocument(q){
-  const col=document.querySelector('#view-body .qv-document-column'), sheet=col&&col.querySelector('.qdoc-sheet'); if(!col||!sheet) return;
+  const ws=document.querySelector('#view-body .qv-document-workspace'), col=ws&&ws.querySelector('.qv-document-column'), sheet=col&&col.querySelector('.qdoc-sheet'); if(!col||!sheet) return;
   const tpl=bcQuoteViewTemplate(q), html=bcQuoteDocHtml(q.id,tpl); if(!html) return;   // nothing captured → the older screen layout stays
-  let bar='';
+  // V271.11 (QV_3): left column — Status, then Print style (contracting from an estimate)
+  let style='';
   if(q.estimate&&tpl==='contractquote'){
-    const st=BC_PRINT_STYLES.some(x=>x[0]===q.estimate.style)?q.estimate.style:'lumpsum', canEdit=typeof bcCan!=='function'||bcCan('quotation','e');
-    bar='<div class="qv-style-bar"><span class="qv-sb-l">Print style</span><span class="qv-sb-seg" role="group" aria-label="Print style">'
-      +BC_PRINT_STYLES.map(([v,t])=>'<button type="button" data-st="'+v+'" class="'+(v===st?'on':'')+'" aria-pressed="'+(v===st)+'">'+(v==='grouped'?'Section Total with Item Rates':t)+'</button>').join('')
-      +'</span><label class="qv-sb-q"><input type="checkbox" data-sq'+(q.estimate.showQty!==false?' checked':'')+'> Show Qty / Unit</label><span class="qv-sb-n">'+(canEdit?'Remembered for this quotation · used by Print / PDF':'View only')+'</span></div>';
+    const st=BC_PRINT_STYLES.some(x=>x[0]===q.estimate.style)?q.estimate.style:'grouped', canEdit=typeof bcCan!=='function'||bcCan('quotation','e');
+    style='<div class="qv-left-card qv-style-card"><div class="qv-lh"><i class="ti ti-printer"></i>Print style</div><div class="qv-style-list" role="group" aria-label="Print style">'
+      +BC_PRINT_STYLES.map(([v,t,d])=>'<button type="button" data-st="'+v+'" class="'+(v===st?'on':'')+'" aria-pressed="'+(v===st)+'" title="'+escapeHtml(d)+'">'+t+'</button>').join('')
+      +'</div><label class="qv-sb-q"><input type="checkbox" data-sq'+(q.estimate.showQty!==false?' checked':'')+'> Show Qty / Unit</label><div class="qv-sb-n">'+(canEdit?'Remembered for this quotation · used by Print / PDF':'View only')+'</div></div>';
   }
-  sheet.classList.add('qv-frame-sheet'); col.classList.add('qv-col-stack'); sheet.innerHTML='<iframe class="qv-doc-iframe" title="Quotation document" tabindex="-1"></iframe>';
-  if(bar){ sheet.insertAdjacentHTML('beforebegin',bar);
-    const b=col.querySelector('.qv-style-bar');
-    b.addEventListener('click',e=>{ const x=e.target.closest('[data-st]'); if(!x||x.classList.contains('on')) return; bcQuoteViewSetStyle(q,x.dataset.st,null); });
-    b.addEventListener('change',e=>{ if(e.target.matches('[data-sq]')) bcQuoteViewSetStyle(q,null,e.target.checked); });
-  }
+  ws.classList.add('qv-3col');
+  ws.insertAdjacentHTML('afterbegin','<aside class="qv-left"><div class="qv-left-card" id="qv-left-status"></div>'+style+'</aside>');
+  renderStatusBar(q,q.status);
+  const left=ws.querySelector('.qv-left');
+  left.addEventListener('click',e=>{ const x=e.target.closest('.qv-style-list [data-st]'); if(!x||x.classList.contains('on')) return; bcQuoteViewSetStyle(q,x.dataset.st,null); });
+  left.addEventListener('change',e=>{ if(e.target.matches('[data-sq]')) bcQuoteViewSetStyle(q,null,e.target.checked); });
+  sheet.classList.add('qv-frame-sheet'); sheet.innerHTML='<iframe class="qv-doc-iframe" title="Quotation document" tabindex="-1"></iframe>';
   const fr=sheet.querySelector('iframe');
   fr.addEventListener('load',()=>{
     const size=()=>{ try{ const d=fr.contentDocument; if(!d||!d.body) return; d.documentElement.style.overflow='hidden'; const h=Math.max(d.documentElement.scrollHeight,d.body.scrollHeight); if(h>50){ fr.style.height=h+'px'; } }catch(e){} };
@@ -6833,6 +6837,7 @@ function bcQuoteViewDocument(q){
   fr.srcdoc=html;
 }
 function bcQuoteViewSetStyle(q,st,sq){
+  q=q&&quotations.find(x=>x.id===q.id)||q;   // V271.11: the current record (the view's copy can be replaced by a later save — the first click was lost)
   if(!q||!q.estimate) return;
   if(st) q.estimate.style=st; if(sq!==null&&sq!==undefined) q.estimate.showQty=!!sq;
   if(typeof bcCan!=='function'||bcCan('quotation','e')) Promise.resolve(saveQuotations()).catch(()=>{});
@@ -6945,6 +6950,9 @@ function renderStatusBar(q, selectedStatus, pending) {
       + ' onclick="renderStatusBar(quotations.find(x=>x.id===this.dataset.qid),quotations.find(x=>x.id===this.dataset.qid).status)">Undo</button>';
   }
 
+  const left = document.getElementById('qv-left-status');   // V271.11: the status sits in the view's left column (QV_3)
+  if (left) { left.innerHTML = '<div class="qv-lh"><i class="ti ti-tag"></i>Status</div><div class="qv-status-list">' + statusBtns + '</div>' + (actionHtml ? '<div class="qv-status-act">' + actionHtml + '</div>' : ''); if (statusBar) statusBar.style.display = 'none'; return; }
+  if (statusBar) statusBar.style.display = '';
   statusBar.innerHTML = '<span class="ssb-label"><i class="ti ti-tag" style="margin-right:4px"></i>Status:</span>'
     + statusBtns + actionHtml;
 }
@@ -13647,7 +13655,7 @@ let _printQID = null;
 const TEMPLATES = [
   { id:'erpbox',       name:'Product', category:'standard', desc:'Standard product quotation with item details. Suitable for most quotations.', badge:'Recommended' },
   { id:'servicequote', name:'Service', category:'standard', desc:'Repair, maintenance and fabrication work on the Product layout: scope of work and delivery terms.' },
-  { id:'contractquote', name:'Contracting', category:'standard', desc:'Proposal for Works from an Estimation: sections, completion period and mobilization; print style chosen at Print / PDF.' },
+  { id:'contractquote', name:'Contracting', category:'standard', desc:'Proposal for Works from an Estimation: sections printed as Detailed, Section Totals or Lump Sum; completion period and mobilization.' },
   { id:'erpbilingual', name:'Arabic / English', category:'bilingual', desc:'Bilingual quotation layout with English and Arabic labels.' },
   { id:'imageref',     name:'Item Image – Thumbnail', category:'image', desc:'Product quotation with compact thumbnail images.' },
   { id:'imagerefmed',  name:'Item Image – Medium', category:'image', desc:'Product quotation with medium-sized images.' },
@@ -13796,21 +13804,21 @@ async function printWithSelectedTemplate() {
 }
 /* V271.9: the print style of a quotation made from an estimate is chosen here (not on the quotation screen) and remembered
    on the quotation, so the next print / PDF and the view use it too. */
-const BC_PRINT_STYLES=[['lumpsum','Lump Sum Only','sections with their scope · one total'],['sections','With Section Totals','each section shows its amount · line amounts'],['grouped','Section Total with Item Rates','qty, unit, rate and amount per line · a total under each section']];
+const BC_PRINT_STYLES=[['grouped','Detailed','qty, unit, rate and amount per line · a total under each section'],['sections','Section Totals','each section shows its amount · line amounts'],['lumpsum','Lump Sum','sections with their scope · one total']];   // V271.11: short names, Detailed first (default)
 function bcPaintPrintStyle(q,tpl){
   const m=document.getElementById('quotation-output-modal'); if(!m) return;
   let box=document.getElementById('qout-style');
   if(!box){ const body=m.querySelector('.qout-body')||m.querySelector('.modal-body'); if(!body) return; box=document.createElement('div'); box.id='qout-style'; box.className='qs-printopt'; const opts=body.querySelector('.qout-options'); opts?opts.after(box):body.appendChild(box); }
   const e=q&&q.estimate; box.hidden=!(e&&tpl==='contractquote');
   if(box.hidden) return;
-  const st=BC_PRINT_STYLES.some(x=>x[0]===e.style)?e.style:'lumpsum';
+  const st=BC_PRINT_STYLES.some(x=>x[0]===e.style)?e.style:'grouped';
   box.innerHTML='<div class="qs-po-h">Print style</div>'+BC_PRINT_STYLES.map(([v,t,d])=>'<label><input type="radio" name="qout-st" value="'+v+'"'+(v===st?' checked':'')+'> <span><b>'+t+'</b> — '+d+'</span></label>').join('')
     +'<label><input type="checkbox" id="qout-st-qty"'+(e.showQty!==false?' checked':'')+'> <span>Show Qty / Unit</span></label><div style="font-size:11.5px;color:#64748b">Remembered for this quotation.</div>';
 }
 /** at Generate: the chosen print style goes on the quotation (memory now; saved when the user may edit quotations) */
 function bcTakePrintStyle(q){
   const box=document.getElementById('qout-style'); if(!box||box.hidden||!q||!q.estimate) return;
-  const st=(box.querySelector('input[name="qout-st"]:checked')||{}).value||q.estimate.style||'lumpsum', sq=!!document.getElementById('qout-st-qty')?.checked;
+  const st=(box.querySelector('input[name="qout-st"]:checked')||{}).value||q.estimate.style||'grouped', sq=!!document.getElementById('qout-st-qty')?.checked;
   if(q.estimate.style===st&&(q.estimate.showQty!==false)===sq) return;
   q.estimate.style=st; q.estimate.showQty=sq;
   if(typeof bcCan!=='function'||bcCan('quotation','e')) Promise.resolve(saveQuotations()).catch(()=>{});
@@ -13990,7 +13998,7 @@ function printQuotationProductA4(id, imageVariant){
   const svcEst=contractMode&&q.estimate?q.estimate:null;
   let svcHead='', svcSubLabel='';
   if(svcEst){
-    const style=svcEst.style==='sections'||svcEst.style==='grouped'?svcEst.style:'lumpsum';
+    const style=svcEst.style==='sections'||svcEst.style==='lumpsum'?svcEst.style:'grouped';   // V271.11: Detailed is the default
     const showQ=svcEst.showQty!==false||style==='grouped', rates=style==='grouped', amt=style!=='lumpsum';
     const ecols=2+(showQ?2:0)+(rates?1:0)+(amt?1:0);
     const letter=i=>{let t='',n=i;do{t=String.fromCharCode(65+n%26)+t;n=Math.floor(n/26)-1;}while(n>=0);return t;};

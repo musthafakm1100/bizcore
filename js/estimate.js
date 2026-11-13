@@ -44,7 +44,7 @@
   ];
   const KIND = Object.fromEntries(KINDS.map(x => [x.k, x]));
   const UNITS = ['LS', 'Lot', 'm²', 'm', 'm³', 'Nos', 'Pcs', 'Set', 'Kg', 'Ltr', 'Roll', 'Box', 'Day', 'Hour', 'Week', 'Month', 'Trip', 'Visit'];
-  const STYLES = { lumpsum: 'Lump Sum Only', sections: 'With Section Totals', grouped: 'Section Total with Item Rates' };
+  const STYLES = { grouped: 'Detailed', sections: 'Section Totals', lumpsum: 'Lump Sum' };   // V271.11: short names, Detailed first (default)
 
   /* ══ Contracting Settings (Administration) ══ */
   const SKEY = 'bizcoreContractingSettings';
@@ -229,7 +229,7 @@
     const lines = (Array.isArray(r.rfqLines) ? r.rfqLines : []).filter(l => l && String(l.desc || '').trim()).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
     const items = lines.length ? lines.map(l => blankItem({ desc: String(l.desc || '').trim() + (l.remarks ? '\n' + String(l.remarks).trim() : ''), unit: l.uom || 'LS', qty: num(l.qty) || 1, rfqLineId: l.lineId || '' })) : [blankItem({ desc: '' })];
     return {
-      site: r.site || '', duration: r.duration || '', estimateDate: today(), quoteStyle: 'lumpsum',
+      site: r.site || '', duration: r.duration || '', estimateDate: today(), quoteStyle: 'grouped',
       overheadPct: num(cs.overheadPct), contingencyPct: num(cs.contingencyPct), markupPct: num(cs.markupPct), roundTo: '',
       sections: [{ id: newId('es'), title: 'Scope of work', items }], internalNotes: '',
     };
@@ -238,7 +238,7 @@
     const est = clone(d) || {};
     est.sections = (Array.isArray(est.sections) ? est.sections : []).map(s => ({ id: s.id || newId('es'), title: s.title || '', ...(s.workCat ? { workCat: s.workCat } : {}), items: (Array.isArray(s.items) ? s.items : []).map(it => ({ ...it, id: it.id || newId('ei'), build: { ...blankBuild(), ...(it.build || {}) } })) }));
     if (!est.sections.length) est.sections = [{ id: newId('es'), title: 'Scope of work', items: [blankItem()] }];
-    ['site', 'duration', 'estimateDate', 'quoteStyle', 'internalNotes'].forEach(k => { if (est[k] == null) est[k] = k === 'quoteStyle' ? 'lumpsum' : ''; });
+    ['site', 'duration', 'estimateDate', 'quoteStyle', 'internalNotes'].forEach(k => { if (est[k] == null) est[k] = k === 'quoteStyle' ? 'grouped' : ''; });
     return est;
   }
   async function loadVersion(r, n) {
@@ -275,7 +275,7 @@
 <div class="es-f"><label for="es-site">Project / Site</label><input id="es-site" maxlength="200" placeholder="Project name, building, floor…"></div>
 <div class="es-f"><label for="es-duration">Est. Duration</label><input id="es-duration" maxlength="40" placeholder="e.g. 21 days"></div>
 <div class="es-f"><label for="es-date">Estimate Date</label><input id="es-date" autocomplete="off"></div>
-<div class="es-f"><label for="es-style">Quotation Style</label><select id="es-style"><option value="lumpsum">Lump Sum Only</option><option value="sections">With Section Totals</option><option value="grouped">Section Total with Item Rates</option></select></div>
+<div class="es-f"><label for="es-style">Quotation Style</label><select id="es-style"><option value="grouped">Detailed</option><option value="sections">Section Totals</option><option value="lumpsum">Lump Sum</option></select></div>
 </div>
 <div class="es-work">
 <div class="es-main">
@@ -425,7 +425,7 @@
   }
   function noteMarks() { const has = !!String(E.est.internalNotes || '').trim(); $('es-note-pill').hidden = !has; const d = document.querySelector('#es-tabs [data-tab="notes"] .es-dot'); if (d) d.hidden = !has; }
   function renderBar() {
-    $('es-site').value = E.est.site || ''; $('es-duration').value = E.est.duration || ''; $('es-style').value = E.est.quoteStyle || 'lumpsum';
+    $('es-site').value = E.est.site || ''; $('es-duration').value = E.est.duration || ''; $('es-style').value = E.est.quoteStyle || 'grouped';
     if (window.BCDate) BCDate.setISO($('es-date'), E.est.estimateDate || today()); else $('es-date').value = E.est.estimateDate || '';
     ['es-site', 'es-duration', 'es-style', 'es-date', 'es-notes'].forEach(id => { $(id).disabled = E.ro; });
   }
@@ -1424,7 +1424,7 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
       });
     });
     const ctx = { rfqId: String(r.id), rfqNo: r.rfqNo || '', version: n, ref: 'EST-' + String(r.rfqNo || '').replace(/^RFQ-?/i, '') + '-V' + n,
-      style: STYLES[est.quoteStyle] ? est.quoteStyle : 'lumpsum', showQty: true, offer: c.offer, itemCount: c.itemCount,
+      style: STYLES[est.quoteStyle] ? est.quoteStyle : 'grouped', showQty: true, offer: c.offer, itemCount: c.itemCount,
       budget: { material: c.by.material, manpower: c.by.manpower, subcontract: c.by.subcontract, other: c.by.other, overhead: c.overhead, contingency: c.contingency, totalCost: c.totalCost },
       plannedProfit: c.profit, site: est.site || '', duration: est.duration || '',
       sections: c.secs.map(s => ({ code: s.code, title: s.title || '', amount: s.offer })),
@@ -1531,7 +1531,7 @@ ${E.ro ? '' : `<div class="es-card"><h4>Copy From</h4><div class="es-note2" styl
     if (!card) { card = document.createElement('div'); card.id = 'qt-est-card'; card.className = 'qt-est-card'; const hd = side.querySelector('.qt-side-hd'); hd ? hd.after(card) : side.prepend(card); }
     card.hidden = false;
     card.innerHTML = `<div class="qt-est-h">Contracting · <b>Estimation V${esc(ctx.version)}</b>${ctx.rfqNo ? ' · ' + esc(ctx.rfqNo) : ''}</div>
-<div class="qt-est-n">Print style: <b>${esc(({ lumpsum: 'Lump Sum Only', sections: 'With Section Totals', grouped: 'Section Total with Item Rates' })[ctx.style] || 'Lump Sum Only')}</b> — chosen at Print / PDF.<br>Lump sum ${fmt(ctx.offer)} from the estimate. Qty and rates are locked — only the quotation discount can be given. To change the price, make a new estimate version.</div>`;
+<div class="qt-est-n">Print style: <b>${esc(STYLES[ctx.style] || 'Lump Sum')}</b> — chosen at Print / PDF.<br>Lump sum ${fmt(ctx.offer)} from the estimate. Qty and rates are locked — only the quotation discount can be given. To change the price, make a new estimate version.</div>`;
     card.onchange = e => {
       if (e.target.name === 'qt-est-style') ctx.style = STYLES[e.target.value] ? e.target.value : 'lumpsum';
       if (e.target.id === 'qt-est-qty') ctx.showQty = e.target.checked;
