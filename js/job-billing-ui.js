@@ -214,7 +214,7 @@ ${invListHtml(job, f)}
     $('wn-save').onclick = saveWcc;
   }
   async function openNewWcc(jobId) {
-    const job = (typeof jobs !== 'undefined' ? jobs : []).find(j => String(j.id) === String(jobId) || j.jobNo === jobId);
+    const job = (window.BCJobs && typeof BCJobs.list === 'function' ? BCJobs.list() : []).find(j => String(j.id) === String(jobId) || j.jobNo === jobId);
     if (!job) { toast('Job ' + jobId + ' was not found.', 'error'); return; }
     if (!window.BCScope) { toast('The scope of work module is not loaded.', 'error'); return; }
     const scope = await BCScope.loadJobScope(job);
@@ -423,7 +423,7 @@ ${w.remarks ? `<div class="wcc-rem"><b>Remarks / pending items</b>${esc(w.remark
     const w = preloaded || wccOf(wccId);
     if (!w) { toast('This certificate is not loaded yet. Please try again in a moment.', 'warning'); return; }
     ensureWccView();
-    const job = (typeof jobs !== 'undefined' ? jobs : []).find(j => String(j.id) === String(w.jobId)) || { id: w.jobId, jobNo: w.jobNo };
+    const job = (window.BCJobs && typeof BCJobs.list === 'function' ? BCJobs.list() : []).find(j => String(j.id) === String(w.jobId)) || { id: w.jobId, jobNo: w.jobNo };
     const inv = invoicesOfJob(w.jobId).find(i => String(i.wccId || '') === String(w.id));
     const f = financeOf(job);
     $('wv-title').textContent = `${w.wccNo} — ${w.type === 'final' ? 'Final' : 'Partial'} ${pct1(w.overallPct)}`;
@@ -527,7 +527,7 @@ ${opt('notAccepted', 'Not accepted', 'The customer refused to sign. A reason is 
         forget(w.jobId);
         closeModal('wcc-acc-modal');
         toast(`${w.wccNo}: ${res.wcc.status}`, 'success', 'Saved');
-        const job = (typeof jobs !== 'undefined' ? jobs : []).find(j => String(j.id) === String(w.jobId));
+        const job = (window.BCJobs && typeof BCJobs.list === 'function' ? BCJobs.list() : []).find(j => String(j.id) === String(w.jobId));
         if (job) await loadFor(job, true);
         if (isModalOpen('wcc-view-modal')) openWccView(w.id);
         else if (job) await reopenJob(job, 'wb');
@@ -560,7 +560,7 @@ ${opt('notAccepted', 'Not accepted', 'The customer refused to sign. A reason is 
         forget(w.jobId);
         closeModal('wcc-cancel-modal');
         toast(`${w.wccNo} cancelled`, 'success');
-        const job = (typeof jobs !== 'undefined' ? jobs : []).find(j => String(j.id) === String(w.jobId));
+        const job = (window.BCJobs && typeof BCJobs.list === 'function' ? BCJobs.list() : []).find(j => String(j.id) === String(w.jobId));
         if (job) await loadFor(job, true);
         if (isModalOpen('wcc-view-modal')) closeModal('wcc-view-modal');
         if (job) await reopenJob(job, 'wb');
@@ -605,7 +605,7 @@ ${opt('notAccepted', 'Not accepted', 'The customer refused to sign. A reason is 
     return (B.wccs || []).filter(w => C().isAcceptedStatus(w.status) && !billed.has(String(w.id)));
   };
   async function openNewJobInvoice(jobId, opts = {}) {
-    const job = (typeof jobs !== 'undefined' ? jobs : []).find(j => String(j.id) === String(jobId) || j.jobNo === jobId);
+    const job = (window.BCJobs && typeof BCJobs.list === 'function' ? BCJobs.list() : []).find(j => String(j.id) === String(jobId) || j.jobNo === jobId);
     if (!job) { toast('Job ' + jobId + ' was not found.', 'error'); return; }
     if (!canBill()) { toast('Your role cannot issue invoices.', 'warning'); return; }
     if (!B || B.jobId !== String(job.id)) await loadFor(job);

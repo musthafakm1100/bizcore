@@ -670,7 +670,7 @@ function renderReceiptView(r){
   sos.forEach(a => { const so = (salesOrders || []).find(s => s.id === a.salesOrderId); flow.push(so ? { label: 'Sales order', text: so.soNo, onclick: rctViewGo(`viewSO('${so.id}')`) } : { label: 'Sales order', text: a.soNo || '—' }); });
   // V271.13: an allocation on a contracting job invoice points at the job
   [...new Set((r.allocations || []).filter(a => a && a.jobId).map(a => a.jobId))].forEach(id => {
-    const job = (typeof jobs !== 'undefined' ? jobs : []).find(j => String(j.id) === String(id));
+    const job = (window.BCJobs && typeof BCJobs.list === 'function' ? BCJobs.list() : []).find(j => String(j.id) === String(id));
     flow.push({ label: 'Job', text: (job && job.jobNo) || ((r.allocations || []).find(a => a.jobId === id) || {}).jobNo || '—', onclick: rctViewGo(`BCJobs.view('${id}',{tab:'wb'})`) });
   });
   (r.allocations || []).forEach(a => flow.push({ label: `Invoice · ${rctF(a.amount)} applied`, text: a.invNo, onclick: `openInvoiceView('${rctEsc(a.invoiceId)}')` }));

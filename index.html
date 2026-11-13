@@ -4610,7 +4610,7 @@ onAuthStateChanged(auth, async user => {
   if (!document.getElementById('bizcore-app-script') && !document.getElementById('bizcore-invoicing-script')) {
     const inv = document.createElement('script');
     inv.id  = 'bizcore-invoicing-script';
-    inv.src = 'js/invoicing.js?v=271.13';
+    inv.src = 'js/invoicing.js?v=271.13.1';
     const start = () => {
       if (document.getElementById('bizcore-app-script')) return;
       const s   = document.createElement('script');
@@ -4634,7 +4634,7 @@ onAuthStateChanged(auth, async user => {
         // V271.2: Contracting Jobs (Create Job, Jobs register, Job view)
         const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.13';
         // V271.13: Work Completion Certificates and job invoicing — after jobs.js (it adds the Completion & Billing tab)
-        jb.onload = () => { const wb = document.createElement('script'); wb.id = 'bizcore-job-billing-script'; wb.src = 'js/job-billing-ui.js?v=271.13'; document.body.appendChild(wb); };
+        jb.onload = () => { const wb = document.createElement('script'); wb.id = 'bizcore-job-billing-script'; wb.src = 'js/job-billing-ui.js?v=271.13.1'; document.body.appendChild(wb); };
         document.body.appendChild(jb);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=271.11'; document.body.appendChild(ds);
@@ -4655,7 +4655,7 @@ onAuthStateChanged(auth, async user => {
     // V267.2: cash-ui.js + cashbank.js (Cash & Bank) after accounts.js, before app.js
     const loadCash = () => { const u = document.createElement('script'); u.id = 'bizcore-cashui-script'; u.src = 'js/cash-ui.js?v=271.32'; u.onload = u.onerror = () => { const c = document.createElement('script'); c.id = 'bizcore-cashbank-script'; c.src = 'js/cashbank.js?v=269.3'; c.onload = loadPurchases; c.onerror = () => { console.error('[BizCore] cashbank.js could not be loaded'); loadPurchases(); }; document.body.appendChild(c); }; document.body.appendChild(u); };
     // V266: receipts.js (Payment Receipts) after invoicing.js, before app.js
-    inv.onload = () => { const r = document.createElement('script'); r.id = 'bizcore-receipts-script'; r.src = 'js/receipts.js?v=271.13'; r.onload = () => { const pa = document.createElement('script'); pa.id = 'bizcore-accounts-script'; pa.src = 'js/accounts.js?v=268.51'; pa.onload = loadCash; pa.onerror = () => { console.error('[BizCore] accounts.js could not be loaded'); loadCash(); }; document.body.appendChild(pa); }; r.onerror = () => { console.error('[BizCore] receipts.js could not be loaded'); start(); }; document.body.appendChild(r); };
+    inv.onload = () => { const r = document.createElement('script'); r.id = 'bizcore-receipts-script'; r.src = 'js/receipts.js?v=271.13.1'; r.onload = () => { const pa = document.createElement('script'); pa.id = 'bizcore-accounts-script'; pa.src = 'js/accounts.js?v=268.51'; pa.onload = loadCash; pa.onerror = () => { console.error('[BizCore] accounts.js could not be loaded'); loadCash(); }; document.body.appendChild(pa); }; r.onerror = () => { console.error('[BizCore] receipts.js could not be loaded'); start(); }; document.body.appendChild(r); };
     inv.onerror = () => { console.error('[BizCore] invoicing.js could not be loaded'); start(); };
     document.body.appendChild(inv);
   }

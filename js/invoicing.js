@@ -907,7 +907,7 @@ function invCustomerVat(custName, custId){
 }
 /** V271.13: is this document a contracting job invoice / credit note (lump sum, no quantities)? */
 function invIsJobDoc(doc){ return !!(doc && doc.jobId) && !doc.salesOrderId; }
-function invJobOf(doc){ return (typeof jobs !== 'undefined' ? jobs : []).find(j => String(j.id) === String(doc && doc.jobId)) || null; }
+function invJobOf(doc){ return (window.BCJobs && typeof BCJobs.list === 'function' ? BCJobs.list() : []).find(j => String(j.id) === String(doc && doc.jobId)) || null; }
 /** A4 document for an invoice (kind 'invoice') or a credit note (kind 'credit'). */
 function invoiceDocumentHtml(doc, kind, screenMode){
   const cn = kind === 'credit';
@@ -1160,7 +1160,7 @@ function printCustomerInvoice(invoiceId){
   const inv = invoicesCache.find(i => i.id === invoiceId); if (!inv) return;
   // V270.4.8: "INV-2610-0001 - SNC Lavalin Arabia - PO2200005124" (the invoice's PO no., else the order's; none → no PO part)
   const po = inv.poNo || ((typeof salesOrders !== 'undefined' ? salesOrders : []).find(x => x.id === inv.salesOrderId) || {}).poNo
-    || ((typeof jobs !== 'undefined' ? jobs : []).find(x => String(x.id) === String(inv.jobId)) || {}).poNo || '';
+    || ((window.BCJobs && typeof BCJobs.list === 'function' ? BCJobs.list() : []).find(x => String(x.id) === String(inv.jobId)) || {}).poNo || '';
   invPrintDocument(invoiceDocumentHtml(inv, 'invoice', false), [inv.invNo, typeof dnSafeFilePart === 'function' ? dnSafeFilePart(inv.customer) : inv.customer, typeof docPoFilePart === 'function' ? docPoFilePart(po) : ''].filter(Boolean).join(' - '));
 }
 function printCreditNote(cnId){

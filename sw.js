@@ -8,7 +8,7 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v27113';
+const CACHE_NAME = 'bizcore-shell-v27113-1';
 const APP_SHELL = [
   './login.html',
   './delivery.html',
@@ -80,13 +80,13 @@ const APP_SHELL = [
   './js/estimate.js?v=271.11',
   './js/invoice-core.mjs?v=266.0',
   './js/invoice-service.mjs?v=270.43',
-  './js/invoicing.js?v=271.13',
+  './js/invoicing.js?v=271.13.1',
   './js/item-link.js?v=270.59',
   './js/job-cost-core.mjs?v=271.32',
   './js/job-cost-service.mjs?v=271.33',
   './js/jobs.js?v=271.13',
   './js/job-billing-core.mjs?v=271.13',
-  './js/job-billing-ui.js?v=271.13',
+  './js/job-billing-ui.js?v=271.13.1',
   './js/job-invoice-service.mjs?v=271.13',
   './js/ledger-core.mjs?v=269.3',
   './js/ledger-service.mjs?v=270.41',
@@ -108,7 +108,7 @@ const APP_SHELL = [
   './js/quote-rich.js?v=271.7.4',
   './js/receipt-core.mjs?v=271.13',
   './js/receipt-service.mjs?v=270.43',
-  './js/receipts.js?v=271.13',
+  './js/receipts.js?v=271.13.1',
   './js/responsive.js?v=270.47',
   './js/rfq-entry.js?v=271.10',
   './js/role-core.mjs?v=271.6',
