@@ -1,0 +1,1 @@
+V271.5.34.2 — UOM & Categories buttons/badges refinement. UI/CSS only, no business logic changes. Pricing standard: 13px regular action text, 12px regular semantic badge text, soft rounded fills, accessible spacing. Updated cache references.

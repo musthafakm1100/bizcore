@@ -18,11 +18,11 @@ import {
   WCC_COLLECTION, WCC_EVENTS, WCC_SCHEMA_VERSION, WCC_STATUS, WCC_LIMITS, WCC_ERR, WccError,
   wccIdForOperation, wccEventId, buildWccBody, buildAcceptance, cancelCheck, priorFromLedger,
   isSafeId, cleanText, isAcceptedStatus,
-} from './wcc-core.mjs?v=271.13';
+} from './wcc-core.mjs?v=271.13.3';
 import {
   JOB_BILLING_COLLECTION, JOB_LIMITS, emptyJobBilling, jobContractValue,
   applyWccCreatedToLedger, applyWccDecisionToLedger, applyWccCancelToLedger,
-} from './job-billing-core.mjs?v=271.13';
+} from './job-billing-core.mjs?v=271.13.3';
 
 const fail = (code, message, details) => { throw new WccError(code, message, details); };
 const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, details); };

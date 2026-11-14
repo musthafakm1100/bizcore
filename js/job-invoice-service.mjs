@@ -14,13 +14,13 @@
 import { accessWithRole, actorMay } from './user-core.mjs?v=270.43';
 import { formatSequence, nextSequence } from './numbering.mjs?v=270.25';
 import { zohoNoKey, INVOICE_COLLECTIONS, INVOICE_SCHEMA_VERSION } from './invoice-core.mjs?v=266.0';
-import { isSafeId, cleanText, isAcceptedStatus, r2, operationKey, WCC_COLLECTION } from './wcc-core.mjs?v=271.13';
+import { isSafeId, cleanText, isAcceptedStatus, r2, operationKey, WCC_COLLECTION } from './wcc-core.mjs?v=271.13.3';
 import {
   JOB_BILLING_COLLECTION, JOB_INVOICE_TYPES, JOB_LIMITS, JB_ERR, JobBillingError, MONEY_EPSILON,
   emptyJobBilling, jobBillingState, jobContractValue, priceJobAdvance, priceJobWork, jobDeductionLimits,
   checkJobDeduction, allocateJobDeduction, applyJobInvoiceToLedger, buildJobCreditNote, jobInvoiceLine,
   effectiveJobBillingSettings, jobInvoiceTypeLabel,
-} from './job-billing-core.mjs?v=271.13';
+} from './job-billing-core.mjs?v=271.13.3';
 
 const fail = (code, message, details) => { throw new JobBillingError(code, message, details); };
 const ensure = (ok, code, message, details) => { if (!ok) fail(code, message, details); };

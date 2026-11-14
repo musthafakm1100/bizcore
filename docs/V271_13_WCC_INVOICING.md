@@ -138,13 +138,30 @@ document as the Sales Order billing rules and does not change them.
 
 | Test | What it covers |
 |---|---|
-| `tests/wcc-core.test.mjs` | 17 — the certificate rules (averages, final 100 %, never below certified, one open at a time, acceptance, cancel) |
+| `tests/wcc-core.test.mjs` | 20 — the certificate rules (averages, final 100 %, never below certified, one open at a time, acceptance, cancel) |
 | `tests/job-billing-core.test.mjs` | 23 — the money (contract cap, deductions forced and limited, the ledger, credit notes, the summary) |
 | `tests/job-billing-service.test.mjs` | 15 — the transactions against an in-memory Firestore (numbering, retried saves, certificate ↔ invoice ↔ ledger) |
 | `tests/emulator/wcc-billing.test.mjs` | the security rules on the emulator — **run `RUN_EMULATOR_TESTS.bat` and publish the rules before uploading** |
 
 A browser pass with a stubbed host drove the whole flow (tab → new certificate → acceptance → job invoice →
 phone width) with no console errors; the screenshots are in the version's folder.
+
+## V271.13.3 — how the certificate prints the scope
+
+`buildWccBody()` now also returns **`rows`**, the certificate's own printable copy of the job's frozen scope
+(`jobs/{id}/scope/main`), and the service stores it on the certificate. It keeps the order of the scope with
+section letters and line codes — `{ k:'heading', sl:'A', text }`, `{ k:'note', text, html }`,
+`{ k:'line', sl:'A1', idx, n, title, html, workCat, qty, uom, prevPct, pct }` — so the document always prints as
+it was certified, even if the job's scope is re-frozen later. `sectionLetter(i)` is the same A … Z, AA sequence the
+quotation uses in `js/app.js`.
+
+The screen renders those rows the way the quotation renders its own lines: a line that carries its own scope of
+work prints the bold title and the scope under it, and a line whose rich description *is* the description prints
+that alone (`bcLineDescHtml()` in `js/app.js` makes the same distinction). Certificates created before V271.13.3
+have no `rows`; they fall back to their flat `lines`.
+
+The customer's copy uses the **Graphite** theme (`--wa: #2f3a45`) with the quotation's typography. The screens
+keep teal as the certificate's accent, as before.
 
 ## Not in this version (agreed)
 

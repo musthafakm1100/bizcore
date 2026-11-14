@@ -20,8 +20,10 @@ behaves exactly like V259 ("legacy mode").
 | `firestore.rules` | security rules (test in the emulator before publishing) |
 
 Folders: application (`index.html`, `login.html`, `delivery.html`, `js/`, `css/`, `icons/`, `sw.js`,
-`manifest.json`) · `tools/dn-migration/` admin CLI · `emulator/` local test database · `tests/` automated tests ·
-`docs/phase-history/` notes from the earlier V260 phases (superseded).
+`manifest.json`, `icons/`) · `tools/dn-migration/` admin CLI · `emulator/` local test database · `tests/` automated tests ·
+`docs/` the design and decision notes per version · `docs/releases/` every release note, newest first
+(`docs/releases/README.md` is the index) · `docs/phase-history/` notes from the earlier V260 phases (superseded).
+The main folder keeps only the application, the settings files, the run scripts and the current release note.
 
 ---
 

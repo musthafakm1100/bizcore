@@ -22,7 +22,7 @@
  *   4. An advance that was deducted cannot be credited (only its undeducted part).
  *   5. Work already certified by the customer is never un-certified by an invoice or a credit note.
  */
-import { WCC_TYPES, WCC_STATUS, isAcceptedStatus, rPct, r2, isSafeId, cleanText, byLineRecord, operationKey } from './wcc-core.mjs?v=271.13';
+import { WCC_TYPES, WCC_STATUS, isAcceptedStatus, rPct, r2, isSafeId, cleanText, byLineRecord, operationKey } from './wcc-core.mjs?v=271.13.3';
 
 export const JOB_BILLING_COLLECTION = 'jobBilling';
 export const JOB_BILLING_SCHEMA_VERSION = 1;

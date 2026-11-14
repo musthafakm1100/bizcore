@@ -82,7 +82,7 @@ button,.btn{font-size:14px!important;font-weight:600!important;}
 <link rel="stylesheet" href="css/pricing-sticky-table.css?v=271.5.19"/>
 <link rel="stylesheet" href="css/bizcore-ui-global.css?v=271.5.21"/>
 <link rel="stylesheet" href="css/jobs-ui-standard.css?v=271.5.23.1"/>
-<link rel="stylesheet" href="css/wcc.css?v=271.13"/>
+<link rel="stylesheet" href="css/wcc.css?v=271.13.3"/>
 <link rel="stylesheet" href="css/stock-ui-standard.css?v=271.5.23"/>
 <link rel="stylesheet" href="css/bizcore-ui-audit.css?v=271.5.24"/>
 <link rel="stylesheet" href="css/pricing-dark-premium-trial.css?v=271.5.26.1"/>
@@ -2333,7 +2333,7 @@ import * as InvCore from './js/invoice-core.mjs?v=266.0';
 import { createInvoiceService } from './js/invoice-service.mjs?v=270.43';
 import { createNumbering, nextSequence, formatSequence } from './js/numbering.mjs?v=270.25';
 import * as MasterCore from './js/master-service.mjs?v=270.55';   // V270.4.9: master codes + VAT numbers
-import * as RctCore from './js/receipt-core.mjs?v=271.13';
+import * as RctCore from './js/receipt-core.mjs?v=271.13.3';
 import { createReceiptService } from './js/receipt-service.mjs?v=270.43';
 import * as AccCore from './js/account-core.mjs?v=268.2';
 import { createAccountService } from './js/account-service.mjs?v=270.43';
@@ -2344,10 +2344,10 @@ import * as PurchaseCore from './js/purchase-core.mjs?v=271.3';
 import { createPurchaseService } from './js/purchase-service.mjs?v=271.3';
 import * as JobCostCore from './js/job-cost-core.mjs?v=271.32';   // V271.3 Contracting actual cost
 import { createJobCostService } from './js/job-cost-service.mjs?v=271.33';
-import * as WccCore from './js/wcc-core.mjs?v=271.13';                 // V271.13 Work Completion Certificates
-import * as JobBillingCore from './js/job-billing-core.mjs?v=271.13';  // V271.13 job invoicing (lump sum)
-import { createWccService } from './js/wcc-service.mjs?v=271.13';
-import { createJobInvoiceService } from './js/job-invoice-service.mjs?v=271.13';
+import * as WccCore from './js/wcc-core.mjs?v=271.13.3';                 // V271.13 Work Completion Certificates
+import * as JobBillingCore from './js/job-billing-core.mjs?v=271.13.3';  // V271.13 job invoicing (lump sum)
+import { createWccService } from './js/wcc-service.mjs?v=271.13.3';
+import { createJobInvoiceService } from './js/job-invoice-service.mjs?v=271.13.3';
 import * as UserCore from './js/user-core.mjs?v=270.43';
 import { createUserService } from './js/user-service.mjs?v=271.6';
 import * as RoleCore from './js/role-core.mjs?v=271.6';
@@ -4634,7 +4634,7 @@ onAuthStateChanged(auth, async user => {
         // V271.2: Contracting Jobs (Create Job, Jobs register, Job view)
         const jb = document.createElement('script'); jb.id = 'bizcore-jobs-script'; jb.src = 'js/jobs.js?v=271.13';
         // V271.13: Work Completion Certificates and job invoicing — after jobs.js (it adds the Completion & Billing tab)
-        jb.onload = () => { const wb = document.createElement('script'); wb.id = 'bizcore-job-billing-script'; wb.src = 'js/job-billing-ui.js?v=271.13.1'; document.body.appendChild(wb); };
+        jb.onload = () => { const wb = document.createElement('script'); wb.id = 'bizcore-job-billing-script'; wb.src = 'js/job-billing-ui.js?v=271.13.3'; document.body.appendChild(wb); };
         document.body.appendChild(jb);
         // V268.5: data-safety.js (shared settings in Firebase, administrator approvals, Data Health)
         const ds = document.createElement('script'); ds.id = 'bizcore-data-safety-script'; ds.src = 'js/data-safety.js?v=271.11'; document.body.appendChild(ds);

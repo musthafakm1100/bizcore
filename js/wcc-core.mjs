@@ -89,6 +89,53 @@ export function certifiableLines(scopeDoc) {
   return out;
 }
 
+/** A, B, … AA — the same section letters the quotation prints (js/app.js). */
+export function sectionLetter(i) {
+  let t = '', n = i;
+  do { t = String.fromCharCode(65 + n % 26) + t; n = Math.floor(n / 26) - 1; } while (n >= 0);
+  return t;
+}
+
+/**
+ * V271.13.3 — the certificate's own printable copy of the scope, in the quotation's shape:
+ * sections A, B… with their sub-text, lines numbered A1, A2, B1…, the rich description kept as it was
+ * accepted, Qty and UOM. It is stored ON the certificate so the document always prints exactly as it
+ * was certified, even if the job's scope is re-frozen later.
+ *   → [{ k:'heading', sl, text }
+ *      { k:'note', text, html }
+ *      { k:'line', sl, idx, n, title, html, workCat, qty, uom, prevPct, pct }]
+ */
+export function printRows(scopeDoc, lines) {
+  const by = new Map((lines || []).map(l => [String(l && l.idx), l]));
+  const src = scopeDoc && Array.isArray(scopeDoc.lines) ? scopeDoc.lines : [];
+  const out = [];
+  let sec = -1, n = 0;
+  src.forEach((l, i) => {
+    if (!l) return;
+    if (l.k === 'heading') {
+      sec++; n = 0;
+      out.push({ k: 'heading', sl: sectionLetter(sec), text: cleanText(l.text, 600) });
+      return;
+    }
+    if (l.k === 'note') {
+      out.push({ k: 'note', text: cleanText(l.text, WCC_LIMITS.text), html: cleanText(l.html, WCC_LIMITS.text) });
+      return;
+    }
+    if (l.k !== 'line') return;
+    const got = by.get(String(i));
+    if (!got) return;
+    if (sec < 0) sec = 0;
+    n++;
+    out.push({
+      k: 'line', sl: sectionLetter(sec) + n, idx: i, n: got.n,
+      title: cleanText(l.title, 600), html: cleanText(l.html, WCC_LIMITS.text),
+      workCat: cleanText(l.workCat, 120), qty: Number(l.qty) || 0, uom: cleanText(l.uom, 40),
+      prevPct: got.prevPct, pct: got.pct,
+    });
+  });
+  return out;
+}
+
 /** Highest % certified per scope line by the accepted certificates (cancelled / refused ones never count). */
 export function certifiedByLine(wccList) {
   const map = new Map();
@@ -240,7 +287,7 @@ export function buildWccBody(job, scopeDoc, prior, input, { today } = {}) {
   }
   return {
     type, date, periodFrom, periodTo, stage: cleanText(input && input.stage, WCC_LIMITS.name),
-    lines, overallPct: overall, previousPct, newPct: rPct(overall - previousPct),
+    lines, rows: printRows(scopeDoc, lines), overallPct: overall, previousPct, newPct: rPct(overall - previousPct),
     remarks: cleanText(input && input.remarks, WCC_LIMITS.text),
     repName: cleanText(input && input.repName, WCC_LIMITS.name), repTitle: cleanText(input && input.repTitle, WCC_LIMITS.name),
   };

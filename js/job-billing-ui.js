@@ -53,6 +53,36 @@
     return e.message || 'Something went wrong.';
   };
 
+  /* ── the scope of work, rendered exactly as the quotation renders it (V271.13.3) ──
+     The frozen scope keeps the rich text of the accepted quotation: a line has a plain `title` and the
+     rich body in `html`, a heading has plain `text`, a note has `text` plus rich `html`.
+     BCRich.show() is the same renderer the quotation print uses, so the wording, the bold title, the extra
+     lines and the italics come out identically. */
+  const RICH = () => window.BCRich;
+  /** A note line of the scope (printed between the lines, like the quotation's standalone note). */
+  function scopeNoteHtml(p) {
+    const r = RICH();
+    return p && p.html && r ? r.show(p.html, p.text || '') : `<span class="bc-rtp">${esc((p && p.text) || '')}</span>`;
+  }
+  const plainOf = html => String(html == null ? '' : html).replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/[ \t]+/g, ' ').trim();
+  /**
+   * One scope line, the way the quotation prints it:
+   *  · a line with its own scope of work → the bold title, then the scope body under it;
+   *  · a line whose rich description IS the description → that description alone (it already carries the title),
+   *    which is how bcLineDescHtml() behaves in js/app.js.
+   */
+  function scopeLineHtml(p) {
+    const r = RICH();
+    const title = String((p && p.title) || '').trim();
+    const html = String((p && p.html) || '');
+    if (!html) return title ? `<div class="bc-sct">${esc(title)}</div>` : '—';
+    const rich = r ? r.show(html, plainOf(html)) : `<span class="bc-rtp">${esc(plainOf(html))}</span>`;
+    const first = plainOf(html).split('\n')[0].trim();
+    const isDesc = title && first.toLowerCase().slice(0, 160) === title.toLowerCase().slice(0, 160);
+    return isDesc ? rich : (title ? `<div class="bc-sct">${esc(title)}</div>` : '') + rich;
+  }
+
   /* ── what is loaded for the open job ── */
   let B = null;        // { jobId, wccs, ledger, loading, error, denied }
   const cache = new Map();   // jobId → { at, wccs, ledger }
@@ -90,13 +120,29 @@
     const w = Math.max(0, Math.min(100, Number(value) || 0));
     return `<span class="wb-bar"><i class="wb-${cls}" style="width:${w}%"></i></span>`;
   }
+  /* V271.13.3 — one "Contract position" card (mockup WCC_8): a single bar the three positions share,
+     then the five figures under it. It reads as one picture of the job instead of four separate cards. */
   function cardsHtml(job, f) {
     const wd = job.workDonePct != null && job.workDonePct !== '' ? num(job.workDonePct) : null;
-    return `<div class="wb-cards">
-<div class="wb-card"><span>Work done (site)</span><b>${wd == null ? '—' : pct1(wd)}</b>${barHtml(wd, 'work')}<small>${job.workDoneAt ? 'Set ' + dmy(String(job.workDoneAt).slice(0, 10)) : 'Set on the Estimate vs Actual tab'}</small></div>
-<div class="wb-card"><span>Certified (accepted)</span><b class="teal">${pct1(f.certifiedPct)}</b>${barHtml(f.certifiedPct, 'cert')}<small>${f.certifiedWcc ? esc(f.certifiedWcc.wccNo) : 'No certificate accepted yet'}</small></div>
-<div class="wb-card"><span>Invoiced</span><b>${pct1(f.invoicedPct)}</b>${barHtml(f.invoicedPct, 'inv')}<small>${fmt(f.goodsValue)} of ${fmt(f.contract)}</small></div>
-<div class="wb-card"><span>Received</span><b class="${f.receivedTotal > 0.005 ? 'green' : ''}">${fmt(f.receivedTotal)}</b>${barHtml(f.receivedPct, 'recv')}<small>Balance ${fmt(f.balanceTotal)} of ${fmt(f.invoicedTotal)} incl. VAT</small></div></div>`;
+    const open = C() ? (B.wccs || []).find(w => C().isOpenStatus(w.status)) : null;
+    const clamp = v => Math.max(0, Math.min(100, Number(v) || 0));
+    const openPct = open ? clamp(open.overallPct) : 0;
+    const leg = (dot, label, value, note, cls) =>
+      `<div class="wb-leg"><span><i class="wb-dot ${dot}"></i>${label}</span><b class="${cls || ''}">${value}</b><small>${note}</small></div>`;
+    return `<div class="wb-pos">
+<div class="wb-pos-hd"><span class="wb-eyebrow">Contract position</span>
+<span class="wb-pos-val">Contract value <b>${fmt(f.contract)}</b> excl. VAT · lump sum</span>
+<span class="jb-sp"></span>
+<button type="button" class="jv-link" data-wcc="refresh" data-id="${esc(job.id)}"><i class="ti ti-refresh"></i>Refresh</button></div>
+<div class="wb-track">${openPct > 0 ? `<i class="wb-open" style="width:${openPct}%"></i>` : ''}<i class="wb-cert" style="width:${clamp(f.certifiedPct)}%"></i><i class="wb-inv" style="width:${clamp(f.invoicedPct)}%"></i><i class="wb-recv" style="width:${clamp(f.receivedPct)}%"></i></div>
+<div class="wb-scale"><span>0 %</span>${open ? `<span class="wb-mark" style="left:${openPct}%">▲ ${pct1(open.overallPct)} on ${esc(open.wccNo)} (waiting)</span>` : ''}<span>100 %</span></div>
+<div class="wb-legs">
+${leg('work', 'Work done (site)', wd == null ? '—' : pct1(wd), job.workDoneAt ? 'Set ' + dmy(String(job.workDoneAt).slice(0, 10)) : 'Set on Estimate vs Actual')}
+${leg('cert', 'Certified (accepted)', pct1(f.certifiedPct), f.certifiedWcc ? esc(f.certifiedWcc.wccNo) : 'No certificate accepted yet', 'teal')}
+${leg('inv', 'Invoiced', fmt(f.goodsValue), pct1(f.invoicedPct) + ' of the contract')}
+${leg('recv', 'Received', fmt(f.receivedTotal), 'Balance ' + fmt(f.balanceTotal), f.receivedTotal > 0.005 ? 'green' : '')}
+${leg('left', 'Still to bill', fmt(f.roomTotal), 'Advance left to deduct ' + fmt(f.advances.remaining))}
+</div></div>`;
   }
   function wccListHtml(job, f) {
     const rows = C() ? C().wccRows(B.wccs, invoicesOfJob(job.id)) : [];
@@ -113,15 +159,15 @@
 <td>${w.acceptance && w.acceptance.by ? esc(w.acceptance.by) + (w.acceptance.date ? ' · ' + dmy(w.acceptance.date) : '') : '<span class="wb-dim">—</span>'}</td>
 <td>${pillOf(w)}</td>
 <td class="nw">${w.billedOn ? `<button type="button" class="jv-link" data-wcc="inv" data-id="${esc(w.billedOn.id)}">${esc(w.billedOn.invNo)}</button>` : '<span class="wb-dim">—</span>'}</td>
-<td class="nw wb-act">${w.open && canCertify() ? `<button type="button" class="btn btn-sm btn-primary" data-wcc="accept" data-id="${esc(w.id)}">Record acceptance</button>` : ''}</td></tr>`).join('')
+<td class="nw wb-act">${w.open && canCertify() ? `<button type="button" class="btn btn-sm btn-primary" data-wcc="accept" data-id="${esc(w.id)}">Record acceptance</button>` : ''}<button type="button" class="jv-link wb-open-lnk" data-wcc="open" data-id="${esc(w.id)}">Open ›</button></td></tr>`).join('')
       : `<tr><td colspan="8" class="jv-none">No certificate yet. A Work Completion Certificate records what the customer accepts — it carries no prices and the accepted work can then be invoiced.</td></tr>`;
     const openOne = rows.find(w => w.open);
     return `<div class="wb-box">
-<div class="wb-box-hd"><div><h4>Work Completion Certificates</h4><p>No prices — the customer signs to accept the work. Accepted certificates can be billed.</p></div>
+<div class="wb-box-hd"><h4>Work Completion Certificates</h4><span class="wb-cnt">${rows.length}</span><div><p>No prices — the customer signs to accept the work. Accepted certificates can be billed.</p></div>
 ${canCertify() ? (openOne ? `<span class="wb-dim">${esc(openOne.wccNo)} is waiting for the customer</span>`
       : f.certifiedPct >= 100 ? '<span class="wb-dim">The work is fully certified</span>'
       : `<button type="button" class="btn btn-primary btn-sm" data-wcc="new" data-id="${esc(job.id)}"><i class="ti ti-plus"></i>New WCC</button>`) : ''}</div>
-<div class="jv-scroll"><table class="jb-tbl wb-tbl"><thead><tr><th>WCC No.</th><th>Date</th><th>Type</th><th class="r">Completion</th><th>Accepted by</th><th>Status</th><th>Billed on</th><th></th></tr></thead><tbody>${body}</tbody></table></div></div>`;
+<div class="jv-scroll"><table class="jb-tbl wb-tbl"><thead><tr><th>WCC No.</th><th>Date</th><th>Type</th><th class="r">Completion</th><th>Accepted by</th><th>Status</th><th>Billed on</th><th class="r"></th></tr></thead><tbody>${body}</tbody></table></div></div>`;
   }
   function invListHtml(job, f) {
     const list = invoicesOfJob(job.id).slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || String(a.invNo || '').localeCompare(String(b.invNo || '')));
@@ -138,15 +184,18 @@ ${canCertify() ? (openOne ? `<span class="wb-dim">${esc(openOne.wccNo)} is waiti
 <td class="r">${inv.contractPct ? pct1(inv.contractPct) : '—'}</td>
 <td class="r">${fmt((inv.totals || {}).total)}</td>
 <td class="r">${fmt(paidOf(inv))}</td>
-<td>${payPill(inv)}</td></tr>`).join('')
-      : `<tr><td colspan="7" class="jv-none">No invoice yet. A job is invoiced lump sum: an advance, progress payments, then the final payment.</td></tr>`;
+<td>${payPill(inv)}</td>
+<td class="nw r"><button type="button" class="jv-link wb-open-lnk" data-wcc="inv" data-id="${esc(inv.id)}">Open ›</button></td></tr>`).join('')
+      : `<tr><td colspan="8" class="jv-none">No invoice yet. A job is invoiced lump sum: an advance, progress payments, then the final payment.</td></tr>`;
     const left = f.roomTotal;
     const ready = f.readyToInvoice;
+    const sum = list.reduce((a, inv) => { a.total += num((inv.totals || {}).total); a.paid += num(paidOf(inv)); return a; }, { total: 0, paid: 0 });
+    const foot = list.length ? `<tfoot><tr><td colspan="4">Total · ${list.length} invoice${list.length === 1 ? '' : 's'}</td><td class="r">${fmt(sum.total)}</td><td class="r">${fmt(sum.paid)}</td><td colspan="2">Balance ${fmt(r2(sum.total - sum.paid))}</td></tr></tfoot>` : '';
     return `<div class="wb-box">
-<div class="wb-box-hd"><div><h4>Job invoices</h4><p>Ordinary tax invoices on this job — they appear in the invoice register and in Payment Receipts.</p></div>
+<div class="wb-box-hd"><h4>Job invoices</h4><span class="wb-cnt">${list.length}</span><div><p>Ordinary tax invoices on this job — they appear in the invoice register and in Payment Receipts.</p></div>
 ${canBill() ? `<div class="wb-split"><button type="button" class="btn btn-primary btn-sm" data-wcc="bill" data-id="${esc(job.id)}" data-type="auto"><i class="ti ti-plus"></i>New Job Invoice</button><button type="button" class="btn btn-primary btn-sm wb-split-x" data-wcc="billmenu" data-id="${esc(job.id)}" aria-label="More invoice types">▾</button></div>` : ''}</div>
-<div class="jv-scroll"><table class="jb-tbl wb-tbl"><thead><tr><th>Invoice</th><th>Date</th><th>Type</th><th class="r">Of contract</th><th class="r">Total</th><th class="r">Received</th><th>Payment</th></tr></thead><tbody>${body}</tbody></table></div>
-<div class="wb-foot"><span>Contract <b>${fmt(f.contract)}</b></span><span>Invoiced (work) <b>${fmt(f.goodsValue)}</b></span><span>Advance left to deduct <b>${fmt(f.advances.remaining)}</b></span><span>Still to bill <b>${fmt(left)}</b></span>${ready > 0.005 ? `<span class="wb-ready">Certified and not yet invoiced <b>${fmt(ready)}</b></span>` : ''}</div></div>`;
+<div class="jv-scroll"><table class="jb-tbl wb-tbl"><thead><tr><th>Invoice</th><th>Date</th><th>Type</th><th class="r">Of contract</th><th class="r">Total incl. VAT</th><th class="r">Received</th><th>Payment</th><th class="r"></th></tr></thead><tbody>${body}</tbody>${foot}</table></div>
+${ready > 0.005 ? `<div class="wb-foot"><span class="wb-ready">Certified and not yet invoiced <b>${fmt(ready)}</b></span><span>Still to bill <b>${fmt(left)}</b></span></div>` : ''}</div>`;
   }
   /** The tab, rendered by js/jobs.js. */
   function tabHtml(job) {
@@ -163,10 +212,14 @@ ${canBill() ? `<div class="wb-split"><button type="button" class="btn btn-primar
     if (f.readyToInvoice > 0.005) attention.push(`${fmt(f.readyToInvoice)} of certified work is not invoiced yet.`);
     if (f.fullyInvoiced && f.balanceTotal > 0.005) attention.push(`The contract is fully invoiced; ${fmt(f.balanceTotal)} is still to be received.`);
     if (f.fullyInvoiced && f.balanceTotal <= 0.005 && !/^(closed|cancelled)$/i.test(String(job.status || ''))) attention.push('Everything is invoiced and paid — the job can be closed (Edit Details → Status).');
-    return `${warn}${denied}${cardsHtml(job, f)}
-<div class="wb-two">${wccListHtml(job, f)}${attention.length ? `<div class="wb-box wb-note"><h4>Needs attention</h4><ul>${attention.map(a => `<li>${a}</li>`).join('')}</ul></div>` : ''}</div>
+    // V271.13.3 (mockup WCC_8): the position card, then one full-width banner, then the two full-width tables.
+    const banner = attention.length ? `<div class="wb-alert"><i class="ti ti-alert-triangle"></i>
+<span><b>Needs attention ·</b> ${attention.map(a => `<span>${a}</span>`).join(' ')}</span>
+${open && canCertify() ? `<button type="button" class="btn btn-secondary btn-sm" data-wcc="accept" data-id="${esc(open.id)}">Record acceptance</button>` : ''}</div>` : '';
+    return `${warn}${denied}${cardsHtml(job, f)}${banner}
+${wccListHtml(job, f)}
 ${invListHtml(job, f)}
-<div class="wb-hint"><button type="button" class="btn btn-secondary btn-sm" data-wcc="refresh" data-id="${esc(job.id)}"><i class="ti ti-refresh"></i>Refresh</button><span>Certificates and billing are read when the tab opens. Payments are recorded in Finance → Payment Receipts, the same as for a Sales Order.</span></div>`;
+<div class="wb-hint"><i class="ti ti-info-circle"></i><span>Certificates and billing are read when the tab opens. Payments are recorded in Finance → Payment Receipts, the same as for a Sales Order.</span></div>`;
   }
   /** Clicks inside the tab (js/jobs.js passes them here). */
   function onTabClick(e, job, repaint) {
@@ -194,7 +247,23 @@ ${invListHtml(job, f)}
 <div class="modal-body" id="wn-body"></div>
 <div class="modal-footer wcc-ft"><span id="wn-chk" class="wcc-chk"></span><span class="jb-sp"></span><button type="button" class="btn btn-secondary" onclick="closeModal('wcc-new-modal')">Cancel</button><button type="button" class="btn btn-primary" id="wn-save"><i class="ti ti-device-floppy"></i>Save WCC</button></div></div>`;
     document.body.appendChild(m);
-    $('wn-body').addEventListener('input', e => { if (e.target.matches('[data-wl]')) { readRows(); paintWccTotals(); } });
+    // V271.13.3: the completion can never go over 100 % — the field itself is corrected as it is typed.
+    $('wn-body').addEventListener('input', e => {
+      if (!e.target.matches('[data-wl]')) return;
+      clampPctField(e.target);
+      readRows(); paintWccTotals();
+    });
+    // V271.13.3: ↑ / ↓ move between the rows (the field is a text box, so the keys are free).
+    $('wn-body').addEventListener('keydown', e => {
+      const inp = e.target.closest('[data-wl]'); if (!inp) return;
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown' && e.key !== 'Enter') return;
+      const all = [...$('wn-body').querySelectorAll('[data-wl]:not([disabled])')];
+      const at = all.indexOf(inp); if (at < 0) return;
+      const next = all[at + (e.key === 'ArrowUp' ? -1 : 1)];
+      e.preventDefault();
+      if (next) { next.focus(); next.select(); }
+      else if (e.key !== 'ArrowUp') { const s = $('wn-save'); if (s && !s.disabled) s.focus(); }
+    });
     $('wn-body').addEventListener('click', e => {
       const t = e.target.closest('[data-wtype]');
       if (t) {
@@ -241,12 +310,20 @@ ${invListHtml(job, f)}
     const j = W.job;
     $('wn-sub').textContent = [j.jobNo, j.company, j.poNo ? 'PO ' + j.poNo : '', j.project].filter(Boolean).join(' · ');
     const seg = (k, label) => `<button type="button" class="wcc-seg${W.type === k ? ' on' : ''}" data-wtype="${k}">${label}</button>`;
-    const rows = W.rows.map((r, i) => `<tr${r.pct >= 100 ? ' class="wcc-done"' : ''}>
-<td class="c">${r.n}</td>
+    // V271.13.3: the lines are shown in the quotation's own shape — sections A, B… and lines A1, A2, B1…
+    const at = new Map(W.rows.map((r, i) => [String(r.idx), i]));
+    const rows = C().printRows(W.scope, W.rows).map(p => {
+      if (p.k === 'heading') return `<tr class="wcc-sec"><td class="c">${esc(p.sl)}</td><td colspan="4">${esc(p.text || '')}</td></tr>`;
+      if (p.k === 'note') return `<tr class="wcc-nt"><td></td><td colspan="4">${scopeNoteHtml(p)}</td></tr>`;
+      const i = at.get(String(p.idx)); if (i == null) return '';
+      const r = W.rows[i];
+      return `<tr${r.pct >= 100 ? ' class="wcc-done"' : ''}>
+<td class="c">${esc(p.sl)}</td>
 <td><b>${esc(r.title || '—')}</b>${r.workCat ? `<span class="wcc-cat">${esc(r.workCat)}</span>` : ''}${r.qty ? `<small>${esc(String(r.qty))} ${esc(r.uom || '')}</small>` : ''}</td>
 <td class="r wcc-prev">${pct1(r.prevPct)}</td>
 <td class="wcc-in"><span class="wcc-spin"><input id="wl-${i}" data-wl="${i}" inputmode="decimal" maxlength="5" value="${esc(String(r.pct))}" aria-label="Completed to date, line ${r.n}"${W.type === 'final' ? ' disabled' : ''}><span class="wcc-arrows"><button type="button" data-wspin="1" data-i="${i}" tabindex="-1" aria-label="More">▲</button><button type="button" data-wspin="-1" data-i="${i}" tabindex="-1" aria-label="Less">▼</button></span></span><i>%</i></td>
-<td class="wcc-st">${r.pct >= 100 ? '<span class="wcc-ok">Completed</span>' : r.pct > r.prevPct ? `<span class="wcc-up">+${Math.round((r.pct - r.prevPct) * 10) / 10} %</span>` : '<span class="wb-dim">—</span>'}</td></tr>`).join('');
+<td class="wcc-st">${r.pct >= 100 ? '<span class="wcc-ok">Completed</span>' : r.pct > r.prevPct ? `<span class="wcc-up">+${Math.round((r.pct - r.prevPct) * 10) / 10} %</span>` : '<span class="wb-dim">—</span>'}</td></tr>`;
+    }).join('');
     $('wn-body').innerHTML = `
 <div class="wcc-top">
 <div class="wcc-f"><label>Certificate type</label><div class="wcc-segs">${seg('partial', 'Partial')}${seg('final', 'Final')}</div></div>
@@ -269,6 +346,23 @@ ${W.type === 'final' ? '<span class="wb-dim">A final certificate sets every line
       BCDate.attach($('wn-to'), { allowEmpty: true, max: () => BCDate.today(), onCommit: () => { readRows(); paintWccTotals(); } });
     }
     readRows(); paintWccTotals();
+  }
+  /** Keeps a completion field inside 0–100 while it is being typed (and drops anything but a number). */
+  function clampPctField(el) {
+    if (!el) return 0;
+    let s = String(el.value || '').replace(/[^0-9.]/g, '');
+    const dot = s.indexOf('.');
+    if (dot >= 0) s = s.slice(0, dot + 1) + s.slice(dot + 1).replace(/\./g, '');
+    let v = s === '' || s === '.' ? 0 : Number(s);
+    if (!Number.isFinite(v)) v = 0;
+    if (v > 100) { v = 100; s = '100'; }
+    if (v < 0) { v = 0; s = '0'; }
+    if (s !== el.value) {
+      const atEnd = el.selectionStart === el.value.length;
+      el.value = s;
+      if (atEnd) try { el.setSelectionRange(s.length, s.length); } catch (_) { }
+    }
+    return v;
   }
   function readRows() {
     if (!W) return;
@@ -349,27 +443,52 @@ ${W.job.workDonePct != null && W.job.workDonePct !== '' ? `<span class="wb-dim">
 
   /* ═══════════════════ the certificate, as it prints (WCC_3) ═══════════════════ */
 
+  /* V271.13.3 — the customer's copy, in the Graphite theme chosen on 14 Nov 2026 (mockup WCC_6 · theme 2),
+     with the QUOTATION's typography: the same 10 px Arial body, 9.5 px line text, 8 px table head,
+     the same box headings, the same section rows and the same terms-style certification panel. */
   const WCC_DOC_CSS = `
-.wcc-a4{--wa:#0f766e;--wa-soft:#9fd6cd;--wa-tint:#effaf7}
-.wcc-a4 .dn-head{border-bottom-color:var(--wa)}
-.wcc-a4 .dn-titlebox{border-color:var(--wa-soft)}
-.wcc-a4 .dn-titlebox h1{background:var(--wa);color:#fff;font-size:15px;font-weight:700;line-height:1.25;text-align:center}
-.wcc-a4 .dn-titlebox div{border-top-color:var(--wa-soft)}
-.wcc-a4 .dn-box{border-color:var(--wa-soft)}
-.wcc-a4 .dn-box h3{color:var(--wa);background:var(--wa-tint);border-bottom-color:var(--wa-soft)}
-.wcc-a4 .dn-ref>div{background:var(--wa-tint);border-color:var(--wa-soft)}
-.wcc-a4 .dn-items th{background:var(--wa);border-color:var(--wa)}
-.wcc-a4 .dn-items th{font-size:8.5px!important;font-weight:700!important;text-transform:uppercase!important;letter-spacing:.04em!important;padding:7px 6px!important}
-.wcc-a4 .dn-items td{font-size:9.5px!important;line-height:1.4!important;padding:7px 6px!important;vertical-align:top}
-.wcc-a4 .dn-items td.c{text-align:center}.wcc-a4 .dn-items td.r,.wcc-a4 .dn-items th.r{text-align:right}
-.wcc-a4 .dn-items td b{font-weight:700}
-.wcc-a4 .dn-items td span.cat{display:inline-block;margin-left:6px;font-size:8px;color:#50657a;border:1px solid #dfe7ef;border-radius:3px;padding:0 4px}
-.wcc-a4 .dn-foot{border-top-color:var(--wa)}
-.wcc-a4 .dn-subtitle{color:#134e48;font-weight:700}
-.wcc-cert{margin-top:12px;border:1px solid var(--wa-soft);background:var(--wa-tint);padding:9px 11px;font-size:10px;line-height:1.6}
-.wcc-rem{margin-top:9px;font-size:10px;line-height:1.5}
-.wcc-rem b{display:block;font-size:8px;text-transform:uppercase;color:var(--wa);margin-bottom:2px}
+.wcc-a4{--wa:#2f3a45;--wa-soft:#c7ccd3;--wa-tint:#f4f5f7;--wa-sec:#eef0f3;font-family:Arial,Tahoma,sans-serif;color:#17324d;font-size:10px}
+.wcc-a4 .dn-head{border-bottom:2px solid var(--wa)}
+.wcc-a4 .dn-contact{font-size:9.5px;line-height:1.5;color:#50657a}
+.wcc-a4 .dn-titlebox{border:1px solid var(--wa-soft)}
+.wcc-a4 .dn-titlebox h1{margin:0;padding:7px 10px;background:var(--wa-tint);color:var(--wa);font-size:14px;font-weight:700;letter-spacing:.35px;line-height:1.25;text-align:center;border-bottom:1px solid var(--wa-soft)}
+.wcc-a4 .dn-titlebox>div{padding:7px 10px;border-top:1px solid var(--wa-soft)}
+.wcc-a4 .dn-titlebox small{display:block;text-transform:uppercase;font-weight:800;color:#5f7489;font-size:8px;margin-bottom:2px}
+.wcc-a4 .dn-titlebox strong{font-size:11px}
+.wcc-a4 .wcc-tgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.wcc-a4 .dn-subtitle{margin:5px 0 9px;text-align:right;font-size:8px;letter-spacing:3px;color:var(--wa);font-weight:800}
+.wcc-a4 .dn-box{border:1px solid var(--wa-soft)}
+.wcc-a4 .dn-box h3{margin:0;background:var(--wa-tint);padding:6px 9px;font-size:9px;text-transform:uppercase;color:var(--wa);border-bottom:1px solid var(--wa-soft)}
+.wcc-a4 .dn-box .content{padding:8px 9px;line-height:1.45;font-size:9.5px}
+.wcc-a4 .dn-box .content strong{display:block;font-size:11.5px;margin-bottom:2px}
+.wcc-a4 .dn-ref>div{background:var(--wa-tint);border:1px solid var(--wa-soft);padding:7px 8px}
+.wcc-a4 .dn-ref small{display:block;font-size:7.5px;font-weight:800;text-transform:uppercase;color:#5e7488;margin-bottom:4px}
+.wcc-a4 .dn-ref strong{font-size:9.5px}
+.wcc-a4 .dn-items{border-bottom:2px solid var(--wa)}
+.wcc-a4 .dn-items th{background:var(--wa)!important;border:1px solid var(--wa)!important;color:#fff!important;padding:6px 5px!important;font-size:8px!important;font-weight:700!important;text-align:left!important;text-transform:uppercase!important;letter-spacing:.04em!important;white-space:nowrap}
+.wcc-a4 .dn-items th.c{text-align:center!important}.wcc-a4 .dn-items th.r{text-align:right!important}
+.wcc-a4 .dn-items td{padding:6px 5px!important;border:0!important;border-bottom:1px solid #e3eaf1!important;font-size:9px!important;line-height:1.4!important;color:#263f56!important;vertical-align:top}
+.wcc-a4 .dn-items td.c{text-align:center}.wcc-a4 .dn-items td.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.wcc-a4 .dn-items tr.sec td{background:var(--wa-sec)!important;color:var(--wa)!important;font-weight:800!important;font-size:9.5px!important}
+.wcc-a4 .dn-items tr.sec .wcc-ssub{font-weight:400;font-size:9px;color:#3d4a57;margin-top:2px}
+.wcc-a4 .dn-items tr.nt td{background:#fff!important;color:#475569!important;font-size:8.5px!important;line-height:1.4!important}
+.wcc-a4 .dn-items .desc{font-size:9.5px}
+.wcc-a4 .dn-items td .bc-sct{font-weight:700!important}
+.wcc-a4 .dn-items td .cat{display:inline-block;margin-left:6px;font-size:8px;color:#50657a;border:1px solid #dfe7ef;border-radius:3px;padding:0 4px;font-weight:400}
+.bc-rtp{white-space:pre-line}
+.wcc-a4 .bc-qht{color:var(--wa);font-weight:700}.wcc-a4 .bc-qhs{margin-top:4px;font-weight:400}
+.wcc-a4 .bc-scb{font-weight:400!important;margin-top:2px}.wcc-a4 .bc-scp{color:#64748b;font-size:.92em}
+.wcc-sum2{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:12px;padding:11px 0 2px;break-inside:avoid;page-break-inside:avoid}
+.wcc-cert{border-left:3px solid var(--wa);background:#f7f9fb;padding:9px 12px;font-size:9.5px;line-height:1.5}
+.wcc-cert .eyebrow{display:block;font-size:9px;letter-spacing:1.2px;font-weight:800;color:var(--wa);margin-bottom:5px}
+.wcc-tot{border:1px solid var(--wa-soft);align-self:start}
+.wcc-tot>div{display:flex;justify-content:space-between;gap:10px;padding:6px 9px;border-bottom:1px solid var(--wa-soft);font-size:9.5px}
+.wcc-tot>div:last-child{border-bottom:0}
+.wcc-tot .now{background:var(--wa);color:#fff;font-weight:800;font-size:11px}
+.wcc-rem{margin-top:7px;border:1px solid #e6c75a;background:#fffbea;padding:8px 10px;font-size:9.5px;line-height:1.45;break-inside:avoid;page-break-inside:avoid}
+.wcc-rem b{display:block;font-size:8px;letter-spacing:.9px;text-transform:uppercase;color:#7a5c05;margin-bottom:2px}
 .wcc-a4 .dn-sign h4{color:var(--wa)}
+.wcc-a4 .dn-foot{border-top:2px solid var(--wa)}
 @media print{.wcc-status-row{display:none!important}}
 `;
   function wccDocumentHtml(w, screenMode) {
@@ -382,19 +501,32 @@ ${W.job.workDonePct != null && W.job.workDonePct !== '' ? `<span class="wb-dim">
     const isFinal = w.type === 'final';
     const subtitle = isFinal ? `FINAL COMPLETION — ${pct1(w.overallPct)}` : `PARTIAL COMPLETION — ${pct1(w.overallPct)}${w.stage ? ' · ' + esc(w.stage).toUpperCase() : ''}`;
     const period = w.periodFrom || w.periodTo ? `${w.periodFrom ? dmy(w.periodFrom) : '—'} → ${w.periodTo ? dmy(w.periodTo) : '—'}` : '—';
-    const rows = (w.lines || []).map(l => `<tr><td class="c">${l.n}</td><td><b>${esc(l.title || '—')}</b>${l.workCat ? `<span class="cat">${esc(l.workCat)}</span>` : ''}</td><td class="r">${pct1(l.pct)}</td><td class="c">${l.pct >= 100 ? 'Completed' : l.pct > 0 ? 'In progress' : 'Not started'}</td></tr>`).join('');
+    const statusOf = p => p.pct >= 99.94 ? 'Completed' : p.pct > 0 ? 'In progress' : 'Not started';
+    // V271.13.3: the scope prints exactly as on the quotation — sections A, B…, lines A1, A2, B1…,
+    // the full accepted description, Qty and UOM. Certificates made before V271.13.3 have no `rows`,
+    // so their flat lines are shown with their own numbers.
+    const printable = Array.isArray(w.rows) && w.rows.length ? w.rows
+      : (w.lines || []).map(l => ({ k: 'line', sl: l.n, title: l.title, html: '', workCat: l.workCat, qty: l.qty, uom: l.uom, pct: l.pct }));
+    const rows = printable.map(p => {
+      if (p.k === 'heading') return `<tr class="sec"><td class="c">${esc(p.sl)}</td><td colspan="5"><div class="desc">${esc(p.text || '')}</div></td></tr>`;
+      if (p.k === 'note') return `<tr class="nt"><td></td><td colspan="5"><div class="desc">${scopeNoteHtml(p)}</div></td></tr>`;
+      return `<tr><td class="c">${esc(p.sl)}</td><td><div class="desc">${scopeLineHtml(p)}</div></td>`
+        + `<td class="c">${esc(p.qty ? String(p.qty) : '')}</td><td class="c">${esc(p.uom || '')}</td>`
+        + `<td class="r"><b>${pct1(p.pct)}</b></td><td class="c">${statusOf(p)}</td></tr>`;
+    }).join('') || '<tr><td colspan="6" class="c">No scope lines</td></tr>';
     const accepted = C() && C().isAcceptedStatus(w.status);
     const statusChip = screenMode ? `<div class="dn-screen-status-row wcc-status-row"><span class="dn-screen-status ${accepted ? 'dn-screen-status--delivered' : w.status === 'Cancelled' ? 'dn-screen-status--rejected' : w.status === 'Not accepted' ? 'dn-screen-status--rejected' : 'dn-screen-status--confirmation'}"><span class="dn-screen-status-dot"></span>${esc(w.status || '')}</span></div>` : '';
     const acc = w.acceptance || {};
     return `<div class="dn-a4 wcc-a4${screenMode ? ' dn-a4-screen' : ''}"><style>${base}${WCC_DOC_CSS}</style>
 <div class="dn-head"><div>${logo}</div><div class="dn-contact">${contactParts.join('<br>') || '&nbsp;'}</div>
-<div class="dn-title-stack">${statusChip}<div class="dn-titlebox"><h1>WORK COMPLETION<br>CERTIFICATE</h1><div><small>WCC No.</small><strong>${esc(w.wccNo || '—')}</strong></div><div><small>Date</small><strong>${dmy(w.date)}</strong></div></div></div></div>
+<div class="dn-title-stack">${statusChip}<div class="dn-titlebox"><h1>WORK COMPLETION<br>CERTIFICATE</h1><div><small>WCC No.</small><strong>${esc(w.wccNo || '—')}</strong></div><div class="wcc-tgrid"><div><small>Date</small><strong>${dmy(w.date)}</strong></div><div><small>Completion</small><strong>${pct1(w.overallPct)}</strong></div></div></div></div></div>
 <div class="dn-subtitle">${subtitle}</div>
 <div class="dn-two"><div class="dn-box"><h3>Customer</h3><div class="content"><strong>${esc(w.company || cust.company || '—')}</strong>${cust.address ? esc(cust.address) : ''}${w.repName ? `<br>Attn: ${esc(w.repName)}${w.repTitle ? ', ' + esc(w.repTitle) : ''}` : ''}</div></div>
 <div class="dn-box"><h3>Project / Site</h3><div class="content"><strong>${esc(w.project || '—')}</strong></div></div></div>
 <div class="dn-ref"><div><small>Customer PO No.</small><strong>${esc(w.poNo || '—')}</strong></div><div><small>PO Date</small><strong>${w.poDate ? dmy(w.poDate) : '—'}</strong></div><div><small>Our Job / Quotation</small><strong>${esc(w.jobNo || '—')}${w.qno ? ' · ' + esc(w.qno) : ''}</strong></div><div><small>Work Period</small><strong>${period}</strong></div></div>
-<table class="dn-items"><thead><tr><th class="c">#</th><th>Scope of Work</th><th class="r">Completed</th><th class="c">Status</th></tr></thead><tbody>${rows}</tbody></table>
-<div class="wcc-cert">This is to certify that the works described above, carried out under Purchase Order No. <b>${esc(w.poNo || '—')}</b>, have been completed ${isFinal ? 'in full' : `to ${pct1(w.overallPct)}`} in accordance with the agreed scope of work, and are accepted by the customer as ${isFinal ? 'complete' : 'completed to the extent certified'}.</div>
+<table class="dn-items"><thead><tr><th class="c" style="width:34px">SL</th><th>Scope of Work</th><th class="c" style="width:44px">Qty</th><th class="c" style="width:44px">UOM</th><th class="r" style="width:66px">Completed</th><th class="c" style="width:66px">Status</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="wcc-sum2"><div class="wcc-cert"><span class="eyebrow">CERTIFICATION</span>This is to certify that the works described above, carried out under Purchase Order No. <b>${esc(w.poNo || '—')}</b>, have been completed ${isFinal ? 'in full' : `to <b>${pct1(w.overallPct)}</b>`} in accordance with the agreed scope of work, and are accepted by the customer as ${isFinal ? 'complete' : 'completed to the extent certified'}.</div>
+<div class="wcc-tot"><div><span>Previously certified</span><b>${pct1(w.previousPct || 0)}</b></div><div><span>This certificate</span><b>${pct1(w.newPct != null ? w.newPct : Math.max(0, (Number(w.overallPct) || 0) - (Number(w.previousPct) || 0)))}</b></div><div class="now"><span>Completed to date</span><span>${pct1(w.overallPct)}</span></div></div></div>
 ${w.remarks ? `<div class="wcc-rem"><b>Remarks / pending items</b>${esc(w.remarks)}</div>` : ''}
 <div class="dn-bottom"><div class="dn-sign"><h4>For ${esc(cp.name || 'the company')}</h4><div>Name: ${esc(w.createdBy || '________________')}<br>Designation: ________________<br>Date: ${dmy(w.date)}<br>Signature: <span class="dn-line"></span></div></div>
 <div class="dn-sign"><h4>Accepted By (Customer)</h4><div>Name: ${esc(acc.by || w.repName || '________________')}<br>Designation: ${esc(acc.title || w.repTitle || '________________')}<br>Date: ${acc.date ? dmy(acc.date) : '________________'}<br>Signature: <span class="dn-line"></span></div></div>
@@ -458,7 +590,8 @@ ${accepted && !inv && f && f.readyToInvoice > 0.005 ? `<div class="wcc-note teal
     ].filter(Boolean)) : ''}</section></aside>`;
     $('wv-body').innerHTML = `<div class="dn-view-workspace wcc-view-workspace"><div class="dn-view-document">${wccDocumentHtml(w, true)}</div>${panel}</div>`;
     const b = ['<div class="dn-view-actionbar-spacer"></div>',
-      `<button class="btn btn-secondary" onclick="closeModal('wcc-view-modal')"><i class="ti ti-x"></i><span>Close</span></button>`];
+      `<button class="btn btn-secondary" onclick="closeModal('wcc-view-modal')"><i class="ti ti-x"></i><span>Close</span></button>`,
+      `<button class="btn btn-secondary" onclick="closeModal('wcc-view-modal');BCJobs.view('${esc(w.jobId)}',{tab:'wb'})"><i class="ti ti-briefcase"></i><span>${esc(w.jobNo || 'Job')}</span></button>`];
     if (w.status === C().WCC_STATUS.pending && canCertify()) b.push(`<button class="btn btn-success" onclick="BCJobBilling.openAcceptance('${esc(w.id)}')"><i class="ti ti-writing-sign"></i><span>Record Acceptance</span></button>`);
     if (C().isAcceptedStatus(w.status) && !inv && canBill()) b.push(`<button class="btn btn-secondary" onclick="closeModal('wcc-view-modal');BCJobBilling.openNewJobInvoice('${esc(w.jobId)}',{wccId:'${esc(w.id)}'})"><i class="ti ti-file-invoice"></i><span>Invoice this work</span></button>`);
     if (w.status !== C().WCC_STATUS.cancelled && canCancel()) b.push(`<button class="btn btn-danger" onclick="BCJobBilling.openCancelWcc('${esc(w.id)}')"><i class="ti ti-ban"></i><span>Cancel WCC…</span></button>`);

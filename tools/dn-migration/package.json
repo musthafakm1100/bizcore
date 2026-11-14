@@ -1,0 +1,13 @@
+{
+  "name": "bizcore-dn-migration",
+  "version": "260.0.0",
+  "private": true,
+  "type": "module",
+  "description": "BizCore V260 Delivery Note migration and recovery tool (administrator use only)",
+  "scripts": {
+    "status": "node cli.mjs status"
+  },
+  "dependencies": {
+    "firebase-admin": "12.7.0"
+  }
+}

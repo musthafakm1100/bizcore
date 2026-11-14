@@ -3,6 +3,8 @@
 Every new screen follows these rules. When something here doesn't fit a new screen, agree the exception first. Don't invent a new style.
 
 ## 1. Register screens (lists of documents)
+> **Desktop registers: V271.5 supersedes parts of this section.** The side monitor (`aside.bc-monitor`) is hidden on desktop and replaced by the horizontal monitor cards in section 11; the filter bar now has an optional **Sort By** first, controls use 13 px text, and Clear Filters / Export show icons only. The phone and tablet rules below still apply unchanged. Where section 11 and this section disagree on a desktop register, follow section 11.
+
 Layout (V266.6): **no page header** — the page name is in the top bar (title + breadcrumb). The **monitor** on the left and the **filter bar** above the table; the page's main button (New …) is the last item of the filter bar.
 
 ### Work-queue tiles (V269.2 — approved 19 Oct 2026, Sales Orders first)
@@ -34,6 +36,7 @@ registers keep the monitor below until their tiles are agreed.
 - Add the workspace id to `getModuleMonitorWorkspace()` so collapse / expand works. The rail button calls `toggleModuleMonitor(key)`.
 
 ### Filter bar
+- RFQ only (V271.5.38): a **Type** filter sits between Customer and Status (`#rfq-type-filter`, values `product`/`service`/`mixed`/`contracting`), and the register has its own matching **Type** column after Reference, shown as a small coloured pill (`rfqTypeBadgeHtml()` in `js/app.js`, colours in `css/status-badges.css`). An RFQ with no stored type shows "Product" (the form's own default). This filter also narrows the RFQ Monitor counts, like Customer.
 - Markup: `.page-control-bar.bc-filterbar`.
   - `.bc-filterbar-left` holds the count (`.bc-filter-count`, e.g. "12 orders"). **No sort list** (V266.6): sorting is by clicking a column header; lists open newest first. (A hidden `.bc-filter-sort` may stay for old code.)
   - `.bc-filterbar-right` holds, **in this order**:
@@ -215,3 +218,47 @@ The order is not a customer document, so its view is a dashboard (docs/V269_7_SO
   away from the side notch, and every bottom bar, sheet, round button and the end of every list above the home bar.
 - New fixed or sticky elements use `var(--sa-top / --sa-bottom / --sa-left / --sa-right)` (not `env()` directly), so
   the browser tests can show an iPhone (they set the variables to 47 px / 34 px).
+
+## 11. Desktop register standard (V271.5 — approved reference: Pricing V271.5.19)
+Applies to desktop (≥ 1101 px) registers. Visual only: it never changes data, filters, sorting or workflows. Phone and tablet layouts keep sections 9–10.
+
+### Shared tokens
+- All values live in `css/bizcore-ui-global.css` as `--bc-ui-*` variables. Change a value there, not in each screen.
+- Card: 112 px high, 8 px gap, 10 px radius, 1 px `#e1e7ef` border, light shadow. Lead card 200 px wide.
+- Toolbar 48 px high; controls 34 px high with 13 px text; inputs `#f8fafc` with a `#cbd5e1` border.
+- Table header 39 px, 12 px medium, `#475569`, theme-tinted and opaque; row text 14 px regular `#111827`; thin horizontal row dividers only (no vertical borders).
+- Gap between monitor, toolbar and table: 5 px.
+
+### Layout of a register
+1. **Monitor strip** on top (`.bc5-strip`, built in `js/phase5a-monitors.js`): one lead card (the theme colour) then individual cards with title, count, a SAR or description line and a count-based progress bar. A card filters the register; selecting it again shows everything.
+2. **Toolbar** in one row: Sort By (when the register has it), Customer, Status, Date, Search, Clear Filters (icon only), Export Excel (icon only), main button last. Clear Filters is enabled only while a filter is active (sorting alone doesn't count).
+3. **Table** inside a rounded, opaque container. Monitor and toolbar stay fixed; only the rows scroll, under a sticky header at top 0. The last column keeps right-edge padding.
+- Cards whose measure can't be calculated yet show a dash. Never invent a count.
+
+### Monitor cards
+- Dark-premium fills (`css/monitor-dark-premium-global.css`): the lead card keeps the theme colour; the next cards use navy, purple, teal, burgundy, then neutral. Pricing keeps its own approved styling.
+- Title 15 px, count 23 px, detail / SAR line 13 px.
+- Card icon and badge colour follow the **meaning**, not the position: blue = open / sent / unpaid, green = done / won / paid / delivered, amber = waiting / follow-up / unapplied, red = overdue, purple = partial / in progress / advance, slate = draft / used up.
+
+### Status badges (`css/status-badges.css`)
+- One shape everywhere: 12 px, weight 500, 4 × 10 px padding, pill. Applies to Sales Orders, RFQ, Quotations, Delivery Notes, Customer Invoices, Receipts, Purchase Invoices and Supplier Payments.
+- Colours: Out for Delivery = sky, Partially Delivered = amber, Partially Accepted = purple, Rejected / Overdue / Cancelled = red, Paid = dark green, Part Paid = light green, To Invoice = orange (its own badge). Voided: the colour set in `css/status-badges.css` is the reference.
+- Invoice issuance and payment are **separate** badges. Receipt amounts shown as unapplied use amber, never the Part Paid green.
+
+### Master Data screens
+- Customers, Suppliers, Products, Employees, Units of Measure and Categories use the same themed toolbar, 13 px controls, table header, 5 px gap, rounded scrolling table and right-edge padding. Import / Delete show icons only; UOM and Category tables are full width.
+- The standard classes and action buttons are written in the HTML itself — don't rely on a script that moves them afterwards.
+- Master Data sidebar (Option B): 205 px, collapsing to a 56 px icon rail; 13 px regular items, 14 px medium heading, 17 px icons. On small screens the full-text grid is kept and the collapse button is hidden.
+- Main sidebar: compact text (`css/sidebar-compact.css`).
+
+### Customer and Supplier details window
+- Two tabs: **Information** (company and contacts, national address, change history, supplier notes) and **Activity & Usage** (usage figures and recent transactions).
+- Company name on one line (medium weight); ID, type and created date in the header when they exist. Field labels and values regular weight. Missing values show "–".
+- One scroll area with a fixed footer.
+
+### Rules for adding or changing a screen
+- Use the shared tokens and classes above; don't add a new override file for one screen. If a screen needs its own rules, put them in that screen's existing stylesheet.
+- Avoid new `!important` rules; the existing override files use many, so a new rule that fights them usually means the old rule should be edited instead.
+- Real HTML table IDs are used by the shared rules (for example `invreg-table`, `rctreg-table`, `pireg-table`, `spreg-table`, `streg-table`, `dn-register-table`, `quotes-table`, `so-register-table`). Give a new register's table an ID in the same style and add it to the shared selectors.
+- Every UI change gets a visual check in a signed-in browser at desktop, laptop and tablet widths, with at least two themes.
+- Icons: Tabler webfont, pinned to version 3.51.0 in `index.html`, `login.html` and `mycash.html`. Change the pinned version deliberately and check the icons after.

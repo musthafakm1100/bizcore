@@ -308,7 +308,6 @@ function issueInvoiceFromDN(m, so, dnId){
   document.getElementById('ii-subtitle').textContent += ' · From ' + (d.dnNo || 'Delivery Note');
   issueInvoiceStep(2);
 }
-window.permState = (level, isAdmin) => permState(level, isAdmin);   // V271.13: used by the job invoice screens
 function permState(level, isAdmin){
   if (level === 'all') return { ok: true, why: '' };
   if (level === 'admin') return isAdmin ? { ok: true, why: '' } : { ok: false, why: 'Your role doesn\'t have the Special Right for this (Administration → Roles & Permissions).' };   // V270.4.3: isAdmin = has the right

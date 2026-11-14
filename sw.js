@@ -8,7 +8,7 @@
   Bump CACHE_NAME whenever app files change materially so old caches are
   cleared and users get the latest version.
 */
-const CACHE_NAME = 'bizcore-shell-v27113-1';
+const CACHE_NAME = 'bizcore-shell-v271133-1';
 const APP_SHELL = [
   './login.html',
   './delivery.html',
@@ -28,7 +28,7 @@ const APP_SHELL = [
   './css/estimate.css?v=271.7.5',
   './css/invoicing.css?v=270.50',
   './css/jobs-ui-standard.css?v=271.5.23.1',
-  './css/wcc.css?v=271.13',
+  './css/wcc.css?v=271.13.3',
   './css/main.css?v=271.12',
   './css/master-customers-pricing-standard.css?v=271.5.31.1',
   './css/master-registers-pricing-standard.css?v=271.5.34.2',
@@ -85,9 +85,9 @@ const APP_SHELL = [
   './js/job-cost-core.mjs?v=271.32',
   './js/job-cost-service.mjs?v=271.33',
   './js/jobs.js?v=271.13',
-  './js/job-billing-core.mjs?v=271.13',
-  './js/job-billing-ui.js?v=271.13.1',
-  './js/job-invoice-service.mjs?v=271.13',
+  './js/job-billing-core.mjs?v=271.13.3',
+  './js/job-billing-ui.js?v=271.13.3',
+  './js/job-invoice-service.mjs?v=271.13.3',
   './js/ledger-core.mjs?v=269.3',
   './js/ledger-service.mjs?v=270.41',
   './js/lock-service.mjs?v=266.0',
@@ -106,7 +106,7 @@ const APP_SHELL = [
   './js/quote-scope.js?v=271.10',
   './js/quote-cost.js?v=270.59',
   './js/quote-rich.js?v=271.7.4',
-  './js/receipt-core.mjs?v=271.13',
+  './js/receipt-core.mjs?v=271.13.3',
   './js/receipt-service.mjs?v=270.43',
   './js/receipts.js?v=271.13.1',
   './js/responsive.js?v=270.47',
@@ -120,8 +120,8 @@ const APP_SHELL = [
   './js/supplier-payments.js?v=271.5.40',
   './js/ui-standard.js?v=269.1',
   './js/user-core.mjs?v=270.43',
-  './js/wcc-core.mjs?v=271.13',
-  './js/wcc-service.mjs?v=271.13',
+  './js/wcc-core.mjs?v=271.13.3',
+  './js/wcc-service.mjs?v=271.13.3',
   './js/user-service.mjs?v=271.6',
   './js/users.js?v=270.43',
   './manifest.json',
